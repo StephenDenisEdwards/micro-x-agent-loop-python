@@ -1,0 +1,20 @@
+[project]
+name = "micro-x-agent-loop"
+version = "0.1.0"
+description = "A minimal AI agent loop with Claude API, streaming responses, and parallel tool execution"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.42.0",
+    "python-dotenv>=1.0.0",
+    "tenacity>=9.0.0",
+    "python-docx>=1.1.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
+    "httpx>=0.27.0",
+    "google-api-python-client>=2.150.0",
+    "google-auth-oauthlib>=1.2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
