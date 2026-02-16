@@ -29,7 +29,6 @@ The agent loop is the core runtime cycle of the application. It manages the conv
 - Dispatches tool calls in parallel via `_execute_tools()`
 - Enforces `MaxToolResultChars` truncation
 - Enforces `MaxConversationMessages` trimming
-- Compacts old tool results when input tokens exceed `InputTokenBudget`
 
 ### llm_client
 
@@ -75,18 +74,6 @@ Large tool outputs (e.g., reading a big file) can consume excessive tokens. When
 3. A warning is printed to stderr
 
 This ensures Claude knows the output was truncated and can request a more targeted read if needed.
-
-## Tool Result Compaction
-
-When input tokens exceed `InputTokenBudget`, old tool results are compacted to reduce context size. This targets tool-heavy workflows (e.g., reading multiple emails or job listings) where stale results accumulate.
-
-- Only tool-result messages older than the most recent are affected
-- Each tool result's content is truncated to `ToolResultRetentionChars` characters
-- A marker `[truncated for context management]` is appended so the LLM knows the result was compacted
-- Already-compacted results are skipped (idempotent)
-- Set `InputTokenBudget` to `0` to disable
-
-See [DESIGN-token-budget.md](DESIGN-token-budget.md) for full details.
 
 ## Error Handling
 

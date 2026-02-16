@@ -19,8 +19,6 @@ class Agent:
         self._anthropic_tools = to_anthropic_tools(config.tools)
         self._max_tool_result_chars = config.max_tool_result_chars
         self._max_conversation_messages = config.max_conversation_messages
-        self._input_token_budget = config.input_token_budget
-        self._tool_result_retention_chars = config.tool_result_retention_chars
 
     _LINE_PREFIX = "assistant> "
 
@@ -33,7 +31,7 @@ class Agent:
         max_tokens_attempts = 0
 
         while True:
-            message, tool_use_blocks, stop_reason, input_tokens = await stream_chat(
+            message, tool_use_blocks, stop_reason = await stream_chat(
                 self._client,
                 self._model,
                 self._max_tokens,
@@ -45,9 +43,6 @@ class Agent:
             )
 
             self._messages.append(message)
-
-            if self._input_token_budget > 0 and input_tokens > self._input_token_budget:
-                self._compact_old_tool_results(input_tokens)
 
             if stop_reason == "max_tokens" and not tool_use_blocks:
                 max_tokens_attempts += 1
@@ -144,45 +139,3 @@ class Agent:
                 file=sys.stderr,
             )
             del self._messages[:remove_count]
-
-    _TRUNCATED_MARKER = "[truncated for context management]"
-
-    def _compact_old_tool_results(self, input_tokens: int) -> None:
-        """Truncate old tool-result content strings to reduce input tokens."""
-        retention = self._tool_result_retention_chars
-
-        # Find indices of all tool-result messages (role=user, content is a list)
-        tool_result_indices = [
-            i
-            for i, msg in enumerate(self._messages)
-            if msg.get("role") == "user" and isinstance(msg.get("content"), list)
-        ]
-
-        if len(tool_result_indices) <= 1:
-            return  # nothing to compact (keep the most recent one intact)
-
-        # Skip the most recent tool-result message — LLM may still need it
-        indices_to_compact = tool_result_indices[:-1]
-
-        compacted = 0
-        for idx in indices_to_compact:
-            for block in self._messages[idx]["content"]:
-                if block.get("type") != "tool_result":
-                    continue
-                content = block.get("content", "")
-                if not isinstance(content, str):
-                    continue
-                # Skip already-truncated results
-                if content.endswith(self._TRUNCATED_MARKER):
-                    continue
-                if len(content) <= retention:
-                    continue
-                block["content"] = content[:retention] + f"\n\n{self._TRUNCATED_MARKER}"
-                compacted += 1
-
-        if compacted > 0:
-            print(
-                f"  Note: Compacted {compacted} old tool result(s) — "
-                f"input tokens ({input_tokens:,}) exceeded budget ({self._input_token_budget:,})",
-                file=sys.stderr,
-            )

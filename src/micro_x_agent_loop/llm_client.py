@@ -103,10 +103,10 @@ async def stream_chat(
     tools: list[dict],
     *,
     line_prefix: str = "",
-) -> tuple[dict, list[dict], str, int]:
+) -> tuple[dict, list[dict], str]:
     """Stream a chat response, printing text deltas to stdout in real time.
 
-    Returns (message dict, tool_use blocks, stop_reason, input_tokens).
+    Returns (message dict, tool_use blocks, stop_reason).
     """
     tool_use_blocks = []
 
@@ -162,4 +162,4 @@ async def stream_chat(
             tool_use_blocks.append(tool_block)
 
     message = {"role": "assistant", "content": assistant_content}
-    return message, tool_use_blocks, response.stop_reason, usage.input_tokens
+    return message, tool_use_blocks, response.stop_reason
