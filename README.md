@@ -2,6 +2,8 @@
 
 A minimal AI agent loop built with Python and the Anthropic Claude API. The agent runs in a REPL, takes natural-language prompts, and autonomously calls tools to get things done. Responses stream in real time as Claude generates them.
 
+This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/StephenDenisEdwards/micro-x-agent-loop-dotnet). Both projects share the same architecture, tools, and configuration format.
+
 ## Features
 
 - **Streaming responses** — text appears word-by-word as Claude generates it
@@ -18,7 +20,7 @@ A minimal AI agent loop built with Python and the Anthropic Claude API. The agen
 - [Python 3.11+](https://python.org/)
 - [uv](https://docs.astral.sh/uv/) (package manager) — see [Why uv?](#why-uv) below
 - An [Anthropic API key](https://console.anthropic.com/)
-- (Optional) Google OAuth credentials for Gmail tools
+- (Optional) Google OAuth credentials for Gmail tools — see [Gmail Setup](#gmail-setup)
 
 ### Install uv
 
@@ -79,7 +81,13 @@ git clone https://github.com/StephenDenisEdwards/micro-x-agent-loop-python.git
 cd micro-x-agent-loop-python
 ```
 
-Create a `.env` file in the project root:
+Copy the example environment file and fill in your keys:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env`:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
@@ -87,7 +95,7 @@ GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 ```
 
-Google credentials are optional — if omitted, Gmail tools are simply not registered.
+Only `ANTHROPIC_API_KEY` is required. Google credentials are optional — if omitted, Gmail tools are simply not registered and everything else works normally.
 
 ### 2. Install dependencies
 
@@ -142,39 +150,109 @@ All settings are optional — sensible defaults are used when missing.
 
 Secrets (API keys) stay in `.env` and are loaded by python-dotenv.
 
+## Gmail Setup
+
+Gmail tools require Google OAuth2 credentials. If you don't need Gmail, skip this section entirely — all other tools work without it.
+
+### 1. Create OAuth credentials
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a project (or select an existing one)
+3. Enable the **Gmail API** under APIs & Services > Library
+4. Go to APIs & Services > Credentials > Create Credentials > OAuth client ID
+5. Application type: **Desktop app**
+6. Copy the **Client ID** and **Client Secret** into your `.env` file
+
+### 2. First-run authorization
+
+The first time you use a Gmail tool (e.g. `gmail_search`), a browser window will open asking you to sign in to your Google account and grant permission. After you authorize:
+
+- An access token is cached locally in `.gmail-tokens/token.json`
+- Subsequent runs reuse the cached token (no browser prompt)
+- The token auto-refreshes when expired
+
+The agent requests two Gmail scopes:
+- `gmail.readonly` — for searching and reading emails
+- `gmail.send` — for sending emails
+
 ## Tools
 
 ### bash
 
-Execute shell commands and return the output (cmd.exe on Windows, bash on Unix). 30-second timeout.
+Execute shell commands and return the output. Uses `cmd.exe` on Windows and `bash` on Unix. Commands time out after 30 seconds.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `command` | string | yes | The bash command to execute |
 
 ### read_file
 
-Read the contents of a text file or `.docx` document. Relative paths are resolved by walking up to the repo root, then falling back to the configured `DocumentsDirectory`.
+Read the contents of a file and return it as text. Supports plain text files and `.docx` documents (via python-docx).
+
+For relative paths, the tool walks up from the current working directory to the repo root (`.git` directory) looking for a match. If not found, it falls back to the configured `DocumentsDirectory`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Absolute or relative path to the file to read |
 
 ### write_file
 
-Write content to a file, creating parent directories if needed.
+Write content to a file, creating parent directories if they don't exist.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Absolute or relative path to the file to write |
+| `content` | string | yes | The content to write to the file |
 
 ### linkedin_jobs
 
-Search LinkedIn job postings by keyword, location, date, job type, remote filter, experience level, and sort order.
+Search for job postings on LinkedIn. Returns job title, company, location, date posted, salary (if listed), and URL.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `keyword` | string | yes | Job search keyword (e.g. `"software engineer"`) |
+| `location` | string | no | Job location (e.g. `"New York"`, `"Remote"`) |
+| `dateSincePosted` | string | no | Recency filter: `"past month"`, `"past week"`, or `"24hr"` |
+| `jobType` | string | no | Employment type: `"full time"`, `"part time"`, `"contract"`, `"temporary"`, `"internship"` |
+| `remoteFilter` | string | no | Work arrangement: `"on site"`, `"remote"`, or `"hybrid"` |
+| `experienceLevel` | string | no | Level: `"internship"`, `"entry level"`, `"associate"`, `"senior"`, `"director"`, `"executive"` |
+| `limit` | string | no | Max results to return (default `"10"`) |
+| `sortBy` | string | no | Sort order: `"recent"` or `"relevant"` |
 
 ### linkedin_job_detail
 
-Fetch the full job description from a LinkedIn job URL (returned by `linkedin_jobs`).
+Fetch the full job specification/description from a LinkedIn job URL. Use this after `linkedin_jobs` to get complete details for a specific posting.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | yes | The LinkedIn job URL (from a `linkedin_jobs` search result) |
 
 ### gmail_search
 
-Search Gmail using Gmail search syntax. Returns message ID, date, sender, subject, and snippet for each match. Only available when Google credentials are configured.
+Search Gmail using [Gmail search syntax](https://support.google.com/mail/answer/7190?hl=en). Returns message ID, date, sender, subject, and snippet for each match. Only available when Google credentials are configured.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | yes | Gmail search query (e.g. `"is:unread"`, `"from:boss@co.com newer_than:7d"`) |
+| `maxResults` | number | no | Max number of results (default 10) |
 
 ### gmail_read
 
-Read the full content of a Gmail message by its ID.
+Read the full content of a Gmail email by its message ID (from `gmail_search` results). Handles multipart MIME messages, preferring HTML content converted to readable plain text.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | yes | The Gmail message ID (from `gmail_search` results) |
 
 ### gmail_send
 
 Send a plain-text email from your Gmail account.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `to` | string | yes | Recipient email address |
+| `subject` | string | yes | Email subject line |
+| `body` | string | yes | Email body (plain text) |
 
 ## Example Prompts
 
@@ -198,6 +276,10 @@ List all Python files in this project
 Run pytest and tell me if anything failed
 ```
 
+```
+What's the current git status?
+```
+
 ### LinkedIn job search
 
 ```
@@ -206,6 +288,10 @@ Search LinkedIn for remote senior .NET developer jobs posted in the last week
 
 ```
 Get the full job description for the first result
+```
+
+```
+Search LinkedIn for Python developer jobs in London, sorted by most recent
 ```
 
 ### Gmail
@@ -231,6 +317,23 @@ Read my CV from documents/Stephen Edwards CV December 2025.docx, then search Lin
 ```
 Search my Gmail for emails from recruiters in the last week and summarise them
 ```
+
+```
+Search LinkedIn for Python developer jobs in London, get the details for the top 3, and write a summary comparing them
+```
+
+## Dependencies
+
+| Package | Purpose | C# Equivalent |
+|---------|---------|---------------|
+| [anthropic](https://pypi.org/project/anthropic/) | Claude API (official SDK) | Anthropic.SDK |
+| [python-dotenv](https://pypi.org/project/python-dotenv/) | Load `.env` files | DotNetEnv |
+| [tenacity](https://pypi.org/project/tenacity/) | Retry with exponential backoff | Polly |
+| [python-docx](https://pypi.org/project/python-docx/) | Read `.docx` files | DocumentFormat.OpenXml |
+| [beautifulsoup4](https://pypi.org/project/beautifulsoup4/) + [lxml](https://pypi.org/project/lxml/) | HTML parsing and conversion | HtmlAgilityPack |
+| [httpx](https://pypi.org/project/httpx/) | Async HTTP client | HttpClient |
+| [google-api-python-client](https://pypi.org/project/google-api-python-client/) | Gmail API | Google.Apis.Gmail.v1 |
+| [google-auth-oauthlib](https://pypi.org/project/google-auth-oauthlib/) | Google OAuth2 flow | Google.Apis.Auth |
 
 ## Why uv?
 
@@ -273,9 +376,15 @@ Create a `.env` file in the project root containing your API key:
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+Or copy the example: `cp .env.example .env` and fill in your key.
+
 ### Gmail tools not showing up
 
 Gmail tools only register when both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set in `.env`. If you don't need Gmail, this is expected — the other tools work without it.
+
+### Gmail OAuth browser doesn't open
+
+If the OAuth browser window fails to open on a headless machine, you'll need to run the first authorization on a machine with a browser. The resulting `.gmail-tokens/token.json` can then be copied to the headless machine.
 
 ### `Rate limited. Retrying in Xs...`
 
@@ -325,6 +434,20 @@ tools/
     gmail_read_tool.py
     gmail_send_tool.py
 ```
+
+### How the agent loop works
+
+1. You type a prompt at the `you>` prompt
+2. The prompt is sent to Claude via the Anthropic streaming API
+3. Claude's response streams word-by-word to your terminal
+4. If Claude decides to use tools, the tool calls are executed **in parallel** via `asyncio.gather`
+5. Tool results are sent back to Claude, which continues generating a response
+6. Steps 3-5 repeat until Claude responds with text only (no tool calls)
+7. The conversation history is maintained across prompts in the same session
+
+## See Also
+
+- [micro-x-agent-loop-dotnet](https://github.com/StephenDenisEdwards/micro-x-agent-loop-dotnet) — the original C#/.NET 8 implementation with full architecture documentation, ADRs, and design docs
 
 ## License
 
