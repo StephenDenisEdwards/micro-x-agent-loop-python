@@ -1,5 +1,7 @@
 import base64
 
+from micro_x_agent_loop.tools.html_utilities import html_to_text
+
 
 def get_header(headers: list[dict] | None, name: str) -> str:
     if not headers:
@@ -21,14 +23,16 @@ def extract_text(payload: dict) -> str:
 
     For multipart/alternative, prefer HTML (richest representation).
     For other multipart types, concatenate all readable sub-parts.
-    Returns raw HTML when available — the LLM can parse it directly.
+    HTML content is converted to plain text with links preserved as 'text (url)'.
     """
     body_data = payload.get("body", {}).get("data", "")
     mime_type = payload.get("mimeType", "")
 
     if body_data:
-        if mime_type in ("text/plain", "text/html"):
+        if mime_type == "text/plain":
             return decode_body(body_data)
+        if mime_type == "text/html":
+            return html_to_text(decode_body(body_data))
 
     parts = payload.get("parts")
     if not parts:
@@ -38,7 +42,7 @@ def extract_text(payload: dict) -> str:
     if mime_type == "multipart/alternative":
         for part in reversed(parts):
             if part.get("mimeType") == "text/html" and part.get("body", {}).get("data"):
-                return decode_body(part["body"]["data"])
+                return html_to_text(decode_body(part["body"]["data"]))
 
         for part in reversed(parts):
             if (part.get("mimeType") or "").startswith("multipart/"):

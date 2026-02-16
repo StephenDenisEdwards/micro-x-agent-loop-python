@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded — `html_to_text()` now preserves links as `text (url)`, removing the original reason for raw HTML. Gmail HTML is converted to plain text in `gmail_parser.extract_text()`, dramatically reducing token usage.
 
 ## Context
 
