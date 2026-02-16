@@ -36,6 +36,8 @@ async def main() -> None:
     temperature = float(config.get("Temperature", 1.0))
     max_tool_result_chars = int(config.get("MaxToolResultChars", 40_000))
     max_conversation_messages = int(config.get("MaxConversationMessages", 50))
+    input_token_budget = int(config.get("InputTokenBudget", 40_000))
+    tool_result_retention_chars = int(config.get("ToolResultRetentionChars", 500))
     working_directory = config.get("WorkingDirectory")
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID")
     google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
@@ -52,6 +54,8 @@ async def main() -> None:
             system_prompt=get_system_prompt(),
             max_tool_result_chars=max_tool_result_chars,
             max_conversation_messages=max_conversation_messages,
+            input_token_budget=input_token_budget,
+            tool_result_retention_chars=tool_result_retention_chars,
         )
     )
 

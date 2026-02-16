@@ -13,3 +13,5 @@ class AgentConfig:
     system_prompt: str = ""
     max_tool_result_chars: int = 40_000
     max_conversation_messages: int = 50
+    input_token_budget: int = 40_000
+    tool_result_retention_chars: int = 500
