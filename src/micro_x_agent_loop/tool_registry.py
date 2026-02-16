@@ -28,4 +28,12 @@ def get_all(
         tools.append(GmailReadTool(google_client_id, google_client_secret))
         tools.append(GmailSendTool(google_client_id, google_client_secret))
 
+        from micro_x_agent_loop.tools.calendar.calendar_list_events_tool import CalendarListEventsTool
+        from micro_x_agent_loop.tools.calendar.calendar_create_event_tool import CalendarCreateEventTool
+        from micro_x_agent_loop.tools.calendar.calendar_get_event_tool import CalendarGetEventTool
+
+        tools.append(CalendarListEventsTool(google_client_id, google_client_secret))
+        tools.append(CalendarCreateEventTool(google_client_id, google_client_secret))
+        tools.append(CalendarGetEventTool(google_client_id, google_client_secret))
+
     return tools

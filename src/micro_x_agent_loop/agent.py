@@ -20,6 +20,8 @@ class Agent:
         self._max_tool_result_chars = config.max_tool_result_chars
         self._max_conversation_messages = config.max_conversation_messages
 
+    _LINE_PREFIX = "assistant> "
+
     async def run(self, user_message: str) -> None:
         self._messages.append({"role": "user", "content": user_message})
         self._trim_conversation_history()
@@ -33,6 +35,7 @@ class Agent:
                 self._system_prompt,
                 self._messages,
                 self._anthropic_tools,
+                line_prefix=self._LINE_PREFIX,
             )
 
             self._messages.append(message)
@@ -44,7 +47,7 @@ class Agent:
             self._messages.append({"role": "user", "content": tool_results})
             self._trim_conversation_history()
 
-            print("\nassistant> ", end="", flush=True)
+            print()  # newline before next spinner
 
     async def _execute_tools(self, tool_use_blocks: list[dict]) -> list[dict]:
         async def run_one(block: dict) -> dict:

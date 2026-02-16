@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 .env
 .gmail-tokens/
+.calendar-tokens/
 .claude/
 .venv/
 dist/

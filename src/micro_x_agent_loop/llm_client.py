@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import threading
 
 import anthropic
 from tenacity import (
@@ -15,22 +16,45 @@ from micro_x_agent_loop.tool import Tool
 
 logger = logging.getLogger(__name__)
 
-_SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_SPINNER_LABEL = " Thinking..."
 
 
-async def _run_spinner(stop: asyncio.Event) -> None:
-    """Show a spinner animation until stop is set."""
-    label = " Thinking..."
-    width = 1 + len(label)
-    i = 0
-    while not stop.is_set():
-        frame = _SPINNER[i % len(_SPINNER)] + label
-        sys.stdout.write(frame)
+class _Spinner:
+    """Thread-based spinner that renders on the current line using \\r."""
+
+    def __init__(self, prefix: str = ""):
+        self._prefix = prefix
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._frame_width = 1 + len(_SPINNER_LABEL)
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        if self._stop.is_set():
+            return
+        self._stop.set()
+        if self._thread:
+            self._thread.join()
+        # Clear spinner text: overwrite with spaces, then reposition cursor after prefix
+        clear = self._prefix + " " * self._frame_width
+        sys.stdout.write("\r" + clear + "\r" + self._prefix)
         sys.stdout.flush()
-        await asyncio.sleep(0.08)
-        sys.stdout.write("\b" * width + " " * width + "\b" * width)
-        sys.stdout.flush()
-        i += 1
+
+    def _run(self) -> None:
+        i = 0
+        try:
+            while not self._stop.is_set():
+                frame = _SPINNER_FRAMES[i % len(_SPINNER_FRAMES)] + _SPINNER_LABEL
+                sys.stdout.write("\r" + self._prefix + frame)
+                sys.stdout.flush()
+                self._stop.wait(0.08)
+                i += 1
+        except (UnicodeEncodeError, OSError):
+            pass  # Terminal doesn't support these characters; fail silently
 
 
 def create_client(api_key: str) -> anthropic.AsyncAnthropic:
@@ -72,6 +96,8 @@ async def stream_chat(
     system_prompt: str,
     messages: list[dict],
     tools: list[dict],
+    *,
+    line_prefix: str = "",
 ) -> tuple[dict, list[dict]]:
     """Stream a chat response, printing text deltas to stdout in real time.
 
@@ -79,33 +105,41 @@ async def stream_chat(
     """
     tool_use_blocks = []
 
-    spinner_stop = asyncio.Event()
-    spinner_task = asyncio.create_task(_run_spinner(spinner_stop))
+    spinner = _Spinner(prefix=line_prefix)
+    spinner.start()
     first_output = False
 
-    async with client.messages.stream(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        system=system_prompt,
-        messages=messages,
-        tools=tools,
-    ) as stream:
-        async for event in stream:
-            if event.type == "content_block_delta":
-                if event.delta.type == "text_delta":
-                    if not first_output:
-                        spinner_stop.set()
-                        await spinner_task
-                        first_output = True
-                    print(event.delta.text, end="", flush=True)
+    try:
+        async with client.messages.stream(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system_prompt,
+            messages=messages,
+            tools=tools,
+        ) as stream:
+            async for event in stream:
+                if event.type == "content_block_delta":
+                    if event.delta.type == "text_delta":
+                        if not first_output:
+                            spinner.stop()
+                            first_output = True
+                        print(event.delta.text, end="", flush=True)
 
-        if not first_output:
-            spinner_stop.set()
-            await spinner_task
+            if not first_output:
+                spinner.stop()
 
-        # Get the final assembled message
-        response = await stream.get_final_message()
+            # Get the final assembled message
+            response = await stream.get_final_message()
+    except BaseException:
+        spinner.stop()
+        raise
+
+    usage = response.usage
+    print(
+        f"  [{usage.input_tokens} in / {usage.output_tokens} out tokens]",
+        file=sys.stderr,
+    )
 
     # Build content and extract tool_use blocks
     assistant_content = []

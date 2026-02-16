@@ -4,7 +4,7 @@
 
 - [Python 3.11](https://www.python.org/downloads/) or later
 - An [Anthropic API key](https://console.anthropic.com/)
-- (Optional) Google OAuth credentials for Gmail tools
+- (Optional) Google OAuth credentials for Gmail and Calendar tools
 
 ## Setup
 
@@ -25,7 +25,7 @@ GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 ```
 
-The Google credentials are optional — if omitted, the Gmail tools will not be registered and all other tools work normally.
+The Google credentials are optional — if omitted, the Gmail and Calendar tools will not be registered and all other tools work normally.
 
 ### 3. Configure settings
 
@@ -65,13 +65,13 @@ You should see:
 
 ```
 micro-x-agent-loop (type 'exit' to quit)
-Tools: bash, read_file, write_file, linkedin_jobs, linkedin_job_detail, gmail_search, gmail_read, gmail_send
+Tools: bash, read_file, write_file, linkedin_jobs, linkedin_job_detail, gmail_search, gmail_read, gmail_send, calendar_list_events, calendar_create_event, calendar_get_event
 Working directory: C:\path\to\your\documents
 
 you>
 ```
 
-If Google credentials are not configured, the Gmail tools will not appear in the tool list.
+If Google credentials are not configured, the Gmail and Calendar tools will not appear in the tool list.
 
 **Alternative — pip install:**
 
@@ -108,6 +108,14 @@ The first time you use a Gmail tool, a browser window will open for Google OAuth
 you> Search my Gmail for unread emails from the last 3 days
 ```
 
+### Calendar First Use
+
+The first time you use a Calendar tool, a separate browser window will open for Google OAuth sign-in (Calendar uses its own scope). After authorizing, tokens are cached in `.calendar-tokens/` for future sessions.
+
+```
+you> What meetings do I have today?
+```
+
 ## Project Structure
 
 ```
@@ -138,10 +146,15 @@ micro-x-agent-loop-python/
             ├── linkedin/
             │   ├── linkedin_jobs_tool.py    # Job search
             │   └── linkedin_job_detail_tool.py # Job detail fetch
-            └── gmail/
-                ├── gmail_auth.py      # OAuth2 flow
-                ├── gmail_parser.py    # MIME parsing
-                ├── gmail_search_tool.py # Email search
-                ├── gmail_read_tool.py   # Email reading
-                └── gmail_send_tool.py   # Email sending
+            ├── gmail/
+            │   ├── gmail_auth.py      # OAuth2 flow
+            │   ├── gmail_parser.py    # MIME parsing
+            │   ├── gmail_search_tool.py # Email search
+            │   ├── gmail_read_tool.py   # Email reading
+            │   └── gmail_send_tool.py   # Email sending
+            └── calendar/
+                ├── calendar_auth.py             # OAuth2 flow (separate tokens)
+                ├── calendar_list_events_tool.py  # Event listing
+                ├── calendar_create_event_tool.py # Event creation
+                └── calendar_get_event_tool.py    # Event detail
 ```
