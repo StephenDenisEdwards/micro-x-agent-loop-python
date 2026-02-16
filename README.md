@@ -166,6 +166,7 @@ App settings live in `config.json` in the project root:
   "Temperature": 1.0,
   "MaxToolResultChars": 40000,
   "MaxConversationMessages": 50,
+  "WorkingDirectory": "C:\\Users\\steph\\projects",
   "DocumentsDirectory": "C:\\path\\to\\your\\documents"
 }
 ```
@@ -177,7 +178,8 @@ App settings live in `config.json` in the project root:
 | `Temperature` | Sampling temperature (0.0 = deterministic, 1.0 = creative) | `1.0` |
 | `MaxToolResultChars` | Max characters per tool result before truncation | `40000` |
 | `MaxConversationMessages` | Max messages in history before trimming oldest | `50` |
-| `DocumentsDirectory` | Fallback directory for `read_file` relative paths | _(none)_ |
+| `WorkingDirectory` | Default directory for all tools when paths are relative. `bash` runs commands here, `read_file` and `write_file` resolve relative paths against it. | Current working directory |
+| `DocumentsDirectory` | Additional fallback directory for `read_file` relative paths (searched after `WorkingDirectory`) | _(none)_ |
 
 All settings are optional — sensible defaults are used when missing.
 

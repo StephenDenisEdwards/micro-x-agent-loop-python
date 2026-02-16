@@ -3,6 +3,9 @@ from typing import Any
 
 
 class WriteFileTool:
+    def __init__(self, working_directory: str | None = None):
+        self._working_directory = working_directory
+
     @property
     def name(self) -> str:
         return "write_file"
@@ -33,6 +36,8 @@ class WriteFileTool:
         content = tool_input["content"]
         try:
             file_path = Path(path)
+            if not file_path.is_absolute() and self._working_directory:
+                file_path = Path(self._working_directory) / file_path
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content, encoding="utf-8")
             return f"Successfully wrote to {path}"

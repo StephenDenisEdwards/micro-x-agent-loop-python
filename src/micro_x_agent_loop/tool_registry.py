@@ -8,13 +8,14 @@ from micro_x_agent_loop.tools.linkedin.linkedin_job_detail_tool import LinkedInJ
 
 def get_all(
     documents_directory: str | None = None,
+    working_directory: str | None = None,
     google_client_id: str | None = None,
     google_client_secret: str | None = None,
 ) -> list[Tool]:
     tools: list[Tool] = [
-        BashTool(),
-        ReadFileTool(documents_directory),
-        WriteFileTool(),
+        BashTool(working_directory),
+        ReadFileTool(documents_directory, working_directory),
+        WriteFileTool(working_directory),
         LinkedInJobsTool(),
         LinkedInJobDetailTool(),
     ]

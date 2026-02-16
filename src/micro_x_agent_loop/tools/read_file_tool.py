@@ -4,8 +4,9 @@ from typing import Any
 
 
 class ReadFileTool:
-    def __init__(self, documents_directory: str | None = None):
+    def __init__(self, documents_directory: str | None = None, working_directory: str | None = None):
         self._documents_directory = documents_directory
+        self._working_directory = working_directory
 
     @property
     def name(self) -> str:
@@ -31,6 +32,12 @@ class ReadFileTool:
     async def execute(self, tool_input: dict[str, Any]) -> str:
         file_path = tool_input["path"]
         try:
+            # Resolve relative paths against the configured working directory
+            if not os.path.isabs(file_path) and self._working_directory:
+                candidate = os.path.join(self._working_directory, file_path)
+                if os.path.exists(candidate):
+                    file_path = candidate
+
             if not os.path.isabs(file_path) and not os.path.exists(file_path):
                 resolved = self._resolve_relative_path(file_path)
                 if resolved:
