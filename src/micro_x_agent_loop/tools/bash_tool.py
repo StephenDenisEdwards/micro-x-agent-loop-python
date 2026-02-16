@@ -4,6 +4,9 @@ from typing import Any
 
 
 class BashTool:
+    def __init__(self, working_directory: str | None = None):
+        self._cwd = working_directory
+
     @property
     def name(self) -> str:
         return "bash"
@@ -34,12 +37,14 @@ class BashTool:
                     f"cmd.exe /c {command}",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
+                    cwd=self._cwd,
                 )
             else:
                 proc = await asyncio.create_subprocess_shell(
                     command,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
+                    cwd=self._cwd,
                 )
 
             try:

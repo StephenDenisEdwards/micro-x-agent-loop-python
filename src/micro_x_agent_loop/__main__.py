@@ -13,7 +13,8 @@ from micro_x_agent_loop.tool_registry import get_all
 
 
 def load_config() -> dict:
-    config_path = Path(__file__).resolve().parent.parent.parent / "config.json"
+    # Look for config.json in the current working directory (where run.bat runs from)
+    config_path = Path.cwd() / "config.json"
     if config_path.exists():
         with open(config_path) as f:
             return json.load(f)
@@ -39,10 +40,7 @@ async def main() -> None:
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID")
     google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
 
-    if working_directory:
-        os.chdir(working_directory)
-
-    tools = get_all(google_client_id, google_client_secret)
+    tools = get_all(working_directory, google_client_id, google_client_secret)
 
     agent = Agent(
         AgentConfig(

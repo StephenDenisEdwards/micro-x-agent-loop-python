@@ -1,8 +1,12 @@
+import os
 from pathlib import Path
 from typing import Any
 
 
 class WriteFileTool:
+    def __init__(self, working_directory: str | None = None):
+        self._working_directory = working_directory
+
     @property
     def name(self) -> str:
         return "write_file"
@@ -32,6 +36,9 @@ class WriteFileTool:
         path = tool_input["path"]
         content = tool_input["content"]
         try:
+            if not os.path.isabs(path) and self._working_directory:
+                path = os.path.join(self._working_directory, path)
+
             file_path = Path(path)
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content, encoding="utf-8")
