@@ -1,12 +1,8 @@
 import os
-from pathlib import Path
 from typing import Any
 
 
 class ReadFileTool:
-    def __init__(self, working_directory: str | None = None):
-        self._working_directory = working_directory
-
     @property
     def name(self) -> str:
         return "read_file"
@@ -31,9 +27,6 @@ class ReadFileTool:
     async def execute(self, tool_input: dict[str, Any]) -> str:
         file_path = tool_input["path"]
         try:
-            if not os.path.isabs(file_path) and self._working_directory:
-                file_path = os.path.join(self._working_directory, file_path)
-
             if file_path.lower().endswith(".docx"):
                 return self._extract_docx_text(file_path)
 

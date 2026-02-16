@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_config import AgentConfig
-from micro_x_agent_loop.system_prompt import build_system_prompt
+from micro_x_agent_loop.system_prompt import SYSTEM_PROMPT
 from micro_x_agent_loop.tool_registry import get_all
 
 
@@ -39,7 +39,10 @@ async def main() -> None:
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID")
     google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
 
-    tools = get_all(working_directory, google_client_id, google_client_secret)
+    if working_directory:
+        os.chdir(working_directory)
+
+    tools = get_all(google_client_id, google_client_secret)
 
     agent = Agent(
         AgentConfig(
@@ -48,7 +51,7 @@ async def main() -> None:
             temperature=temperature,
             api_key=api_key,
             tools=tools,
-            system_prompt=build_system_prompt(working_directory),
+            system_prompt=SYSTEM_PROMPT,
             max_tool_result_chars=max_tool_result_chars,
             max_conversation_messages=max_conversation_messages,
         )
@@ -56,6 +59,8 @@ async def main() -> None:
 
     print("micro-x-agent-loop (type 'exit' to quit)")
     print(f"Tools: {', '.join(t.name for t in tools)}")
+    if working_directory:
+        print(f"Working directory: {working_directory}")
     print()
 
     while True:
