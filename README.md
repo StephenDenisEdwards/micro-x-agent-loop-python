@@ -97,21 +97,42 @@ GOOGLE_CLIENT_SECRET=your-client-secret
 
 Only `ANTHROPIC_API_KEY` is required. Google credentials are optional — if omitted, Gmail tools are simply not registered and everything else works normally.
 
-### 2. Install dependencies
+### 2. Install dependencies and run
+
+#### Option A: Using uv (recommended)
 
 ```bash
 uv sync
-```
-
-This creates a `.venv/` virtual environment and installs all packages from `pyproject.toml`. You never need to activate the venv manually — `uv run` handles it.
-
-### 3. Run the agent
-
-```bash
 uv run python -m micro_x_agent_loop
 ```
 
-You'll see:
+#### Option B: Using pip (no extra tools needed)
+
+```bash
+python -m venv .venv
+```
+
+Activate the virtual environment:
+
+```bash
+# Windows (cmd)
+.venv\Scripts\activate
+
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+
+# macOS / Linux
+source .venv/bin/activate
+```
+
+Install dependencies and run:
+
+```bash
+pip install .
+python -m micro_x_agent_loop
+```
+
+#### You'll see:
 
 ```
 micro-x-agent-loop (type 'exit' to quit)
