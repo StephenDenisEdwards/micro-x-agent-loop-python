@@ -24,6 +24,13 @@ def html_to_text(html: str) -> str:
         tag.insert(0, NavigableString("\n"))
         tag.append(NavigableString("\n"))
 
+    # Preserve link URLs: <a href="url">text</a> → text (url)
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        link_text = a.get_text(strip=True)
+        if href and href != link_text and not href.startswith("#"):
+            a.replace_with(f"{link_text} ({href})" if link_text else href)
+
     # Bullet list items
     for li in soup.find_all("li"):
         li.insert(0, NavigableString("\n- "))
