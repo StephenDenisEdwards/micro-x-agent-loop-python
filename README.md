@@ -109,7 +109,13 @@ run.bat
 ./run.sh
 ```
 
-That's it. The script creates a virtual environment, installs dependencies, and starts the agent automatically on first run. Subsequent runs start instantly.
+That's it — one command. The script handles everything automatically:
+
+1. **First run:** Creates a Python virtual environment (`.venv/`), installs all dependencies via pip, then starts the agent. This takes 30-60 seconds.
+2. **Subsequent runs:** Detects that the venv and packages are already installed, skips straight to starting the agent (instant).
+3. **Recovery:** If the venv exists but packages are missing (e.g. after a failed install), it detects this and reinstalls automatically.
+
+You never need to activate a virtual environment, run `pip install`, or know anything about Python packaging.
 
 <details>
 <summary>Alternative: using uv</summary>
