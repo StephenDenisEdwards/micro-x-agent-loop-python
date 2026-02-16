@@ -2,6 +2,7 @@ from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tools.bash_tool import BashTool
 from micro_x_agent_loop.tools.read_file_tool import ReadFileTool
 from micro_x_agent_loop.tools.write_file_tool import WriteFileTool
+from micro_x_agent_loop.tools.append_file_tool import AppendFileTool
 from micro_x_agent_loop.tools.linkedin.linkedin_jobs_tool import LinkedInJobsTool
 from micro_x_agent_loop.tools.linkedin.linkedin_job_detail_tool import LinkedInJobDetailTool
 
@@ -15,6 +16,7 @@ def get_all(
         BashTool(working_directory),
         ReadFileTool(working_directory),
         WriteFileTool(working_directory),
+        AppendFileTool(working_directory),
         LinkedInJobsTool(),
         LinkedInJobDetailTool(),
     ]

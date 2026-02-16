@@ -13,6 +13,10 @@ Today's date is {today} (UTC).
 When the user asks you to do something, use the available tools to accomplish it. \
 Think step by step about what tools you need to use, then use them.
 
+When writing large files, break the content into sections: use write_file to create the file \
+with the first section, then use append_file to add the remaining sections. This avoids \
+hitting output token limits.
+
 If a tool call fails, read the error message carefully and try a different approach.
 
 Be concise in your responses. When you've completed a task, briefly summarize what you did.\

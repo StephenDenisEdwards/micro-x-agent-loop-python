@@ -1,5 +1,5 @@
 {
   "Model": "claude-sonnet-4-5-20250929",
-  "MaxTokens": 8192,
+  "MaxTokens": 32768,
   "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\resources\\documents"
   }

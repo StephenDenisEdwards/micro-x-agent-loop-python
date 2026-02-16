@@ -22,12 +22,16 @@ class Agent:
 
     _LINE_PREFIX = "assistant> "
 
+    _MAX_TOKENS_RETRIES = 3
+
     async def run(self, user_message: str) -> None:
         self._messages.append({"role": "user", "content": user_message})
         self._trim_conversation_history()
 
+        max_tokens_attempts = 0
+
         while True:
-            message, tool_use_blocks = await stream_chat(
+            message, tool_use_blocks, stop_reason = await stream_chat(
                 self._client,
                 self._model,
                 self._max_tokens,
@@ -39,6 +43,28 @@ class Agent:
             )
 
             self._messages.append(message)
+
+            if stop_reason == "max_tokens" and not tool_use_blocks:
+                max_tokens_attempts += 1
+                if max_tokens_attempts >= self._MAX_TOKENS_RETRIES:
+                    print(
+                        f"\n{self._LINE_PREFIX}[Stopped: response exceeded max_tokens "
+                        f"({self._max_tokens}) {self._MAX_TOKENS_RETRIES} times in a row. "
+                        f"Try increasing MaxTokens in config.json or simplifying the request.]",
+                    )
+                    return
+                self._messages.append({
+                    "role": "user",
+                    "content": (
+                        "Your response was cut off because it exceeded the token limit. "
+                        "Please continue, but be more concise. If you were writing a file, "
+                        "break it into smaller sections or shorten the content."
+                    ),
+                })
+                print()  # newline before next spinner
+                continue
+
+            max_tokens_attempts = 0
 
             if not tool_use_blocks:
                 return
