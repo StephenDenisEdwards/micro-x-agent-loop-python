@@ -1,6 +1,5 @@
 {
   "Model": "claude-sonnet-4-5-20250929",
   "MaxTokens": 8192,
-  "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python",
-  "DocumentsDirectory": "C:\\Users\\steph\\source\\repos\\resources\\documents"
+  "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python"
 }

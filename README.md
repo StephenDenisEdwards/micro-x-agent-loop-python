@@ -166,8 +166,7 @@ App settings live in `config.json` in the project root:
   "Temperature": 1.0,
   "MaxToolResultChars": 40000,
   "MaxConversationMessages": 50,
-  "WorkingDirectory": "C:\\Users\\steph\\projects",
-  "DocumentsDirectory": "C:\\path\\to\\your\\documents"
+  "WorkingDirectory": "C:\\Users\\steph\\projects"
 }
 ```
 
@@ -179,7 +178,6 @@ App settings live in `config.json` in the project root:
 | `MaxToolResultChars` | Max characters per tool result before truncation | `40000` |
 | `MaxConversationMessages` | Max messages in history before trimming oldest | `50` |
 | `WorkingDirectory` | Default directory for all tools when paths are relative. `bash` runs commands here, `read_file` and `write_file` resolve relative paths against it. | Current working directory |
-| `DocumentsDirectory` | Additional fallback directory for `read_file` relative paths (searched after `WorkingDirectory`) | _(none)_ |
 
 All settings are optional — sensible defaults are used when missing.
 
@@ -224,7 +222,7 @@ Execute shell commands and return the output. Uses `cmd.exe` on Windows and `bas
 
 Read the contents of a file and return it as text. Supports plain text files and `.docx` documents (via python-docx).
 
-For relative paths, the tool walks up from the current working directory to the repo root (`.git` directory) looking for a match. If not found, it falls back to the configured `DocumentsDirectory`.
+Relative paths are resolved against the configured `WorkingDirectory`. If not set, the current working directory is used.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|

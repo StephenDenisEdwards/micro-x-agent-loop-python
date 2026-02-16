@@ -35,12 +35,11 @@ async def main() -> None:
     temperature = float(config.get("Temperature", 1.0))
     max_tool_result_chars = int(config.get("MaxToolResultChars", 40_000))
     max_conversation_messages = int(config.get("MaxConversationMessages", 50))
-    documents_directory = config.get("DocumentsDirectory")
     working_directory = config.get("WorkingDirectory")
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID")
     google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
 
-    tools = get_all(documents_directory, working_directory, google_client_id, google_client_secret)
+    tools = get_all(working_directory, google_client_id, google_client_secret)
 
     agent = Agent(
         AgentConfig(
