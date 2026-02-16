@@ -1,6 +1,9 @@
 import asyncio
 import platform
+import subprocess
 from typing import Any
+
+_IS_WINDOWS = platform.system() == "Windows"
 
 
 class BashTool:
@@ -32,16 +35,19 @@ class BashTool:
         command = tool_input["command"]
 
         try:
-            if platform.system() == "Windows":
+            if _IS_WINDOWS:
                 proc = await asyncio.create_subprocess_shell(
                     f"cmd.exe /c {command}",
+                    stdin=subprocess.DEVNULL,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=self._cwd,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
                 )
             else:
                 proc = await asyncio.create_subprocess_shell(
                     command,
+                    stdin=subprocess.DEVNULL,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=self._cwd,
@@ -51,8 +57,11 @@ class BashTool:
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
             except asyncio.TimeoutError:
                 proc.kill()
-                await proc.communicate()
-                return f"[timed out after 30s]"
+                try:
+                    await asyncio.wait_for(proc.communicate(), timeout=5)
+                except (asyncio.TimeoutError, ProcessLookupError):
+                    pass
+                return "[timed out after 30s]"
 
             output = stdout.decode(errors="replace") + stderr.decode(errors="replace")
 

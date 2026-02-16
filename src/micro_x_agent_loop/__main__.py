@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_config import AgentConfig
-from micro_x_agent_loop.system_prompt import SYSTEM_PROMPT
+from micro_x_agent_loop.system_prompt import get_system_prompt
 from micro_x_agent_loop.tool_registry import get_all
 
 
@@ -49,7 +49,7 @@ async def main() -> None:
             temperature=temperature,
             api_key=api_key,
             tools=tools,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=get_system_prompt(),
             max_tool_result_chars=max_tool_result_chars,
             max_conversation_messages=max_conversation_messages,
         )
@@ -76,7 +76,7 @@ async def main() -> None:
             continue
 
         try:
-            print("\nassistant> ", end="", flush=True)
+            print()  # newline before spinner
             await agent.run(trimmed)
             print("\n")
         except Exception as ex:
