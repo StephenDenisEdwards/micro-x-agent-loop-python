@@ -1,3 +1,4 @@
+import asyncio
 import sys
 
 import anthropic
@@ -13,6 +14,23 @@ import logging
 from micro_x_agent_loop.tool import Tool
 
 logger = logging.getLogger(__name__)
+
+_SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+
+async def _run_spinner(stop: asyncio.Event) -> None:
+    """Show a spinner animation until stop is set."""
+    label = " Thinking..."
+    width = 1 + len(label)
+    i = 0
+    while not stop.is_set():
+        frame = _SPINNER[i % len(_SPINNER)] + label
+        sys.stdout.write(frame)
+        sys.stdout.flush()
+        await asyncio.sleep(0.08)
+        sys.stdout.write("\b" * width + " " * width + "\b" * width)
+        sys.stdout.flush()
+        i += 1
 
 
 def create_client(api_key: str) -> anthropic.AsyncAnthropic:
@@ -60,7 +78,10 @@ async def stream_chat(
     Returns the assembled message dict and any tool_use blocks found.
     """
     tool_use_blocks = []
-    full_content = []
+
+    spinner_stop = asyncio.Event()
+    spinner_task = asyncio.create_task(_run_spinner(spinner_stop))
+    first_output = False
 
     async with client.messages.stream(
         model=model,
@@ -71,12 +92,17 @@ async def stream_chat(
         tools=tools,
     ) as stream:
         async for event in stream:
-            if event.type == "content_block_start":
-                if event.content_block.type == "text":
-                    pass  # text will come via deltas
-            elif event.type == "content_block_delta":
+            if event.type == "content_block_delta":
                 if event.delta.type == "text_delta":
+                    if not first_output:
+                        spinner_stop.set()
+                        await spinner_task
+                        first_output = True
                     print(event.delta.text, end="", flush=True)
+
+        if not first_output:
+            spinner_stop.set()
+            await spinner_task
 
         # Get the final assembled message
         response = await stream.get_final_message()

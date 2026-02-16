@@ -48,35 +48,37 @@ Gmail tools are **conditionally registered** — they are only added when both G
 
 ## Built-in Tools
 
+Each tool has its own detailed documentation in the [tools/](tools/) directory.
+
 ### File System
 
-| Tool | Description |
-|------|-------------|
-| `read_file` | Read text files and `.docx` documents. Resolves relative paths against the configured `WorkingDirectory`. |
-| `write_file` | Write content to a file, creating parent directories as needed. Resolves relative paths against `WorkingDirectory`. |
+| Tool | Description | Docs |
+|------|-------------|------|
+| `read_file` | Read text files and `.docx` documents | [read-file](tools/read-file/README.md) |
+| `write_file` | Write content to a file, creating directories as needed | [write-file](tools/write-file/README.md) |
 
 ### Shell
 
-| Tool | Description |
-|------|-------------|
-| `bash` | Execute a shell command (cmd.exe on Windows, bash on Unix). 30-second timeout. Uses `WorkingDirectory` as the current working directory. |
+| Tool | Description | Docs |
+|------|-------------|------|
+| `bash` | Execute a shell command (cmd.exe on Windows, bash on Unix) | [bash](tools/bash/README.md) |
 
 ### LinkedIn
 
-| Tool | Description |
-|------|-------------|
-| `linkedin_jobs` | Search LinkedIn job postings by keyword, location, date, job type, remote filter, experience level, and sort order. Scrapes the public jobs API. |
-| `linkedin_job_detail` | Fetch the full job description from a LinkedIn job URL. |
+| Tool | Description | Docs |
+|------|-------------|------|
+| `linkedin_jobs` | Search LinkedIn job postings with filters | [linkedin-jobs](tools/linkedin-jobs/README.md) |
+| `linkedin_job_detail` | Fetch full job description from a LinkedIn URL | [linkedin-job-detail](tools/linkedin-job-detail/README.md) |
 
 ### Gmail (conditional)
 
-| Tool | Description |
-|------|-------------|
-| `gmail_search` | Search Gmail using Gmail search syntax (e.g., `is:unread`, `from:someone@example.com`). |
-| `gmail_read` | Read the full content of a Gmail message by its ID. Returns raw HTML for the LLM to process. |
-| `gmail_send` | Send a plain-text email. |
+| Tool | Description | Docs |
+|------|-------------|------|
+| `gmail_search` | Search Gmail using Gmail search syntax | [gmail-search](tools/gmail-search/README.md) |
+| `gmail_read` | Read full email content by message ID | [gmail-read](tools/gmail-read/README.md) |
+| `gmail_send` | Send a plain-text email | [gmail-send](tools/gmail-send/README.md) |
 
-Gmail tools require OAuth2 authentication. On first use, a browser window opens for Google sign-in. Tokens are cached in `.gmail-tokens/`.
+Gmail tools require OAuth2 authentication. On first use, a browser window opens for Google sign-in. Tokens are cached in `.gmail-tokens/`. See [ADR-004](../architecture/decisions/ADR-004-raw-html-for-gmail.md) for the decision to pass raw HTML to the LLM.
 
 ## Shared Utilities
 

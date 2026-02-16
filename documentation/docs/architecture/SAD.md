@@ -190,6 +190,7 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-001](decisions/ADR-001-python-dotenv-for-secrets.md) | python-dotenv for secrets management | Accepted |
 | [ADR-002](decisions/ADR-002-tenacity-for-retry.md) | tenacity for API retry resilience | Accepted |
 | [ADR-003](decisions/ADR-003-streaming-responses.md) | Streaming responses via SSE | Accepted |
+| [ADR-004](decisions/ADR-004-raw-html-for-gmail.md) | Raw HTML for Gmail email content | Accepted |
 
 ## 9. Risks and Technical Debt
 

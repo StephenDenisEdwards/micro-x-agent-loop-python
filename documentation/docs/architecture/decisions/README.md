@@ -27,3 +27,4 @@ What becomes easier or more difficult to do because of this change?
 | [ADR-001](ADR-001-python-dotenv-for-secrets.md) | python-dotenv for secrets management | Accepted |
 | [ADR-002](ADR-002-tenacity-for-retry.md) | tenacity for API retry resilience | Accepted |
 | [ADR-003](ADR-003-streaming-responses.md) | Streaming responses via SSE | Accepted |
+| [ADR-004](ADR-004-raw-html-for-gmail.md) | Raw HTML for Gmail email content | Accepted |
