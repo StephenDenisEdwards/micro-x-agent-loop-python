@@ -8,7 +8,6 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    before_sleep_log,
 )
 import logging
 
@@ -75,14 +74,20 @@ def to_anthropic_tools(tools: list[Tool]) -> list[dict]:
 def _on_retry(retry_state):
     attempt = retry_state.attempt_number
     wait = retry_state.next_action.sleep if retry_state.next_action else 0
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    reason = type(exc).__name__ if exc else "Unknown"
     print(
-        f"Rate limited. Retrying in {wait:.0f}s (attempt {attempt}/5)...",
+        f"{reason}. Retrying in {wait:.0f}s (attempt {attempt}/5)...",
         file=sys.stderr,
     )
 
 
 @retry(
-    retry=retry_if_exception_type(anthropic.RateLimitError),
+    retry=retry_if_exception_type((
+        anthropic.RateLimitError,
+        anthropic.APIConnectionError,
+        anthropic.APITimeoutError,
+    )),
     wait=wait_exponential(multiplier=10, min=10, max=320),
     stop=stop_after_attempt(5),
     before_sleep=_on_retry,
