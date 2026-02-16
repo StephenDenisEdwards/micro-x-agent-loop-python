@@ -24,10 +24,11 @@ A minimal AI agent loop built with Python and the Anthropic Claude API. The agen
 
 [uv](https://docs.astral.sh/uv/) is a fast Python package and project manager built by [Astral](https://astral.sh/) (the Ruff team). It's written in Rust and replaces `pip`, `pip-tools`, `virtualenv`, and `pyenv` in a single tool — with 10-100x faster dependency resolution and installs.
 
-**Windows (PowerShell):**
+**Windows (PowerShell) — recommended:**
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
+This automatically adds `uv` to your PATH. Restart your terminal after installing.
 
 **macOS / Linux:**
 ```bash
@@ -37,6 +38,38 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 **Or via pip:**
 ```bash
 pip install uv
+```
+
+> **Windows PATH issue with `pip install uv`:** When pip installs with `--user` (the default when site-packages is not writeable), the `uv.exe` binary lands in a user Scripts directory that is **not** on your PATH. You'll see:
+>
+> ```
+> 'uv' is not recognized as an internal or external command
+> ```
+>
+> **Fix — choose one:**
+>
+> 1. **Add the Scripts directory to your PATH** (run in PowerShell, then restart your terminal):
+>    ```powershell
+>    $scriptsDir = & python -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))"
+>    [Environment]::SetEnvironmentVariable("Path", "$([Environment]::GetEnvironmentVariable('Path', 'User'));$scriptsDir", "User")
+>    ```
+>
+> 2. **Use the official installer instead** (handles PATH automatically):
+>    ```powershell
+>    pip uninstall uv -y
+>    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+>    ```
+>
+> 3. **Run uv as a Python module** (no PATH change needed):
+>    ```bash
+>    python -m uv sync
+>    python -m uv run python -m micro_x_agent_loop
+>    ```
+
+**Verify the installation:**
+
+```bash
+uv --version
 ```
 
 ### 1. Clone and configure
@@ -56,10 +89,17 @@ GOOGLE_CLIENT_SECRET=your-client-secret
 
 Google credentials are optional — if omitted, Gmail tools are simply not registered.
 
-### 2. Install dependencies and run
+### 2. Install dependencies
 
 ```bash
 uv sync
+```
+
+This creates a `.venv/` virtual environment and installs all packages from `pyproject.toml`. You never need to activate the venv manually — `uv run` handles it.
+
+### 3. Run the agent
+
+```bash
 uv run python -m micro_x_agent_loop
 ```
 
@@ -71,6 +111,8 @@ Tools: bash, read_file, write_file, linkedin_jobs, linkedin_job_detail, gmail_se
 
 you>
 ```
+
+Type a natural-language prompt and press Enter. The agent will stream its response and call tools as needed. Type `exit` or `quit` to stop.
 
 ### Configuration
 
@@ -211,6 +253,53 @@ This project uses **uv** instead of pip for package management.
 | `uv run python -m micro_x_agent_loop` | Run the app inside the managed venv |
 | `uv add <package>` | Add a new dependency to `pyproject.toml` and install it |
 | `uv remove <package>` | Remove a dependency |
+
+## Troubleshooting
+
+### `'uv' is not recognized` on Windows
+
+See the [Install uv](#install-uv) section above. The quickest fix is to run `uv` as a Python module instead:
+
+```bash
+python -m uv sync
+python -m uv run python -m micro_x_agent_loop
+```
+
+### `ANTHROPIC_API_KEY environment variable is required`
+
+Create a `.env` file in the project root containing your API key:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### Gmail tools not showing up
+
+Gmail tools only register when both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set in `.env`. If you don't need Gmail, this is expected — the other tools work without it.
+
+### `Rate limited. Retrying in Xs...`
+
+The agent automatically retries with exponential backoff (10s, 20s, 40s, 80s, 160s) when the Anthropic API returns a rate limit error. Wait for retries to complete — no action needed.
+
+### Tool output truncated warning
+
+If a tool returns more than 40,000 characters, the output is truncated. You can increase the limit in `config.json`:
+
+```json
+{
+  "MaxToolResultChars": 80000
+}
+```
+
+### Conversation history trimmed warning
+
+When the conversation exceeds 50 messages, the oldest messages are removed. You can increase the limit in `config.json`:
+
+```json
+{
+  "MaxConversationMessages": 100
+}
+```
 
 ## Architecture
 
