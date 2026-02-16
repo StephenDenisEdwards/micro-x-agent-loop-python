@@ -1,3 +1,4 @@
+import sys
 from datetime import datetime, timezone
 from typing import Any
 
@@ -103,4 +104,5 @@ class CalendarListEventsTool:
             return "\n\n".join(results)
 
         except Exception as ex:
+            print(f"  calendar_list_events error: {ex}", file=sys.stderr)
             return f"Error listing calendar events: {ex}"

@@ -1,3 +1,4 @@
+import sys
 from typing import Any
 
 from micro_x_agent_loop.tools.calendar.calendar_auth import get_calendar_service
@@ -80,4 +81,5 @@ class CalendarGetEventTool:
             return "\n".join(lines)
 
         except Exception as ex:
+            print(f"  calendar_get_event error: {ex}", file=sys.stderr)
             return f"Error getting calendar event: {ex}"
