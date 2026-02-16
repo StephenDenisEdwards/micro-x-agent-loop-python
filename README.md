@@ -16,9 +16,28 @@ A minimal AI agent loop built with Python and the Anthropic Claude API. The agen
 ### Prerequisites
 
 - [Python 3.11+](https://python.org/)
-- [uv](https://docs.astral.sh/uv/) (package manager)
+- [uv](https://docs.astral.sh/uv/) (package manager) — see [Why uv?](#why-uv) below
 - An [Anthropic API key](https://console.anthropic.com/)
 - (Optional) Google OAuth credentials for Gmail tools
+
+### Install uv
+
+[uv](https://docs.astral.sh/uv/) is a fast Python package and project manager built by [Astral](https://astral.sh/) (the Ruff team). It's written in Rust and replaces `pip`, `pip-tools`, `virtualenv`, and `pyenv` in a single tool — with 10-100x faster dependency resolution and installs.
+
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+**macOS / Linux:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Or via pip:**
+```bash
+pip install uv
+```
 
 ### 1. Clone and configure
 
@@ -170,6 +189,28 @@ Read my CV from documents/Stephen Edwards CV December 2025.docx, then search Lin
 ```
 Search my Gmail for emails from recruiters in the last week and summarise them
 ```
+
+## Why uv?
+
+This project uses **uv** instead of pip for package management.
+
+| Feature | uv | pip |
+|---------|-----|-----|
+| Install speed | 10-100x faster (Rust) | Baseline |
+| Virtual env management | Automatic (`uv sync` creates `.venv/`) | Manual (`python -m venv`) |
+| Run in venv | `uv run <cmd>` — no activate needed | `source .venv/bin/activate` first |
+| Lockfile | `uv.lock` for reproducible installs | Requires `pip-compile` |
+| Python version management | Built-in (`uv python install 3.12`) | Needs pyenv |
+| Config format | Standard `pyproject.toml` | `requirements.txt` or `pyproject.toml` |
+
+**Key commands for this project:**
+
+| Command | What it does |
+|---------|-------------|
+| `uv sync` | Install all dependencies from `pyproject.toml` into `.venv/` |
+| `uv run python -m micro_x_agent_loop` | Run the app inside the managed venv |
+| `uv add <package>` | Add a new dependency to `pyproject.toml` and install it |
+| `uv remove <package>` | Remove a dependency |
 
 ## Architecture
 
