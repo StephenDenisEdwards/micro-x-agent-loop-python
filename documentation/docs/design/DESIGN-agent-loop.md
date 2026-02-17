@@ -8,7 +8,7 @@ The agent loop is the core runtime cycle of the application. It manages the conv
 
 1. User types a prompt
 2. Prompt is added to conversation history
-3. Conversation history is trimmed if over the limit
+3. Compaction strategy runs (may summarize old messages), then history is trimmed if still over the message limit
 4. Message list is sent to Claude via streaming API
 5. Text deltas are printed to stdout as they arrive
 6. If Claude requests tool use:
@@ -29,6 +29,7 @@ The agent loop is the core runtime cycle of the application. It manages the conv
 - Dispatches tool calls in parallel via `_execute_tools()`
 - Enforces `MaxToolResultChars` truncation
 - Enforces `MaxConversationMessages` trimming
+- Delegates to the configured `CompactionStrategy` before trimming (see [Compaction Design](DESIGN-compaction.md))
 
 ### llm_client
 
@@ -46,7 +47,7 @@ Messages accumulate in `_messages` as the conversation progresses. Each message 
 - **Assistant message** — Claude's response (text + tool_use blocks)
 - **Tool result message** — tool execution results (`{"role": "user", "content": [tool_result dicts]}`)
 
-When `len(_messages)` exceeds `MaxConversationMessages`, the oldest messages are removed from the front. A warning is printed to stderr so the user knows context was lost.
+Before trimming, the agent runs its configured compaction strategy (`_maybe_compact()`). With the `"summarize"` strategy, this summarizes the middle of the conversation via an LLM call when estimated tokens exceed a threshold, preserving key context. After compaction, `_trim_conversation_history()` still runs as a hard backstop — when `len(_messages)` exceeds `MaxConversationMessages`, the oldest messages are removed from the front. A warning is printed to stderr so the user knows context was lost. See [Compaction Design](DESIGN-compaction.md) for details.
 
 ## Parallel Tool Execution
 

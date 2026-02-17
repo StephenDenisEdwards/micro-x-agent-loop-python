@@ -15,6 +15,7 @@ Central navigation hub for all project documentation.
 
 - [Agent Loop Design](design/DESIGN-agent-loop.md) - Core agent loop, tool dispatch, streaming
 - [Tool System Design](design/DESIGN-tool-system.md) - Tool interface, registry, built-in tools
+- [Compaction Design](design/DESIGN-compaction.md) - Conversation compaction via strategy pattern
 
 ## Operations
 
@@ -30,6 +31,7 @@ graph TD
     INDEX --> ADR[ADR Index]
     INDEX --> DESIGN1[Agent Loop Design]
     INDEX --> DESIGN2[Tool System Design]
+    INDEX --> DESIGN3[Compaction Design]
     INDEX --> OPS1[Getting Started]
     INDEX --> OPS2[Configuration]
     INDEX --> OPS3[Troubleshooting]

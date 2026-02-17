@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 
+from micro_x_agent_loop.compaction import CompactionStrategy, NoneCompactionStrategy
 from micro_x_agent_loop.tool import Tool
 
 
@@ -13,3 +14,4 @@ class AgentConfig:
     system_prompt: str = ""
     max_tool_result_chars: int = 40_000
     max_conversation_messages: int = 50
+    compaction_strategy: CompactionStrategy = field(default_factory=NoneCompactionStrategy)

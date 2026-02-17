@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_config import AgentConfig
+from micro_x_agent_loop.compaction import NoneCompactionStrategy, SummarizeCompactionStrategy
+from micro_x_agent_loop.llm_client import create_client
 from micro_x_agent_loop.system_prompt import get_system_prompt
 from micro_x_agent_loop.tool_registry import get_all
 
@@ -36,11 +38,24 @@ async def main() -> None:
     temperature = float(config.get("Temperature", 1.0))
     max_tool_result_chars = int(config.get("MaxToolResultChars", 40_000))
     max_conversation_messages = int(config.get("MaxConversationMessages", 50))
+    compaction_strategy_name = config.get("CompactionStrategy", "none").lower()
+    compaction_threshold_tokens = int(config.get("CompactionThresholdTokens", 80_000))
+    protected_tail_messages = int(config.get("ProtectedTailMessages", 6))
     working_directory = config.get("WorkingDirectory")
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID")
     google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
 
     tools = get_all(working_directory, google_client_id, google_client_secret)
+
+    if compaction_strategy_name == "summarize":
+        compaction_strategy = SummarizeCompactionStrategy(
+            client=create_client(api_key),
+            model=model,
+            threshold_tokens=compaction_threshold_tokens,
+            protected_tail_messages=protected_tail_messages,
+        )
+    else:
+        compaction_strategy = NoneCompactionStrategy()
 
     agent = Agent(
         AgentConfig(
@@ -52,6 +67,7 @@ async def main() -> None:
             system_prompt=get_system_prompt(),
             max_tool_result_chars=max_tool_result_chars,
             max_conversation_messages=max_conversation_messages,
+            compaction_strategy=compaction_strategy,
         )
     )
 
@@ -59,6 +75,8 @@ async def main() -> None:
     print(f"Tools: {', '.join(t.name for t in tools)}")
     if working_directory:
         print(f"Working directory: {working_directory}")
+    if compaction_strategy_name != "none":
+        print(f"Compaction: {compaction_strategy_name} (threshold: {compaction_threshold_tokens:,} tokens, tail: {protected_tail_messages} messages)")
     print()
 
     while True:

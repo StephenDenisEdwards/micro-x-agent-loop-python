@@ -19,6 +19,7 @@ class Agent:
         self._anthropic_tools = to_anthropic_tools(config.tools)
         self._max_tool_result_chars = config.max_tool_result_chars
         self._max_conversation_messages = config.max_conversation_messages
+        self._compaction_strategy = config.compaction_strategy
 
     _LINE_PREFIX = "assistant> "
 
@@ -26,7 +27,7 @@ class Agent:
 
     async def run(self, user_message: str) -> None:
         self._messages.append({"role": "user", "content": user_message})
-        self._trim_conversation_history()
+        await self._maybe_compact()
 
         max_tokens_attempts = 0
 
@@ -71,9 +72,13 @@ class Agent:
 
             tool_results = await self._execute_tools(tool_use_blocks)
             self._messages.append({"role": "user", "content": tool_results})
-            self._trim_conversation_history()
+            await self._maybe_compact()
 
             print()  # newline before next spinner
+
+    async def _maybe_compact(self) -> None:
+        self._messages = await self._compaction_strategy.maybe_compact(self._messages)
+        self._trim_conversation_history()
 
     async def _execute_tools(self, tool_use_blocks: list[dict]) -> list[dict]:
         async def run_one(block: dict) -> dict:
