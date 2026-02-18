@@ -26,6 +26,7 @@ This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/Stephe
 - (Optional) [Brave Search API key](https://brave.com/search/api/) for the `web_search` tool
 - (Optional) Anthropic Admin API key (`sk-ant-admin...`) for the `anthropic_usage` tool
 - (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the bundled system-info MCP server
+- (Optional) [Go 1.21+](https://go.dev/dl/) and a C compiler (GCC) for the WhatsApp MCP server
 
 ### Install uv
 
@@ -173,6 +174,7 @@ Tools:
   - web_search
 MCP servers:
   - system-info: system_info, disk_info, network_info
+  - whatsapp: search_contacts, list_messages, list_chats, get_chat, ...
 Working directory: C:\path\to\your\documents
 Compaction: summarize (threshold: 80,000 tokens, tail: 6 messages)
 Logging: console (stderr, DEBUG), file (agent.log, DEBUG)
@@ -196,6 +198,43 @@ The repository includes a bundled .NET MCP server that exposes system informatio
 3. The `McpServers` entry in `config.json` is already configured. On next startup, the agent will show `system-info__system_info`, `system-info__disk_info`, and `system-info__network_info` in the tool list.
 
 Rebuild after any code changes to the MCP server — the config uses `--no-build` to avoid build output interfering with the stdio transport.
+
+### 4. WhatsApp MCP server setup (optional)
+
+The agent can send and receive WhatsApp messages via the [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp) external MCP server. This is a two-component system: a **Go bridge** that connects to WhatsApp Web, and a **Python MCP server** that the agent communicates with.
+
+**Prerequisites:** [Go 1.21+](https://go.dev/dl/), a C compiler (GCC), and [uv](https://docs.astral.sh/uv/).
+
+> **Windows users:** The Go bridge depends on CGO (for go-sqlite3), which requires GCC in your PATH. Windows does not ship with GCC. Install [WinLibs MinGW-w64](https://winlibs.com/) via `winget install BrechtSanders.WinLibs.POSIX.UCRT`, then build using **PowerShell** (not Git Bash — WinLibs installs to a long path that Git Bash cannot resolve). See the [full WhatsApp setup guide](documentation/docs/design/tools/whatsapp-mcp/README.md) for details.
+
+1. Clone and build the Go bridge:
+   ```bash
+   git clone https://github.com/lharries/whatsapp-mcp.git
+   cd whatsapp-mcp/whatsapp-bridge
+   CGO_ENABLED=1 go build -o whatsapp-bridge .
+   ```
+
+2. Start the bridge and scan the **QR code** with your phone (WhatsApp > Settings > Linked Devices > Link a Device):
+   ```bash
+   ./whatsapp-bridge
+   ```
+
+3. Add to `config.json`:
+   ```json
+   {
+     "McpServers": {
+       "whatsapp": {
+         "transport": "stdio",
+         "command": "uv",
+         "args": ["--directory", "/path/to/whatsapp-mcp/whatsapp-mcp-server", "run", "main.py"]
+       }
+     }
+   }
+   ```
+
+4. Start the agent — WhatsApp tools will appear in the MCP servers section.
+
+The Go bridge must be running before the agent starts. See the [full WhatsApp setup guide](documentation/docs/design/tools/whatsapp-mcp/README.md) for all 12 tools, known limitations, and troubleshooting.
 
 ### Configuration
 
@@ -306,6 +345,23 @@ MCP tools are discovered from external servers configured in `config.json`. The 
 | `system-info__disk_info` | Per-drive disk usage (fixed drives) |
 | `system-info__network_info` | Network interfaces with IP addresses |
 
+The external [WhatsApp MCP server](documentation/docs/design/tools/whatsapp-mcp/README.md) provides:
+
+| Tool | Description |
+|------|-------------|
+| `whatsapp__search_contacts` | Search contacts by name or phone number |
+| `whatsapp__list_messages` | Search/filter messages with pagination and context |
+| `whatsapp__list_chats` | List chats with search and sorting |
+| `whatsapp__get_chat` | Chat metadata by JID |
+| `whatsapp__get_direct_chat_by_contact` | Find direct chat by phone number |
+| `whatsapp__get_contact_chats` | All chats involving a contact |
+| `whatsapp__get_last_interaction` | Most recent message with a contact |
+| `whatsapp__get_message_context` | Messages surrounding a specific message |
+| `whatsapp__send_message` | Send text to a phone number or group JID |
+| `whatsapp__send_file` | Send a file (image, video, document) |
+| `whatsapp__send_audio_message` | Send audio as a voice message (requires ffmpeg) |
+| `whatsapp__download_media` | Download media from a message |
+
 MCP tools are prefixed as `{server_name}__{tool_name}`. Any MCP-compatible server can be added via config — no code changes needed. See [Tool System Design](documentation/docs/design/DESIGN-tool-system.md#mcp-tools-dynamic) for details.
 
 ## Example Prompts
@@ -368,6 +424,20 @@ What meetings do I have today?
 
 ```
 Create a meeting called "Team Standup" tomorrow at 10am for 30 minutes
+```
+
+### WhatsApp
+
+```
+Search my WhatsApp contacts for John
+```
+
+```
+List my recent WhatsApp chats
+```
+
+```
+Send a WhatsApp message to 1234567890 saying "I'll be there in 10 minutes"
 ```
 
 ### System information
@@ -455,6 +525,14 @@ If the OAuth browser window fails to open on a headless machine, you'll need to 
 ### MCP server fails with "Failed to parse JSONRPC message"
 
 The MCP server is writing non-JSONRPC data to stdout (e.g., build output or logging). For .NET servers, build separately (`dotnet build mcp-servers/system-info`) and use `--no-build` in the config. See [Troubleshooting](documentation/docs/operations/troubleshooting.md) for details.
+
+### WhatsApp: `gcc not found` when building the bridge
+
+The Go bridge uses CGO (go-sqlite3) and needs GCC. On Windows, install WinLibs (`winget install BrechtSanders.WinLibs.POSIX.UCRT`) and build using PowerShell, not Git Bash. See [WhatsApp setup guide](documentation/docs/design/tools/whatsapp-mcp/README.md#windows-specific-the-cgo-problem).
+
+### WhatsApp: `Connection refused` when sending messages
+
+The Go bridge must be running at `localhost:8080` before using WhatsApp tools. Start it with `./whatsapp-bridge` (or `whatsapp-bridge.exe` on Windows).
 
 ### `Rate limited. Retrying in Xs...`
 
@@ -553,6 +631,7 @@ Full documentation is available in the [documentation/docs/](documentation/docs/
 - [Software Architecture Document](documentation/docs/architecture/SAD.md) — system overview, components, data flow
 - [Tool System Design](documentation/docs/design/DESIGN-tool-system.md) — tool interface, registry, MCP integration
 - [Compaction Design](documentation/docs/design/DESIGN-compaction.md) — conversation compaction algorithm
+- [WhatsApp MCP Setup](documentation/docs/design/tools/whatsapp-mcp/README.md) — WhatsApp integration guide, prerequisites, pain points
 - [Configuration Reference](documentation/docs/operations/config.md) — all settings with types and defaults
 - [Architecture Decision Records](documentation/docs/architecture/decisions/README.md) — index of all ADRs
 
