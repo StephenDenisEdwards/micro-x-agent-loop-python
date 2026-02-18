@@ -171,6 +171,22 @@ Example — the bundled system-info server (included in this repository):
 
 > **Note:** For stdio servers that have a build step (like .NET or TypeScript projects), use `--no-build` (or equivalent) to prevent build output from being written to stdout, which would corrupt the JSONRPC transport. Build the server separately before starting the agent (e.g., `dotnet build mcp-servers/system-info`).
 
+Example — the external WhatsApp MCP server (see [WhatsApp MCP docs](../design/tools/whatsapp-mcp/README.md)):
+
+```json
+{
+  "McpServers": {
+    "whatsapp": {
+      "transport": "stdio",
+      "command": "uv",
+      "args": ["--directory", "C:\\path\\to\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
+    }
+  }
+}
+```
+
+> **Note:** The WhatsApp MCP server requires a separate Go bridge process to be running. The bridge connects to WhatsApp Web and must be started manually before the agent. See [WhatsApp MCP](../design/tools/whatsapp-mcp/README.md) for the full setup guide.
+
 Example with both transports:
 
 ```json
@@ -181,11 +197,10 @@ Example with both transports:
       "command": "dotnet",
       "args": ["run", "--no-build", "--project", "mcp-servers/system-info"]
     },
-    "filesystem": {
+    "whatsapp": {
       "transport": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
-      "env": {}
+      "command": "uv",
+      "args": ["--directory", "C:\\path\\to\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
     },
     "remote-tools": {
       "transport": "http",

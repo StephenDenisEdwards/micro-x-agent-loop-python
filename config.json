@@ -13,6 +13,11 @@
       "transport": "stdio",
       "command": "dotnet",
       "args": ["run", "--no-build", "--project", "mcp-servers/system-info"]
+    },
+    "whatsapp": {
+      "transport": "stdio",
+      "command": "uv",
+      "args": ["--directory", "C:\\Users\\steph\\source\\repos\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
     }
   }
 }

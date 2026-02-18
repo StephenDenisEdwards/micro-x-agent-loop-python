@@ -155,6 +155,34 @@ Built with the [ModelContextProtocol](https://www.nuget.org/packages/ModelContex
 
 The server must be built before starting the agent (`dotnet build mcp-servers/system-info`). The config uses `--no-build` to skip the build step at runtime.
 
+### External MCP Server: WhatsApp
+
+The agent can also connect to the [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp) external MCP server for WhatsApp messaging. Unlike system-info, this server lives outside this repository and has a two-component architecture:
+
+| Component | Role |
+|-----------|------|
+| Go bridge (`whatsapp-bridge/`) | Connects to WhatsApp Web via whatsmeow, stores messages in SQLite, exposes HTTP API on port 8080 |
+| Python MCP server (`whatsapp-mcp-server/`) | FastMCP server that queries SQLite for messages and calls the bridge API for sending. Runs via `uv` as a stdio MCP server. |
+
+The Go bridge must be running before the agent starts. The Python MCP server is spawned by McpManager as a child process.
+
+| MCP Tool | Agent Tool Name | Description |
+|----------|----------------|-------------|
+| `search_contacts` | `whatsapp__search_contacts` | Search contacts by name or phone |
+| `list_messages` | `whatsapp__list_messages` | Search/filter messages with pagination and context |
+| `list_chats` | `whatsapp__list_chats` | List chats with search and sorting |
+| `get_chat` | `whatsapp__get_chat` | Chat metadata by JID |
+| `get_direct_chat_by_contact` | `whatsapp__get_direct_chat_by_contact` | Find direct chat by phone number |
+| `get_contact_chats` | `whatsapp__get_contact_chats` | All chats involving a contact |
+| `get_last_interaction` | `whatsapp__get_last_interaction` | Most recent message with a contact |
+| `get_message_context` | `whatsapp__get_message_context` | Messages surrounding a specific message |
+| `send_message` | `whatsapp__send_message` | Send text to phone number or group JID |
+| `send_file` | `whatsapp__send_file` | Send file (image, video, document) |
+| `send_audio_message` | `whatsapp__send_audio_message` | Send audio as voice message (requires ffmpeg) |
+| `download_media` | `whatsapp__download_media` | Download media from a message |
+
+See [WhatsApp MCP](tools/whatsapp-mcp/README.md) for the full setup guide, prerequisites (Go, GCC, uv), Windows CGO pain points, and known limitations.
+
 ### Configuration
 
 See [Configuration Reference](../operations/config.md#mcpservers) for the full config format.

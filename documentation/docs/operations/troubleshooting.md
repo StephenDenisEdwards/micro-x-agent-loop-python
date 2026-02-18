@@ -132,6 +132,91 @@ The MCP server is writing non-JSONRPC data to stdout (e.g., build output, restor
 
 For other runtimes, redirect all logging to stderr and ensure nothing writes to stdout except the JSONRPC transport.
 
+### WhatsApp bridge build fails with "gcc not found"
+
+```
+cgo: C compiler "gcc" not found: exec: "gcc": executable file not found in %PATH%
+```
+
+The Go WhatsApp bridge uses [go-sqlite3](https://github.com/mattn/go-sqlite3), a CGO package that requires a C compiler (GCC) to build. Windows does not ship with GCC.
+
+**Fix:** Install a GCC distribution and ensure it is in your PATH:
+
+- **WinLibs (recommended):** `winget install BrechtSanders.WinLibs.POSIX.UCRT`
+- **Chocolatey:** `choco install mingw`
+- **MSYS2:** `winget install MSYS2.MSYS2`, then `pacman -S mingw-w64-ucrt-x86_64-gcc`
+
+**Pain point:** WinLibs installed via winget goes to a deeply nested path under `AppData\Local\Microsoft\WinGet\Packages\`. Git Bash may not be able to access this path. Use **PowerShell** to build:
+
+```powershell
+$gccDir = (Get-ChildItem -Recurse "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Filter "gcc.exe" | Select-Object -First 1).DirectoryName
+$env:PATH = "$gccDir;$env:PATH"
+$env:CGO_ENABLED = "1"
+cd whatsapp-mcp\whatsapp-bridge
+go build -o whatsapp-bridge.exe .
+```
+
+On macOS (`xcode-select --install`) and Linux (`apt install build-essential`), GCC is straightforward.
+
+See [WhatsApp MCP docs](../design/tools/whatsapp-mcp/README.md#windows-specific-the-cgo-problem) for full details.
+
+### WhatsApp tools fail with "Connection refused"
+
+```
+httpx.ConnectError: [Errno 111] Connection refused
+```
+
+The WhatsApp Python MCP server cannot reach the Go bridge at `http://localhost:8080`.
+
+**Fix:** Start the Go bridge before starting the agent:
+
+```bash
+cd whatsapp-mcp/whatsapp-bridge
+./whatsapp-bridge          # Linux/macOS
+whatsapp-bridge.exe        # Windows
+```
+
+The bridge must stay running for send operations to work. Reading cached messages from SQLite may work without the bridge if the database file exists from a previous session.
+
+### WhatsApp QR code expired or doesn't render
+
+On first run, the Go bridge displays a QR code that you scan with your phone. Issues:
+
+- **QR code expired:** The code expires after ~60 seconds. Restart the bridge to get a new one.
+- **QR code garbled:** The terminal needs Unicode support. Use Windows Terminal, iTerm2, or any modern terminal emulator. Older cmd.exe may not render the QR code correctly.
+- **Already linked:** If you previously linked and the session is still valid, the bridge connects without showing a QR code.
+
+### WhatsApp "no such table" SQLite error
+
+```
+sqlite3.OperationalError: no such table: messages
+```
+
+The SQLite database at `whatsapp-bridge/store/messages.db` has not been created yet.
+
+**Fix:** Start the Go bridge and let it connect to WhatsApp. The database and tables are created on first successful connection.
+
+### WhatsApp tools not appearing at agent startup
+
+The MCP servers section does not show WhatsApp tools.
+
+**Common causes:**
+
+1. **Wrong path in config.json:** The `--directory` argument must point to the `whatsapp-mcp-server/` directory containing `main.py` and `pyproject.toml`.
+2. **uv not installed:** The WhatsApp MCP server is run via `uv`. Install it from https://docs.astral.sh/uv/.
+3. **Python dependency error:** Run `uv --directory /path/to/whatsapp-mcp-server sync` manually to see if dependencies install correctly.
+4. **Port 8080 conflict:** If another application uses port 8080, the bridge cannot start. Check with `netstat -an | findstr 8080` (Windows) or `lsof -i :8080` (macOS/Linux).
+
+### WhatsApp send_audio_message fails
+
+```
+FileNotFoundError: ffmpeg not found
+```
+
+The `send_audio_message` tool converts audio files to Opus .ogg format, which requires [ffmpeg](https://ffmpeg.org/) installed and in PATH.
+
+**Fix:** Install ffmpeg, or use `send_file` instead (sends the raw audio file without conversion).
+
 ### run.bat creates venv but fails to start
 
 If `run.bat` creates the virtual environment but fails with an error about missing packages:

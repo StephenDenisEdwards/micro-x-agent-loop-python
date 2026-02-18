@@ -6,6 +6,7 @@
 - An [Anthropic API key](https://console.anthropic.com/)
 - (Optional) Google OAuth credentials for Gmail and Calendar tools
 - (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the bundled system-info MCP server
+- (Optional) [Go 1.21+](https://go.dev/dl/) and a C compiler (GCC) for the WhatsApp MCP server
 
 ## Setup
 
@@ -85,12 +86,13 @@ Tools:
   - web_search
 MCP servers:
   - system-info: system_info, disk_info, network_info
+  - whatsapp: search_contacts, list_messages, list_chats, get_chat, ...
 Working directory: C:\path\to\your\documents
 
 you>
 ```
 
-If Google credentials or the Anthropic Admin API key are not configured, their respective tools will not appear in the tool list. If the .NET SDK is not installed or the system-info MCP server has not been built, the MCP servers section will not appear (a warning is logged but the agent starts normally).
+If Google credentials or the Anthropic Admin API key are not configured, their respective tools will not appear in the tool list. If the .NET SDK is not installed or the system-info MCP server has not been built, the MCP servers section will not appear (a warning is logged but the agent starts normally). The same applies to the WhatsApp MCP server — if it is not configured or the bridge is not set up, the agent starts without WhatsApp tools.
 
 **Alternative — pip install:**
 
@@ -149,6 +151,48 @@ dotnet build mcp-servers/system-info
 3. The `McpServers` entry in `config.json` is already configured. On next startup, the agent will show `system-info__system_info`, `system-info__disk_info`, and `system-info__network_info` in the tool list.
 
 Rebuild after any code changes to the MCP server — the config uses `--no-build` to avoid build output interfering with the stdio transport.
+
+### WhatsApp MCP Server Setup (Optional)
+
+The agent can connect to WhatsApp via the [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp) external MCP server. This is a two-component system: a Go bridge that connects to WhatsApp Web, and a Python MCP server that the agent talks to.
+
+**Prerequisites:** [Go 1.21+](https://go.dev/dl/), a C compiler (GCC), and [uv](https://docs.astral.sh/uv/).
+
+> **Windows users:** The Go bridge depends on CGO (go-sqlite3), which requires GCC in your PATH. This is the biggest pain point on Windows. See the [WhatsApp MCP docs](../design/tools/whatsapp-mcp/README.md#windows-specific-the-cgo-problem) for detailed instructions on installing GCC via WinLibs and working around long-path issues in Git Bash.
+
+1. Clone and build the bridge:
+
+```bash
+git clone https://github.com/lharries/whatsapp-mcp.git
+cd whatsapp-mcp/whatsapp-bridge
+CGO_ENABLED=1 go build -o whatsapp-bridge .   # Linux/macOS
+```
+
+On Windows, use PowerShell — see the [full build instructions](../design/tools/whatsapp-mcp/README.md#2-build-the-go-bridge).
+
+2. Start the bridge and scan the QR code with your phone (WhatsApp > Settings > Linked Devices > Link a Device):
+
+```bash
+./whatsapp-bridge
+```
+
+3. Add the MCP server to `config.json`:
+
+```json
+{
+  "McpServers": {
+    "whatsapp": {
+      "transport": "stdio",
+      "command": "uv",
+      "args": ["--directory", "/path/to/whatsapp-mcp/whatsapp-mcp-server", "run", "main.py"]
+    }
+  }
+}
+```
+
+4. Start the agent. The WhatsApp tools (`search_contacts`, `list_messages`, `send_message`, etc.) will appear in the MCP servers section.
+
+The Go bridge must be running before you start the agent. See [WhatsApp MCP](../design/tools/whatsapp-mcp/README.md) for the full setup guide, all 12 tools, known limitations, and troubleshooting.
 
 ## Project Structure
 

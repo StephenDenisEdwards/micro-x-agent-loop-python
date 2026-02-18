@@ -44,6 +44,7 @@ graph LR
     Agent --> LinkedIn[LinkedIn Web]
     Agent --> Gmail[Gmail API]
     Agent --> MCP[MCP Servers]
+    Agent --> WhatsApp[WhatsApp Web<br/>via MCP + Bridge]
 ```
 
 The agent sits between the user and external services. The user provides natural-language instructions; the agent uses Claude to decide which tools to call, executes them, and returns results.
@@ -58,6 +59,7 @@ The agent sits between the user and external services. The user provides natural
 | Local shell | Process execution | Bash/cmd commands |
 | File system | Direct I/O | Read/write files (.txt, .docx) |
 | MCP servers | stdio / StreamableHTTP | Dynamic external tools via Model Context Protocol |
+| WhatsApp Web | MCP stdio + HTTP :8080 + WebSocket | Messaging via Go bridge (whatsmeow) and Python MCP server |
 
 ## 4. Solution Strategy
 
@@ -123,6 +125,7 @@ graph TD
 | `McpManager` | Connects to all configured MCP servers, discovers tools, manages lifecycle |
 | `McpToolProxy` | Adapter wrapping an MCP tool + session into the `Tool` Protocol |
 | `mcp-servers/system-info` | Bundled .NET MCP server exposing `system_info`, `disk_info`, `network_info` via stdio |
+| WhatsApp MCP (external) | External two-component MCP server: Go bridge (WhatsApp Web connection, SQLite, HTTP API) + Python FastMCP server (12 tools for messaging, contacts, chats) |
 | `html_utilities` | Shared HTML-to-plain-text conversion |
 | `gmail_auth` | OAuth2 flow and token caching for Gmail |
 | `gmail_parser` | Base64url decoding, MIME parsing, text extraction |
