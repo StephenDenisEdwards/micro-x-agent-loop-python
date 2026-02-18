@@ -18,6 +18,24 @@ _REPORT_LABELS = {
 }
 
 
+def _convert_cost_amounts(data: dict) -> None:
+    """Convert 'amount' fields from cents to dollars in-place, recursively.
+
+    The Anthropic cost API returns amounts in lowest currency units (cents).
+    E.g. "123.45" in USD means $1.23. We divide by 100 and rename to 'amount_usd'.
+    """
+    for key in list(data.keys()):
+        if key == "amount" and "currency" in data:
+            cents = float(data.pop(key))
+            data["amount_usd"] = round(cents / 100, 2)
+        elif isinstance(data[key], dict):
+            _convert_cost_amounts(data[key])
+        elif isinstance(data[key], list):
+            for item in data[key]:
+                if isinstance(item, dict):
+                    _convert_cost_amounts(item)
+
+
 class AnthropicUsageTool:
     def __init__(self, admin_api_key: str) -> None:
         self._admin_key = admin_api_key
@@ -30,7 +48,7 @@ class AnthropicUsageTool:
     def description(self) -> str:
         return (
             "Query Anthropic Admin API for organization usage and cost reports. "
-            "Supports three actions: 'usage' (token-level usage), 'cost' (spend in USD), "
+            "Supports three actions: 'usage' (token-level usage), 'cost' (spend in USD, converted from cents), "
             "'claude_code' (Claude Code productivity metrics)."
         )
 
@@ -109,6 +127,10 @@ class AnthropicUsageTool:
 
             data = response.json()
             label = _REPORT_LABELS[action]
+
+            if action == "cost":
+                _convert_cost_amounts(data)
+
             return f"{label}:\n{json.dumps(data, indent=2)}"
 
         except Exception as ex:
