@@ -12,6 +12,7 @@ dist/
 .ruff_cache/
 uv.lock
 
-# .NET build artifacts
+# .NET
+*.sln
 bin/
 obj/

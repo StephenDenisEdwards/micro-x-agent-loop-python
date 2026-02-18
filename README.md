@@ -9,8 +9,10 @@ This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/Stephe
 - **Streaming responses** — text appears word-by-word as Claude generates it
 - **Parallel tool execution** — multiple tool calls in a single turn run concurrently via `asyncio.gather`
 - **Automatic retry** — tenacity-based exponential backoff on API rate limits
-- **Configurable limits** — max tool result size and conversation history length with clear warnings
-- **Conditional tools** — Gmail tools only load when credentials are present
+- **Conversation compaction** — LLM-based summarization keeps long conversations within context limits
+- **MCP tool servers** — extend the agent with external tools via the Model Context Protocol (stdio and HTTP transports)
+- **Configurable logging** — structured logging via loguru to console and/or file
+- **Conditional tools** — Gmail, Calendar, Anthropic usage, and web search tools only load when their credentials are present
 - **Cross-platform** — works on Windows, macOS, and Linux
 
 ## Quick Start
@@ -20,7 +22,10 @@ This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/Stephe
 - [Python 3.11+](https://python.org/)
 - [uv](https://docs.astral.sh/uv/) (package manager) — see [Why uv?](#why-uv) below
 - An [Anthropic API key](https://console.anthropic.com/)
-- (Optional) Google OAuth credentials for Gmail tools — see [Gmail Setup](#gmail-setup)
+- (Optional) Google OAuth credentials for Gmail and Calendar tools — see [Gmail Setup](#gmail-setup)
+- (Optional) [Brave Search API key](https://brave.com/search/api/) for the `web_search` tool
+- (Optional) Anthropic Admin API key (`sk-ant-admin...`) for the `anthropic_usage` tool
+- (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the bundled system-info MCP server
 
 ### Install uv
 
@@ -93,9 +98,11 @@ Then edit `.env`:
 ANTHROPIC_API_KEY=sk-ant-...
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
+ANTHROPIC_ADMIN_API_KEY=sk-ant-admin...
+BRAVE_API_KEY=BSA...
 ```
 
-Only `ANTHROPIC_API_KEY` is required. Google credentials are optional — if omitted, Gmail tools are simply not registered and everything else works normally.
+Only `ANTHROPIC_API_KEY` is required. All other credentials are optional — if omitted, their respective tools are simply not registered and everything else works normally.
 
 ### 2. Run
 
@@ -148,12 +155,30 @@ python -m micro_x_agent_loop
 
 ```
 micro-x-agent-loop (type 'exit' to quit)
-Tools: bash, read_file, write_file, linkedin_jobs, linkedin_job_detail, gmail_search, gmail_read, gmail_send
+Tools: bash, read_file, write_file, append_file, linkedin_jobs, linkedin_job_detail, web_fetch, gmail_search, gmail_read, gmail_send, calendar_list_events, calendar_create_event, calendar_get_event, anthropic_usage, web_search, system-info__system_info, system-info__disk_info, system-info__network_info
+Working directory: C:\path\to\your\documents
+Compaction: summarize (threshold: 80,000 tokens, tail: 6 messages)
+Logging: console (stderr, DEBUG), file (agent.log, DEBUG)
 
 you>
 ```
 
 Type a natural-language prompt and press Enter. The agent will stream its response and call tools as needed. Type `exit` or `quit` to stop.
+
+Tools that appear depend on which credentials are configured in `.env` and which MCP servers are available.
+
+### 3. MCP server setup (optional)
+
+The repository includes a bundled .NET MCP server that exposes system information tools. To enable it:
+
+1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download) (or later)
+2. Build the server:
+   ```bash
+   dotnet build mcp-servers/system-info
+   ```
+3. The `McpServers` entry in `config.json` is already configured. On next startup, the agent will show `system-info__system_info`, `system-info__disk_info`, and `system-info__network_info` in the tool list.
+
+Rebuild after any code changes to the MCP server — the config uses `--no-build` to avoid build output interfering with the stdio transport.
 
 ### Configuration
 
@@ -166,7 +191,22 @@ App settings live in `config.json` in the project root:
   "Temperature": 1.0,
   "MaxToolResultChars": 40000,
   "MaxConversationMessages": 50,
-  "WorkingDirectory": "C:\\Users\\steph\\projects"
+  "CompactionStrategy": "summarize",
+  "CompactionThresholdTokens": 80000,
+  "ProtectedTailMessages": 6,
+  "WorkingDirectory": "C:\\Users\\you\\documents",
+  "LogLevel": "DEBUG",
+  "LogConsumers": [
+    { "type": "console" },
+    { "type": "file", "path": "agent.log" }
+  ],
+  "McpServers": {
+    "system-info": {
+      "transport": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--no-build", "--project", "mcp-servers/system-info"]
+    }
+  }
 }
 ```
 
@@ -177,21 +217,27 @@ App settings live in `config.json` in the project root:
 | `Temperature` | Sampling temperature (0.0 = deterministic, 1.0 = creative) | `1.0` |
 | `MaxToolResultChars` | Max characters per tool result before truncation | `40000` |
 | `MaxConversationMessages` | Max messages in history before trimming oldest | `50` |
-| `WorkingDirectory` | Default directory for all tools when paths are relative. `bash` runs commands here, `read_file` and `write_file` resolve relative paths against it. | Current working directory |
+| `CompactionStrategy` | `"none"` or `"summarize"` — LLM-based conversation compaction | `"none"` |
+| `CompactionThresholdTokens` | Estimated token count that triggers compaction | `80000` |
+| `ProtectedTailMessages` | Recent messages protected from compaction | `6` |
+| `WorkingDirectory` | Default directory for file and shell tools | Current working directory |
+| `LogLevel` | Logging level (DEBUG, INFO, WARNING, ERROR) | `"DEBUG"` |
+| `LogConsumers` | Array of log outputs (`console` and/or `file`) | `[]` |
+| `McpServers` | MCP server configurations (see [MCP docs](documentation/docs/operations/config.md#mcpservers)) | `{}` |
 
-All settings are optional — sensible defaults are used when missing.
+All settings are optional — sensible defaults are used when missing. See [Configuration Reference](documentation/docs/operations/config.md) for full details.
 
 Secrets (API keys) stay in `.env` and are loaded by python-dotenv.
 
 ## Gmail Setup
 
-Gmail tools require Google OAuth2 credentials. If you don't need Gmail, skip this section entirely — all other tools work without it.
+Gmail and Calendar tools require Google OAuth2 credentials. If you don't need them, skip this section entirely — all other tools work without it.
 
 ### 1. Create OAuth credentials
 
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a project (or select an existing one)
-3. Enable the **Gmail API** under APIs & Services > Library
+3. Enable the **Gmail API** and **Google Calendar API** under APIs & Services > Library
 4. Go to APIs & Services > Credentials > Create Credentials > OAuth client ID
 5. Application type: **Desktop app**
 6. Copy the **Client ID** and **Client Secret** into your `.env` file
@@ -204,88 +250,46 @@ The first time you use a Gmail tool (e.g. `gmail_search`), a browser window will
 - Subsequent runs reuse the cached token (no browser prompt)
 - The token auto-refreshes when expired
 
-The agent requests two Gmail scopes:
-- `gmail.readonly` — for searching and reading emails
-- `gmail.send` — for sending emails
+Calendar tools trigger a separate OAuth flow on first use, with tokens cached in `.calendar-tokens/`.
 
 ## Tools
 
-### bash
+### Always available
 
-Execute shell commands and return the output. Uses `cmd.exe` on Windows and `bash` on Unix. Commands time out after 30 seconds.
+| Tool | Description |
+|------|-------------|
+| `bash` | Execute shell commands (cmd.exe on Windows, bash on Unix). 30s timeout. |
+| `read_file` | Read text files and `.docx` documents. Relative paths resolve against `WorkingDirectory`. |
+| `write_file` | Write content to a file, creating parent directories as needed. |
+| `append_file` | Append content to an existing file, creating it if it doesn't exist. |
+| `linkedin_jobs` | Search LinkedIn job postings with filters (keyword, location, date, type, remote, experience, limit). |
+| `linkedin_job_detail` | Fetch full job description from a LinkedIn job URL. |
+| `web_fetch` | Fetch and extract content from a URL (HTML converted to text, JSON pretty-printed). |
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `command` | string | yes | The bash command to execute |
+### Conditional (require credentials)
 
-### read_file
+| Tool | Required credential | Description |
+|------|-------------------|-------------|
+| `gmail_search` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Search Gmail using Gmail search syntax |
+| `gmail_read` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Read full email content by message ID |
+| `gmail_send` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Send a plain-text email |
+| `calendar_list_events` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | List events by date range or search query |
+| `calendar_create_event` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Create events with title, time, attendees |
+| `calendar_get_event` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Get full event details by ID |
+| `anthropic_usage` | `ANTHROPIC_ADMIN_API_KEY` | Query usage, cost, and Claude Code productivity reports |
+| `web_search` | `BRAVE_API_KEY` | Search the web via Brave Search API |
 
-Read the contents of a file and return it as text. Supports plain text files and `.docx` documents (via python-docx).
+### MCP tools (dynamic)
 
-Relative paths are resolved against the configured `WorkingDirectory`. If not set, the current working directory is used.
+MCP tools are discovered from external servers configured in `config.json`. The bundled system-info server provides:
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | yes | Absolute or relative path to the file to read |
+| Tool | Description |
+|------|-------------|
+| `system-info__system_info` | OS, CPU, memory, uptime, .NET runtime |
+| `system-info__disk_info` | Per-drive disk usage (fixed drives) |
+| `system-info__network_info` | Network interfaces with IP addresses |
 
-### write_file
-
-Write content to a file, creating parent directories if they don't exist.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | yes | Absolute or relative path to the file to write |
-| `content` | string | yes | The content to write to the file |
-
-### linkedin_jobs
-
-Search for job postings on LinkedIn. Returns job title, company, location, date posted, salary (if listed), and URL.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `keyword` | string | yes | Job search keyword (e.g. `"software engineer"`) |
-| `location` | string | no | Job location (e.g. `"New York"`, `"Remote"`) |
-| `dateSincePosted` | string | no | Recency filter: `"past month"`, `"past week"`, or `"24hr"` |
-| `jobType` | string | no | Employment type: `"full time"`, `"part time"`, `"contract"`, `"temporary"`, `"internship"` |
-| `remoteFilter` | string | no | Work arrangement: `"on site"`, `"remote"`, or `"hybrid"` |
-| `experienceLevel` | string | no | Level: `"internship"`, `"entry level"`, `"associate"`, `"senior"`, `"director"`, `"executive"` |
-| `limit` | string | no | Max results to return (default `"10"`) |
-| `sortBy` | string | no | Sort order: `"recent"` or `"relevant"` |
-
-### linkedin_job_detail
-
-Fetch the full job specification/description from a LinkedIn job URL. Use this after `linkedin_jobs` to get complete details for a specific posting.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `url` | string | yes | The LinkedIn job URL (from a `linkedin_jobs` search result) |
-
-### gmail_search
-
-Search Gmail using [Gmail search syntax](https://support.google.com/mail/answer/7190?hl=en). Returns message ID, date, sender, subject, and snippet for each match. Only available when Google credentials are configured.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `query` | string | yes | Gmail search query (e.g. `"is:unread"`, `"from:boss@co.com newer_than:7d"`) |
-| `maxResults` | number | no | Max number of results (default 10) |
-
-### gmail_read
-
-Read the full content of a Gmail email by its message ID (from `gmail_search` results). Handles multipart MIME messages, preferring HTML content converted to readable plain text.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `messageId` | string | yes | The Gmail message ID (from `gmail_search` results) |
-
-### gmail_send
-
-Send a plain-text email from your Gmail account.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `to` | string | yes | Recipient email address |
-| `subject` | string | yes | Email subject line |
-| `body` | string | yes | Email body (plain text) |
+MCP tools are prefixed as `{server_name}__{tool_name}`. Any MCP-compatible server can be added via config — no code changes needed. See [Tool System Design](documentation/docs/design/DESIGN-tool-system.md#mcp-tools-dynamic) for details.
 
 ## Example Prompts
 
@@ -306,10 +310,6 @@ List all Python files in this project
 ```
 
 ```
-Run pytest and tell me if anything failed
-```
-
-```
 What's the current git status?
 ```
 
@@ -323,8 +323,14 @@ Search LinkedIn for remote senior .NET developer jobs posted in the last week
 Get the full job description for the first result
 ```
 
+### Web
+
 ```
-Search LinkedIn for Python developer jobs in London, sorted by most recent
+Fetch the content from https://example.com and summarise it
+```
+
+```
+Search the web for "Python asyncio best practices" and summarise the top results
 ```
 
 ### Gmail
@@ -334,11 +340,23 @@ Search my Gmail for unread emails from the last 3 days
 ```
 
 ```
-Read the email with subject "Interview Invitation" and summarise it
+Send an email to alice@example.com with subject "Meeting Notes" and body "Here are the notes from today's meeting..."
+```
+
+### Calendar
+
+```
+What meetings do I have today?
 ```
 
 ```
-Send an email to alice@example.com with subject "Meeting Notes" and body "Here are the notes from today's meeting..."
+Create a meeting called "Team Standup" tomorrow at 10am for 30 minutes
+```
+
+### System information
+
+```
+What are my system specs?
 ```
 
 ### Multi-step tasks
@@ -351,10 +369,6 @@ Read my CV from documents/Stephen Edwards CV December 2025.docx, then search Lin
 Search my Gmail for emails from recruiters in the last week and summarise them
 ```
 
-```
-Search LinkedIn for Python developer jobs in London, get the details for the top 3, and write a summary comparing them
-```
-
 ## Dependencies
 
 | Package | Purpose | C# Equivalent |
@@ -365,8 +379,10 @@ Search LinkedIn for Python developer jobs in London, get the details for the top
 | [python-docx](https://pypi.org/project/python-docx/) | Read `.docx` files | DocumentFormat.OpenXml |
 | [beautifulsoup4](https://pypi.org/project/beautifulsoup4/) + [lxml](https://pypi.org/project/lxml/) | HTML parsing and conversion | HtmlAgilityPack |
 | [httpx](https://pypi.org/project/httpx/) | Async HTTP client | HttpClient |
-| [google-api-python-client](https://pypi.org/project/google-api-python-client/) | Gmail API | Google.Apis.Gmail.v1 |
+| [google-api-python-client](https://pypi.org/project/google-api-python-client/) | Gmail and Calendar API | Google.Apis.Gmail.v1 |
 | [google-auth-oauthlib](https://pypi.org/project/google-auth-oauthlib/) | Google OAuth2 flow | Google.Apis.Auth |
+| [loguru](https://pypi.org/project/loguru/) | Structured logging | Serilog |
+| [mcp](https://pypi.org/project/mcp/) | Model Context Protocol client | ModelContextProtocol |
 
 ## Why uv?
 
@@ -411,13 +427,17 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 Or copy the example: `cp .env.example .env` and fill in your key.
 
-### Gmail tools not showing up
+### Gmail/Calendar tools not showing up
 
-Gmail tools only register when both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set in `.env`. If you don't need Gmail, this is expected — the other tools work without it.
+These tools only register when both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set in `.env`. If you don't need them, this is expected — the other tools work without it.
 
 ### Gmail OAuth browser doesn't open
 
 If the OAuth browser window fails to open on a headless machine, you'll need to run the first authorization on a machine with a browser. The resulting `.gmail-tokens/token.json` can then be copied to the headless machine.
+
+### MCP server fails with "Failed to parse JSONRPC message"
+
+The MCP server is writing non-JSONRPC data to stdout (e.g., build output or logging). For .NET servers, build separately (`dotnet build mcp-servers/system-info`) and use `--no-build` in the config. See [Troubleshooting](documentation/docs/operations/troubleshooting.md) for details.
 
 ### `Rate limited. Retrying in Xs...`
 
@@ -435,10 +455,11 @@ If a tool returns more than 40,000 characters, the output is truncated. You can 
 
 ### Conversation history trimmed warning
 
-When the conversation exceeds 50 messages, the oldest messages are removed. You can increase the limit in `config.json`:
+When the conversation exceeds 50 messages, the oldest messages are removed. Enable compaction for smarter context management:
 
 ```json
 {
+  "CompactionStrategy": "summarize",
   "MaxConversationMessages": 100
 }
 ```
@@ -446,26 +467,55 @@ When the conversation exceeds 50 messages, the oldest messages are removed. You 
 ## Architecture
 
 ```
-__main__.py              -- Entry point: loads config, builds tools, starts REPL
-agent.py                 -- Agent loop: streaming, parallel tool dispatch, history management
-agent_config.py          -- Configuration dataclass
-llm_client.py            -- Anthropic API streaming + tenacity retry
-tool.py                  -- Tool Protocol (structural typing interface)
-tool_registry.py         -- Assembles tools with dependencies (conditional Gmail)
-tools/
-  bash_tool.py
-  read_file_tool.py
-  write_file_tool.py
-  html_utilities.py      -- Shared HTML-to-text conversion
-  linkedin/
-    linkedin_jobs_tool.py
-    linkedin_job_detail_tool.py
-  gmail/
-    gmail_auth.py        -- OAuth2 flow + token caching
-    gmail_parser.py      -- MIME parsing + body extraction
-    gmail_search_tool.py
-    gmail_read_tool.py
-    gmail_send_tool.py
+src/micro_x_agent_loop/
+  __main__.py              -- Entry point: loads config, builds tools, initializes MCP, starts REPL
+  agent.py                 -- Agent loop: streaming, parallel tool dispatch, history management
+  agent_config.py          -- Configuration dataclass
+  llm_client.py            -- Anthropic API streaming + tenacity retry
+  compaction.py            -- Conversation compaction strategies (none, summarize)
+  logging_config.py        -- Loguru logging setup from config
+  system_prompt.py         -- System prompt text
+  tool.py                  -- Tool Protocol (structural typing interface)
+  tool_registry.py         -- Assembles tools with dependencies (conditional registration)
+  mcp/
+    mcp_manager.py         -- MCP server connection lifecycle
+    mcp_tool_proxy.py      -- Adapter: MCP tool -> Tool Protocol
+  tools/
+    bash_tool.py
+    read_file_tool.py
+    write_file_tool.py
+    append_file_tool.py
+    html_utilities.py      -- Shared HTML-to-text conversion
+    web/
+      web_fetch_tool.py    -- Fetch and extract web content
+      web_search_tool.py   -- Web search via Brave Search API
+      search_provider.py   -- Search provider abstraction
+      brave_search_provider.py
+    linkedin/
+      linkedin_jobs_tool.py
+      linkedin_job_detail_tool.py
+    gmail/
+      gmail_auth.py        -- OAuth2 flow + token caching
+      gmail_parser.py      -- MIME parsing + body extraction
+      gmail_search_tool.py
+      gmail_read_tool.py
+      gmail_send_tool.py
+    calendar/
+      calendar_auth.py     -- OAuth2 flow (separate tokens)
+      calendar_list_events_tool.py
+      calendar_create_event_tool.py
+      calendar_get_event_tool.py
+    anthropic/
+      anthropic_usage_tool.py  -- Usage/cost/Claude Code reports
+
+mcp-servers/
+  system-info/             -- Bundled .NET MCP server for system information
+    SystemInfo.csproj
+    Program.cs
+    Tools/
+      SystemInfoTools.cs   -- OS, CPU, memory, uptime
+      DiskInfoTools.cs     -- Per-drive disk usage
+      NetworkInfoTools.cs  -- Network interfaces + IPs
 ```
 
 ### How the agent loop works
@@ -477,6 +527,17 @@ tools/
 5. Tool results are sent back to Claude, which continues generating a response
 6. Steps 3-5 repeat until Claude responds with text only (no tool calls)
 7. The conversation history is maintained across prompts in the same session
+8. When the conversation grows large, compaction summarizes older messages to stay within context limits
+
+## Documentation
+
+Full documentation is available in the [documentation/docs/](documentation/docs/index.md) directory:
+
+- [Software Architecture Document](documentation/docs/architecture/SAD.md) — system overview, components, data flow
+- [Tool System Design](documentation/docs/design/DESIGN-tool-system.md) — tool interface, registry, MCP integration
+- [Compaction Design](documentation/docs/design/DESIGN-compaction.md) — conversation compaction algorithm
+- [Configuration Reference](documentation/docs/operations/config.md) — all settings with types and defaults
+- [Architecture Decision Records](documentation/docs/architecture/decisions/README.md) — index of all ADRs
 
 ## See Also
 
