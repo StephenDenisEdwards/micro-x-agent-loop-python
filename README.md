@@ -155,7 +155,24 @@ python -m micro_x_agent_loop
 
 ```
 micro-x-agent-loop (type 'exit' to quit)
-Tools: bash, read_file, write_file, append_file, linkedin_jobs, linkedin_job_detail, web_fetch, gmail_search, gmail_read, gmail_send, calendar_list_events, calendar_create_event, calendar_get_event, anthropic_usage, web_search, system-info__system_info, system-info__disk_info, system-info__network_info
+Tools:
+  - bash
+  - read_file
+  - write_file
+  - append_file
+  - linkedin_jobs
+  - linkedin_job_detail
+  - web_fetch
+  - gmail_search
+  - gmail_read
+  - gmail_send
+  - calendar_list_events
+  - calendar_create_event
+  - calendar_get_event
+  - anthropic_usage
+  - web_search
+MCP servers:
+  - system-info: system_info, disk_info, network_info
 Working directory: C:\path\to\your\documents
 Compaction: summarize (threshold: 80,000 tokens, tail: 6 messages)
 Logging: console (stderr, DEBUG), file (agent.log, DEBUG)

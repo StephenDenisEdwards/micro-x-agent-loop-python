@@ -58,6 +58,7 @@ async def main() -> None:
     tools = get_all(working_directory, google_client_id, google_client_secret, anthropic_admin_api_key, brave_api_key)
 
     mcp_manager: McpManager | None = None
+    mcp_tools: list = []
     mcp_server_configs = config.get("McpServers", {})
     if mcp_server_configs:
         mcp_manager = McpManager(mcp_server_configs)
@@ -89,7 +90,18 @@ async def main() -> None:
     )
 
     print("micro-x-agent-loop (type 'exit' to quit)")
-    print(f"Tools: {', '.join(t.name for t in tools)}")
+    builtin_tools = [t for t in tools if t not in mcp_tools]
+    print("Tools:")
+    for t in builtin_tools:
+        print(f"  - {t.name}")
+    if mcp_tools:
+        mcp_names: dict[str, list[str]] = {}
+        for t in mcp_tools:
+            server, _, tool_name = t.name.partition("__")
+            mcp_names.setdefault(server, []).append(tool_name or t.name)
+        print("MCP servers:")
+        for server, tool_names in mcp_names.items():
+            print(f"  - {server}: {', '.join(tool_names)}")
     if working_directory:
         print(f"Working directory: {working_directory}")
     if compaction_strategy_name != "none":

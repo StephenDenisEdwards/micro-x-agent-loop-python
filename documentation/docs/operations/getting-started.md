@@ -67,13 +67,30 @@ You should see:
 
 ```
 micro-x-agent-loop (type 'exit' to quit)
-Tools: bash, read_file, write_file, linkedin_jobs, linkedin_job_detail, gmail_search, gmail_read, gmail_send, calendar_list_events, calendar_create_event, calendar_get_event, anthropic_usage, system-info__system_info, system-info__disk_info, system-info__network_info
+Tools:
+  - bash
+  - read_file
+  - write_file
+  - append_file
+  - linkedin_jobs
+  - linkedin_job_detail
+  - web_fetch
+  - gmail_search
+  - gmail_read
+  - gmail_send
+  - calendar_list_events
+  - calendar_create_event
+  - calendar_get_event
+  - anthropic_usage
+  - web_search
+MCP servers:
+  - system-info: system_info, disk_info, network_info
 Working directory: C:\path\to\your\documents
 
 you>
 ```
 
-If Google credentials or the Anthropic Admin API key are not configured, their respective tools will not appear in the tool list. If the .NET SDK is not installed or the system-info MCP server has not been built, the `system-info__*` tools will not appear (a warning is logged but the agent starts normally).
+If Google credentials or the Anthropic Admin API key are not configured, their respective tools will not appear in the tool list. If the .NET SDK is not installed or the system-info MCP server has not been built, the MCP servers section will not appear (a warning is logged but the agent starts normally).
 
 **Alternative — pip install:**
 
