@@ -41,10 +41,11 @@ def get_all(
     working_directory: str | None = None,
     google_client_id: str | None = None,
     google_client_secret: str | None = None,
+    anthropic_admin_api_key: str | None = None,
 ) -> list[Tool]:
 ```
 
-Gmail tools are **conditionally registered** — they are only added when both Google credentials are present. This prevents runtime errors when Gmail is not configured.
+Gmail/Calendar tools are **conditionally registered** when both Google credentials are present. The Anthropic usage tool is conditionally registered when the admin API key is present. This prevents runtime errors when optional credentials are not configured.
 
 ## Built-in Tools
 
@@ -89,6 +90,14 @@ Gmail tools require OAuth2 authentication. On first use, a browser window opens 
 | `calendar_get_event` | Get full event details by ID | [calendar-get-event](tools/calendar-get-event/README.md) |
 
 Calendar tools use the same Google OAuth2 credentials as Gmail but with a separate token cache (`.calendar-tokens/`) and the `https://www.googleapis.com/auth/calendar` scope.
+
+### Anthropic Admin (conditional)
+
+| Tool | Description | Docs |
+|------|-------------|------|
+| `anthropic_usage` | Query usage, cost, and Claude Code productivity reports | [anthropic-usage](tools/anthropic-usage/README.md) |
+
+Requires an Anthropic Admin API key (`sk-ant-admin...`), separate from the inference key. See [DESIGN-account-management-apis](DESIGN-account-management-apis.md) for full API surface details.
 
 ## Shared Utilities
 

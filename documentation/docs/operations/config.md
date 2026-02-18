@@ -10,10 +10,11 @@ Configuration is split into two files:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude |
-| `GOOGLE_CLIENT_ID` | No | Google OAuth client ID for Gmail tools |
-| `GOOGLE_CLIENT_SECRET` | No | Google OAuth client secret for Gmail tools |
+| `GOOGLE_CLIENT_ID` | No | Google OAuth client ID for Gmail and Calendar tools |
+| `GOOGLE_CLIENT_SECRET` | No | Google OAuth client secret for Gmail and Calendar tools |
+| `ANTHROPIC_ADMIN_API_KEY` | No | Anthropic Admin API key (`sk-ant-admin...`) for usage/cost reporting |
 
-If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail tools are not registered. All other tools work normally.
+If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail and Calendar tools are not registered. If `ANTHROPIC_ADMIN_API_KEY` is missing, the `anthropic_usage` tool is not registered. All other tools work normally.
 
 ## App Settings (`config.json`)
 

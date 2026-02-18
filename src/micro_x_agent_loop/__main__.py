@@ -51,8 +51,9 @@ async def main() -> None:
     working_directory = config.get("WorkingDirectory")
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID")
     google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    anthropic_admin_api_key = os.environ.get("ANTHROPIC_ADMIN_API_KEY")
 
-    tools = get_all(working_directory, google_client_id, google_client_secret)
+    tools = get_all(working_directory, google_client_id, google_client_secret, anthropic_admin_api_key)
 
     if compaction_strategy_name == "summarize":
         compaction_strategy = SummarizeCompactionStrategy(

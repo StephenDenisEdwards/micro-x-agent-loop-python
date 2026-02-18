@@ -23,9 +23,10 @@ Create `.env` in the project root with your API keys:
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
+ANTHROPIC_ADMIN_API_KEY=sk-ant-admin...
 ```
 
-The Google credentials are optional — if omitted, the Gmail and Calendar tools will not be registered and all other tools work normally.
+The Google credentials are optional — if omitted, the Gmail and Calendar tools will not be registered. The Anthropic Admin API key is optional — if omitted, the `anthropic_usage` tool will not be registered. All other tools work normally.
 
 ### 3. Configure settings
 
@@ -65,13 +66,13 @@ You should see:
 
 ```
 micro-x-agent-loop (type 'exit' to quit)
-Tools: bash, read_file, write_file, linkedin_jobs, linkedin_job_detail, gmail_search, gmail_read, gmail_send, calendar_list_events, calendar_create_event, calendar_get_event
+Tools: bash, read_file, write_file, linkedin_jobs, linkedin_job_detail, gmail_search, gmail_read, gmail_send, calendar_list_events, calendar_create_event, calendar_get_event, anthropic_usage
 Working directory: C:\path\to\your\documents
 
 you>
 ```
 
-If Google credentials are not configured, the Gmail and Calendar tools will not appear in the tool list.
+If Google credentials or the Anthropic Admin API key are not configured, their respective tools will not appear in the tool list.
 
 **Alternative — pip install:**
 
@@ -143,6 +144,8 @@ micro-x-agent-loop-python/
             ├── read_file_tool.py  # File reading (.txt, .docx)
             ├── write_file_tool.py # File writing
             ├── html_utilities.py  # Shared HTML-to-text
+            ├── anthropic/
+            │   └── anthropic_usage_tool.py  # Usage/cost/Claude Code reports
             ├── linkedin/
             │   ├── linkedin_jobs_tool.py    # Job search
             │   └── linkedin_job_detail_tool.py # Job detail fetch
