@@ -16,8 +16,8 @@
     },
     "whatsapp": {
       "transport": "stdio",
-      "command": "uv",
-      "args": ["--directory", "C:\\Users\\steph\\source\\repos\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
+      "command": "python",
+      "args": ["-m", "uv", "--directory", "C:\\Users\\steph\\source\\repos\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
     }
   }
 }

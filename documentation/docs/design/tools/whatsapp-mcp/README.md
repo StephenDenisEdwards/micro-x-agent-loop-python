@@ -108,48 +108,84 @@ $env:CGO_ENABLED = "1"
 go build -o whatsapp-bridge.exe .
 ```
 
+If GCC is installed via MSYS2 instead of WinLibs, use the direct path:
+```powershell
+$env:PATH = "C:\msys64\ucrt64\bin;" + $env:PATH
+$env:CGO_ENABLED = "1"
+go build -o whatsapp-bridge.exe .
+```
+
 The build produces a ~36 MB binary (`whatsapp-bridge` or `whatsapp-bridge.exe`).
 
 ### 3. Run the bridge and authenticate
 
+**This step is critical.** The bridge must be running and authenticated before WhatsApp tools will work.
+
 ```bash
-./whatsapp-bridge    # or whatsapp-bridge.exe on Windows
+./whatsapp-bridge    # or .\whatsapp-bridge.exe on Windows
 ```
 
 On first run, the bridge prints a **QR code** to the terminal. Scan it with your phone:
 
 1. Open WhatsApp on your phone
 2. Go to **Settings > Linked Devices > Link a Device**
-3. Scan the QR code displayed in the terminal
+3. Point your phone camera at the QR code in the terminal
 
-After scanning, the bridge connects to WhatsApp Web and begins receiving messages. It stores them in `whatsapp-bridge/store/messages.db`.
+After scanning, the bridge connects to WhatsApp Web and begins syncing messages. You will see output like:
+```
+Successfully connected and authenticated!
+Received history sync event with N conversations
+History sync complete. Stored N messages.
+REST server is running. Press Ctrl+C to disconnect and exit.
+```
+
+**Wait for the history sync to finish** (30-60 seconds) before starting the agent. The sync creates `whatsapp-bridge/store/messages.db` — this database must exist for WhatsApp tools to return any data.
 
 **Pain points:**
 - The QR code expires quickly (~60 seconds). If it expires, restart the bridge to get a new one.
 - The terminal must support Unicode block characters for the QR code to render correctly. Windows Terminal works; older cmd.exe may not.
-- The bridge must stay running. If you close it, the MCP server loses the ability to send messages (reading cached messages from SQLite still works).
+- The bridge must stay running in its own terminal window. If you close it, the MCP server loses the ability to send messages (reading cached messages from SQLite still works).
+- **Keep the bridge terminal open** — do not close it after scanning the QR code.
 
 ### 4. Configure the MCP server in config.json
 
 Add the WhatsApp MCP server to your agent's `config.json`:
 
+**Windows:**
+```json
+{
+  "McpServers": {
+    "whatsapp": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "uv", "--directory", "C:\\path\\to\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
+    }
+  }
+}
+```
+
+**macOS / Linux:**
 ```json
 {
   "McpServers": {
     "whatsapp": {
       "transport": "stdio",
       "command": "uv",
-      "args": ["--directory", "C:\\path\\to\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
+      "args": ["--directory", "/path/to/whatsapp-mcp/whatsapp-mcp-server", "run", "main.py"]
     }
   }
 }
 ```
 
-Replace `C:\\path\\to\\whatsapp-mcp\\whatsapp-mcp-server` with the actual absolute path to the cloned `whatsapp-mcp-server` directory.
+Replace the path with the actual absolute path to the cloned `whatsapp-mcp-server` directory.
+
+> **Windows note:** Use `"command": "python"` with `"args": ["-m", "uv", ...]` instead of `"command": "uv"`. The `uv` executable may not be on the system PATH when spawned by the agent, but `python -m uv` works reliably.
 
 The `uv --directory` flag ensures `uv` resolves the `pyproject.toml` from the correct directory and installs dependencies (`httpx`, `mcp[cli]`, `requests`) automatically.
 
 ### 5. Start the agent
+
+**Make sure the Go bridge is already running and authenticated (step 3) before starting the agent.**
 
 Start the agent with `run.bat` or `run.sh`. You should see the WhatsApp tools in the MCP servers section:
 
@@ -159,20 +195,37 @@ MCP servers:
   - whatsapp: search_contacts, list_messages, list_chats, get_chat, ...
 ```
 
+### 6. Verify it works
+
+Type this prompt in the agent:
+
+```
+List my 5 most recent WhatsApp chats
+```
+
+If you see chat data, everything is working. If the agent says "no results", see [Troubleshooting](#troubleshooting).
+
 ## Startup Order
 
-The Go bridge and the Python MCP server are **independent processes** with different lifecycles:
+The Go bridge and the Python MCP server are **independent processes** with different lifecycles. The correct startup order is:
 
 ```
-1. Start the Go bridge          →  must be running first
-2. Start the agent (run.bat)    →  spawns the Python MCP server via uv
+1. Build the Go bridge            →  one-time (rebuild when outdated)
+2. Start the Go bridge            →  must be running first, in its own terminal
+3. Scan QR code on first run      →  authenticates with WhatsApp
+4. Wait for history sync          →  creates messages.db (30-60 seconds)
+5. Start the agent (run.bat)      →  spawns the Python MCP server via uv
 ```
 
-The agent's `McpManager` spawns the Python MCP server as a child process (stdio transport). But the Python MCP server needs the Go bridge to be running at `localhost:8080` for send operations and the SQLite database to exist for read operations.
+The agent's `McpManager` spawns the Python MCP server as a child process (stdio transport). But the Python MCP server needs the Go bridge to be running at `localhost:8080` for send operations and the SQLite database to exist at `whatsapp-bridge/store/messages.db` for read operations.
 
 **If the bridge is not running:**
-- Message reading may still work (if the SQLite file exists from a previous session)
-- Sending messages, searching contacts, and downloading media will fail with connection errors
+- All tools will return empty results (no database file exists)
+- Sending messages will fail with connection errors
+
+**If the bridge is running but not authenticated:**
+- The database does not exist yet
+- All tools will return empty results
 
 ## Tools
 
@@ -221,11 +274,13 @@ For tools that accept a `recipient` parameter:
 
 4. **Audio messages require ffmpeg** — The `send_audio_message` tool converts audio to Opus .ogg format, which requires ffmpeg installed and in PATH. Falls back to `send_file` if unavailable.
 
-5. **No message history before bridge start** — The bridge only stores messages received while it is running. Historical messages from before the bridge was started are not available.
+5. **History sync on first connect only** — The bridge syncs recent message history when you first scan the QR code. After that, it only stores messages received while running. If you delete the `store/` directory, you need to re-scan and sync again.
 
 6. **Single WhatsApp account** — The bridge connects to one WhatsApp account. To switch accounts, delete the `whatsapp-bridge/store/` directory and re-scan a new QR code.
 
 7. **Session expiry** — WhatsApp may disconnect the linked device after ~14 days of inactivity. Re-run the bridge and scan a new QR code when this happens.
+
+8. **Client version expiry** — WhatsApp periodically deprecates older client versions. When this happens, the bridge fails with `Client outdated (405)`. You must update the `whatsmeow` library and rebuild — see [Updating the Bridge](#updating-the-bridge).
 
 ## Troubleshooting
 
@@ -236,8 +291,48 @@ See [Troubleshooting](../../../operations/troubleshooting.md) for general MCP is
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
 | `gcc not found` during build | No C compiler in PATH | See [CGO Problem](#windows-specific-the-cgo-problem) |
+| `Client outdated (405)` on bridge start | whatsmeow library is too old | See [Updating the Bridge](#updating-the-bridge) below |
 | QR code doesn't render | Terminal doesn't support Unicode | Use Windows Terminal or iTerm2 |
 | `Connection refused` on send | Bridge not running | Start the bridge first |
-| `no such table` from SQLite | Database not created yet | Start the bridge and let it connect |
-| Tools not appearing at startup | Config path wrong | Check the `--directory` path in config.json |
+| Tools return empty / `(no output)` | Bridge not authenticated or DB missing | Start bridge, scan QR, wait for sync |
+| `no such table` from SQLite | Database not created yet | Start the bridge, scan QR code, wait for history sync |
+| Tools not appearing at startup | Config path wrong or `uv` not found | Check path in config.json; on Windows use `python -m uv` |
 | `send_audio_message` fails | ffmpeg not installed | Install ffmpeg or use `send_file` instead |
+
+### Updating the Bridge
+
+WhatsApp periodically rejects older client versions with a `405 Client outdated` error:
+
+```
+[Client ERROR] Client outdated (405) connect failure (client version: 2.3000.xxxx)
+```
+
+**Fix:** Update the `whatsmeow` library and rebuild.
+
+**macOS / Linux:**
+```bash
+cd whatsapp-mcp/whatsapp-bridge
+go get go.mau.fi/whatsmeow@latest
+go mod tidy
+CGO_ENABLED=1 go build -o whatsapp-bridge .
+```
+
+**Windows (PowerShell):**
+```powershell
+cd whatsapp-mcp\whatsapp-bridge
+go get go.mau.fi/whatsmeow@latest
+go mod tidy
+$env:CGO_ENABLED = "1"
+# Add GCC to PATH if needed (MSYS2 example):
+$env:PATH = "C:\msys64\ucrt64\bin;" + $env:PATH
+go build -o whatsapp-bridge.exe .
+```
+
+**If the build fails with new API errors** (e.g., `not enough arguments in call to`), the whatsmeow update introduced breaking API changes. Common fixes:
+- Many functions now require `context.Context` as the first argument — add `context.Background()` to calls like `client.Download()`, `sqlstore.New()`, `container.GetFirstDevice()`, `client.GetGroupInfo()`, `client.Store.Contacts.GetContact()`
+
+After rebuilding, delete the old session data and re-authenticate:
+```bash
+rm -rf store/           # or Remove-Item -Recurse -Force store on Windows
+./whatsapp-bridge       # scan QR code again
+```

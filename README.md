@@ -205,7 +205,7 @@ The agent can send and receive WhatsApp messages via the [lharries/whatsapp-mcp]
 
 **Prerequisites:** [Go 1.21+](https://go.dev/dl/), a C compiler (GCC), and [uv](https://docs.astral.sh/uv/).
 
-> **Windows users:** The Go bridge depends on CGO (for go-sqlite3), which requires GCC in your PATH. Windows does not ship with GCC. Install [WinLibs MinGW-w64](https://winlibs.com/) via `winget install BrechtSanders.WinLibs.POSIX.UCRT`, then build using **PowerShell** (not Git Bash — WinLibs installs to a long path that Git Bash cannot resolve). See the [full WhatsApp setup guide](documentation/docs/design/tools/whatsapp-mcp/README.md) for details.
+> **Windows users:** The Go bridge depends on CGO (go-sqlite3), which requires GCC in your PATH. Windows does not ship with GCC. Install via MSYS2 (`pacman -S mingw-w64-ucrt-x86_64-gcc`) or [WinLibs](https://winlibs.com/), then build using **PowerShell** (not Git Bash). See the [full WhatsApp setup guide](documentation/docs/design/tools/whatsapp-mcp/README.md) for details.
 
 1. Clone and build the Go bridge:
    ```bash
@@ -214,27 +214,29 @@ The agent can send and receive WhatsApp messages via the [lharries/whatsapp-mcp]
    CGO_ENABLED=1 go build -o whatsapp-bridge .
    ```
 
-2. Start the bridge and scan the **QR code** with your phone (WhatsApp > Settings > Linked Devices > Link a Device):
+2. **Start the bridge in a separate terminal** (keep it open) and scan the **QR code** with your phone (WhatsApp > Settings > Linked Devices > Link a Device):
    ```bash
    ./whatsapp-bridge
    ```
+   **Wait for sync** — after scanning the QR code, wait 30-60 seconds until you see `History sync complete` in the bridge terminal.
 
-3. Add to `config.json`:
+3. Add to `config.json` (Windows — use `python -m uv` since `uv` may not be on PATH):
    ```json
    {
      "McpServers": {
        "whatsapp": {
          "transport": "stdio",
-         "command": "uv",
-         "args": ["--directory", "/path/to/whatsapp-mcp/whatsapp-mcp-server", "run", "main.py"]
+         "command": "python",
+         "args": ["-m", "uv", "--directory", "C:\\path\\to\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
        }
      }
    }
    ```
+   On macOS/Linux, use `"command": "uv"` with `"args": ["--directory", "/path/to/...", "run", "main.py"]` instead.
 
-4. Start the agent — WhatsApp tools will appear in the MCP servers section.
+4. Start the agent (with the bridge still running) — WhatsApp tools will appear in the MCP servers section. Test with: `List my 5 most recent WhatsApp chats`
 
-The Go bridge must be running before the agent starts. See the [full WhatsApp setup guide](documentation/docs/design/tools/whatsapp-mcp/README.md) for all 12 tools, known limitations, and troubleshooting.
+The Go bridge must be running and authenticated before the agent starts. If the bridge shows `Client outdated (405)`, update the whatsmeow library and rebuild — see the [full WhatsApp setup guide](documentation/docs/design/tools/whatsapp-mcp/README.md#updating-the-bridge).
 
 ### Configuration
 
@@ -528,11 +530,27 @@ The MCP server is writing non-JSONRPC data to stdout (e.g., build output or logg
 
 ### WhatsApp: `gcc not found` when building the bridge
 
-The Go bridge uses CGO (go-sqlite3) and needs GCC. On Windows, install WinLibs (`winget install BrechtSanders.WinLibs.POSIX.UCRT`) and build using PowerShell, not Git Bash. See [WhatsApp setup guide](documentation/docs/design/tools/whatsapp-mcp/README.md#windows-specific-the-cgo-problem).
+The Go bridge uses CGO (go-sqlite3) and needs GCC. On Windows, install via MSYS2 or WinLibs, and build using PowerShell (not Git Bash). See [WhatsApp setup guide](documentation/docs/design/tools/whatsapp-mcp/README.md#windows-specific-the-cgo-problem).
+
+### WhatsApp: `Client outdated (405)` when starting the bridge
+
+WhatsApp has rejected the bridge's client version. Update the Go library and rebuild:
+```bash
+cd whatsapp-mcp/whatsapp-bridge
+go get go.mau.fi/whatsmeow@latest && go mod tidy
+CGO_ENABLED=1 go build -o whatsapp-bridge .
+rm -rf store/           # delete old session
+./whatsapp-bridge       # scan QR code again
+```
+See [Updating the Bridge](documentation/docs/design/tools/whatsapp-mcp/README.md#updating-the-bridge) for Windows instructions and troubleshooting build errors.
+
+### WhatsApp: tools return empty results
+
+All WhatsApp tools succeed but return no data. This means the SQLite database (`whatsapp-bridge/store/messages.db`) does not exist yet. Start the Go bridge, scan the QR code, and wait for the history sync to complete (30-60 seconds) before using the agent.
 
 ### WhatsApp: `Connection refused` when sending messages
 
-The Go bridge must be running at `localhost:8080` before using WhatsApp tools. Start it with `./whatsapp-bridge` (or `whatsapp-bridge.exe` on Windows).
+The Go bridge must be running at `localhost:8080` before using WhatsApp tools. Start it with `./whatsapp-bridge` (or `.\whatsapp-bridge.exe` on Windows). The bridge must stay running in its own terminal.
 
 ### `Rate limited. Retrying in Xs...`
 

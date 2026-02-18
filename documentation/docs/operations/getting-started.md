@@ -154,13 +154,13 @@ Rebuild after any code changes to the MCP server — the config uses `--no-build
 
 ### WhatsApp MCP Server Setup (Optional)
 
-The agent can connect to WhatsApp via the [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp) external MCP server. This is a two-component system: a Go bridge that connects to WhatsApp Web, and a Python MCP server that the agent talks to.
+The agent can send and receive WhatsApp messages via the [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp) external MCP server. This is a two-component system: a **Go bridge** that connects to WhatsApp Web, and a **Python MCP server** that the agent communicates with.
 
 **Prerequisites:** [Go 1.21+](https://go.dev/dl/), a C compiler (GCC), and [uv](https://docs.astral.sh/uv/).
 
-> **Windows users:** The Go bridge depends on CGO (go-sqlite3), which requires GCC in your PATH. This is the biggest pain point on Windows. See the [WhatsApp MCP docs](../design/tools/whatsapp-mcp/README.md#windows-specific-the-cgo-problem) for detailed instructions on installing GCC via WinLibs and working around long-path issues in Git Bash.
+> **Windows users:** The Go bridge depends on CGO (go-sqlite3), which requires GCC in your PATH. Windows does not ship with GCC. Install via MSYS2 (`pacman -S mingw-w64-ucrt-x86_64-gcc`) or [WinLibs](https://winlibs.com/), then build using **PowerShell** (not Git Bash). See the [full WhatsApp setup guide](../design/tools/whatsapp-mcp/README.md#windows-specific-the-cgo-problem) for details.
 
-1. Clone and build the bridge:
+**Step 1 — Clone and build the Go bridge:**
 
 ```bash
 git clone https://github.com/lharries/whatsapp-mcp.git
@@ -168,16 +168,42 @@ cd whatsapp-mcp/whatsapp-bridge
 CGO_ENABLED=1 go build -o whatsapp-bridge .   # Linux/macOS
 ```
 
-On Windows, use PowerShell — see the [full build instructions](../design/tools/whatsapp-mcp/README.md#2-build-the-go-bridge).
-
-2. Start the bridge and scan the QR code with your phone (WhatsApp > Settings > Linked Devices > Link a Device):
-
-```bash
-./whatsapp-bridge
+On Windows (PowerShell):
+```powershell
+$env:PATH = "C:\msys64\ucrt64\bin;" + $env:PATH   # adjust to your GCC location
+$env:CGO_ENABLED = "1"
+go build -o whatsapp-bridge.exe .
 ```
 
-3. Add the MCP server to `config.json`:
+**Step 2 — Start the bridge and authenticate (in a separate terminal — keep it open):**
 
+```bash
+./whatsapp-bridge          # Linux/macOS
+.\whatsapp-bridge.exe      # Windows
+```
+
+On first run, the bridge displays a **QR code**. Scan it with your phone:
+- Open WhatsApp > **Settings** > **Linked Devices** > **Link a Device**
+- Point your phone camera at the QR code
+
+**Step 3 — Wait for sync.** After scanning, wait 30-60 seconds until you see `History sync complete. Stored N messages.` in the bridge terminal. This creates the `store/messages.db` database that the tools read from.
+
+**Step 4 — Add the MCP server to `config.json`:**
+
+Windows:
+```json
+{
+  "McpServers": {
+    "whatsapp": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "uv", "--directory", "C:\\path\\to\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
+    }
+  }
+}
+```
+
+macOS / Linux:
 ```json
 {
   "McpServers": {
@@ -190,9 +216,11 @@ On Windows, use PowerShell — see the [full build instructions](../design/tools
 }
 ```
 
-4. Start the agent. The WhatsApp tools (`search_contacts`, `list_messages`, `send_message`, etc.) will appear in the MCP servers section.
+> **Windows note:** Use `"command": "python"` with `"-m", "uv"` instead of `"command": "uv"` — the `uv` binary may not be on the system PATH when spawned by the agent.
 
-The Go bridge must be running before you start the agent. See [WhatsApp MCP](../design/tools/whatsapp-mcp/README.md) for the full setup guide, all 12 tools, known limitations, and troubleshooting.
+**Step 5 — Start the agent** (with the bridge still running in its own terminal). WhatsApp tools will appear in the MCP servers section. Test with: `List my 5 most recent WhatsApp chats`
+
+See [WhatsApp MCP](../design/tools/whatsapp-mcp/README.md) for the full setup guide, all 12 tools, known limitations, and troubleshooting.
 
 ## Project Structure
 

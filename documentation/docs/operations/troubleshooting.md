@@ -160,6 +160,55 @@ On macOS (`xcode-select --install`) and Linux (`apt install build-essential`), G
 
 See [WhatsApp MCP docs](../design/tools/whatsapp-mcp/README.md#windows-specific-the-cgo-problem) for full details.
 
+### WhatsApp bridge fails with "Client outdated (405)"
+
+```
+[Client ERROR] Client outdated (405) connect failure (client version: 2.3000.xxxx)
+[Client/Socket ERROR] Error reading from websocket: websocket: close 1006 (abnormal closure): unexpected EOF
+```
+
+WhatsApp has rejected the bridge's client version. The `whatsmeow` Go library needs to be updated and the bridge rebuilt.
+
+**Fix:**
+
+```bash
+cd whatsapp-mcp/whatsapp-bridge
+go get go.mau.fi/whatsmeow@latest
+go mod tidy
+CGO_ENABLED=1 go build -o whatsapp-bridge .     # Linux/macOS
+```
+
+On Windows (PowerShell), ensure GCC is on PATH:
+```powershell
+$env:PATH = "C:\msys64\ucrt64\bin;" + $env:PATH   # adjust to your GCC location
+$env:CGO_ENABLED = "1"
+go get go.mau.fi/whatsmeow@latest
+go mod tidy
+go build -o whatsapp-bridge.exe .
+```
+
+If the build fails with errors like `not enough arguments in call to`, the new whatsmeow version introduced API changes. Common fix: add `context.Background()` as the first argument to affected function calls in `main.go`.
+
+After rebuilding, delete the old session and re-authenticate:
+```bash
+rm -rf store/
+./whatsapp-bridge       # scan QR code again
+```
+
+See the [WhatsApp MCP docs](../design/tools/whatsapp-mcp/README.md#updating-the-bridge) for details.
+
+### WhatsApp tools return empty results / "(no output)"
+
+All WhatsApp tools execute without error but return no data.
+
+**Cause:** The SQLite database (`whatsapp-bridge/store/messages.db`) does not exist. This happens when the Go bridge has not been started, has not been authenticated (QR code not scanned), or the history sync has not completed yet.
+
+**Fix:**
+1. Start the Go bridge: `./whatsapp-bridge` (or `.\whatsapp-bridge.exe`)
+2. Scan the QR code with your phone (WhatsApp > Settings > Linked Devices > Link a Device)
+3. Wait 30-60 seconds for the history sync to complete — you will see `History sync complete. Stored N messages.` in the bridge terminal
+4. Then start or restart the agent
+
 ### WhatsApp tools fail with "Connection refused"
 
 ```

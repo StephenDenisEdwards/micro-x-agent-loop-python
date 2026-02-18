@@ -1,5 +1,7 @@
+import json
 from typing import Any
 
+from loguru import logger
 from mcp import ClientSession
 from mcp.types import TextContent
 
@@ -27,8 +29,19 @@ class McpToolProxy:
         return self._input_schema
 
     async def execute(self, tool_input: dict[str, Any]) -> str:
+        logger.debug("MCP tool call: {name} | input: {input}", name=self.name, input=json.dumps(tool_input, default=str))
         result = await self._session.call_tool(self._tool_name, arguments=tool_input)
+        logger.debug(
+            "MCP raw response: {name} | isError={err} | blocks={count} | types={types}",
+            name=self.name,
+            err=result.isError,
+            count=len(result.content),
+            types=[type(b).__name__ for b in result.content],
+        )
         text_parts = [block.text for block in result.content if isinstance(block, TextContent)]
+        output = "\n".join(text_parts) if text_parts else "(no output)"
         if result.isError:
-            raise RuntimeError("\n".join(text_parts) if text_parts else "MCP tool returned an error with no details")
-        return "\n".join(text_parts) if text_parts else "(no output)"
+            logger.warning("MCP tool error: {name} | result: {output}", name=self.name, output=output[:500])
+            raise RuntimeError(output)
+        logger.debug("MCP tool result: {name} | chars={chars} | result: {output}", name=self.name, chars=len(output), output=output[:500])
+        return output
