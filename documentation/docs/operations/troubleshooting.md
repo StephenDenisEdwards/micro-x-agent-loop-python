@@ -107,6 +107,31 @@ The conversation has exceeded `MaxConversationMessages`. Oldest messages were re
 - Start a new session for unrelated tasks
 - Set `MaxConversationMessages` to `0` to disable trimming (risk of rate limits)
 
+### MCP server fails with "Failed to parse JSONRPC message"
+
+```
+Failed to parse JSONRPC message from server
+pydantic_core._pydantic_core.ValidationError: 1 validation error for JSONRPCMessage
+  Invalid JSON: expected value at line 1 column 1 ...
+Failed to connect to MCP server 'system-info': Connection closed
+```
+
+The MCP server is writing non-JSONRPC data to stdout (e.g., build output, restore messages, or logging), which the MCP client tries to parse as JSONRPC and fails.
+
+**Common causes:**
+
+- Using `dotnet run` without `--no-build` — MSBuild/NuGet restore messages go to stdout
+- A Node.js MCP server logging to `console.log` instead of `console.error`
+- Any MCP server that writes to stdout before starting the JSONRPC transport
+
+**Fix:** Ensure the MCP server writes **only** JSONRPC messages to stdout. For .NET servers:
+
+1. Build separately: `dotnet build mcp-servers/system-info`
+2. Use `--no-build` in the config args: `["run", "--no-build", "--project", "mcp-servers/system-info"]`
+3. Use `Host.CreateEmptyApplicationBuilder(settings: null)` instead of `Host.CreateDefaultBuilder()` to avoid default console logging on stdout
+
+For other runtimes, redirect all logging to stderr and ensure nothing writes to stdout except the JSONRPC transport.
+
 ### run.bat creates venv but fails to start
 
 If `run.bat` creates the virtual environment but fails with an error about missing packages:

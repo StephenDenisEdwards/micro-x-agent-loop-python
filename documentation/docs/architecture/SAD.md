@@ -2,7 +2,7 @@
 
 **Project:** micro-x-agent-loop-python
 **Version:** 1.0
-**Last Updated:** 2026-02-16
+**Last Updated:** 2026-02-18
 
 ## 1. Introduction and Goals
 
@@ -43,6 +43,7 @@ graph LR
     Agent --> FS[File System]
     Agent --> LinkedIn[LinkedIn Web]
     Agent --> Gmail[Gmail API]
+    Agent --> MCP[MCP Servers]
 ```
 
 The agent sits between the user and external services. The user provides natural-language instructions; the agent uses Claude to decide which tools to call, executes them, and returns results.
@@ -56,6 +57,7 @@ The agent sits between the user and external services. The user provides natural
 | LinkedIn | HTTPS / HTML scraping | Job search and detail fetching |
 | Local shell | Process execution | Bash/cmd commands |
 | File system | Direct I/O | Read/write files (.txt, .docx) |
+| MCP servers | stdio / StreamableHTTP | Dynamic external tools via Model Context Protocol |
 
 ## 4. Solution Strategy
 
@@ -66,7 +68,8 @@ The agent sits between the user and external services. The user provides natural
 | Resilience | tenacity decorator with exponential backoff for rate limits |
 | Secrets | `.env` file loaded by python-dotenv; never committed to git |
 | App config | `config.json` for non-secret settings |
-| Tool extensibility | `Tool` Protocol class; register in `tool_registry` |
+| Tool extensibility | `Tool` Protocol class; register in `tool_registry` or connect via MCP |
+| Bundled MCP server | `mcp-servers/system-info/` — .NET MCP server providing system information tools |
 
 ## 5. Building Block View
 
@@ -77,12 +80,17 @@ graph TD
     Main["__main__.py<br/>Entry Point"] --> Agent["Agent<br/>Loop Orchestrator"]
     Main --> Config["Configuration<br/>config.json + .env"]
     Main --> Registry["tool_registry<br/>Tool Factory"]
+    Main --> McpMgr["McpManager<br/>MCP Connections"]
 
     Agent --> LlmClient["llm_client<br/>API + Streaming"]
     Agent --> Tools["Tool Implementations"]
+    Agent --> McpTools["MCP Tool Proxies"]
 
     LlmClient --> Tenacity["tenacity<br/>Retry on 429"]
     LlmClient --> Anthropic["anthropic SDK"]
+
+    McpMgr --> McpSDK["mcp SDK"]
+    McpMgr --> McpTools
 
     subgraph Tools
         direction TB
@@ -95,18 +103,26 @@ graph TD
         Gmail2[GmailReadTool]
         Gmail3[GmailSendTool]
     end
+
+    subgraph McpTools["MCP Tool Proxies"]
+        direction TB
+        McpProxy1["McpToolProxy<br/>(per discovered tool)"]
+    end
 ```
 
 ### Level 2: Key Modules
 
 | Module | Responsibility |
 |--------|---------------|
-| `__main__` | Entry point; loads config, builds tools, runs REPL |
+| `__main__` | Entry point; loads config, builds tools, initializes MCP, runs REPL |
 | `Agent` | Manages conversation history, dispatches tool calls in parallel, enforces limits |
 | `AgentConfig` | Dataclass holding all agent configuration with defaults |
 | `llm_client` | Wraps Anthropic SDK; streaming + tenacity retry |
-| `tool_registry` | Factory that assembles the tool list with dependencies |
+| `tool_registry` | Factory that assembles the built-in tool list with dependencies |
 | `Tool` | Protocol class: `name`, `description`, `input_schema`, `execute` |
+| `McpManager` | Connects to all configured MCP servers, discovers tools, manages lifecycle |
+| `McpToolProxy` | Adapter wrapping an MCP tool + session into the `Tool` Protocol |
+| `mcp-servers/system-info` | Bundled .NET MCP server exposing `system_info`, `disk_info`, `network_info` via stdio |
 | `html_utilities` | Shared HTML-to-plain-text conversion |
 | `gmail_auth` | OAuth2 flow and token caching for Gmail |
 | `gmail_parser` | Base64url decoding, MIME parsing, text extraction |
@@ -191,6 +207,7 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-002](decisions/ADR-002-tenacity-for-retry.md) | tenacity for API retry resilience | Accepted |
 | [ADR-003](decisions/ADR-003-streaming-responses.md) | Streaming responses via SSE | Accepted |
 | [ADR-004](decisions/ADR-004-raw-html-for-gmail.md) | Raw HTML for Gmail email content | Accepted |
+| [ADR-005](decisions/ADR-005-mcp-for-external-tools.md) | MCP for external tool integration | Accepted |
 
 ## 9. Risks and Technical Debt
 

@@ -5,6 +5,7 @@
 - [Python 3.11](https://www.python.org/downloads/) or later
 - An [Anthropic API key](https://console.anthropic.com/)
 - (Optional) Google OAuth credentials for Gmail and Calendar tools
+- (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the bundled system-info MCP server
 
 ## Setup
 
@@ -66,13 +67,13 @@ You should see:
 
 ```
 micro-x-agent-loop (type 'exit' to quit)
-Tools: bash, read_file, write_file, linkedin_jobs, linkedin_job_detail, gmail_search, gmail_read, gmail_send, calendar_list_events, calendar_create_event, calendar_get_event, anthropic_usage
+Tools: bash, read_file, write_file, linkedin_jobs, linkedin_job_detail, gmail_search, gmail_read, gmail_send, calendar_list_events, calendar_create_event, calendar_get_event, anthropic_usage, system-info__system_info, system-info__disk_info, system-info__network_info
 Working directory: C:\path\to\your\documents
 
 you>
 ```
 
-If Google credentials or the Anthropic Admin API key are not configured, their respective tools will not appear in the tool list.
+If Google credentials or the Anthropic Admin API key are not configured, their respective tools will not appear in the tool list. If the .NET SDK is not installed or the system-info MCP server has not been built, the `system-info__*` tools will not appear (a warning is logged but the agent starts normally).
 
 **Alternative — pip install:**
 
@@ -117,6 +118,21 @@ The first time you use a Calendar tool, a separate browser window will open for 
 you> What meetings do I have today?
 ```
 
+### MCP Server Setup (Optional)
+
+The repository includes a bundled .NET MCP server that exposes system information tools (`system_info`, `disk_info`, `network_info`). To enable it:
+
+1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download) (or later)
+2. Build the server:
+
+```bash
+dotnet build mcp-servers/system-info
+```
+
+3. The `McpServers` entry in `config.json` is already configured. On next startup, the agent will show `system-info__system_info`, `system-info__disk_info`, and `system-info__network_info` in the tool list.
+
+Rebuild after any code changes to the MCP server — the config uses `--no-build` to avoid build output interfering with the stdio transport.
+
 ## Project Structure
 
 ```
@@ -129,6 +145,8 @@ micro-x-agent-loop-python/
 ├── run.sh                         # macOS/Linux startup script
 ├── README.md                      # Project overview
 ├── documentation/docs/            # Full documentation
+├── mcp-servers/                   # MCP tool servers
+│   └── system-info/               # .NET MCP server for system information
 └── src/
     └── micro_x_agent_loop/
         ├── __init__.py
@@ -138,6 +156,10 @@ micro-x-agent-loop-python/
         ├── llm_client.py          # Anthropic API + streaming + tenacity
         ├── system_prompt.py       # System prompt text
         ├── tool.py                # Tool Protocol (interface)
+        ├── mcp/
+        │   ├── __init__.py
+        │   ├── mcp_tool_proxy.py  # Adapter: MCP tool -> Tool Protocol
+        │   └── mcp_manager.py     # MCP server connection lifecycle
         └── tools/
             ├── tool_registry.py   # Tool assembly and registration
             ├── bash_tool.py       # Shell command execution

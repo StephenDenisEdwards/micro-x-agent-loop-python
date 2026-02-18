@@ -40,6 +40,7 @@ graph TD
     ADR --> ADR002[ADR-002: tenacity for Retry]
     ADR --> ADR003[ADR-003: Streaming Responses]
     ADR --> ADR004[ADR-004: Raw HTML for Gmail]
+    ADR --> ADR005[ADR-005: MCP for External Tools]
 
     SAD --> DESIGN1
     SAD --> DESIGN2

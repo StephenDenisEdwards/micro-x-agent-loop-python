@@ -99,6 +99,66 @@ Calendar tools use the same Google OAuth2 credentials as Gmail but with a separa
 
 Requires an Anthropic Admin API key (`sk-ant-admin...`), separate from the inference key. See [DESIGN-account-management-apis](DESIGN-account-management-apis.md) for full API surface details.
 
+## MCP Tools (dynamic)
+
+The agent supports dynamically discovering tools from external **MCP (Model Context Protocol)** servers. MCP tools are configured in `config.json` under `McpServers` — no code changes are needed to add new tool servers.
+
+See [ADR-005](../architecture/decisions/ADR-005-mcp-for-external-tools.md) for the architectural decision.
+
+### How It Works
+
+1. At startup, `McpManager` reads the `McpServers` config and connects to each server
+2. For each server, it calls `list_tools()` to discover available tools
+3. Each discovered tool is wrapped in `McpToolProxy`, which adapts it to the `Tool` Protocol
+4. MCP tools are merged with built-in tools and passed to the agent
+
+The agent dispatches MCP tools identically to built-in tools — no special handling is needed.
+
+### McpToolProxy
+
+`McpToolProxy` is an adapter class in `mcp/mcp_tool_proxy.py` that wraps an MCP tool definition and session into a `Tool` Protocol object:
+
+| Member | Behavior |
+|--------|----------|
+| `name` | `{server_name}__{tool_name}` — prefixed to avoid collisions with built-in tools |
+| `description` | From the MCP tool's metadata |
+| `input_schema` | From the MCP tool's `inputSchema` |
+| `execute()` | Calls `session.call_tool(name, arguments)`, extracts text from result content blocks |
+
+### McpManager
+
+`McpManager` in `mcp/mcp_manager.py` manages the lifecycle of all MCP server connections:
+
+- `connect_all()` — connects to all configured servers, returns discovered tools
+- `close()` — cleanly shuts down all connections via `AsyncExitStack`
+
+Connection failures for individual servers are logged but do not prevent the agent from starting. Other servers and built-in tools continue to work normally.
+
+### Supported Transports
+
+| Transport | Config | Use Case |
+|-----------|--------|----------|
+| `stdio` | `command`, `args`, `env` | Local MCP servers spawned as child processes |
+| `http` | `url` | Remote MCP servers via StreamableHTTP |
+
+### Bundled MCP Server: system-info
+
+The repository includes a .NET MCP server at `mcp-servers/system-info/` that demonstrates the stdio transport pattern. It exposes three tools:
+
+| MCP Tool | Agent Tool Name | Description |
+|----------|----------------|-------------|
+| `system_info` | `system-info__system_info` | OS, CPU, memory, uptime, .NET runtime |
+| `disk_info` | `system-info__disk_info` | Per-drive disk usage (fixed drives) |
+| `network_info` | `system-info__network_info` | Network interfaces with IP addresses |
+
+Built with the [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) NuGet package and `Microsoft.Extensions.Hosting`. Uses `Host.CreateEmptyApplicationBuilder(settings: null)` to avoid default logging to stdout (which would corrupt the stdio transport).
+
+The server must be built before starting the agent (`dotnet build mcp-servers/system-info`). The config uses `--no-build` to skip the build step at runtime.
+
+### Configuration
+
+See [Configuration Reference](../operations/config.md#mcpservers) for the full config format.
+
 ## Shared Utilities
 
 ### HtmlUtilities

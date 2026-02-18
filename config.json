@@ -7,5 +7,12 @@
   "LogConsumers": [
     { "type": "console" },
     { "type": "file", "path": "C:\\Users\\steph\\source\\repos\\resources\\micro-x-agent-loop-logs\\agent.log" }
-  ]
+  ],
+  "McpServers": {
+    "system-info": {
+      "transport": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--no-build", "--project", "mcp-servers/system-info"]
+    }
+  }
 }

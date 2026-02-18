@@ -29,6 +29,7 @@ If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail and Calendar t
 | `CompactionThresholdTokens` | int | `80000` | Estimated token count that triggers compaction |
 | `ProtectedTailMessages` | int | `6` | Recent messages protected from compaction |
 | `WorkingDirectory` | string | _(none)_ | Default directory for file tools and shell commands |
+| `McpServers` | object | _(none)_ | MCP server configurations for external tools (see [below](#mcpservers)) |
 
 ### Example
 
@@ -42,7 +43,14 @@ If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail and Calendar t
   "CompactionStrategy": "summarize",
   "CompactionThresholdTokens": 80000,
   "ProtectedTailMessages": 6,
-  "WorkingDirectory": "C:\\Users\\you\\documents"
+  "WorkingDirectory": "C:\\Users\\you\\documents",
+  "McpServers": {
+    "system-info": {
+      "transport": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--no-build", "--project", "mcp-servers/system-info"]
+    }
+  }
 }
 ```
 
@@ -124,3 +132,69 @@ Sets the default directory used by file and shell tools:
 - **`bash`** — commands execute with this as the current working directory
 
 Use an absolute path for reliability. When not set, tools use the directory where `run.bat`/`run.sh` was executed.
+
+### McpServers
+
+Configures external tool servers using the **Model Context Protocol (MCP)**. Each key is a server name, and the value is a transport configuration object. MCP tools are discovered at startup and merged with built-in tools.
+
+Two transports are supported:
+
+**stdio** — spawns a local process:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `transport` | string | No | `"stdio"` (default if omitted) |
+| `command` | string | Yes | Executable to run |
+| `args` | string[] | No | Command-line arguments |
+| `env` | object | No | Environment variables for the process |
+
+**http** — connects to a remote StreamableHTTP endpoint:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `transport` | string | Yes | Must be `"http"` |
+| `url` | string | Yes | StreamableHTTP endpoint URL |
+
+Example — the bundled system-info server (included in this repository):
+
+```json
+{
+  "McpServers": {
+    "system-info": {
+      "transport": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--no-build", "--project", "mcp-servers/system-info"]
+    }
+  }
+}
+```
+
+> **Note:** For stdio servers that have a build step (like .NET or TypeScript projects), use `--no-build` (or equivalent) to prevent build output from being written to stdout, which would corrupt the JSONRPC transport. Build the server separately before starting the agent (e.g., `dotnet build mcp-servers/system-info`).
+
+Example with both transports:
+
+```json
+{
+  "McpServers": {
+    "system-info": {
+      "transport": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--no-build", "--project", "mcp-servers/system-info"]
+    },
+    "filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "env": {}
+    },
+    "remote-tools": {
+      "transport": "http",
+      "url": "http://localhost:8000/mcp"
+    }
+  }
+}
+```
+
+MCP tool names appear prefixed as `{server_name}__{tool_name}` in the Tools list at startup. If a server fails to connect, a warning is logged but the agent starts normally with the remaining tools.
+
+See [ADR-005](../architecture/decisions/ADR-005-mcp-for-external-tools.md) for the architectural decision and [Tool System Design](../design/DESIGN-tool-system.md#mcp-tools-dynamic) for implementation details.
