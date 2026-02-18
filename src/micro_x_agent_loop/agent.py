@@ -1,9 +1,10 @@
 import asyncio
-import sys
 from typing import Any
 
+from loguru import logger
+
 from micro_x_agent_loop.agent_config import AgentConfig
-from micro_x_agent_loop.llm_client import create_client, stream_chat, to_anthropic_tools
+from micro_x_agent_loop.llm_client import Spinner, create_client, stream_chat, to_anthropic_tools
 from micro_x_agent_loop.tool import Tool
 
 
@@ -70,7 +71,13 @@ class Agent:
             if not tool_use_blocks:
                 return
 
-            tool_results = await self._execute_tools(tool_use_blocks)
+            tool_names = ", ".join(b["name"] for b in tool_use_blocks)
+            spinner = Spinner(prefix=self._LINE_PREFIX, label=f" Running {tool_names}...")
+            spinner.start()
+            try:
+                tool_results = await self._execute_tools(tool_use_blocks)
+            finally:
+                spinner.stop()
             self._messages.append({"role": "user", "content": tool_results})
             await self._maybe_compact()
 
@@ -123,10 +130,9 @@ class Agent:
             f"\n\n[OUTPUT TRUNCATED: Showing {self._max_tool_result_chars:,} "
             f"of {original_length:,} characters from {tool_name}]"
         )
-        print(
-            f"  Warning: {tool_name} output truncated from {original_length:,} "
-            f"to {self._max_tool_result_chars:,} chars",
-            file=sys.stderr,
+        logger.warning(
+            f"{tool_name} output truncated from {original_length:,} "
+            f"to {self._max_tool_result_chars:,} chars"
         )
         return truncated + message
 
@@ -138,9 +144,8 @@ class Agent:
 
         remove_count = len(self._messages) - self._max_conversation_messages
         if remove_count > 0:
-            print(
-                f"  Note: Conversation history trimmed — removed {remove_count} oldest message(s) "
-                f"to stay within the {self._max_conversation_messages} message limit",
-                file=sys.stderr,
+            logger.info(
+                f"Conversation history trimmed — removed {remove_count} oldest message(s) "
+                f"to stay within the {self._max_conversation_messages} message limit"
             )
             del self._messages[:remove_count]

@@ -1,0 +1,183 @@
+JOB SEARCH PROMPT - STEPHEN EDWARDS
+====================================
+
+MAIN PROMPT:
+------------
+Using the search criteria from 'job-search-criteria.txt', search my Gmail for all JobServe emails received in the last 24 hours. Read the full content of each email. Then search LinkedIn for similar UK contract roles matching my core skills and preferences, and get the full details of promising jobs.
+
+Score each job against my search criteria using the FULL job content (1-10) based on:
+- Technology match (core skills: .NET Core, Azure, AI/ML, Blazor, Python, Microservices)
+- Seniority level match (Senior/Lead/Architect roles)
+- Rate/salary match (£500-£700+/day preferred)
+- Sector match (Healthcare, Finance, Legal, Industrial preferred)
+- Location match (London or Remote UK)
+- IR35 status (Outside IR35 bonus points)
+- Special interests (AI/ML, Healthcare domain, FHIR/HL7, Regulatory)
+
+Exclude roles scoring below 5/10.
+
+Create a markdown file called 'todays-jobs-YYYY-MM-DD.md' (replacing YYYY-MM-DD with today's date, e.g. todays-jobs-2026-02-16.md). Do NOT add version numbers or suffixes — use exactly this naming format.
+
+IMPORTANT - FILE WRITING:
+When creating the output file, write it in stages. Use write_file for the first section (Top 10), then use append_file for the JobServe section, then append_file again for the LinkedIn section, then append_file for the Summary Statistics section. Do not attempt to write the entire file in one call.
+
+
+REPORT FORMAT:
+--------------
+Follow this exact format. See 'todays-jobs-2026-02-16-v1.md' as the reference example.
+
+### Title
+```
+# Today's Job Opportunities - [Month Day, Year]
+```
+
+### Section 1: Top 10 Best Matches
+
+A numbered list ranked by score (highest first). Each entry on TWO lines:
+- Line 1: Bold linked title with anchor to the detailed section, score
+- Line 2: Indented one-line summary (rate, location, duration, key tech matches, notable constraints)
+
+Use HTML anchor tags `<a id="anchor-name"></a>` before each detailed job heading below so the links work reliably.
+
+Example:
+```
+1. **[Job Title](#anchor-name)** - Score: 8/10
+   6 months, £500-650/day, Remote UK. Key tech matches. Notable constraint or highlight.
+```
+
+Followed by `---` separator.
+
+### Section 2: JobServe Jobs (24 Hours)
+
+For each job, use this exact structure:
+
+```
+<a id="anchor-name"></a>
+
+### [Job Title]
+**Score: X/10**
+
+**Location:** [location and working pattern]
+**Rate:** [rate/day or equivalent]
+**Duration:** [contract length]
+**IR35:** [status or "Not specified"]
+**Posted:** [agency name], Ref: [reference]
+
+**Summary:**
+[One paragraph summarising the role, key technologies, responsibilities, and requirements. NOT the full job spec — a concise summary.]
+
+**Links:**
+- [Job Spec](url)
+- [Apply](url)
+
+**Why this score:**
+[One paragraph explaining score — what matches well, what doesn't, key constraints like rate, location, IR35 status.]
+
+---
+```
+
+### Section 3: LinkedIn Jobs (24 Hours)
+
+Same structure as JobServe but with these fields instead:
+
+```
+<a id="anchor-name"></a>
+
+### [Company] - [Job Title]
+**Score: X/10**
+
+**Company:** [company name]
+**Location:** [location]
+**Type:** [Permanent/Contract] - [working pattern]
+**Sector:** [sector]
+**Posted:** [time ago]
+
+**Summary:**
+[One paragraph summary.]
+
+**Link:** [View Job](url)
+
+**Why this score:**
+[One paragraph explanation. Bold any major constraints like **Permanent role, not contract**.]
+
+---
+```
+
+### Section 4: Summary Statistics
+
+Include at the end:
+
+```
+## Summary Statistics
+
+**Total Jobs Found:** X (Y JobServe + Z LinkedIn)
+**Jobs Scoring 5+/10:** X
+**Average Score (5+ only):** X.X/10
+
+**Top Technologies:**
+- [technology]: X roles
+[... list top 8 technologies]
+
+**Sectors:**
+- [sector]: X
+[... list all sectors]
+
+**Contract vs Permanent:**
+- Contract roles: X
+- Permanent roles: X
+- Not specified: X
+
+**Location Distribution:**
+- [location]: X
+[... list all locations]
+
+**IR35 Status:**
+- Inside IR35: X contracts
+- Outside IR35: X contracts
+- Not specified: X
+
+**Key Observations:**
+[5-7 numbered observations about market trends, patterns, notable opportunities]
+
+**Recommended Actions:**
+[5-6 numbered prioritised recommendations for which jobs to pursue]
+
+---
+
+*Report generated: [date]*
+*Search criteria: [brief summary of search parameters]*
+```
+
+
+SCORING CRITERIA:
+-----------------
+9-10: Perfect match
+  - Senior/Lead/Architect role
+  - 4+ core technologies match (.NET Core, Azure, AI/ML, Microservices, etc.)
+  - £600+/day or equivalent
+  - Preferred sector (Healthcare, Finance, Legal)
+  - London or Remote UK
+  - Outside IR35 (bonus)
+  - Special interests mentioned (AI/ML, FHIR/HL7, Regulatory)
+
+7-8: Strong match
+  - Senior role
+  - 3+ core technologies match
+  - £500+/day
+  - Good sector match
+  - Acceptable location
+  - Most criteria met, minor compromises
+
+5-6: Good match
+  - Appropriate seniority
+  - 2+ core technologies match
+  - Rate acceptable but not ideal
+  - Some criteria don't align
+  - Worth considering
+
+Below 5: Weak match - EXCLUDE
+  - Junior/mid-level role
+  - Few matching technologies
+  - Poor rate or no rate specified
+  - Wrong location or contract type
+  - Missing key requirements

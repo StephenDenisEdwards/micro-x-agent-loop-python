@@ -1,6 +1,7 @@
-import sys
 from datetime import datetime, timezone
 from typing import Any
+
+from loguru import logger
 
 from micro_x_agent_loop.tools.calendar.calendar_auth import get_calendar_service
 
@@ -104,5 +105,5 @@ class CalendarListEventsTool:
             return "\n\n".join(results)
 
         except Exception as ex:
-            print(f"  calendar_list_events error: {ex}", file=sys.stderr)
+            logger.error(f"calendar_list_events error: {ex}")
             return f"Error listing calendar events: {ex}"

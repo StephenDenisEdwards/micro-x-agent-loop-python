@@ -2,5 +2,10 @@
   "Model": "claude-sonnet-4-5-20250929",
   "MaxTokens": 32768,
   "CompactionStrategy": "summarize",
-  "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\resources\\documents"
+  "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\resources\\documents",
+  "LogLevel": "DEBUG",
+  "LogConsumers": [
+    { "type": "console" },
+    { "type": "file", "path": "C:\\Users\\steph\\source\\repos\\resources\\micro-x-agent-loop-logs\\agent.log" }
+  ]
 }

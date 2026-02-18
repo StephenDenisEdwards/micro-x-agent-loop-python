@@ -9,24 +9,22 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
-import logging
+from loguru import logger
 
 from micro_x_agent_loop.tool import Tool
 
-logger = logging.getLogger(__name__)
-
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-_SPINNER_LABEL = " Thinking..."
 
 
-class _Spinner:
+class Spinner:
     """Thread-based spinner that renders on the current line using \\r."""
 
-    def __init__(self, prefix: str = ""):
+    def __init__(self, prefix: str = "", label: str = " Thinking..."):
         self._prefix = prefix
+        self._label = label
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._frame_width = 1 + len(_SPINNER_LABEL)
+        self._frame_width = 1 + len(label)
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -47,7 +45,7 @@ class _Spinner:
         i = 0
         try:
             while not self._stop.is_set():
-                frame = _SPINNER_FRAMES[i % len(_SPINNER_FRAMES)] + _SPINNER_LABEL
+                frame = _SPINNER_FRAMES[i % len(_SPINNER_FRAMES)] + self._label
                 sys.stdout.write("\r" + self._prefix + frame)
                 sys.stdout.flush()
                 self._stop.wait(0.08)
@@ -76,10 +74,7 @@ def _on_retry(retry_state):
     wait = retry_state.next_action.sleep if retry_state.next_action else 0
     exc = retry_state.outcome.exception() if retry_state.outcome else None
     reason = type(exc).__name__ if exc else "Unknown"
-    print(
-        f"{reason}. Retrying in {wait:.0f}s (attempt {attempt}/5)...",
-        file=sys.stderr,
-    )
+    logger.warning(f"{reason}. Retrying in {wait:.0f}s (attempt {attempt}/5)...")
 
 
 @retry(
@@ -110,11 +105,12 @@ async def stream_chat(
     """
     tool_use_blocks = []
 
-    spinner = _Spinner(prefix=line_prefix)
+    spinner = Spinner(prefix=line_prefix)
     spinner.start()
     first_output = False
 
     try:
+        logger.debug(f"API request: model={model}, max_tokens={max_tokens}, messages={len(messages)}, tools={len(tools)}")
         async with client.messages.stream(
             model=model,
             max_tokens=max_tokens,
@@ -141,10 +137,7 @@ async def stream_chat(
         raise
 
     usage = response.usage
-    print(
-        f"  [{usage.input_tokens} in / {usage.output_tokens} out tokens]",
-        file=sys.stderr,
-    )
+    logger.debug(f"API response: stop_reason={response.stop_reason}, input_tokens={usage.input_tokens}, output_tokens={usage.output_tokens}")
 
     # Build content and extract tool_use blocks
     assistant_content = []

@@ -1,5 +1,6 @@
-import sys
 from typing import Any
+
+from loguru import logger
 
 from micro_x_agent_loop.tools.calendar.calendar_auth import get_calendar_service
 
@@ -107,5 +108,5 @@ class CalendarCreateEventTool:
             )
 
         except Exception as ex:
-            print(f"  calendar_create_event error: {ex}", file=sys.stderr)
+            logger.error(f"calendar_create_event error: {ex}")
             return f"Error creating calendar event: {ex}"

@@ -1,8 +1,8 @@
 import json
-import sys
 from typing import Protocol, runtime_checkable
 
 import anthropic
+from loguru import logger
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -55,29 +55,24 @@ class SummarizeCompactionStrategy:
 
         compactable = messages[compact_start:compact_end]
 
-        print(
-            f"  Compaction: estimated ~{estimated:,} tokens, threshold {self._threshold_tokens:,}"
-            f" — compacting {len(compactable)} messages",
-            file=sys.stderr,
+        logger.info(
+            f"Compaction: estimated ~{estimated:,} tokens, threshold {self._threshold_tokens:,}"
+            f" — compacting {len(compactable)} messages"
         )
 
         try:
             summary = await _summarize(self._client, self._model, compactable)
         except Exception as ex:
-            print(
-                f"  Warning: Compaction failed: {ex}. Falling back to history trimming.",
-                file=sys.stderr,
-            )
+            logger.warning(f"Compaction failed: {ex}. Falling back to history trimming.")
             return messages
 
         result = _rebuild_messages(messages, compact_end, summary)
 
         summary_tokens = len(summary) // 4
         freed = estimated - estimate_tokens(result)
-        print(
-            f"  Compaction: summarized {len(compactable)} messages into ~{summary_tokens:,} tokens,"
-            f" freed ~{freed:,} estimated tokens",
-            file=sys.stderr,
+        logger.info(
+            f"Compaction: summarized {len(compactable)} messages into ~{summary_tokens:,} tokens,"
+            f" freed ~{freed:,} estimated tokens"
         )
 
         return result
@@ -204,12 +199,16 @@ async def _summarize(
             + formatted[-half:]
         )
 
+    logger.debug(f"Compaction API request: model={model}, input_chars={len(formatted):,}")
     response = await client.messages.create(
         model=model,
         max_tokens=4096,
         temperature=0,
         messages=[{"role": "user", "content": _SUMMARIZE_PROMPT + formatted}],
     )
+
+    usage = response.usage
+    logger.debug(f"Compaction API response: input_tokens={usage.input_tokens}, output_tokens={usage.output_tokens}")
 
     return response.content[0].text
 

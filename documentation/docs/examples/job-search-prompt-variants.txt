@@ -1,0 +1,71 @@
+SEARCH PROMPT VARIANTS & CUSTOMIZATION
+=======================================
+See 'job-search-prompt.txt' for the main prompt and report format.
+
+
+ALTERNATIVE QUICK PROMPT:
+--------------------------
+"Use 'job-search-criteria.txt' to find and rank today's jobs (1-10 score based on tech match, seniority, rate, sector, location). Get JobServe emails (24h) and LinkedIn matches. Create 'todays-jobs-YYYY-MM-DD.md' using the report format from job-search-prompt.txt. Exclude sub-5/10 matches."
+
+
+VARIANT PROMPTS:
+----------------
+
+WEEKLY SEARCH:
+"Use 'job-search-criteria.txt' to find this week's relevant jobs. Get JobServe emails from last 7 days and search LinkedIn for matching roles. Create 'weekly-jobs-YYYY-MM-DD.md' using the report format from job-search-prompt.txt with all opportunities scored 5+/10."
+
+SPECIFIC FOCUS:
+"Use 'job-search-criteria.txt' but prioritize [AI/ML | Healthcare | Azure | FinTech] roles. Search last 24h JobServe + LinkedIn. Create 'todays-jobs-YYYY-MM-DD.md' using the report format from job-search-prompt.txt with Top 10 and full listings."
+
+HIGH-VALUE ONLY:
+"Use 'job-search-criteria.txt' but only include roles scoring 7+/10 and paying £600+/day. Search JobServe (24h) + LinkedIn. Create 'premium-jobs-YYYY-MM-DD.md' using the report format from job-search-prompt.txt."
+
+REMOTE ONLY:
+"Use 'job-search-criteria.txt' but only include fully remote UK positions. Search JobServe (24h) + LinkedIn. Create 'remote-jobs-YYYY-MM-DD.md' using the report format from job-search-prompt.txt."
+
+
+CUSTOMIZATION OPTIONS:
+----------------------
+Add any of these to the main prompt:
+
+HIGHLIGHTS:
+- "Highlight jobs that mention AI/ML, Healthcare, or FHIR/HL7"
+- "Flag roles with Azure IoT or embedded systems"
+- "Prioritize Outside IR35 contracts"
+- "Mark roles paying £650+/day with ⭐"
+
+FILTERS:
+- "Only include fully remote or London-based positions"
+- "Exclude roles requiring security clearance"
+- "Only include contracts 6+ months"
+- "Filter out banking/financial services"
+
+ENHANCEMENTS:
+- "Add a summary section with statistics (total found, avg score, top sector)"
+- "Group Top 10 by sector"
+- "Include reasoning for each score in Top 10"
+- "Add a 'Quick Apply' section with top 3 JobServe links"
+
+
+USAGE INSTRUCTIONS:
+-------------------
+1. Simply provide this file to the AI assistant
+2. The assistant will execute the main prompt
+3. Output will be saved as 'todays-jobs-YYYY-MM-DD.md'
+4. Review the Top 10 section first for best opportunities
+5. Check full listings for additional options
+
+For variations, copy the main prompt and add customizations from the options above.
+
+
+EXAMPLE USAGE:
+--------------
+"Execute the job search prompt from job-search-prompt.txt"
+
+OR
+
+"Run job-search-prompt.txt but only show roles scoring 8+/10"
+
+OR
+
+"Use job-search-prompt.txt and highlight Healthcare + AI/ML roles"

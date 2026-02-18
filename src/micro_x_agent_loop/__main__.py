@@ -5,11 +5,13 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from loguru import logger
 
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.compaction import NoneCompactionStrategy, SummarizeCompactionStrategy
 from micro_x_agent_loop.llm_client import create_client
+from micro_x_agent_loop.logging_config import setup_logging
 from micro_x_agent_loop.system_prompt import get_system_prompt
 from micro_x_agent_loop.tool_registry import get_all
 
@@ -28,9 +30,14 @@ async def main() -> None:
 
     config = load_config()
 
+    log_descriptions = setup_logging(
+        level=config.get("LogLevel", "INFO"),
+        consumers=config.get("LogConsumers"),
+    )
+
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
-        print("Error: ANTHROPIC_API_KEY environment variable is required.", file=sys.stderr)
+        logger.error("ANTHROPIC_API_KEY environment variable is required.")
         sys.exit(1)
 
     model = config.get("Model", "claude-sonnet-4-5-20250929")
@@ -77,6 +84,8 @@ async def main() -> None:
         print(f"Working directory: {working_directory}")
     if compaction_strategy_name != "none":
         print(f"Compaction: {compaction_strategy_name} (threshold: {compaction_threshold_tokens:,} tokens, tail: {protected_tail_messages} messages)")
+    if log_descriptions:
+        print(f"Logging: {', '.join(log_descriptions)}")
     print()
 
     while True:
@@ -98,7 +107,7 @@ async def main() -> None:
             await agent.run(trimmed)
             print("\n")
         except Exception as ex:
-            print(f"\nError: {ex}\n", file=sys.stderr)
+            logger.error(f"Unhandled error: {ex}")
 
 
 if __name__ == "__main__":
