@@ -1,5 +1,7 @@
 # Plan: Add `web_fetch` Tool
 
+**Status: Completed** (2026-02-18)
+
 ## Context
 
 The agent currently has no way to fetch web content. When tasks require reading articles, documentation, job listings, or API responses from URLs, the agent can't access them unless they arrive via Gmail or LinkedIn tools. Adding a general-purpose `web_fetch` tool unlocks a large class of use cases with minimal complexity.
