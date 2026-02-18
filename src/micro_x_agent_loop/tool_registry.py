@@ -13,6 +13,7 @@ def get_all(
     google_client_id: str | None = None,
     google_client_secret: str | None = None,
     anthropic_admin_api_key: str | None = None,
+    brave_api_key: str | None = None,
 ) -> list[Tool]:
     tools: list[Tool] = [
         BashTool(working_directory),
@@ -45,5 +46,11 @@ def get_all(
         from micro_x_agent_loop.tools.anthropic.anthropic_usage_tool import AnthropicUsageTool
 
         tools.append(AnthropicUsageTool(anthropic_admin_api_key))
+
+    if brave_api_key:
+        from micro_x_agent_loop.tools.web.brave_search_provider import BraveSearchProvider
+        from micro_x_agent_loop.tools.web.web_search_tool import WebSearchTool
+
+        tools.append(WebSearchTool(BraveSearchProvider(brave_api_key)))
 
     return tools

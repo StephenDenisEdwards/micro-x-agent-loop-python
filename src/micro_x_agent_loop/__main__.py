@@ -52,8 +52,9 @@ async def main() -> None:
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID")
     google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
     anthropic_admin_api_key = os.environ.get("ANTHROPIC_ADMIN_API_KEY")
+    brave_api_key = os.environ.get("BRAVE_API_KEY")
 
-    tools = get_all(working_directory, google_client_id, google_client_secret, anthropic_admin_api_key)
+    tools = get_all(working_directory, google_client_id, google_client_secret, anthropic_admin_api_key, brave_api_key)
 
     if compaction_strategy_name == "summarize":
         compaction_strategy = SummarizeCompactionStrategy(
