@@ -4,6 +4,7 @@ __pycache__/
 .env
 .gmail-tokens/
 .calendar-tokens/
+.contacts-tokens/
 .claude/
 .venv/
 dist/

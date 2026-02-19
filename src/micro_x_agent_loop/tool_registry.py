@@ -42,6 +42,20 @@ def get_all(
         tools.append(CalendarCreateEventTool(google_client_id, google_client_secret))
         tools.append(CalendarGetEventTool(google_client_id, google_client_secret))
 
+        from micro_x_agent_loop.tools.contacts.contacts_search_tool import ContactsSearchTool
+        from micro_x_agent_loop.tools.contacts.contacts_list_tool import ContactsListTool
+        from micro_x_agent_loop.tools.contacts.contacts_get_tool import ContactsGetTool
+        from micro_x_agent_loop.tools.contacts.contacts_create_tool import ContactsCreateTool
+        from micro_x_agent_loop.tools.contacts.contacts_update_tool import ContactsUpdateTool
+        from micro_x_agent_loop.tools.contacts.contacts_delete_tool import ContactsDeleteTool
+
+        tools.append(ContactsSearchTool(google_client_id, google_client_secret))
+        tools.append(ContactsListTool(google_client_id, google_client_secret))
+        tools.append(ContactsGetTool(google_client_id, google_client_secret))
+        tools.append(ContactsCreateTool(google_client_id, google_client_secret))
+        tools.append(ContactsUpdateTool(google_client_id, google_client_secret))
+        tools.append(ContactsDeleteTool(google_client_id, google_client_secret))
+
     if anthropic_admin_api_key:
         from micro_x_agent_loop.tools.anthropic.anthropic_usage_tool import AnthropicUsageTool
 
