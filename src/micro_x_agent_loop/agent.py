@@ -1,16 +1,27 @@
+from __future__ import annotations
+
 import asyncio
-import shlex
 
 from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig
-from micro_x_agent_loop.llm_client import Spinner
+from micro_x_agent_loop.commands.router import CommandRouter
+from micro_x_agent_loop.commands.voice_command import parse_voice_command, parse_voice_start_options
 from micro_x_agent_loop.provider import create_provider
+from micro_x_agent_loop.services.checkpoint_service import CheckpointService
+from micro_x_agent_loop.services.session_controller import SessionController
 from micro_x_agent_loop.tool import Tool
+from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.voice_runtime import VoiceRuntime
 
 
 class Agent:
+    _LINE_PREFIX = "assistant> "
+    _USER_PROMPT = "you> "
+
+    _MAX_TOKENS_RETRIES = 3
+    _MUTATING_TOOL_NAMES = {"write_file", "append_file"}
+
     def __init__(self, config: AgentConfig):
         self._provider = create_provider(config.provider, config.api_key)
         self._model = config.model
@@ -33,17 +44,45 @@ class Agent:
         self._current_checkpoint_id: str | None = None
         self._last_assistant_message_id: str | None = None
         self._run_lock = asyncio.Lock()
+
         self._voice_runtime = VoiceRuntime(
             line_prefix=self._LINE_PREFIX,
             tool_map=self._tool_map,
             on_utterance=self._process_voice_utterance,
         )
 
-    _LINE_PREFIX = "assistant> "
-    _USER_PROMPT = "you> "
+        self._session_controller = SessionController(line_prefix=self._LINE_PREFIX)
+        self._checkpoint_service = CheckpointService(line_prefix=self._LINE_PREFIX)
 
-    _MAX_TOKENS_RETRIES = 3
-    _MUTATING_TOOL_NAMES = {"write_file", "append_file"}
+        self._turn_engine = TurnEngine(
+            provider=self._provider,
+            model=self._model,
+            max_tokens=self._max_tokens,
+            temperature=self._temperature,
+            system_prompt=self._system_prompt,
+            converted_tools=self._converted_tools,
+            tool_map=self._tool_map,
+            line_prefix=self._LINE_PREFIX,
+            max_tool_result_chars=self._max_tool_result_chars,
+            max_tokens_retries=self._MAX_TOKENS_RETRIES,
+            on_append_message=self._append_message,
+            on_user_message_appended=self._set_current_user_message_id,
+            on_maybe_compact=self._maybe_compact,
+            on_ensure_checkpoint_for_turn=self._ensure_checkpoint_for_turn,
+            on_maybe_track_mutation=self._maybe_track_mutation,
+            on_record_tool_call=self._record_tool_call,
+            on_tool_started=self._emit_tool_started,
+            on_tool_completed=self._emit_tool_completed,
+        )
+
+        self._command_router = CommandRouter(
+            on_help=self._on_help,
+            on_rewind=self._handle_rewind_command,
+            on_checkpoint=self._handle_checkpoint_command,
+            on_session=self._handle_session_command,
+            on_voice=self._handle_voice_command,
+            on_unknown=self._on_unknown_command,
+        )
 
     async def initialize_session(self) -> None:
         if not self._memory_enabled or self._session_manager is None or self._active_session_id is None:
@@ -64,167 +103,16 @@ class Agent:
         self._current_checkpoint_id = None
         self._last_assistant_message_id = None
         self._current_user_message_text = user_message
-        self._current_user_message_id = self._append_message("user", user_message)
-        await self._maybe_compact()
-
-        max_tokens_attempts = 0
-
-        while True:
-            message, tool_use_blocks, stop_reason = await self._provider.stream_chat(
-                self._model,
-                self._max_tokens,
-                self._temperature,
-                self._system_prompt,
-                self._messages,
-                self._converted_tools,
-                line_prefix=self._LINE_PREFIX,
-            )
-
-            self._last_assistant_message_id = self._append_message("assistant", message["content"])
-
-            if stop_reason == "max_tokens" and not tool_use_blocks:
-                max_tokens_attempts += 1
-                if max_tokens_attempts >= self._MAX_TOKENS_RETRIES:
-                    print(
-                        f"\n{self._LINE_PREFIX}[Stopped: response exceeded max_tokens "
-                        f"({self._max_tokens}) {self._MAX_TOKENS_RETRIES} times in a row. "
-                        f"Try increasing MaxTokens in config.json or simplifying the request.]",
-                    )
-                    return
-                self._append_message(
-                    "user",
-                    (
-                        "Your response was cut off because it exceeded the token limit. "
-                        "Please continue, but be more concise. If you were writing a file, "
-                        "break it into smaller sections or shorten the content."
-                    ),
-                )
-                print()  # newline before next spinner
-                continue
-
-            max_tokens_attempts = 0
-
-            if not tool_use_blocks:
-                return
-
-            tool_names = ", ".join(b["name"] for b in tool_use_blocks)
-            spinner = Spinner(prefix=self._LINE_PREFIX, label=f" Running {tool_names}...")
-            spinner.start()
-            try:
-                self._ensure_checkpoint_for_turn(tool_use_blocks)
-                tool_results = await self._execute_tools(tool_use_blocks)
-            finally:
-                spinner.stop()
-            self._append_message("user", tool_results)
-            await self._maybe_compact()
-
-            print()  # newline before next spinner
+        current_user_message_id, last_assistant_message_id = await self._turn_engine.run(
+            messages=self._messages,
+            user_message=user_message,
+        )
+        self._current_user_message_id = current_user_message_id
+        self._last_assistant_message_id = last_assistant_message_id
 
     async def _maybe_compact(self) -> None:
         self._messages = await self._compaction_strategy.maybe_compact(self._messages)
         self._trim_conversation_history()
-
-    async def _execute_tools(self, tool_use_blocks: list[dict]) -> list[dict]:
-        async def run_one(block: dict) -> dict:
-            tool_name = block["name"]
-            tool_use_id = block["id"]
-            tool = self._tool_map.get(tool_name)
-            tool_input = block["input"]
-
-            if self._event_emitter is not None and self._active_session_id is not None:
-                self._event_emitter.emit(
-                    self._active_session_id,
-                    "tool.started",
-                    {"tool_use_id": tool_use_id, "tool_name": tool_name},
-                )
-
-            if tool is None:
-                content = f'Error: unknown tool "{tool_name}"'
-                self._record_tool_call(
-                    tool_call_id=tool_use_id,
-                    tool_name=tool_name,
-                    tool_input=tool_input,
-                    result_text=content,
-                    is_error=True,
-                )
-                result = {
-                    "type": "tool_result",
-                    "tool_use_id": tool_use_id,
-                    "content": content,
-                    "is_error": True,
-                }
-                if self._event_emitter is not None and self._active_session_id is not None:
-                    self._event_emitter.emit(
-                        self._active_session_id,
-                        "tool.completed",
-                        {"tool_use_id": tool_use_id, "tool_name": tool_name, "is_error": True},
-                    )
-                return result
-
-            try:
-                self._maybe_track_mutation(tool_name, tool, tool_input)
-                result = await tool.execute(tool_input)
-                result = self._truncate_tool_result(result, tool_name)
-                self._record_tool_call(
-                    tool_call_id=tool_use_id,
-                    tool_name=tool_name,
-                    tool_input=tool_input,
-                    result_text=result,
-                    is_error=False,
-                )
-                payload = {
-                    "type": "tool_result",
-                    "tool_use_id": tool_use_id,
-                    "content": result,
-                }
-                if self._event_emitter is not None and self._active_session_id is not None:
-                    self._event_emitter.emit(
-                        self._active_session_id,
-                        "tool.completed",
-                        {"tool_use_id": tool_use_id, "tool_name": tool_name, "is_error": False},
-                    )
-                return payload
-            except Exception as ex:
-                content = f'Error executing tool "{tool_name}": {ex}'
-                self._record_tool_call(
-                    tool_call_id=tool_use_id,
-                    tool_name=tool_name,
-                    tool_input=tool_input,
-                    result_text=content,
-                    is_error=True,
-                )
-                payload = {
-                    "type": "tool_result",
-                    "tool_use_id": tool_use_id,
-                    "content": content,
-                    "is_error": True,
-                }
-                if self._event_emitter is not None and self._active_session_id is not None:
-                    self._event_emitter.emit(
-                        self._active_session_id,
-                        "tool.completed",
-                        {"tool_use_id": tool_use_id, "tool_name": tool_name, "is_error": True},
-                    )
-                return payload
-
-        results = await asyncio.gather(*(run_one(b) for b in tool_use_blocks))
-        return list(results)
-
-    def _truncate_tool_result(self, result: str, tool_name: str) -> str:
-        if self._max_tool_result_chars <= 0 or len(result) <= self._max_tool_result_chars:
-            return result
-
-        original_length = len(result)
-        truncated = result[: self._max_tool_result_chars]
-        message = (
-            f"\n\n[OUTPUT TRUNCATED: Showing {self._max_tool_result_chars:,} "
-            f"of {original_length:,} characters from {tool_name}]"
-        )
-        logger.warning(
-            f"{tool_name} output truncated from {original_length:,} "
-            f"to {self._max_tool_result_chars:,} chars"
-        )
-        return truncated + message
 
     def _trim_conversation_history(self) -> None:
         if self._max_conversation_messages <= 0:
@@ -287,7 +175,6 @@ class Agent:
         try:
             self._checkpoint_manager.maybe_track_tool_input(self._current_checkpoint_id, tool_input)
         except Exception as ex:
-            # Snapshot failures must not block tool execution.
             logger.warning(
                 f"Checkpoint tracking failed for tool '{tool_name}' "
                 f"(checkpoint={self._current_checkpoint_id}): {ex}"
@@ -303,6 +190,25 @@ class Agent:
                     },
                 )
 
+    def _emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
+        if self._event_emitter is not None and self._active_session_id is not None:
+            self._event_emitter.emit(
+                self._active_session_id,
+                "tool.started",
+                {"tool_use_id": tool_use_id, "tool_name": tool_name},
+            )
+
+    def _set_current_user_message_id(self, message_id: str | None) -> None:
+        self._current_user_message_id = message_id
+
+    def _emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
+        if self._event_emitter is not None and self._active_session_id is not None:
+            self._event_emitter.emit(
+                self._active_session_id,
+                "tool.completed",
+                {"tool_use_id": tool_use_id, "tool_name": tool_name, "is_error": is_error},
+            )
+
     def _record_tool_call(
         self,
         *,
@@ -311,6 +217,7 @@ class Agent:
         tool_input: dict,
         result_text: str,
         is_error: bool,
+        message_id: str | None,
     ) -> None:
         if (
             not self._memory_enabled
@@ -320,7 +227,7 @@ class Agent:
             return
         self._session_manager.record_tool_call(
             self._active_session_id,
-            message_id=self._last_assistant_message_id,
+            message_id=message_id,
             tool_name=tool_name,
             tool_input=tool_input,
             result_text=result_text,
@@ -329,32 +236,13 @@ class Agent:
         )
 
     async def _handle_local_command(self, user_message: str) -> bool:
-        trimmed = user_message.strip()
-        if not trimmed.startswith("/"):
-            return False
+        return await self._command_router.try_handle(user_message)
 
-        if trimmed == "/help":
-            self._print_help()
-            return True
+    async def _on_help(self) -> None:
+        self._print_help()
 
-        if trimmed.startswith("/rewind"):
-            await self._handle_rewind_command(trimmed)
-            return True
-
-        if trimmed.startswith("/checkpoint"):
-            await self._handle_checkpoint_command(trimmed)
-            return True
-
-        if trimmed.startswith("/session"):
-            await self._handle_session_command(trimmed)
-            return True
-
-        if trimmed.startswith("/voice"):
-            await self._handle_voice_command(trimmed)
-            return True
-
+    def _on_unknown_command(self, trimmed: str) -> None:
         print(f"{self._LINE_PREFIX}Unknown local command: {trimmed}")
-        return True
 
     def _print_help(self) -> None:
         print(f"{self._LINE_PREFIX}Available commands:")
@@ -398,7 +286,7 @@ class Agent:
             title = session.get("title", self._active_session_id) if session else self._active_session_id
             print(
                 f"{self._LINE_PREFIX}Current session: {title} "
-                f"[{self._short_id(self._active_session_id)}] (id={self._active_session_id})"
+                f"[{self._session_controller.short_id(self._active_session_id)}] (id={self._active_session_id})"
             )
             return
 
@@ -416,7 +304,7 @@ class Agent:
                 return
             print(f"{self._LINE_PREFIX}Recent sessions:")
             for s in sessions:
-                print(self._format_session_list_entry(s))
+                print(self._session_controller.format_session_list_entry(s, active_session_id=self._active_session_id))
             return
 
         if len(parts) >= 2 and parts[1] == "new":
@@ -427,7 +315,7 @@ class Agent:
             session = self._session_manager.get_session(new_id) or {"title": new_id}
             print(
                 f"{self._LINE_PREFIX}Started new session: {session.get('title', new_id)} "
-                f"[{self._short_id(new_id)}] (id={new_id})"
+                f"[{self._session_controller.short_id(new_id)}] (id={new_id})"
             )
             return
 
@@ -462,9 +350,10 @@ class Agent:
             summary = self._session_manager.build_session_summary(resolved_id)
             print(
                 f"{self._LINE_PREFIX}Resumed session {summary['title']} "
-                f"[{self._short_id(resolved_id)}] (id={resolved_id}, {len(self._messages)} messages)"
+                f"[{self._session_controller.short_id(resolved_id)}] (id={resolved_id}, {len(self._messages)} messages)"
             )
-            self._print_resumed_session_summary(summary)
+            for line in self._session_controller.format_resumed_summary_lines(summary):
+                print(line)
             return
 
         if len(parts) == 2 and parts[1] == "fork":
@@ -499,11 +388,8 @@ class Agent:
             print(f"{self._LINE_PREFIX}Rewind failed: {ex}")
             return
 
-        print(f"{self._LINE_PREFIX}Rewind {checkpoint_id} results:")
-        for outcome in outcomes:
-            detail = outcome["detail"]
-            suffix = f" ({detail})" if detail else ""
-            print(f"{self._LINE_PREFIX}- {outcome['path']}: {outcome['status']}{suffix}")
+        for line in self._checkpoint_service.format_rewind_outcome_lines(checkpoint_id, outcomes):
+            print(line)
 
     async def _handle_checkpoint_command(self, command: str) -> None:
         if (
@@ -529,7 +415,7 @@ class Agent:
                 return
             print(f"{self._LINE_PREFIX}Recent checkpoints:")
             for cp in checkpoints:
-                print(self._format_checkpoint_list_entry(cp))
+                print(self._checkpoint_service.format_checkpoint_list_entry(cp))
             return
 
         if len(parts) == 3 and parts[1] == "rewind":
@@ -542,7 +428,7 @@ class Agent:
 
     async def _handle_voice_command(self, command: str) -> None:
         try:
-            parts = shlex.split(command)
+            parts = parse_voice_command(command)
         except ValueError:
             print(f"{self._LINE_PREFIX}Invalid command syntax")
             return
@@ -557,89 +443,19 @@ class Agent:
 
         action = parts[1].lower()
         if action == "start":
-            source = "microphone"
-            mic_device_id: str | None = None
-            mic_device_name: str | None = None
-            chunk_seconds: int | None = None
-            endpointing_ms: int | None = None
-            utterance_end_ms: int | None = None
-            idx = 2
-            if len(parts) >= 3 and not parts[2].startswith("--"):
-                source = parts[2].lower()
-                idx = 3
-
-            while idx < len(parts):
-                token = parts[idx]
-                if token == "--mic-device-id":
-                    if idx + 1 >= len(parts):
-                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --mic-device-id <id>")
-                        return
-                    mic_device_id = parts[idx + 1]
-                    idx += 2
-                    continue
-                if token == "--mic-device-name":
-                    if idx + 1 >= len(parts):
-                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --mic-device-name <name>")
-                        return
-                    name_tokens: list[str] = []
-                    j = idx + 1
-                    while j < len(parts) and not parts[j].startswith("--"):
-                        name_tokens.append(parts[j])
-                        j += 1
-                    if not name_tokens:
-                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --mic-device-name <name>")
-                        return
-                    mic_device_name = " ".join(name_tokens).strip().strip("\"'")
-                    idx = j
-                    continue
-                if token == "--chunk-seconds":
-                    if idx + 1 >= len(parts):
-                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --chunk-seconds <n>")
-                        return
-                    try:
-                        chunk_seconds = int(parts[idx + 1])
-                    except ValueError:
-                        print(f"{self._LINE_PREFIX}chunk-seconds must be an integer")
-                        return
-                    idx += 2
-                    continue
-                if token == "--endpointing-ms":
-                    if idx + 1 >= len(parts):
-                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --endpointing-ms <n>")
-                        return
-                    try:
-                        endpointing_ms = int(parts[idx + 1])
-                    except ValueError:
-                        print(f"{self._LINE_PREFIX}endpointing-ms must be an integer")
-                        return
-                    idx += 2
-                    continue
-                if token == "--utterance-end-ms":
-                    if idx + 1 >= len(parts):
-                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --utterance-end-ms <n>")
-                        return
-                    try:
-                        utterance_end_ms = int(parts[idx + 1])
-                    except ValueError:
-                        print(f"{self._LINE_PREFIX}utterance-end-ms must be an integer")
-                        return
-                    idx += 2
-                    continue
-                print(
-                    f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] "
-                    "[--mic-device-id <id>] [--mic-device-name <name>] "
-                    "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>]"
-                )
+            opts, error = parse_voice_start_options(parts, line_prefix=self._LINE_PREFIX)
+            if error:
+                print(error)
                 return
-
+            assert opts is not None
             print(
                 await self._voice_runtime.start(
-                    source,
-                    mic_device_id,
-                    mic_device_name,
-                    chunk_seconds,
-                    endpointing_ms,
-                    utterance_end_ms,
+                    opts.source,
+                    opts.mic_device_id,
+                    opts.mic_device_name,
+                    opts.chunk_seconds,
+                    opts.endpointing_ms,
+                    opts.utterance_end_ms,
                 )
             )
             return
@@ -676,54 +492,32 @@ class Agent:
 
     async def _process_voice_utterance(self, text: str) -> None:
         await self.run(text)
-        # input() is already blocking in another thread; redraw the prompt so
-        # voice-first workflows don't require pressing Enter to see "ready".
         print(f"\n{self._USER_PROMPT}", end="", flush=True)
 
     async def shutdown(self) -> None:
         await self._voice_runtime.shutdown()
 
+    @property
+    def active_session_id(self) -> str | None:
+        return self._active_session_id
+
+    # Backward-compatible wrappers for existing tests.
+    async def _execute_tools(self, tool_use_blocks: list[dict]) -> list[dict]:
+        return await self._turn_engine.execute_tools(
+            tool_use_blocks,
+            last_assistant_message_id=self._last_assistant_message_id,
+        )
+
     def _short_id(self, value: str, length: int = 8) -> str:
-        if len(value) <= length:
-            return value
-        return value[:length]
+        _ = length
+        return self._session_controller.short_id(value)
 
     def _format_session_list_entry(self, session: dict) -> str:
-        marker = "*" if session["id"] == self._active_session_id else " "
-        parent = session["parent_session_id"] or "-"
-        title = session.get("title", session["id"])
-        short_id = self._short_id(session["id"])
-        return (
-            f"{self._LINE_PREFIX}{marker} {title} [{short_id}] (id={session['id']}) "
-            f"(status={session['status']}, created={session['created_at']}, "
-            f"updated={session['updated_at']}, parent={parent})"
-        )
+        return self._session_controller.format_session_list_entry(session, active_session_id=self._active_session_id)
 
     def _format_checkpoint_list_entry(self, checkpoint: dict) -> str:
-        tools = checkpoint.get("tools", [])
-        tool_text = ", ".join(tools) if tools else "n/a"
-        preview = checkpoint.get("user_preview", "")
-        preview_text = f', prompt="{preview}"' if preview else ""
-        short_id = self._short_id(checkpoint["id"])
-        return (
-            f"{self._LINE_PREFIX}- [{short_id}] (id={checkpoint['id']}, created={checkpoint['created_at']}, "
-            f"tools={tool_text}{preview_text})"
-        )
+        return self._checkpoint_service.format_checkpoint_list_entry(checkpoint)
 
     def _print_resumed_session_summary(self, summary: dict) -> None:
-        print(f"{self._LINE_PREFIX}Session summary:")
-        print(
-            f"{self._LINE_PREFIX}- Created: {summary['created_at']} | "
-            f"Updated: {summary['updated_at']}"
-        )
-        print(
-            f"{self._LINE_PREFIX}- Messages: {summary['message_count']} "
-            f"(user={summary['user_message_count']}, assistant={summary['assistant_message_count']})"
-        )
-        print(f"{self._LINE_PREFIX}- Checkpoints: {summary['checkpoint_count']}")
-        last_user = summary.get("last_user_preview", "")
-        if last_user:
-            print(f"{self._LINE_PREFIX}- Last user: {last_user}")
-        last_assistant = summary.get("last_assistant_preview", "")
-        if last_assistant:
-            print(f"{self._LINE_PREFIX}- Last assistant: {last_assistant}")
+        for line in self._session_controller.format_resumed_summary_lines(summary):
+            print(line)
