@@ -54,3 +54,17 @@ Implementation shape:
 - Polling introduces eventual consistency and tuning tradeoffs (poll interval vs latency)
 - Additional runtime concurrency (poll task + queue consumer + turn lock)
 - Voice quality depends on segmentation and environment noise; requires iterative tuning
+
+## Implementation Note (2026-02-19)
+
+Current implementation is hybrid:
+
+- STT runtime is stream-driven in the Interview Assist session worker (persistent Deepgram stream).
+- Agent consumption is still poll-based via `stt_get_updates`.
+
+This keeps compatibility with existing MCP request/response tooling while significantly improving utterance quality versus fixed one-shot chunk restarts.
+
+Potential future evolution:
+
+- Introduce MCP push/subscription delivery for STT events to reduce poll overhead and latency.
+- Keep `stt_get_updates` as backward-compatible fallback and diagnostics surface.

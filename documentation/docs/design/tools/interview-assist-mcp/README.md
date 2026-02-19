@@ -53,9 +53,9 @@ Add this server to `config.json`:
 - `ia_tune_threshold`: tunes detection threshold
 - `ia_regression_test`: checks current run against baseline
 - `ia_create_baseline`: creates baseline JSON from session data
-- `ia_transcribe_once`: captures live microphone/loopback audio for N seconds and returns Deepgram transcription JSON
-- `stt_list_devices`: lists logical STT sources (`microphone`, `loopback`)
-- `stt_start_session`: starts continuous STT polling session
+- `ia_transcribe_once`: captures live microphone/loopback audio for N seconds and returns Deepgram transcription JSON (supports `mic_device_id` / `mic_device_name`)
+- `stt_list_devices`: lists logical STT sources and detected endpoint devices (capture + render)
+- `stt_start_session`: starts continuous STT polling session (supports `mic_device_id`, `mic_device_name`, `chunk_seconds`, `endpointing_ms`, `utterance_end_ms`)
 - `stt_get_updates`: fetches incremental STT events since sequence id
 - `stt_get_session`: reads session status/counters/latest transcript
 - `stt_stop_session`: stops session
@@ -66,7 +66,9 @@ Add this server to `config.json`:
 - `ia_evaluate_session` and `ia_compare_strategies` use JSON output files where possible and return parsed data.
 - For large outputs, tools return output tails to keep responses manageable.
 - Transcription tools read `DEEPGRAM_API_KEY` from the MCP server process environment.
-- `stt_*` session tools are Phase 1 scaffolding: they poll repeated short captures (default 4s chunks) and emit incremental events.
+- `stt_*` session tools poll repeated short captures and emit incremental events.
+- Agent voice turns are triggered from `utterance_final` events.
+- Finalization behavior is primarily controlled by Deepgram timing settings (`endpointing_ms`, `utterance_end_ms`) plus `chunk_seconds`.
 
 ## Continuous Voice Workflow
 
@@ -76,3 +78,14 @@ High-level flow used by the agent voice runtime:
 2. Poll `stt_get_updates(session_id, since_seq)` in a loop
 3. For each `utterance_final` event, enqueue text as a normal agent user turn
 4. `stt_stop_session` when voice mode ends
+
+Architecture note:
+
+- STT session runtime is push/stream based (persistent Deepgram stream in the STT CLI session worker).
+- Agent consumption is currently poll based (`stt_get_updates`) for MCP compatibility and operational simplicity.
+- A future push/subscription MCP path can reduce latency/overhead further while keeping `stt_get_updates` as fallback.
+
+Useful diagnostics:
+
+- `/voice events 50` in the agent shell to inspect raw STT events.
+- `stt_get_updates` directly for session-level event inspection.

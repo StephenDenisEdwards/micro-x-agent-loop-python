@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -59,8 +60,10 @@ class SttSession:
     events: list[SttEvent] = field(default_factory=list)
     stable_chunk_count: int = 0
     latest_transcript: str = ""
+    pending_text: str = ""
     stop_event: threading.Event = field(default_factory=threading.Event)
     worker: threading.Thread | None = None
+    process: subprocess.Popen[str] | None = None
     error_count: int = 0
 
 
@@ -86,6 +89,37 @@ def _push_stt_event(session: SttSession, event_type: str, payload: dict[str, Any
         session.events = session.events[-_MAX_EVENTS_PER_SESSION:]
 
 
+def _append_pending_text(session: SttSession, text: str) -> None:
+    clean = text.strip()
+    if not clean:
+        return
+    if not session.pending_text:
+        session.pending_text = clean
+        return
+    # Avoid obvious duplication from repeated interim/stable text.
+    if clean in session.pending_text:
+        return
+    if session.pending_text in clean:
+        session.pending_text = clean
+        return
+    session.pending_text = f"{session.pending_text} {clean}".strip()
+
+
+def _flush_pending_utterance(session: SttSession, reason: str) -> None:
+    text = session.pending_text.strip()
+    if not text:
+        return
+    _push_stt_event(
+        session,
+        "utterance_final",
+        {
+            "text": text,
+            "reason": reason,
+        },
+    )
+    session.pending_text = ""
+
+
 def _stt_capture_loop(session: SttSession) -> None:
     _push_stt_event(
         session,
@@ -93,123 +127,101 @@ def _stt_capture_loop(session: SttSession) -> None:
         {
             "message": "stt session started",
             "source": session.source,
-            "chunk_seconds": session.chunk_seconds,
+            "mode": "stream",
         },
     )
-    chunk_index = 0
-    while not session.stop_event.is_set():
-        chunk_index += 1
-        chunk_started = time.perf_counter()
-        _push_stt_event(
-            session,
-            "info",
-            {
-                "message": "chunk_started",
-                "chunk_index": chunk_index,
-                "chunk_seconds": session.chunk_seconds,
-            },
+    args = [
+        "--stream-events",
+        "--source",
+        session.source,
+        "--sample-rate",
+        str(max(8000, session.sample_rate)),
+        "--model",
+        session.model,
+        "--language",
+        session.language,
+        "--endpointing-ms",
+        str(max(0, session.endpointing_ms)),
+        "--utterance-end-ms",
+        str(max(0, session.utterance_end_ms)),
+        "--diarize",
+        "true" if session.diarize else "false",
+        *(
+            ["--mic-device-id", session.mic_device_id]
+            if session.source == "microphone" and session.mic_device_id
+            else []
+        ),
+        *(
+            ["--mic-device-name", session.mic_device_name]
+            if session.source == "microphone" and session.mic_device_name
+            else []
+        ),
+    ]
+    command = _dotnet_run_command(session.repo, STT_CLI_PROJECT, args)
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=str(session.repo),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
         )
-        try:
-            result = _run_stt_cli(
-                session.repo,
-                [
-                    "--duration-seconds",
-                    str(max(1, session.chunk_seconds)),
-                    "--source",
-                    session.source,
-                    "--sample-rate",
-                    str(max(8000, session.sample_rate)),
-                    "--model",
-                    session.model,
-                    "--language",
-                    session.language,
-                    "--endpointing-ms",
-                    str(max(0, session.endpointing_ms)),
-                    "--utterance-end-ms",
-                    str(max(0, session.utterance_end_ms)),
-                    "--diarize",
-                    "true" if session.diarize else "false",
-                    *(
-                        ["--mic-device-id", session.mic_device_id]
-                        if session.source == "microphone" and session.mic_device_id
-                        else []
-                    ),
-                    *(
-                        ["--mic-device-name", session.mic_device_name]
-                        if session.source == "microphone" and session.mic_device_name
-                        else []
-                    ),
-                ],
-                timeout_seconds=max(30, session.chunk_seconds + 20),
-            )
-            payload = _parse_stt_cli_payload(result["stdout"])
-            stable_text, provisional_text, stable_chunks = _extract_transcript_fields(payload)
-            elapsed_ms = int((time.perf_counter() - chunk_started) * 1000)
-            _push_stt_event(
-                session,
-                "info",
-                {
-                    "message": "chunk_completed",
-                    "chunk_index": chunk_index,
-                    "elapsed_ms": elapsed_ms,
-                    "stable_chunks": len(stable_chunks),
-                    "has_stable_text": bool(stable_text),
-                    "has_provisional_text": bool(provisional_text),
-                },
-            )
-            if not stable_text and not provisional_text:
-                _push_stt_event(
-                    session,
-                    "info",
-                    {
-                        "message": "chunk_empty",
-                        "chunk_index": chunk_index,
-                        "payload_keys": sorted(payload.keys()),
-                        "payload_preview": _payload_preview(payload),
-                    },
-                )
-            session.stable_chunk_count += len(stable_chunks)
-            if stable_text:
-                session.latest_transcript = stable_text
-                _push_stt_event(
-                    session,
-                    "utterance_final",
-                    {
-                        "text": stable_text,
-                        "stable_chunk_count": len(stable_chunks),
-                    },
-                )
-            elif provisional_text:
-                # Some short captures return provisional text without stable chunks.
-                # Promote this to a final utterance so voice mode still progresses.
-                if provisional_text != session.latest_transcript:
-                    session.latest_transcript = provisional_text
+        session.process = process
+        _push_stt_event(session, "info", {"message": "stream_process_started", "pid": process.pid})
+        while not session.stop_event.is_set():
+            if process.stdout is None:
+                break
+            line = process.stdout.readline()
+            if line == "":
+                if process.poll() is not None:
+                    break
+                time.sleep(0.05)
+                continue
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                _push_stt_event(session, "info", {"message": "stream_log", "line": text[-300:]})
+                continue
+            event_name = str(payload.get("event", "")).strip().lower()
+            if event_name == "utterance_final":
+                final_text = str(payload.get("text", "")).strip()
+                if final_text:
+                    session.latest_transcript = final_text
+                    session.stable_chunk_count += 1
                     _push_stt_event(
                         session,
                         "utterance_final",
                         {
-                            "text": provisional_text,
-                            "stable_chunk_count": 0,
-                            "provisional_fallback": True,
+                            "text": final_text,
+                            "reason": payload.get("reason"),
                         },
                     )
-        except Exception as ex:
+            elif event_name == "error":
+                session.error_count += 1
+                _push_stt_event(session, "error", {"message": str(payload.get("message", ""))})
+            elif event_name in {"warning", "info", "session_started", "session_stopped", "stable_text", "provisional_text"}:
+                _push_stt_event(session, "info", {"message": event_name, "payload": payload})
+            else:
+                _push_stt_event(session, "info", {"message": "stream_event", "event": event_name, "payload": payload})
+        if process.poll() is None:
+            with contextlib.suppress(Exception):
+                process.terminate()
+                process.wait(timeout=3)
+        if process.poll() not in (0, None) and not session.stop_event.is_set():
             session.error_count += 1
-            elapsed_ms = int((time.perf_counter() - chunk_started) * 1000)
-            _push_stt_event(
-                session,
-                "error",
-                {
-                    "message": str(ex),
-                    "kind": "chunk_failed",
-                    "chunk_index": chunk_index,
-                    "elapsed_ms": elapsed_ms,
-                },
-            )
-            # Back off slightly so repeated failures don't spin.
-            time.sleep(1.0)
-    session.status = "stopped"
-    _push_stt_event(session, "info", {"message": "stt session stopped"})
+            _push_stt_event(session, "error", {"message": f"stream process exited with code {process.returncode}"})
+    except Exception as ex:
+        session.error_count += 1
+        _push_stt_event(session, "error", {"message": str(ex), "kind": "stream_failed"})
+    finally:
+        session.status = "stopped"
+        _push_stt_event(session, "info", {"message": "stt session stopped"})
 
 
 def _parse_stt_cli_payload(stdout: str) -> dict[str, Any]:
@@ -320,15 +332,7 @@ def _run_dotnet_project(
     project = repo / project_relative_path
     if not project.exists():
         raise FileNotFoundError(f"Project not found: {project}")
-    command = [
-        "dotnet",
-        "run",
-        "--no-build",
-        "--project",
-        str(project),
-        "--",
-        *args,
-    ]
+    command = _dotnet_run_command(repo, project_relative_path, args)
     completed = subprocess.run(
         command,
         cwd=str(repo),
@@ -355,6 +359,23 @@ def _run_dotnet_project(
             f"\nstderr_tail: {stderr[-2000:]}"
         )
     return result
+
+
+def _dotnet_run_command(
+    repo: Path,
+    project_relative_path: Path,
+    args: list[str],
+) -> list[str]:
+    project = repo / project_relative_path
+    return [
+        "dotnet",
+        "run",
+        "--no-build",
+        "--project",
+        str(project),
+        "--",
+        *args,
+    ]
 
 
 def _run_interview_assist(

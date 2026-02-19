@@ -194,7 +194,7 @@ The agent can also connect to the local Interview Assist MCP wrapper for session
 | `ia_healthcheck` | `interview-assist__ia_healthcheck` | Validate Interview Assist repo/project setup |
 | `ia_evaluate_session` | `interview-assist__ia_evaluate_session` | Evaluate transcript/session detection metrics |
 | `ia_transcribe_once` | `interview-assist__ia_transcribe_once` | One-shot microphone/loopback transcription |
-| `stt_list_devices` | `interview-assist__stt_list_devices` | List available STT sources |
+| `stt_list_devices` | `interview-assist__stt_list_devices` | List STT sources and detected endpoint devices |
 | `stt_start_session` | `interview-assist__stt_start_session` | Start continuous STT polling session |
 | `stt_get_updates` | `interview-assist__stt_get_updates` | Retrieve incremental STT events |
 | `stt_get_session` | `interview-assist__stt_get_session` | Read STT session status/counters |

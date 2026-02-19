@@ -1,4 +1,5 @@
 import asyncio
+import shlex
 
 from loguru import logger
 
@@ -39,6 +40,7 @@ class Agent:
         )
 
     _LINE_PREFIX = "assistant> "
+    _USER_PROMPT = "you> "
 
     _MAX_TOKENS_RETRIES = 3
     _MUTATING_TOOL_NAMES = {"write_file", "append_file"}
@@ -359,7 +361,8 @@ class Agent:
         print(f"{self._LINE_PREFIX}- /help")
         print(
             f"{self._LINE_PREFIX}- /voice start [microphone|loopback] "
-            "[--mic-device-id <id>] [--mic-device-name <name>]"
+            "[--mic-device-id <id>] [--mic-device-name <name>] "
+            "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>]"
         )
         print(f"{self._LINE_PREFIX}- /voice status")
         print(f"{self._LINE_PREFIX}- /voice events [limit]")
@@ -537,11 +540,16 @@ class Agent:
         )
 
     async def _handle_voice_command(self, command: str) -> None:
-        parts = command.split()
+        try:
+            parts = shlex.split(command)
+        except ValueError:
+            print(f"{self._LINE_PREFIX}Invalid command syntax")
+            return
         if len(parts) == 1:
             print(
                 f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] "
-                "[--mic-device-id <id>] [--mic-device-name <name>] | "
+                "[--mic-device-id <id>] [--mic-device-name <name>] "
+                "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>] | "
                 "/voice status | /voice events [limit] | /voice stop"
             )
             return
@@ -551,6 +559,9 @@ class Agent:
             source = "microphone"
             mic_device_id: str | None = None
             mic_device_name: str | None = None
+            chunk_seconds: int | None = None
+            endpointing_ms: int | None = None
+            utterance_end_ms: int | None = None
             idx = 2
             if len(parts) >= 3 and not parts[2].startswith("--"):
                 source = parts[2].lower()
@@ -569,16 +580,67 @@ class Agent:
                     if idx + 1 >= len(parts):
                         print(f"{self._LINE_PREFIX}Usage: /voice start ... --mic-device-name <name>")
                         return
-                    mic_device_name = " ".join(parts[idx + 1 :]).strip().strip("\"'")
-                    idx = len(parts)
+                    name_tokens: list[str] = []
+                    j = idx + 1
+                    while j < len(parts) and not parts[j].startswith("--"):
+                        name_tokens.append(parts[j])
+                        j += 1
+                    if not name_tokens:
+                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --mic-device-name <name>")
+                        return
+                    mic_device_name = " ".join(name_tokens).strip().strip("\"'")
+                    idx = j
+                    continue
+                if token == "--chunk-seconds":
+                    if idx + 1 >= len(parts):
+                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --chunk-seconds <n>")
+                        return
+                    try:
+                        chunk_seconds = int(parts[idx + 1])
+                    except ValueError:
+                        print(f"{self._LINE_PREFIX}chunk-seconds must be an integer")
+                        return
+                    idx += 2
+                    continue
+                if token == "--endpointing-ms":
+                    if idx + 1 >= len(parts):
+                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --endpointing-ms <n>")
+                        return
+                    try:
+                        endpointing_ms = int(parts[idx + 1])
+                    except ValueError:
+                        print(f"{self._LINE_PREFIX}endpointing-ms must be an integer")
+                        return
+                    idx += 2
+                    continue
+                if token == "--utterance-end-ms":
+                    if idx + 1 >= len(parts):
+                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --utterance-end-ms <n>")
+                        return
+                    try:
+                        utterance_end_ms = int(parts[idx + 1])
+                    except ValueError:
+                        print(f"{self._LINE_PREFIX}utterance-end-ms must be an integer")
+                        return
+                    idx += 2
                     continue
                 print(
                     f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] "
-                    "[--mic-device-id <id>] [--mic-device-name <name>]"
+                    "[--mic-device-id <id>] [--mic-device-name <name>] "
+                    "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>]"
                 )
                 return
 
-            print(await self._voice_runtime.start(source, mic_device_id, mic_device_name))
+            print(
+                await self._voice_runtime.start(
+                    source,
+                    mic_device_id,
+                    mic_device_name,
+                    chunk_seconds,
+                    endpointing_ms,
+                    utterance_end_ms,
+                )
+            )
             return
 
         if action == "status":
@@ -602,12 +664,16 @@ class Agent:
 
         print(
             f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] "
-            "[--mic-device-id <id>] [--mic-device-name <name>] | "
+            "[--mic-device-id <id>] [--mic-device-name <name>] "
+            "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>] | "
             "/voice status | /voice events [limit] | /voice stop"
         )
 
     async def _process_voice_utterance(self, text: str) -> None:
         await self.run(text)
+        # input() is already blocking in another thread; redraw the prompt so
+        # voice-first workflows don't require pressing Enter to see "ready".
+        print(f"\n{self._USER_PROMPT}", end="", flush=True)
 
     async def shutdown(self) -> None:
         await self._voice_runtime.shutdown()

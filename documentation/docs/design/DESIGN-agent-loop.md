@@ -39,6 +39,15 @@ The agent loop is the core runtime cycle of the application. It manages the conv
 - Starts/stops STT sessions (`stt_start_session`, `stt_stop_session`)
 - Polls incremental events (`stt_get_updates`)
 - Queues `utterance_final` events and forwards them into the normal `Agent.run()` path
+- Supports microphone selection (`mic_device_id`, `mic_device_name`) and STT timing controls (`chunk_seconds`, `endpointing_ms`, `utterance_end_ms`)
+- Provides `/voice events [limit]` for raw STT event diagnostics
+
+Current architecture is hybrid:
+
+- STT generation is stream-driven inside the Interview Assist session worker (persistent Deepgram stream).
+- Agent delivery remains poll-based over MCP (`stt_get_updates`).
+
+Only `utterance_final` events trigger agent turns. Other stream events (`stable_text`, `provisional_text`, `info`, `warning`, `error`) are diagnostic and do not directly create turns.
 
 ### Provider Layer
 
@@ -119,6 +128,7 @@ Runtime local commands:
 - `/help`
 - `/session ...` (when memory enabled)
 - `/checkpoint ...` (when memory enabled)
-- `/voice start [microphone|loopback]`
+- `/voice start [microphone|loopback] [--mic-device-id <id>] [--mic-device-name <name>] [--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>]`
 - `/voice status`
+- `/voice events [limit]`
 - `/voice stop`

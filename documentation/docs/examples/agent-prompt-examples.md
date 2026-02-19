@@ -29,11 +29,19 @@ Run documentation/docs/examples/job-search-prompt.txt but only include roles sco
 ```
 
 ```text
+/voice start microphone --mic-device-name "Headset (Jabra Evolve2 65)" --chunk-seconds 2 --endpointing-ms 500 --utterance-end-ms 1500
+```
+
+```text
 When voice mode is active, treat each finalized utterance as a normal user turn and keep responses concise.
 ```
 
 ```text
 /voice status
+```
+
+```text
+/voice events 50
 ```
 
 ```text

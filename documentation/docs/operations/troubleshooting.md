@@ -287,6 +287,42 @@ If `run.bat` creates the virtual environment but fails with an error about missi
 
 Then run `run.bat` again.
 
+### Voice mode starts but no transcription appears
+
+You can start voice mode and see a running session, but no `utterance_final` events arrive.
+
+**Checks:**
+
+1. Verify session events:
+   - Run `/voice events 50`
+   - Look for `utterance_final` events
+2. Enumerate devices:
+   - Call `interview-assist__stt_list_devices`
+   - Pick a capture device from the returned `capture` list
+3. Start voice with explicit mic selection:
+   - `/voice start microphone --mic-device-name "Your Mic Name"`
+   - or `/voice start microphone --mic-device-id {device-id}`
+4. If mic remains empty, test loopback:
+   - `/voice start loopback`
+   - If loopback works, the STT pipeline is healthy and the issue is mic endpoint selection/levels.
+
+### Voice turn starts too slowly or cuts off too early
+
+Voice finalization is based on Deepgram timing plus capture chunk cadence.
+
+Tune with `/voice start` options:
+
+- `--chunk-seconds <n>`: lower values reduce start latency
+- `--endpointing-ms <n>`: silence threshold before endpointing
+- `--utterance-end-ms <n>`: wait longer before finalizing utterance
+
+Examples:
+
+- Balanced:
+  `/voice start microphone --chunk-seconds 2 --endpointing-ms 500 --utterance-end-ms 1500`
+- More conservative finalization (less cutoff):
+  `/voice start microphone --chunk-seconds 3 --endpointing-ms 700 --utterance-end-ms 2200`
+
 ## Diagnostic Tips
 
 ### Check your configuration

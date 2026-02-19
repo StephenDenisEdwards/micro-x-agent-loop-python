@@ -202,3 +202,4 @@ Latency:
 1. Add latency and queue-depth metrics/log summaries for voice sessions.
 2. Tune segmentation/short-utterance filtering and confidence gating defaults.
 3. Add stronger recovery policy for MCP/STT session interruption and auto-recreate behavior.
+4. Design MCP push/subscription path for STT events (keep `stt_get_updates` as fallback).

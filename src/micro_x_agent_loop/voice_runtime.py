@@ -16,6 +16,12 @@ class VoiceRuntime:
         "stop": "__stt_stop_session",
         "status": "__stt_get_session",
     }
+    # Retained for compatibility; current MCP STT session mode is streaming.
+    _MIN_CHUNK_SECONDS = 1
+    _DEFAULT_CHUNK_SECONDS = 3
+    _DEFAULT_ENDPOINTING_MS = 500
+    _DEFAULT_UTTERANCE_END_MS = 1500
+    _POLL_INTERVAL_SECONDS = 0.2
 
     def __init__(
         self,
@@ -42,6 +48,9 @@ class VoiceRuntime:
         source: str = "microphone",
         mic_device_id: str | None = None,
         mic_device_name: str | None = None,
+        chunk_seconds: int | None = None,
+        endpointing_ms: int | None = None,
+        utterance_end_ms: int | None = None,
     ) -> str:
         tool_names = self._resolve_tool_names()
         missing = [name for name, resolved in tool_names.items() if resolved is None]
@@ -57,7 +66,16 @@ class VoiceRuntime:
         if self._session_id is not None:
             return f"{self._line_prefix}Voice is already running (session={self._session_id})"
 
-        start_input: dict[str, Any] = {"source": source, "chunk_seconds": 4}
+        effective_chunk_seconds = max(
+            self._MIN_CHUNK_SECONDS,
+            int(chunk_seconds or self._DEFAULT_CHUNK_SECONDS),
+        )
+        start_input: dict[str, Any] = {
+            "source": source,
+            "chunk_seconds": effective_chunk_seconds,
+            "endpointing_ms": max(0, int(endpointing_ms or self._DEFAULT_ENDPOINTING_MS)),
+            "utterance_end_ms": max(0, int(utterance_end_ms or self._DEFAULT_UTTERANCE_END_MS)),
+        }
         if source == "microphone" and mic_device_id:
             start_input["mic_device_id"] = mic_device_id
         if source == "microphone" and mic_device_name:
@@ -72,7 +90,17 @@ class VoiceRuntime:
         self._queue = asyncio.Queue()
         self._poll_task = asyncio.create_task(self._poll_loop(tool_names))
         self._consumer_task = asyncio.create_task(self._consumer_loop())
-        return f"{self._line_prefix}Voice started ({source}) session={session_id}"
+        details = (
+            f"chunk={start_input.get('chunk_seconds')} "
+            f"endpointing_ms={start_input.get('endpointing_ms')} "
+            f"utterance_end_ms={start_input.get('utterance_end_ms')}"
+        )
+        details += " stream_mode=true"
+        if source == "microphone" and mic_device_name:
+            details += f" mic_device_name={mic_device_name!r}"
+        if source == "microphone" and mic_device_id:
+            details += f" mic_device_id={mic_device_id}"
+        return f"{self._line_prefix}Voice started ({source}) session={session_id} [{details}]"
 
     async def status(self) -> str:
         if self._session_id is None:
@@ -166,7 +194,7 @@ class VoiceRuntime:
                         if text:
                             await self._queue.put(text)
                             print(f"{self._line_prefix}[voice] queued: {text}")
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(self._POLL_INTERVAL_SECONDS)
         except asyncio.CancelledError:
             raise
         except Exception as ex:
@@ -183,6 +211,9 @@ class VoiceRuntime:
                 await self._on_utterance(text)
         except asyncio.CancelledError:
             raise
+        except Exception as ex:
+            # Keep voice runtime healthy even if a single utterance fails.
+            print(f"{self._line_prefix}Voice consumer failed: {ex}")
 
     def _resolve_tool_names(self) -> dict[str, str | None]:
         resolved: dict[str, str | None] = {}

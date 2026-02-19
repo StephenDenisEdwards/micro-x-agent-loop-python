@@ -423,7 +423,7 @@ The local [Interview Assist MCP server](documentation/docs/design/tools/intervie
 | `interview-assist__ia_regression_test` | Run regression check against baseline |
 | `interview-assist__ia_create_baseline` | Create baseline JSON from session data |
 | `interview-assist__ia_transcribe_once` | One-shot microphone/loopback transcription |
-| `interview-assist__stt_list_devices` | List supported STT sources (`microphone`, `loopback`) |
+| `interview-assist__stt_list_devices` | List STT sources plus detected capture/render endpoint devices |
 | `interview-assist__stt_start_session` | Start continuous STT session |
 | `interview-assist__stt_get_updates` | Poll incremental STT events |
 | `interview-assist__stt_get_session` | Read STT session status/counters |
@@ -530,12 +530,34 @@ Search my Gmail for emails from recruiters in the last week and summarise them
 ```
 
 ```text
+/voice start microphone --mic-device-name "Headset (Jabra Evolve2 65)"
+```
+
+```text
+/voice start microphone --mic-device-id {0.0.1.00000000}.{...}
+```
+
+```text
+/voice start microphone --chunk-seconds 2 --endpointing-ms 500 --utterance-end-ms 1500
+```
+
+```text
 /voice status
+```
+
+```text
+/voice events 50
 ```
 
 ```text
 /voice stop
 ```
+
+Voice mode details:
+
+- The agent only executes spoken turns from `utterance_final` STT events.
+- Finalization timing is controlled by Deepgram settings passed through MCP (`endpointing_ms`, `utterance_end_ms`) and chunk cadence (`chunk_seconds`).
+- If microphone capture is wrong/empty, use `interview-assist__stt_list_devices` and pass `--mic-device-name` or `--mic-device-id` on `/voice start`.
 
 ## Dependencies
 
