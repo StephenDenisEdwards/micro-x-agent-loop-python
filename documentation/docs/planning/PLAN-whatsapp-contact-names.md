@@ -1,6 +1,6 @@
 # Plan: Fix WhatsApp Contact Names
 
-**Status: Proposed** (2026-02-19)
+**Status: Completed** (2026-02-19)
 
 ## Problem
 
@@ -8,57 +8,42 @@ WhatsApp tools return phone numbers instead of contact names for individual chat
 
 **Example:** The agent shows `447930348027` where the phone and desktop app show "John Smith".
 
-All 59 chats in the SQLite database have a `name` column, but for individual contacts the value is the raw phone number or JID — never the person's actual name.
+All 59 chats in `messages.db` have a `name` column, but for individual contacts the value is the raw phone number or JID — never the person's actual name.
 
 ## Root Cause
 
-The Go bridge (`whatsapp-mcp/whatsapp-bridge/main.go`) has three problems:
+The Go bridge (`whatsapp-mcp/whatsapp-bridge/main.go`) stores phone numbers as names because its `GetChatName()` function only checks `contact.FullName` (rarely populated via app state sync) and falls back to the raw JID. It ignores `PushName` and `BusinessName`, and doesn't handle `events.PushName` or `events.Contact`.
 
-### 1. `GetChatName()` only checks `FullName` (line 991-999)
+## Key Discovery: whatsapp.db
 
-```go
-contact, err := client.Store.Contacts.GetContact(context.Background(), jid)
-if err == nil && contact.FullName != "" {
-    name = contact.FullName
-} else if sender != "" {
-    name = sender        // falls through to phone number
-} else {
-    name = jid.User      // falls through to phone number
-}
+While investigating, we found that **whatsmeow already stores contact names** in a separate SQLite database (`whatsapp-bridge/store/whatsapp.db`), in the `whatsmeow_contacts` table:
+
+```
+whatsmeow_contacts:
+  our_jid      TEXT    -- our account JID
+  their_jid    TEXT    -- the contact's JID (matches chats.jid in messages.db)
+  first_name   TEXT    -- from phone address book
+  full_name    TEXT    -- from phone address book (99/138 contacts populated)
+  push_name    TEXT    -- self-chosen WhatsApp display name (60/138 populated)
+  business_name TEXT   -- verified business name
 ```
 
-The `ContactInfo` struct (whatsmeow `types/user.go:64-74`) has three name fields:
+Sample data confirms names are present:
 
-| Field | Source | Populated? |
-|-------|--------|------------|
-| `FullName` | Your phone's address book (synced via app state) | Rarely — requires full app state sync |
-| `PushName` | The name the contact chose for themselves in WhatsApp settings | Usually populated |
-| `BusinessName` | Verified business name | Only for business accounts |
+| messages.db chats.name | whatsmeow_contacts full_name | push_name |
+|------------------------|------------------------------|-----------|
+| `447740948859` | John Taliadoros | John |
+| `447939245392` | Kinga | Kinga |
+| `447966909882` | Lawrie (Lawrence) | Lawrence Cook |
+| `447831592032` | Doug Packer | Doug Packer |
 
-The code only checks `FullName` and never falls back to `PushName` or `BusinessName`.
-
-### 2. `handleMessage()` ignores `msg.Info.PushName` (line 412-418)
-
-```go
-func handleMessage(..., msg *events.Message, ...) {
-    sender := msg.Info.Sender.User           // phone number
-    name := GetChatName(..., sender, ...)     // passes phone number as fallback
-```
-
-Every incoming `events.Message` has a `PushName` field (`types/message.go:101`) containing the sender's self-chosen display name. This is the most reliable source of contact names, but it's completely ignored.
-
-### 3. No event handlers for name-related events (line 838-854)
-
-The event handler switch only handles `events.Message`, `events.HistorySync`, `events.Connected`, and `events.LoggedOut`. It does not handle:
-
-- **`events.PushName`** — emitted when a message arrives with a different push name than cached. Contains `NewPushName` and the contact's JID.
-- **`events.Contact`** — emitted when a contact entry is modified (including during full app state sync). Contains `ContactAction.FullName` and `FirstName` from the user's address book.
+The Go bridge writes to `messages.db`. Whatsmeow itself maintains `whatsapp.db` as part of its internal state. The Python MCP server currently only reads `messages.db`.
 
 ## How Other Projects Handle This
 
 ### OpenClaw (Baileys / Node.js)
 
-OpenClaw uses the Baileys library (TypeScript equivalent of whatsmeow) and extracts `pushName` directly from each incoming message:
+OpenClaw uses the Baileys library (TypeScript equivalent of whatsmeow) and extracts `pushName` directly from each incoming message object:
 
 ```typescript
 // src/web/inbound/monitor.ts:208
@@ -68,119 +53,46 @@ pushName: msg.pushName ?? undefined
 const senderName = msg.pushName ?? undefined
 ```
 
-The push name is passed through the message pipeline and stored in pairing request metadata. OpenClaw does not maintain a persistent contact database — it relies on per-message push names.
+This works because Baileys runs in-process — the push name is available on every message. Our architecture is different (separate Go bridge + SQLite), but we can achieve the same result by reading from whatsmeow's own contact cache.
 
-This confirms that **push names are the practical solution** for getting human-readable contact names without access to the phone's address book.
+## Approach: Read from whatsapp.db (Python MCP server fix)
 
-## Proposed Fix
+Instead of modifying the Go bridge (upstream code we don't control), fix name resolution in the **Python MCP server** by reading contact names from `whatsapp.db`'s `whatsmeow_contacts` table.
 
-Changes to `whatsapp-mcp/whatsapp-bridge/main.go` (upstream repo):
+### Changes to `whatsapp-mcp/whatsapp-mcp-server/whatsapp.py`
 
-### A. Update `GetChatName()` fallback chain
+1. Add `CONTACTS_DB_PATH` constant pointing to `../whatsapp-bridge/store/whatsapp.db`
 
-For individual contacts, add `PushName` and `BusinessName` fallbacks:
+2. Add a `_resolve_contact_name(jid)` function that queries `whatsmeow_contacts` with the priority: `full_name` > `push_name` > `business_name`
 
-```go
-contact, err := client.Store.Contacts.GetContact(context.Background(), jid)
-if err == nil && contact.FullName != "" {
-    name = contact.FullName
-} else if err == nil && contact.PushName != "" {
-    name = contact.PushName
-} else if err == nil && contact.BusinessName != "" {
-    name = contact.BusinessName
-} else if sender != "" {
-    name = sender
-} else {
-    name = jid.User
-}
-```
+3. Update `get_sender_name()` to fall back to `_resolve_contact_name()` when the `chats` table only has a phone number
 
-### B. Pass push name from `handleMessage()`
+4. Apply name resolution when constructing `Chat` and `Contact` objects wherever `chats.name` is currently used
 
-Use `msg.Info.PushName` as the sender hint instead of the raw phone number:
+### Name Priority
 
-```go
-func handleMessage(..., msg *events.Message, ...) {
-    sender := msg.Info.PushName
-    if sender == "" {
-        sender = msg.Info.Sender.User
-    }
-    name := GetChatName(..., sender, ...)
-```
+1. **`full_name`** from whatsmeow_contacts — your phone's address book name (best, 99/138 populated)
+2. **`push_name`** from whatsmeow_contacts — the name they chose for themselves (60/138 populated)
+3. **`business_name`** from whatsmeow_contacts — verified business name
+4. **`chats.name`** from messages.db — falls back to phone number (current behaviour)
 
-### C. Add event handlers for name updates
-
-```go
-case *events.PushName:
-    if v.NewPushName != "" {
-        chatJID := v.JID.String()
-        messageStore.StoreChat(chatJID, v.NewPushName, time.Now())
-        logger.Infof("Updated push name for %s: %s", chatJID, v.NewPushName)
-    }
-
-case *events.Contact:
-    if v.Action != nil {
-        fullName := v.Action.GetFullName()
-        if fullName != "" {
-            chatJID := v.JID.String()
-            messageStore.StoreChat(chatJID, fullName, time.Now())
-            logger.Infof("Updated contact name for %s: %s", chatJID, fullName)
-        }
-    }
-```
-
-### D. Update existing names on reconnect
-
-After the bridge connects and the contact store is populated, iterate through existing chats and update any that still have phone numbers as names:
-
-```go
-// After connection stabilizes
-rows, _ := messageStore.db.Query("SELECT jid FROM chats WHERE name = jid OR name LIKE '%@%'")
-for rows.Next() {
-    var chatJID string
-    rows.Scan(&chatJID)
-    jid, _ := types.ParseJID(chatJID)
-    contact, err := client.Store.Contacts.GetContact(context.Background(), jid)
-    if err == nil {
-        newName := contact.FullName
-        if newName == "" { newName = contact.PushName }
-        if newName == "" { newName = contact.BusinessName }
-        if newName != "" && newName != chatJID {
-            messageStore.StoreChat(chatJID, newName, time.Now())
-        }
-    }
-}
-```
-
-## Name Priority
-
-The name resolution order (best to worst):
-
-1. **`FullName`** from contact store — the name you gave them in your phone's address book
-2. **`PushName`** from contact store or message — the name they chose for themselves
-3. **`BusinessName`** from contact store — verified business name
-4. **`msg.Info.PushName`** — push name from the current message (most reliable source)
-5. **Phone number** — last resort
-
-## Limitations
-
-- **Push names are not your address book names.** If you saved someone as "Mom", but their WhatsApp push name is "Jane Edwards", the bridge will show "Jane Edwards". This matches WhatsApp Web's behaviour when it doesn't have access to your phone contacts.
-- **Push names can change.** Users can update their WhatsApp display name at any time. The `events.PushName` handler keeps the database current.
-- **First-time contacts without messages.** If you haven't received a message from someone yet, their push name is unknown. The phone number remains until a message arrives.
-- **`events.Contact` depends on app state sync.** The full address book sync doesn't always complete, especially on reconnections. Push names are more reliable.
-
-## Scope
-
-This fix is in the **upstream** `whatsapp-mcp` Go bridge (not our code). Options:
-
-1. **Fork and fix** — maintain our own fork with these changes
-2. **Contribute upstream** — submit a PR to [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp)
-3. **Both** — fork for immediate use, PR upstream for long-term
-
-## Files Affected
+### Files Affected
 
 | File | Change |
 |------|--------|
-| `whatsapp-mcp/whatsapp-bridge/main.go` | Update `GetChatName()`, `handleMessage()`, add event handlers |
-| No changes to the Python MCP server | It already reads `name` from SQLite correctly |
-| No changes to our agent code | The issue is entirely in the Go bridge |
+| `whatsapp-mcp/whatsapp-mcp-server/whatsapp.py` | Add contacts DB path, name resolution function, apply to all name lookups |
+| No Go bridge changes | whatsmeow already maintains the contact data we need |
+| No agent code changes | The fix is entirely in the Python MCP server |
+
+### Advantages over Go bridge fix
+
+- **No upstream fork needed** — we don't modify code we don't control
+- **Already populated** — whatsmeow has 99/138 full names and 60/138 push names stored
+- **Simple** — one new function, applied at the Python layer
+- **`full_name` available** — the Go bridge only tried `FullName` at runtime via API call; the SQLite store has it already persisted from app state sync
+
+## Limitations
+
+- **Names depend on app state sync completing.** If whatsmeow hasn't synced contacts yet, `whatsmeow_contacts` will be empty. This typically completes on first connection.
+- **Push names are not your address book names.** If you saved someone as "Mom" but their push name is "Jane Edwards", and `full_name` is empty, you'll see "Jane Edwards".
+- **LID JIDs may not resolve.** Some contacts appear with `@lid` JIDs in `messages.db` which may not match `their_jid` in `whatsmeow_contacts`.
