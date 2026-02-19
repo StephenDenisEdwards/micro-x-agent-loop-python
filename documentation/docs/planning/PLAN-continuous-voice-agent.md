@@ -1,5 +1,14 @@
 # Plan: Continuous Voice Agent via STT MCP Sessions
 
+**Status: In progress** (Updated 2026-02-19)
+
+Implementation snapshot:
+
+- Phase 1: Completed
+- Phase 2: Completed
+- Phase 3: Completed (baseline)
+- Phase 4: In progress
+
 ## Goal
 
 Enable continuous microphone-driven interaction with the Python agent, where spoken utterances are transcribed and fed into normal agent turns without manual typing.
@@ -82,6 +91,8 @@ Event schema (minimum):
 
 ### Phase 1: STT Session Runtime (interview-assist-2)
 
+Status: Completed
+
 1. Add an in-memory `SttSessionManager` with:
    - session map
    - cancellation tokens
@@ -97,6 +108,8 @@ Deliverable:
 
 ### Phase 2: MCP Surface for Sessions
 
+Status: Completed
+
 1. Expose lifecycle/update tools above.
 2. Validate and sanitize input options.
 3. Guarantee deterministic error payloads.
@@ -107,6 +120,8 @@ Deliverable:
 - Stable MCP API for continuous transcription polling.
 
 ### Phase 3: Python Agent Voice Mode
+
+Status: Completed (baseline)
 
 1. Add local commands:
    - `/voice start`
@@ -129,6 +144,8 @@ Deliverable:
 - End-to-end hands-free voice-to-agent interaction.
 
 ### Phase 4: Hardening
+
+Status: In progress
 
 1. Debounce/merge very short utterances.
 2. Noise suppression thresholds and min-duration filters.
@@ -182,6 +199,6 @@ Latency:
 
 ## Immediate Next Tasks
 
-1. Implement STT session manager in `interview-assist-2`.
-2. Add MCP tools for `stt_start_session`, `stt_get_updates`, `stt_stop_session`.
-3. Add `/voice start|stop|status` command handlers in `micro-x-agent-loop-python`.
+1. Add latency and queue-depth metrics/log summaries for voice sessions.
+2. Tune segmentation/short-utterance filtering and confidence gating defaults.
+3. Add stronger recovery policy for MCP/STT session interruption and auto-recreate behavior.

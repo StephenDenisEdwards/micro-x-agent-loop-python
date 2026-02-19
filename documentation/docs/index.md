@@ -25,6 +25,11 @@ Central navigation hub for all project documentation.
 - [Sessions and Rewind](operations/sessions.md) - Session lifecycle, resume/fork, checkpoint rewind commands
 - [Troubleshooting](operations/troubleshooting.md) - Common issues and solutions
 
+## Examples
+
+- [Example Prompts](examples/README.md) - Prompt packs and workflow examples
+- [Agent Prompt Examples](examples/agent-prompt-examples.md) - Ready-to-use prompts across core agent workflows
+
 ## Planning
 
 - [Continuous Voice Agent Plan](planning/PLAN-continuous-voice-agent.md) - Session-based STT MCP and `/voice` orchestration plan

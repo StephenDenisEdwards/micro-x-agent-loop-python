@@ -12,6 +12,7 @@ A multi-tool workflow that searches Gmail (JobServe alerts) and LinkedIn for con
 |------|---------|
 | `job-search-prompt.txt` | Main prompt with scoring criteria and report format template. Place alongside a `job-search-criteria.txt` with your personal preferences. |
 | `job-search-prompt-variants.txt` | Alternative prompts (quick, weekly, high-value, remote-only), customization snippets (filters, highlights, enhancements), and usage instructions. |
+| `agent-prompt-examples.md` | Curated prompt examples for general productivity, job search, voice/STT mode, Interview Assist MCP, WhatsApp MCP, and GitHub MCP workflows. |
 
 ### How it works
 

@@ -1,5 +1,13 @@
 # Plan: Interview Assist MCP Integration
 
+**Status: Completed (Phase 1 + STT extension)** (Updated 2026-02-19)
+
+Implementation snapshot:
+
+- Phase 1 analysis/evaluation MCP tools: Completed
+- STT MCP tools (`ia_transcribe_once`, `stt_*`): Completed
+- Phase 2 recommendations: Planned
+
 ## Goal
 
 Expose `interview-assist-2` analysis and evaluation workflows as MCP tools so agent users can run interview diagnostics through natural-language requests.
