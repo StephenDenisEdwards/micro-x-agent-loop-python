@@ -211,6 +211,7 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-003](decisions/ADR-003-streaming-responses.md) | Streaming responses via SSE | Accepted |
 | [ADR-004](decisions/ADR-004-raw-html-for-gmail.md) | Raw HTML for Gmail email content | Accepted |
 | [ADR-005](decisions/ADR-005-mcp-for-external-tools.md) | MCP for external tool integration | Accepted |
+| [ADR-006](decisions/ADR-006-separate-repos-for-third-party-mcp-servers.md) | Separate repos for third-party MCP servers | Accepted |
 
 ## 9. Risks and Technical Debt
 

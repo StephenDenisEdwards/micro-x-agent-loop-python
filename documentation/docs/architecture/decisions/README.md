@@ -29,3 +29,4 @@ What becomes easier or more difficult to do because of this change?
 | [ADR-003](ADR-003-streaming-responses.md) | Streaming responses via SSE | Accepted |
 | [ADR-004](ADR-004-raw-html-for-gmail.md) | Raw HTML for Gmail email content | Accepted |
 | [ADR-005](ADR-005-mcp-for-external-tools.md) | MCP for external tool integration | Accepted |
+| [ADR-006](ADR-006-separate-repos-for-third-party-mcp-servers.md) | Separate repos for third-party MCP servers | Accepted |
