@@ -75,6 +75,7 @@ async def main() -> None:
     google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
     anthropic_admin_api_key = os.environ.get("ANTHROPIC_ADMIN_API_KEY")
     brave_api_key = os.environ.get("BRAVE_API_KEY")
+    github_token = os.environ.get("GITHUB_TOKEN")
     memory_enabled = _to_bool(config.get("MemoryEnabled", False), default=False)
     memory_db_path = str(config.get("MemoryDbPath", ".micro_x/memory.db"))
     continue_conversation = _to_bool(config.get("ContinueConversation", False), default=False)
@@ -87,7 +88,7 @@ async def main() -> None:
     memory_max_messages_per_session = int(config.get("MemoryMaxMessagesPerSession", 5000))
     memory_retention_days = int(config.get("MemoryRetentionDays", 30))
 
-    tools = get_all(working_directory, google_client_id, google_client_secret, anthropic_admin_api_key, brave_api_key)
+    tools = get_all(working_directory, google_client_id, google_client_secret, anthropic_admin_api_key, brave_api_key, github_token)
 
     mcp_manager: McpManager | None = None
     mcp_tools: list = []

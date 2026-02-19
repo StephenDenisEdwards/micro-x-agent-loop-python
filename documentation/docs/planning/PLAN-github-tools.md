@@ -1,6 +1,6 @@
 # Plan: GitHub Tools
 
-**Status: Planned**
+**Status: Completed** (Phase 1 — 5 core tools)
 
 ## Context
 

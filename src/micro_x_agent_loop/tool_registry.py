@@ -14,6 +14,7 @@ def get_all(
     google_client_secret: str | None = None,
     anthropic_admin_api_key: str | None = None,
     brave_api_key: str | None = None,
+    github_token: str | None = None,
 ) -> list[Tool]:
     tools: list[Tool] = [
         BashTool(working_directory),
@@ -66,5 +67,20 @@ def get_all(
         from micro_x_agent_loop.tools.web.web_search_tool import WebSearchTool
 
         tools.append(WebSearchTool(BraveSearchProvider(brave_api_key)))
+
+    if github_token:
+        from micro_x_agent_loop.tools.github.github_list_prs_tool import GitHubListPRsTool
+        from micro_x_agent_loop.tools.github.github_get_pr_tool import GitHubGetPRTool
+        from micro_x_agent_loop.tools.github.github_create_issue_tool import GitHubCreateIssueTool
+        from micro_x_agent_loop.tools.github.github_list_issues_tool import GitHubListIssuesTool
+        from micro_x_agent_loop.tools.github.github_create_pr_tool import GitHubCreatePRTool
+
+        tools.extend([
+            GitHubListPRsTool(github_token),
+            GitHubGetPRTool(github_token),
+            GitHubCreateIssueTool(github_token),
+            GitHubListIssuesTool(github_token),
+            GitHubCreatePRTool(github_token),
+        ])
 
     return tools
