@@ -51,6 +51,8 @@ graph TD
     ADR --> ADR007[ADR-007: Google Contacts as Built-in Tools]
     ADR --> ADR008[ADR-008: GitHub Built-in Tools via Raw httpx]
     ADR --> ADR009[ADR-009: SQLite Memory + File Checkpoints]
+    ADR --> ADR010[ADR-010: Multi-Provider LLM Support]
+    ADR --> ADR011[ADR-011: Continuous Voice via STT MCP Sessions]
 
     SAD --> DESIGN1
     SAD --> DESIGN2

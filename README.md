@@ -254,12 +254,13 @@ The Go bridge must be running and authenticated before the agent starts. If the 
 
 ### 5. Interview Assist MCP server setup (optional)
 
-This repo includes a local MCP wrapper for `interview-assist-2` non-interactive workflows (analyze, evaluate, compare, threshold tuning, regression, baselines).
+This repo includes a local MCP wrapper for `interview-assist-2` analysis/evaluation workflows and STT tools for voice mode.
 
 1. Build the Interview Assist console once:
 
    ```powershell
    dotnet build C:\Users\steph\source\repos\interview-assist-2\Interview-assist-transcription-detection-console\Interview-assist-transcription-detection-console.csproj
+   dotnet build C:\Users\steph\source\repos\interview-assist-2\Interview-assist-stt-cli\Interview-assist-stt-cli.csproj
    ```
 
 2. Add server config:
@@ -280,6 +281,8 @@ This repo includes a local MCP wrapper for `interview-assist-2` non-interactive 
    ```
 
 See [Interview Assist MCP docs](documentation/docs/design/tools/interview-assist-mcp/README.md) for tool list and details.
+
+For voice transcription tools, set `DEEPGRAM_API_KEY` in `.env`.
 
 ### Configuration
 
@@ -407,6 +410,25 @@ The external [WhatsApp MCP server](documentation/docs/design/tools/whatsapp-mcp/
 | `whatsapp__send_audio_message` | Send audio as a voice message (requires ffmpeg) |
 | `whatsapp__download_media` | Download media from a message |
 
+The local [Interview Assist MCP server](documentation/docs/design/tools/interview-assist-mcp/README.md) provides:
+
+| Tool | Description |
+|------|-------------|
+| `interview-assist__ia_healthcheck` | Validate Interview Assist repo/project setup |
+| `interview-assist__ia_list_recordings` | List recent Interview Assist recording files |
+| `interview-assist__ia_analyze_session` | Generate markdown report from session JSONL |
+| `interview-assist__ia_evaluate_session` | Evaluate precision/recall/F1 for a session |
+| `interview-assist__ia_compare_strategies` | Compare heuristic/LLM/parallel detection strategies |
+| `interview-assist__ia_tune_threshold` | Tune detection confidence threshold |
+| `interview-assist__ia_regression_test` | Run regression check against baseline |
+| `interview-assist__ia_create_baseline` | Create baseline JSON from session data |
+| `interview-assist__ia_transcribe_once` | One-shot microphone/loopback transcription |
+| `interview-assist__stt_list_devices` | List supported STT sources (`microphone`, `loopback`) |
+| `interview-assist__stt_start_session` | Start continuous STT session |
+| `interview-assist__stt_get_updates` | Poll incremental STT events |
+| `interview-assist__stt_get_session` | Read STT session status/counters |
+| `interview-assist__stt_stop_session` | Stop STT session |
+
 MCP tools are prefixed as `{server_name}__{tool_name}`. Any MCP-compatible server can be added via config — no code changes needed. See [Tool System Design](documentation/docs/design/DESIGN-tool-system.md#mcp-tools-dynamic) for details.
 
 ## Example Prompts
@@ -499,6 +521,20 @@ Read my CV from documents/Stephen Edwards CV December 2025.docx, then search Lin
 
 ```
 Search my Gmail for emails from recruiters in the last week and summarise them
+```
+
+### Voice mode
+
+```text
+/voice start microphone
+```
+
+```text
+/voice status
+```
+
+```text
+/voice stop
 ```
 
 ## Dependencies

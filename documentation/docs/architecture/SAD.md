@@ -6,7 +6,7 @@
 
 ## 1. Introduction and Goals
 
-micro-x-agent-loop-python is a minimal AI agent loop built with Python and a pluggable LLM backend (Anthropic Claude or OpenAI GPT). It provides a REPL interface where users type natural-language prompts and the agent autonomously calls tools to accomplish tasks.
+micro-x-agent-loop-python is a minimal AI agent loop built with Python and a pluggable LLM backend (Anthropic Claude or OpenAI GPT). It provides a REPL interface where users type natural-language prompts (or use voice mode) and the agent autonomously calls tools to accomplish tasks.
 
 ### Key Goals
 
@@ -60,6 +60,7 @@ The agent sits between the user and external services. The user provides natural
 | Local shell | Process execution | Bash/cmd commands |
 | File system | Direct I/O | Read/write files (.txt, .docx) |
 | MCP servers | stdio / StreamableHTTP | Dynamic external tools via Model Context Protocol |
+| Deepgram STT (via Interview Assist MCP) | HTTPS / WebSocket | Continuous speech transcription for voice mode |
 | WhatsApp Web | MCP stdio + HTTP :8080 + WebSocket | Messaging via Go bridge (whatsmeow) and Python MCP server |
 
 ## 4. Solution Strategy
@@ -225,6 +226,7 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-008](decisions/ADR-008-github-built-in-tools-with-raw-httpx.md) | GitHub as built-in tools via raw httpx | Accepted |
 | [ADR-009](decisions/ADR-009-sqlite-memory-sessions-and-file-checkpoints.md) | SQLite memory for sessions, events, and file checkpoints | Accepted |
 | [ADR-010](decisions/ADR-010-multi-provider-llm-support.md) | Multi-provider LLM support (provider abstraction) | Accepted |
+| [ADR-011](decisions/ADR-011-continuous-voice-mode-via-stt-mcp-sessions.md) | Continuous voice mode via STT MCP sessions | Accepted |
 
 ## 9. Risks and Technical Debt
 

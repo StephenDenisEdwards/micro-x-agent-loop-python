@@ -185,6 +185,23 @@ The Go bridge must be running before the agent starts. The Python MCP server is 
 
 See [WhatsApp MCP](tools/whatsapp-mcp/README.md) for the full setup guide, prerequisites (Go, GCC, uv), Windows CGO pain points, and known limitations.
 
+### External MCP Server: Interview Assist
+
+The agent can also connect to the local Interview Assist MCP wrapper for session analysis/evaluation and speech-to-text workflows.
+
+| MCP Tool | Agent Tool Name | Description |
+|----------|----------------|-------------|
+| `ia_healthcheck` | `interview-assist__ia_healthcheck` | Validate Interview Assist repo/project setup |
+| `ia_evaluate_session` | `interview-assist__ia_evaluate_session` | Evaluate transcript/session detection metrics |
+| `ia_transcribe_once` | `interview-assist__ia_transcribe_once` | One-shot microphone/loopback transcription |
+| `stt_list_devices` | `interview-assist__stt_list_devices` | List available STT sources |
+| `stt_start_session` | `interview-assist__stt_start_session` | Start continuous STT polling session |
+| `stt_get_updates` | `interview-assist__stt_get_updates` | Retrieve incremental STT events |
+| `stt_get_session` | `interview-assist__stt_get_session` | Read STT session status/counters |
+| `stt_stop_session` | `interview-assist__stt_stop_session` | Stop STT session |
+
+See [Interview Assist MCP](tools/interview-assist-mcp/README.md) for setup and tool details.
+
 ### Configuration
 
 See [Configuration Reference](../operations/config.md#mcpservers) for the full config format.

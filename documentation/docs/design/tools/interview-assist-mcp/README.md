@@ -1,6 +1,6 @@
 # Interview Assist MCP Server
 
-This MCP server exposes `interview-assist-2` non-interactive evaluation workflows as tools for the Python agent.
+This MCP server exposes `interview-assist-2` evaluation workflows and STT transcription workflows as tools for the Python agent.
 
 ## Location
 
@@ -12,7 +12,7 @@ This MCP server exposes `interview-assist-2` non-interactive evaluation workflow
 - .NET SDK installed (`dotnet --version`)
 - `interview-assist-2` cloned locally
 - `Interview-assist-transcription-detection-console` buildable
-- `DEEPGRAM_API_KEY` set when using `ia_transcribe_once`
+- `DEEPGRAM_API_KEY` set when using transcription tools (`ia_transcribe_once`, `stt_*`)
 - Python environment with `mcp` installed (already in this repo's dependencies)
 
 Build once before first use:
@@ -65,5 +65,14 @@ Add this server to `config.json`:
 - Commands run with `dotnet run --no-build` to avoid stdout build noise breaking MCP stdio transport.
 - `ia_evaluate_session` and `ia_compare_strategies` use JSON output files where possible and return parsed data.
 - For large outputs, tools return output tails to keep responses manageable.
-- `ia_transcribe_once` reads `DEEPGRAM_API_KEY` from the MCP server process environment.
+- Transcription tools read `DEEPGRAM_API_KEY` from the MCP server process environment.
 - `stt_*` session tools are Phase 1 scaffolding: they poll repeated short captures (default 4s chunks) and emit incremental events.
+
+## Continuous Voice Workflow
+
+High-level flow used by the agent voice runtime:
+
+1. `stt_start_session` with `source="microphone"` (or `loopback`)
+2. Poll `stt_get_updates(session_id, since_seq)` in a loop
+3. For each `utterance_final` event, enqueue text as a normal agent user turn
+4. `stt_stop_session` when voice mode ends

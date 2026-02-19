@@ -1,0 +1,57 @@
+{
+  "_comment": "Example configurations for different providers and models. Copy the relevant settings into config.json.",
+
+  "_anthropic_sonnet": {
+    "Provider": "anthropic",
+    "Model": "claude-sonnet-4-5-20250929",
+    "MaxTokens": 8192,
+    "Temperature": 1.0
+  },
+
+  "_anthropic_opus": {
+    "Provider": "anthropic",
+    "Model": "claude-opus-4-6",
+    "MaxTokens": 8192,
+    "Temperature": 1.0
+  },
+
+  "_anthropic_haiku": {
+    "Provider": "anthropic",
+    "Model": "claude-haiku-4-5-20251001",
+    "MaxTokens": 8192,
+    "Temperature": 1.0
+  },
+
+  "_openai_gpt4o": {
+    "Provider": "openai",
+    "Model": "gpt-4o",
+    "MaxTokens": 8192,
+    "Temperature": 1.0
+  },
+
+  "_openai_gpt4o_mini": {
+    "Provider": "openai",
+    "Model": "gpt-4o-mini",
+    "MaxTokens": 8192,
+    "Temperature": 1.0
+  },
+
+  "_openai_o3": {
+    "Provider": "openai",
+    "Model": "o3",
+    "MaxTokens": 32768,
+    "Temperature": 1.0
+  },
+
+  "_openai_o3_mini": {
+    "Provider": "openai",
+    "Model": "o3-mini",
+    "MaxTokens": 16384,
+    "Temperature": 1.0
+  },
+
+  "_env_variables": {
+    "ANTHROPIC_API_KEY": "sk-ant-... (required for Provider=anthropic)",
+    "OPENAI_API_KEY": "sk-... (required for Provider=openai)"
+  }
+}

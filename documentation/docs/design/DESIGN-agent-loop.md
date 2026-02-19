@@ -2,21 +2,21 @@
 
 ## Overview
 
-The agent loop is the core runtime cycle of the application. It manages the conversation between the user, Claude, and the tool system.
+The agent loop is the core runtime cycle of the application. It manages the conversation between the user, the configured LLM provider, and the tool system.
 
 ## Flow
 
-1. User types a prompt
+1. User provides input (typed prompt, or finalized voice utterance from `/voice` mode)
 2. Prompt is added to conversation history
 3. Compaction strategy runs (may summarize old messages), then history is trimmed if still over the message limit
-4. Message list is sent to Claude via streaming API
+4. Message list is sent to the configured provider via streaming API
 5. Text deltas are printed to stdout as they arrive
-6. If Claude requests tool use:
+6. If the provider requests tool use:
    a. All tool calls execute **in parallel** via `asyncio.gather`
    b. Results are truncated if over the character limit
    c. Tool results are added to conversation history
    d. Loop back to step 3
-7. If Claude returns a final text response, control returns to the REPL
+7. If the provider returns a final text response, control returns to the REPL
 
 ## Components
 
@@ -30,6 +30,15 @@ The agent loop is the core runtime cycle of the application. It manages the conv
 - Enforces `MaxToolResultChars` truncation
 - Enforces `MaxConversationMessages` trimming
 - Delegates to the configured `CompactionStrategy` before trimming (see [Compaction Design](DESIGN-compaction.md))
+- Routes local commands (`/help`, `/session`, `/checkpoint`, `/voice`)
+
+### Voice Runtime
+
+`voice_runtime.py` manages continuous voice input via MCP STT session tools:
+
+- Starts/stops STT sessions (`stt_start_session`, `stt_stop_session`)
+- Polls incremental events (`stt_get_updates`)
+- Queues `utterance_final` events and forwards them into the normal `Agent.run()` path
 
 ### Provider Layer
 
@@ -102,3 +111,14 @@ This ensures Claude knows the output was truncated and can request a more target
 | Tool raises exception | Error message returned to Claude |
 | API rate limit (429) | tenacity retries with exponential backoff |
 | Unrecoverable API error | Exception propagates to REPL, user sees error |
+
+## Local Commands
+
+Runtime local commands:
+
+- `/help`
+- `/session ...` (when memory enabled)
+- `/checkpoint ...` (when memory enabled)
+- `/voice start [microphone|loopback]`
+- `/voice status`
+- `/voice stop`
