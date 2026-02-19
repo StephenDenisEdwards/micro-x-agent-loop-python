@@ -1,6 +1,6 @@
 # Plan: Add `web_search` Tool (Phase 2)
 
-**Status: Planned**
+**Status: Completed**
 
 ## Context
 
