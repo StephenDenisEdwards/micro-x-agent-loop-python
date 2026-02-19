@@ -21,10 +21,14 @@ This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/Stephe
 
 - [Python 3.11+](https://python.org/)
 - [uv](https://docs.astral.sh/uv/) (package manager) — see [Why uv?](#why-uv) below
-- An [Anthropic API key](https://console.anthropic.com/)
+- A model provider API key:
+  - [Anthropic API key](https://console.anthropic.com/) when `Provider=anthropic` (default), or
+  - OpenAI API key when `Provider=openai`
 - (Optional) Google OAuth credentials for Gmail and Calendar tools — see [Gmail Setup](#gmail-setup)
 - (Optional) [Brave Search API key](https://brave.com/search/api/) for the `web_search` tool
 - (Optional) Anthropic Admin API key (`sk-ant-admin...`) for the `anthropic_usage` tool
+- (Optional) GitHub personal access token (`GITHUB_TOKEN`) for `github_*` tools
+- (Optional) Deepgram API key (`DEEPGRAM_API_KEY`) for Interview Assist transcription/STT tools
 - (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the system-info MCP server (in the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo)
 - (Optional) [Go 1.21+](https://go.dev/dl/) and a C compiler (GCC) for the WhatsApp MCP server
 - (Optional) local clone of `interview-assist-2` for Interview Assist MCP tools (analysis/evaluation workflows)
@@ -98,14 +102,34 @@ Then edit `.env`:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 ANTHROPIC_ADMIN_API_KEY=sk-ant-admin...
 BRAVE_API_KEY=BSA...
+GITHUB_TOKEN=ghp_...
+DEEPGRAM_API_KEY=dg_...
 ```
 
-Only `ANTHROPIC_API_KEY` is required. All other credentials are optional — if omitted, their respective tools are simply not registered and everything else works normally.
+Required key depends on `Provider` in `config.json`:
 
+- `Provider: "anthropic"` (default) -> `ANTHROPIC_API_KEY` required
+- `Provider: "openai"` -> `OPENAI_API_KEY` required
+
+All other keys are optional and only enable specific tool sets.
+
+| Key | Required | Used for |
+|-----|----------|----------|
+| `ANTHROPIC_API_KEY` | Yes when `Provider=anthropic` | Main LLM provider |
+| `OPENAI_API_KEY` | Yes when `Provider=openai` | Main LLM provider |
+| `GOOGLE_CLIENT_ID` | No | Gmail, Calendar, Contacts tools (with secret) |
+| `GOOGLE_CLIENT_SECRET` | No | Gmail, Calendar, Contacts tools (with client id) |
+| `ANTHROPIC_ADMIN_API_KEY` | No | `anthropic_usage` tool |
+| `BRAVE_API_KEY` | No | `web_search` tool |
+| `GITHUB_TOKEN` | No | GitHub tools (`github_*`) |
+| `DEEPGRAM_API_KEY` | No | Interview Assist STT transcription tools (`ia_transcribe_once`, `stt_*`) |
+
+For the Interview Assist MCP server path, set `INTERVIEW_ASSIST_REPO` in the MCP server `env` block in `config.json` (not in `.env`).
 ### 2. Run
 
 **Windows:**
@@ -628,12 +652,14 @@ python -m uv sync
 python -m uv run python -m micro_x_agent_loop
 ```
 
-### `ANTHROPIC_API_KEY environment variable is required`
+### `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` environment variable is required
 
-Create a `.env` file in the project root containing your API key:
+Create a `.env` file in the project root containing the key for your configured provider:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
+# or
+OPENAI_API_KEY=sk-...
 ```
 
 Or copy the example: `cp .env.example .env` and fill in your key.
@@ -776,3 +802,4 @@ Full documentation is available in the [documentation/docs/](documentation/docs/
 ## License
 
 MIT
+
