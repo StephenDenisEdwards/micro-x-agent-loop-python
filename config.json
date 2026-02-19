@@ -26,6 +26,14 @@
       "transport": "stdio",
       "command": "python",
       "args": ["-m", "uv", "--directory", "C:\\Users\\steph\\source\\repos\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
+    },
+    "interview-assist": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\interview_assist_server.py"],
+      "env": {
+        "INTERVIEW_ASSIST_REPO": "C:\\Users\\steph\\source\\repos\\interview-assist-2"
+      }
     }
   }
 }
