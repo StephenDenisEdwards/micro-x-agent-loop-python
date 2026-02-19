@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from micro_x_agent_loop.tool import Tool
+from micro_x_agent_loop.voice_ingress import PollingVoiceIngress, VoiceIngress
 
 
 class VoiceRuntime:
@@ -22,7 +24,6 @@ class VoiceRuntime:
     _DEFAULT_CHUNK_SECONDS = 3
     _DEFAULT_ENDPOINTING_MS = 500
     _DEFAULT_UTTERANCE_END_MS = 1500
-    _POLL_INTERVAL_SECONDS = 0.2
 
     def __init__(
         self,
@@ -30,15 +31,24 @@ class VoiceRuntime:
         line_prefix: str,
         tool_map: dict[str, Tool],
         on_utterance: Callable[[str], Awaitable[None]],
+        ingress: VoiceIngress | None = None,
     ) -> None:
         self._line_prefix = line_prefix
         self._tool_map = tool_map
         self._on_utterance = on_utterance
+        self._ingress = ingress or PollingVoiceIngress(tool_map=tool_map)
         self._session_id: str | None = None
         self._last_seq = 0
         self._poll_task: asyncio.Task | None = None
         self._consumer_task: asyncio.Task | None = None
-        self._queue: asyncio.Queue[str] = asyncio.Queue()
+        self._queue: asyncio.Queue[tuple[str, float]] = asyncio.Queue()
+        self._metrics = {
+            "queued_count": 0,
+            "processed_count": 0,
+            "avg_queue_wait_ms": 0.0,
+            "avg_process_ms": 0.0,
+            "last_process_ms": 0.0,
+        }
 
     @property
     def is_running(self) -> bool:
@@ -89,7 +99,14 @@ class VoiceRuntime:
         self._session_id = session_id
         self._last_seq = 0
         self._queue = asyncio.Queue()
-        self._poll_task = asyncio.create_task(self._poll_loop(tool_names))
+        self._metrics = {
+            "queued_count": 0,
+            "processed_count": 0,
+            "avg_queue_wait_ms": 0.0,
+            "avg_process_ms": 0.0,
+            "last_process_ms": 0.0,
+        }
+        self._poll_task = asyncio.create_task(self._poll_loop())
         self._consumer_task = asyncio.create_task(self._consumer_loop())
         details = (
             f"chunk={start_input.get('chunk_seconds')} "
@@ -120,7 +137,10 @@ class VoiceRuntime:
                 f"{self._line_prefix}Voice session={self._session_id} "
                 f"status={payload.get('status')} queue={self._queue.qsize()} "
                 f"next_seq={payload.get('next_seq')} stable={payload.get('stable_chunk_count', 0)} "
-                f"errors={payload.get('error_count', 0)} latest='{latest}'"
+                f"errors={payload.get('error_count', 0)} queued={self._metrics['queued_count']} "
+                f"processed={self._metrics['processed_count']} "
+                f"avg_wait_ms={self._metrics['avg_queue_wait_ms']:.0f} "
+                f"avg_process_ms={self._metrics['avg_process_ms']:.0f} latest='{latest}'"
             )
         except Exception as ex:
             return f"{self._line_prefix}Voice status check failed: {ex}"
@@ -179,31 +199,23 @@ class VoiceRuntime:
         if self._session_id is not None:
             await self.stop()
 
-    async def _poll_loop(self, tool_names: dict[str, str | None]) -> None:
-        updates_tool = tool_names["updates"]
-        if updates_tool is None:
+    async def _poll_loop(self) -> None:
+        if self._session_id is None:
             return
+        session_id = self._session_id
         try:
-            while self._session_id is not None:
-                payload = await self._call_json_tool(
-                    updates_tool,
-                    {
-                        "session_id": self._session_id,
-                        "since_seq": self._last_seq,
-                        "limit": 100,
-                    },
-                )
-                events = payload.get("events", []) or []
-                for event in events:
-                    seq = int(event.get("seq", 0))
-                    if seq > self._last_seq:
-                        self._last_seq = seq
-                    if event.get("type") == "utterance_final":
-                        text = str(event.get("text", "")).strip()
-                        if text:
-                            await self._queue.put(text)
-                            print(f"{self._line_prefix}[voice] queued: {text}")
-                await asyncio.sleep(self._POLL_INTERVAL_SECONDS)
+            async for event in self._ingress.stream_events(session_id=session_id, since_seq=self._last_seq):
+                if self._session_id is None:
+                    return
+                seq = int(event.get("seq", 0))
+                if seq > self._last_seq:
+                    self._last_seq = seq
+                if event.get("type") == "utterance_final":
+                    text = str(event.get("text", "")).strip()
+                    if text:
+                        self._metrics["queued_count"] += 1
+                        await self._queue.put((text, time.perf_counter()))
+                        print(f"{self._line_prefix}[voice] queued: {text}")
         except asyncio.CancelledError:
             raise
         except Exception as ex:
@@ -213,11 +225,24 @@ class VoiceRuntime:
     async def _consumer_loop(self) -> None:
         try:
             while self._session_id is not None:
-                text = await self._queue.get()
+                text, queued_at = await self._queue.get()
                 if self._session_id is None:
                     return
                 print(f"{self._line_prefix}[voice] processing")
+                wait_ms = (time.perf_counter() - queued_at) * 1000
+                process_start = time.perf_counter()
                 await self._on_utterance(text)
+                process_ms = (time.perf_counter() - process_start) * 1000
+
+                self._metrics["processed_count"] += 1
+                n = self._metrics["processed_count"]
+                self._metrics["avg_queue_wait_ms"] = (
+                    (self._metrics["avg_queue_wait_ms"] * (n - 1) + wait_ms) / n
+                )
+                self._metrics["avg_process_ms"] = (
+                    (self._metrics["avg_process_ms"] * (n - 1) + process_ms) / n
+                )
+                self._metrics["last_process_ms"] = process_ms
         except asyncio.CancelledError:
             raise
         except Exception as ex:
