@@ -345,9 +345,10 @@ class Agent:
         print(f"{self._LINE_PREFIX}- /help")
         if self._memory_enabled:
             print(f"{self._LINE_PREFIX}- /session")
+            print(f"{self._LINE_PREFIX}- /session new [title]")
             print(f"{self._LINE_PREFIX}- /session list [limit]")
             print(f"{self._LINE_PREFIX}- /session name <title>")
-            print(f"{self._LINE_PREFIX}- /session resume <id>")
+            print(f"{self._LINE_PREFIX}- /session resume <id-or-name>")
             print(f"{self._LINE_PREFIX}- /session fork")
             print(f"{self._LINE_PREFIX}- /rewind <checkpoint_id>")
             print(f"{self._LINE_PREFIX}- /checkpoint list [limit]")
@@ -390,14 +391,19 @@ class Agent:
                 return
             print(f"{self._LINE_PREFIX}Recent sessions:")
             for s in sessions:
-                marker = "*" if s["id"] == self._active_session_id else " "
-                parent = s["parent_session_id"] or "-"
-                title = s.get("title", s["id"])
-                short_id = self._short_id(s["id"])
-                print(
-                    f"{self._LINE_PREFIX}{marker} {title} [{short_id}] (id={s['id']}) "
-                    f"(status={s['status']}, created={s['created_at']}, updated={s['updated_at']}, parent={parent})"
-                )
+                print(self._format_session_list_entry(s))
+            return
+
+        if len(parts) >= 2 and parts[1] == "new":
+            title = command.partition("new")[2].strip()
+            new_id = self._session_manager.create_session(title=title if title else None)
+            self._active_session_id = new_id
+            self._messages = self._session_manager.load_messages(new_id)
+            session = self._session_manager.get_session(new_id) or {"title": new_id}
+            print(
+                f"{self._LINE_PREFIX}Started new session: {session.get('title', new_id)} "
+                f"[{self._short_id(new_id)}] (id={new_id})"
+            )
             return
 
         if len(parts) >= 3 and parts[1] == "name":
@@ -413,17 +419,25 @@ class Agent:
             return
 
         if len(parts) >= 3 and parts[1] == "resume":
-            target = parts[2]
-            session = self._session_manager.get_session(target)
+            target = command.partition("resume")[2].strip()
+            if not target:
+                print(f"{self._LINE_PREFIX}Usage: /session resume <id-or-name>")
+                return
+            try:
+                session = self._session_manager.resolve_session_identifier(target)
+            except ValueError as ex:
+                print(f"{self._LINE_PREFIX}{ex}")
+                return
             if session is None:
                 print(f"{self._LINE_PREFIX}Session not found: {target}")
                 return
-            self._active_session_id = target
-            self._messages = self._session_manager.load_messages(target)
-            summary = self._session_manager.build_session_summary(target)
+            resolved_id = session["id"]
+            self._active_session_id = resolved_id
+            self._messages = self._session_manager.load_messages(resolved_id)
+            summary = self._session_manager.build_session_summary(resolved_id)
             print(
                 f"{self._LINE_PREFIX}Resumed session {summary['title']} "
-                f"[{target}] ({len(self._messages)} messages)"
+                f"[{self._short_id(resolved_id)}] (id={resolved_id}, {len(self._messages)} messages)"
             )
             self._print_resumed_session_summary(summary)
             return
@@ -440,8 +454,8 @@ class Agent:
             return
 
         print(
-            f"{self._LINE_PREFIX}Usage: /session | /session list [limit] | "
-            "/session name <title> | /session resume <id> | /session fork"
+            f"{self._LINE_PREFIX}Usage: /session | /session new [title] | /session list [limit] | "
+            "/session name <title> | /session resume <id-or-name> | /session fork"
         )
 
     async def _handle_rewind_command(self, command: str) -> None:
@@ -490,15 +504,7 @@ class Agent:
                 return
             print(f"{self._LINE_PREFIX}Recent checkpoints:")
             for cp in checkpoints:
-                tools = cp.get("tools", [])
-                tool_text = ", ".join(tools) if tools else "n/a"
-                preview = cp.get("user_preview", "")
-                preview_text = f', prompt="{preview}"' if preview else ""
-                short_id = self._short_id(cp["id"])
-                print(
-                    f"{self._LINE_PREFIX}- [{short_id}] (id={cp['id']}, created={cp['created_at']}, "
-                    f"tools={tool_text}{preview_text})"
-                )
+                print(self._format_checkpoint_list_entry(cp))
             return
 
         if len(parts) == 3 and parts[1] == "rewind":
@@ -513,6 +519,28 @@ class Agent:
         if len(value) <= length:
             return value
         return value[:length]
+
+    def _format_session_list_entry(self, session: dict) -> str:
+        marker = "*" if session["id"] == self._active_session_id else " "
+        parent = session["parent_session_id"] or "-"
+        title = session.get("title", session["id"])
+        short_id = self._short_id(session["id"])
+        return (
+            f"{self._LINE_PREFIX}{marker} {title} [{short_id}] (id={session['id']}) "
+            f"(status={session['status']}, created={session['created_at']}, "
+            f"updated={session['updated_at']}, parent={parent})"
+        )
+
+    def _format_checkpoint_list_entry(self, checkpoint: dict) -> str:
+        tools = checkpoint.get("tools", [])
+        tool_text = ", ".join(tools) if tools else "n/a"
+        preview = checkpoint.get("user_preview", "")
+        preview_text = f', prompt="{preview}"' if preview else ""
+        short_id = self._short_id(checkpoint["id"])
+        return (
+            f"{self._LINE_PREFIX}- [{short_id}] (id={checkpoint['id']}, created={checkpoint['created_at']}, "
+            f"tools={tool_text}{preview_text})"
+        )
 
     def _print_resumed_session_summary(self, summary: dict) -> None:
         print(f"{self._LINE_PREFIX}Session summary:")

@@ -16,6 +16,21 @@ class SessionManagerTests(MemoryStoreTestCase):
         self.assertIsNotNone(session)
         self.assertEqual("Interview Prep - Morning", session["title"])
 
+    def test_resolve_session_identifier_by_id_and_title(self) -> None:
+        sid = self._sessions.create_session("resolve-id", title="Daily Standup")
+        by_id = self._sessions.resolve_session_identifier("resolve-id")
+        by_title = self._sessions.resolve_session_identifier("daily standup")
+        self.assertIsNotNone(by_id)
+        self.assertIsNotNone(by_title)
+        self.assertEqual(sid, by_id["id"])
+        self.assertEqual(sid, by_title["id"])
+
+    def test_resolve_session_identifier_raises_when_ambiguous(self) -> None:
+        self._sessions.create_session("a1", title="Duplicate Name")
+        self._sessions.create_session("a2", title="Duplicate Name")
+        with self.assertRaises(ValueError):
+            self._sessions.resolve_session_identifier("Duplicate Name")
+
     def test_create_append_and_load_messages(self) -> None:
         sid = self._sessions.create_session("s-test")
         self._sessions.append_message(sid, "user", "hello")

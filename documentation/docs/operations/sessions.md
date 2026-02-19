@@ -17,13 +17,21 @@ Resolution order:
 3. Create a new session
 4. If `ForkSession=true`, fork the resolved session into a new active session
 
+`ResumeSessionId` can be either:
+
+- a full session ID, or
+- an exact session name (case-insensitive)
+
+If multiple sessions share the same name, resume by name is rejected as ambiguous and you should resume by ID.
+
 ## Runtime Commands
 
 - `/help` - show available local commands
 - `/session` - show current active session ID
+- `/session new [title]` - start a brand-new session (optional title)
 - `/session list [limit]` - list recent sessions (default 20)
 - `/session name <title>` - rename the current session for easier identification
-- `/session resume <id>` - switch to an existing session, reload persisted messages, and print a session summary
+- `/session resume <id-or-name>` - switch to an existing session by ID or exact name, reload messages, and print a summary
 - `/session fork` - create a new forked session from current context
 - `/rewind <checkpoint_id>` - restore tracked files from a checkpoint
 - `/checkpoint list [limit]` - list recent checkpoints for the current session (default 20)

@@ -127,18 +127,16 @@ async def main() -> None:
             enabled=enable_file_checkpointing,
             write_tools_only=checkpoint_write_tools_only,
         )
-        prune_memory(
-            memory_store,
-            max_sessions=memory_max_sessions,
-            max_messages_per_session=memory_max_messages_per_session,
-            retention_days=memory_retention_days,
-        )
-
         if resume_session_id:
-            if session_manager.get_session(resume_session_id) is None:
+            try:
+                resolved = session_manager.resolve_session_identifier(resume_session_id)
+            except ValueError as ex:
+                logger.error(str(ex))
+                sys.exit(1)
+            if resolved is None:
                 logger.error(f"Resume session not found: {resume_session_id}")
                 sys.exit(1)
-            active_session_id = resume_session_id
+            active_session_id = resolved["id"]
         elif continue_conversation and configured_session_id:
             active_session_id = session_manager.load_or_create(configured_session_id)
         else:
@@ -146,6 +144,14 @@ async def main() -> None:
 
         if fork_session:
             active_session_id = session_manager.fork_session(active_session_id)
+
+        # Prune after resolving/creating active session to avoid deleting the target session first.
+        prune_memory(
+            memory_store,
+            max_sessions=memory_max_sessions,
+            max_messages_per_session=memory_max_messages_per_session,
+            retention_days=memory_retention_days,
+        )
 
     agent = Agent(
         AgentConfig(
@@ -188,7 +194,8 @@ async def main() -> None:
         print(f"Memory: enabled (session: {active_session_id})")
         print(
             "Memory controls: /session, /session list [limit], /session name <title>, "
-            "/session resume <id>, /session fork, /checkpoint list [limit], /checkpoint rewind <id>"
+            "/session new [title], /session resume <id-or-name>, /session fork, "
+            "/checkpoint list [limit], /checkpoint rewind <checkpoint_id>"
         )
     if log_descriptions:
         print(f"Logging: {', '.join(log_descriptions)}")

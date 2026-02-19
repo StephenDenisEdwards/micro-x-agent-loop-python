@@ -33,7 +33,7 @@ If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail and Calendar t
 | `MemoryDbPath` | string | `".micro_x/memory.db"` | SQLite path for memory persistence |
 | `SessionId` | string | _(none)_ | Optional logical session ID to continue (with `ContinueConversation=true`) |
 | `ContinueConversation` | bool | `false` | Continue or create the configured `SessionId` |
-| `ResumeSessionId` | string | _(none)_ | Resume an existing session ID; exits if missing |
+| `ResumeSessionId` | string | _(none)_ | Resume an existing session ID or exact session name; exits if missing/ambiguous |
 | `ForkSession` | bool | `false` | Fork the resolved startup session into a new session |
 | `EnableFileCheckpointing` | bool | `false` | Enable checkpoint capture for tracked mutating tools |
 | `CheckpointWriteToolsOnly` | bool | `true` | Track only `write_file`/`append_file` mutations for checkpointing |
@@ -167,9 +167,10 @@ Startup session resolution:
 Runtime commands when memory is enabled:
 
 - `/session`
+- `/session new [title]`
 - `/session list [limit]`
 - `/session name <title>`
-- `/session resume <id>`
+- `/session resume <id-or-name>`
 - `/session fork`
 - `/rewind <checkpoint_id>`
 - `/checkpoint list [limit]`

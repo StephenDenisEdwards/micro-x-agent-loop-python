@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,17 @@ class MemoryStore:
 
     def rollback(self) -> None:
         self._conn.rollback()
+
+    @contextmanager
+    def transaction(self):
+        self._conn.execute("BEGIN")
+        try:
+            yield
+        except Exception:
+            self._conn.rollback()
+            raise
+        else:
+            self._conn.commit()
 
     def _initialize_schema(self) -> None:
         self._conn.executescript(
@@ -104,6 +116,8 @@ class MemoryStore:
                 ON checkpoints(session_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_events_session_created
                 ON events(session_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_sessions_title_nocase
+                ON sessions((json_extract(metadata_json, '$.title') COLLATE NOCASE));
             """
         )
         self._conn.commit()

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from uuid import uuid4
 
 from micro_x_agent_loop.compaction import estimate_tokens
@@ -49,21 +48,56 @@ class SessionManager:
         *,
         parent_session_id: str | None = None,
         metadata: dict | None = None,
+        title: str | None = None,
     ) -> str:
         sid = session_id or str(uuid4())
         now = utc_now()
         full_metadata = dict(metadata or {})
+        if title and title.strip():
+            full_metadata["title"] = title.strip()
         full_metadata.setdefault("title", self._default_title(now))
-        self._store.execute(
-            """
-            INSERT INTO sessions (id, parent_session_id, created_at, updated_at, status, model, metadata_json)
-            VALUES (?, ?, ?, ?, 'active', ?, ?)
-            """,
-            (sid, parent_session_id, now, now, self._model, json.dumps(full_metadata, ensure_ascii=True)),
-        )
-        self._store.commit()
+        with self._store.transaction():
+            self._store.execute(
+                """
+                INSERT INTO sessions (id, parent_session_id, created_at, updated_at, status, model, metadata_json)
+                VALUES (?, ?, ?, ?, 'active', ?, ?)
+                """,
+                (sid, parent_session_id, now, now, self._model, json.dumps(full_metadata, ensure_ascii=True)),
+            )
         self._events.emit(sid, "session.started", {"session_id": sid, "parent_session_id": parent_session_id})
         return sid
+
+    def resolve_session_identifier(self, identifier: str) -> dict | None:
+        trimmed = identifier.strip()
+        if not trimmed:
+            return None
+
+        by_id = self.get_session(trimmed)
+        if by_id is not None:
+            return by_id
+
+        rows = self._store.execute(
+            """
+            SELECT *
+            FROM sessions
+            WHERE json_extract(metadata_json, '$.title') COLLATE NOCASE = ?
+            ORDER BY updated_at DESC, created_at DESC
+            """,
+            (trimmed,),
+        ).fetchall()
+        matches: list[dict] = [dict(row) for row in rows]
+        for session in matches:
+            session["title"] = self._extract_title(session.get("metadata_json", "{}"), session["created_at"])
+
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            ids = ", ".join(m["id"] for m in matches[:5])
+            suffix = "..." if len(matches) > 5 else ""
+            raise ValueError(
+                f"Session name '{identifier}' is ambiguous ({len(matches)} matches: {ids}{suffix})"
+            )
+        return None
 
     def set_session_title(self, session_id: str, title: str) -> None:
         row = self._store.execute(
@@ -76,11 +110,11 @@ class SessionManager:
         metadata = self._parse_metadata(row["metadata_json"])
         metadata["title"] = title.strip()
         now = utc_now()
-        self._store.execute(
-            "UPDATE sessions SET metadata_json = ?, updated_at = ? WHERE id = ?",
-            (json.dumps(metadata, ensure_ascii=True), now, session_id),
-        )
-        self._store.commit()
+        with self._store.transaction():
+            self._store.execute(
+                "UPDATE sessions SET metadata_json = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(metadata, ensure_ascii=True), now, session_id),
+            )
         self._events.emit(
             session_id,
             "session.renamed",
@@ -102,18 +136,18 @@ class SessionManager:
         now = utc_now()
         content_json = json.dumps(content, ensure_ascii=True)
         token_estimate = max(0, estimate_tokens([{"role": role, "content": content}]))
-        self._store.execute(
-            """
-            INSERT INTO messages (id, session_id, seq, role, content_json, created_at, token_estimate)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (message_id, session_id, next_seq, role, content_json, now, token_estimate),
-        )
-        self._store.execute(
-            "UPDATE sessions SET updated_at = ? WHERE id = ?",
-            (now, session_id),
-        )
-        self._store.commit()
+        with self._store.transaction():
+            self._store.execute(
+                """
+                INSERT INTO messages (id, session_id, seq, role, content_json, created_at, token_estimate)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (message_id, session_id, next_seq, role, content_json, now, token_estimate),
+            )
+            self._store.execute(
+                "UPDATE sessions SET updated_at = ? WHERE id = ?",
+                (now, session_id),
+            )
         self._events.emit(
             session_id,
             "message.appended",
@@ -146,27 +180,27 @@ class SessionManager:
     ) -> str:
         call_id = tool_call_id or str(uuid4())
         now = utc_now()
-        self._store.execute(
-            """
-            INSERT INTO tool_calls (id, session_id, message_id, tool_name, input_json, result_text, is_error, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                call_id,
-                session_id,
-                message_id,
-                tool_name,
-                json.dumps(tool_input, ensure_ascii=True),
-                result_text,
-                1 if is_error else 0,
-                now,
-            ),
-        )
-        self._store.execute(
-            "UPDATE sessions SET updated_at = ? WHERE id = ?",
-            (now, session_id),
-        )
-        self._store.commit()
+        with self._store.transaction():
+            self._store.execute(
+                """
+                INSERT INTO tool_calls (id, session_id, message_id, tool_name, input_json, result_text, is_error, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    call_id,
+                    session_id,
+                    message_id,
+                    tool_name,
+                    json.dumps(tool_input, ensure_ascii=True),
+                    result_text,
+                    1 if is_error else 0,
+                    now,
+                ),
+            )
+            self._store.execute(
+                "UPDATE sessions SET updated_at = ? WHERE id = ?",
+                (now, session_id),
+            )
         return call_id
 
     def build_session_summary(self, session_id: str) -> dict:
@@ -256,14 +290,14 @@ class SessionManager:
                         row["token_estimate"],
                     )
                 )
-            self._store.executemany(
-                """
-                INSERT INTO messages (id, session_id, seq, role, content_json, created_at, token_estimate)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                params,
-            )
-            self._store.commit()
+            with self._store.transaction():
+                self._store.executemany(
+                    """
+                    INSERT INTO messages (id, session_id, seq, role, content_json, created_at, token_estimate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    params,
+                )
         return fork_id
 
     def _default_title(self, iso_timestamp: str) -> str:

@@ -35,14 +35,14 @@ class CheckpointManager:
     def create_checkpoint(self, session_id: str, user_message_id: str, *, scope: dict | None = None) -> str:
         checkpoint_id = str(uuid4())
         now = utc_now()
-        self._store.execute(
-            """
-            INSERT INTO checkpoints (id, session_id, user_message_id, created_at, scope_json)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (checkpoint_id, session_id, user_message_id, now, json.dumps(scope or {}, ensure_ascii=True)),
-        )
-        self._store.commit()
+        with self._store.transaction():
+            self._store.execute(
+                """
+                INSERT INTO checkpoints (id, session_id, user_message_id, created_at, scope_json)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (checkpoint_id, session_id, user_message_id, now, json.dumps(scope or {}, ensure_ascii=True)),
+            )
         self._events.emit(
             session_id,
             "checkpoint.created",
@@ -174,14 +174,14 @@ class CheckpointManager:
 
         existed_before = path.exists()
         backup_blob = path.read_bytes() if existed_before else None
-        self._store.execute(
-            """
-            INSERT INTO checkpoint_files (checkpoint_id, path, existed_before, backup_blob, backup_path)
-            VALUES (?, ?, ?, ?, NULL)
-            """,
-            (checkpoint_id, str(path), 1 if existed_before else 0, backup_blob),
-        )
-        self._store.commit()
+        with self._store.transaction():
+            self._store.execute(
+                """
+                INSERT INTO checkpoint_files (checkpoint_id, path, existed_before, backup_blob, backup_path)
+                VALUES (?, ?, ?, ?, NULL)
+                """,
+                (checkpoint_id, str(path), 1 if existed_before else 0, backup_blob),
+            )
         self._events.emit(
             session_id,
             "checkpoint.file_tracked",
