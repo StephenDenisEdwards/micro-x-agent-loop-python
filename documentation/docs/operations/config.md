@@ -29,6 +29,17 @@ If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail and Calendar t
 | `CompactionThresholdTokens` | int | `80000` | Estimated token count that triggers compaction |
 | `ProtectedTailMessages` | int | `6` | Recent messages protected from compaction |
 | `WorkingDirectory` | string | _(none)_ | Default directory for file tools and shell commands |
+| `MemoryEnabled` | bool | `false` | Enables persistent session/message/tool memory in SQLite |
+| `MemoryDbPath` | string | `".micro_x/memory.db"` | SQLite path for memory persistence |
+| `SessionId` | string | _(none)_ | Optional logical session ID to continue (with `ContinueConversation=true`) |
+| `ContinueConversation` | bool | `false` | Continue or create the configured `SessionId` |
+| `ResumeSessionId` | string | _(none)_ | Resume an existing session ID; exits if missing |
+| `ForkSession` | bool | `false` | Fork the resolved startup session into a new session |
+| `EnableFileCheckpointing` | bool | `false` | Enable checkpoint capture for tracked mutating tools |
+| `CheckpointWriteToolsOnly` | bool | `true` | Track only `write_file`/`append_file` mutations for checkpointing |
+| `MemoryMaxSessions` | int | `200` | Maximum persisted sessions retained after pruning |
+| `MemoryMaxMessagesPerSession` | int | `5000` | Maximum persisted messages retained per session |
+| `MemoryRetentionDays` | int | `30` | Time-based retention window for persisted memory |
 | `McpServers` | object | _(none)_ | MCP server configurations for external tools (see [below](#mcpservers)) |
 
 ### Example
@@ -44,6 +55,15 @@ If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail and Calendar t
   "CompactionThresholdTokens": 80000,
   "ProtectedTailMessages": 6,
   "WorkingDirectory": "C:\\Users\\you\\documents",
+  "MemoryEnabled": true,
+  "MemoryDbPath": ".micro_x/memory.db",
+  "ContinueConversation": true,
+  "SessionId": "local-main",
+  "EnableFileCheckpointing": true,
+  "CheckpointWriteToolsOnly": true,
+  "MemoryMaxSessions": 200,
+  "MemoryMaxMessagesPerSession": 5000,
+  "MemoryRetentionDays": 30,
   "McpServers": {
     "system-info": {
       "transport": "stdio",
@@ -132,6 +152,42 @@ Sets the default directory used by file and shell tools:
 - **`bash`** — commands execute with this as the current working directory
 
 Use an absolute path for reliability. When not set, tools use the directory where `run.bat`/`run.sh` was executed.
+
+### MemoryEnabled, MemoryDbPath, Session Controls
+
+When `MemoryEnabled=true`, the agent persists sessions, messages, tool calls, checkpoints, and events in SQLite.
+
+Startup session resolution:
+
+1. If `ResumeSessionId` is set, that session must already exist.
+2. Else if `ContinueConversation=true` and `SessionId` is set, the session is loaded or created.
+3. Else a new session is created.
+4. If `ForkSession=true`, the resolved session is forked into a new active session.
+
+Runtime commands when memory is enabled:
+
+- `/session`
+- `/session list [limit]`
+- `/session resume <id>`
+- `/session fork`
+- `/rewind <checkpoint_id>`
+
+### Checkpointing
+
+When `EnableFileCheckpointing=true`, the agent snapshots tracked files before mutating tools execute and can restore them with `/rewind`.
+
+- Current strict tracking target: `write_file`, `append_file`
+- `CheckpointWriteToolsOnly=true` keeps tracking limited to those tools
+
+Checkpoint rewind is best effort and reports per-file outcomes (`restored`, `removed`, `skipped`, `failed`).
+
+### Memory Retention
+
+Pruning runs at startup when memory is enabled:
+
+- Time-based retention via `MemoryRetentionDays`
+- Session cap via `MemoryMaxSessions`
+- Per-session message cap via `MemoryMaxMessagesPerSession`
 
 ### McpServers
 

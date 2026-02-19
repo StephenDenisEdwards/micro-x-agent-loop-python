@@ -32,6 +32,16 @@ class WriteFileTool:
             "required": ["path", "content"],
         }
 
+    @property
+    def is_mutating(self) -> bool:
+        return True
+
+    def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]:
+        path = tool_input.get("path")
+        if isinstance(path, str) and path.strip():
+            return [path]
+        return []
+
     async def execute(self, tool_input: dict[str, Any]) -> str:
         path = tool_input["path"]
         content = tool_input["content"]

@@ -2,6 +2,13 @@
   "Model": "claude-sonnet-4-5-20250929",
   "MaxTokens": 32768,
   "CompactionStrategy": "summarize",
+  "MemoryEnabled": true,
+  "MemoryDbPath": ".micro_x/memory.db",
+  "EnableFileCheckpointing": true,
+  "CheckpointWriteToolsOnly": true,
+  "MemoryMaxSessions": 200,
+  "MemoryMaxMessagesPerSession": 5000,
+  "MemoryRetentionDays": 30,
   "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\resources\\documents",
   "LogLevel": "DEBUG",
   "LogConsumers": [

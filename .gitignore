@@ -12,6 +12,7 @@ dist/
 .mypy_cache/
 .ruff_cache/
 uv.lock
+.micro_x/
 
 # .NET
 *.sln

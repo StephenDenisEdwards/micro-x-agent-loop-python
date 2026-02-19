@@ -21,6 +21,7 @@ Central navigation hub for all project documentation.
 
 - [Getting Started](operations/getting-started.md) - Prerequisites, setup, running
 - [Configuration Reference](operations/config.md) - All settings with types and defaults
+- [Sessions and Rewind](operations/sessions.md) - Session lifecycle, resume/fork, checkpoint rewind commands
 - [Troubleshooting](operations/troubleshooting.md) - Common issues and solutions
 
 ## Document Map

@@ -1,8 +1,8 @@
-# Plan: Claude-Style Memory Features
+# Plan: OpenClaw-Inspired Memory Features
 
 ## Goal
 
-Add memory capabilities similar to Claude SDK while preserving the current local-agent architecture:
+Add memory capabilities inspired by OpenClaw memory/session workflows while preserving the current local-agent architecture:
 
 1. Session continuity (`session_id`, resume, continue, fork)
 2. Persistent transcript/state storage
@@ -11,6 +11,374 @@ Add memory capabilities similar to Claude SDK while preserving the current local
 5. Retention and safety controls
 
 This plan is incremental and intentionally starts with low-risk pieces.
+
+## Status (Updated February 19, 2026)
+
+Current implementation status:
+
+- Phase 1 (Session persistence): Completed.
+- Phase 2 (Checkpoint/rewind for `write_file`/`append_file`): Completed.
+- Phase 3 (expanded mutation coverage + advanced events/callbacks): In progress.
+
+Delivered in code:
+
+- SQLite-backed memory store and schema bootstrap.
+- Session create/resume/fork and persisted message reload.
+- Persisted tool call records.
+- Checkpoint + rewind for `write_file` and `append_file`.
+- Local commands: `/help`, `/session`, `/session list [limit]`, `/session resume <id>`, `/session fork`, `/rewind <checkpoint_id>`.
+- Startup/session config wiring and startup pruning.
+- Initial automated tests for session, checkpoint, rewind, pruning, and non-blocking checkpoint tracking failures.
+
+Remaining from plan:
+
+- Best-effort `bash` and broader mutation tracking.
+- Optional external event callback API.
+- Additional stress/concurrency tests and deeper retention policy hardening.
+
+## Source Inspiration and Scope
+
+Primary inspiration:
+
+- OpenClaw memory/session/checkpoint workflow patterns (resume, branching, recoverability, and event visibility).
+
+Scope clarification:
+
+- This plan adapts those patterns to this repo's local architecture.
+- It does not attempt to replicate proprietary hosted backend internals from any vendor.
+
+## Detailed Feature Intent + Implementation Comparison
+
+This section clarifies what "OpenClaw-inspired memory" means in this repo.
+
+Important scope note:
+
+- The goal is practical workflow parity (resume, fork, rewind, event traceability), not implementation parity with external platforms.
+- Where external behavior is unspecified, this plan chooses explicit, deterministic local behavior.
+
+Quick comparison:
+
+| Capability | OpenClaw-Inspired Expectation | Planned Here | Why Different |
+| --- | --- | --- | --- |
+| Session continuity | Resume and branch prior conversations | Explicit `session_id` create/resume/continue/fork with deterministic precedence | Local/offline operation and predictable testable semantics |
+| Transcript persistence | Conversation state survives beyond one run | SQLite-backed `sessions/messages/tool_calls` with ordered replay | Inspectable local storage and transactional safety |
+| Rewind | Recover from undesired agent changes | First-class checkpoint + per-file rewind reporting | Local file mutation risk is primary; explicit undo is required |
+| Streaming state events | Meaningful runtime state transitions | Typed local events persisted to DB, callback-ready later | Repo-specific observability and offline replay/debugging |
+| Retention and safety | Controlled memory lifecycle | Configurable caps/retention, planned redaction hooks | Operator-controlled local compliance and storage bounds |
+
+### Comparison: Claude Code Memory Features (Current)
+
+Based on Anthropic's Claude Code memory docs (retrieved February 19, 2026), Claude Code memory is primarily instruction memory via `CLAUDE.md` files and related commands (`/memory`, `/init`, `#` shortcut), with hierarchical file loading and imports.
+
+What Claude Code memory emphasizes:
+
+- File-based instruction memory in multiple scopes (enterprise, project, user).
+- Hierarchical loading and precedence of memory files.
+- Importing additional files from memory files (`@path` syntax).
+- Fast authoring/editing workflow for memory files via CLI shortcuts and commands.
+
+How this plan overlaps:
+
+- Both approaches aim to preserve useful context across sessions.
+- Both make memory operator-editable, not opaque.
+- Both support project-level conventions and reusable workflow guidance.
+
+How this plan differs:
+
+- This plan adds persisted conversational state (`sessions/messages/tool_calls`) rather than only instruction files.
+- This plan includes checkpoint/rewind of file mutations, which is outside Claude Code memory-file scope.
+- This plan includes structured persisted runtime events for replay/debugging.
+- This plan proposes retention/pruning over persisted execution artifacts, not just memory-file maintenance.
+
+Why both can coexist conceptually:
+
+- Claude Code-style memory files are strong for stable instructions ("how to work").
+- Session/checkpoint/event memory is strong for execution history ("what happened").
+- Combining both yields policy + history + recoverability for local autonomous coding workflows.
+
+### 1) Session continuity (`session_id`, resume, continue, fork)
+
+What we are planning:
+
+- Every conversation is assigned a stable `session_id`.
+- Users can explicitly resume an existing session.
+- Users can continue a named session across process restarts.
+- Users can fork a session to branch from prior context without mutating the original lineage.
+
+What it does exactly:
+
+- `session_id` identifies a single conversation timeline.
+- `resume` reopens an existing timeline and loads its persisted messages as active context.
+- `continue` with a known ID reuses that timeline across process restarts without requiring transcript copy/paste.
+- `fork` creates a new timeline that starts from the same prior transcript, then diverges independently.
+- `parent_session_id` preserves ancestry so operators can trace where a branch came from.
+- Session status (`active`, `archived`, `deleted`) controls lifecycle without physically deleting everything immediately.
+
+Use cases:
+
+- Ongoing research thread: continue a multi-day analysis session without re-briefing the assistant each day.
+- Policy drafting alternatives: fork one branch for "strict policy" and another for "balanced policy" and compare.
+- Customer support escalation: resume the exact prior troubleshooting context for a returning case.
+- Operations handoff: day shift forks a night-shift session to test a different remediation path safely.
+
+Why this matters:
+
+- Enables long-running work over days/weeks.
+- Makes experimentation safer (fork before risky changes).
+- Supports repeatable debugging by replaying the same conversation state.
+
+How this compares to OpenClaw-inspired behavior:
+
+- Similar: supports continuing prior context and branching/fork-like workflows.
+- Different: this repo defines explicit startup precedence and deterministic local IDs rather than relying on opaque server-side session routing.
+
+Why this difference is intentional:
+
+- Local agent architecture must work offline and be inspectable.
+- Deterministic semantics reduce operator confusion and make tests straightforward.
+
+### 2) Persistent transcript/state storage
+
+What we are planning:
+
+- Persist user/assistant/system messages and tool call outcomes in SQLite.
+- Rehydrate in-memory conversation from persisted rows at startup/resume.
+- Keep sequence ordering explicit with monotonic per-session `seq`.
+
+What it does exactly:
+
+- Each message append writes a row to `messages` with `session_id`, `seq`, role, payload, and timestamp.
+- Tool invocations and outputs are persisted in `tool_calls`, including error state.
+- On startup/resume, the session manager reconstructs `_messages` from stored rows in `seq` order.
+- Compaction outputs (summaries) are persisted as first-class messages, not hidden side state.
+- The persisted state becomes the source of truth; in-memory state is a runtime cache/working set.
+
+Use cases:
+
+- Crash recovery: restart after process failure and continue the same conversation in any domain.
+- Audit trail: inspect what prompt/response/tool sequence produced a compliance or quality issue.
+- Knowledge continuity: preserve institutional context across operator changes and long-running cases.
+- Quality review: compare two sessions to understand why one produced better outputs than another.
+
+Why this matters:
+
+- Process restarts no longer lose context.
+- Auditability: operators can inspect exactly what context the model saw.
+- Better incident response when prompts/tool outputs need post-mortem analysis.
+
+How this compares to OpenClaw-inspired behavior:
+
+- Similar: conversation state survives beyond a single in-memory run.
+- Different: this implementation is local-first with a portable SQLite schema and queryable tables.
+
+Why this difference is intentional:
+
+- Local, file-backed state matches this project's "run from current working directory" model.
+- SQLite gives transactional safety without introducing service dependencies.
+
+### 3) File checkpointing + rewind
+
+What we are planning:
+
+- Create checkpoints around mutating tool execution.
+- Track pre-change file state and restore via `rewind_files(checkpoint_id)`.
+- Start strict with `write_file`/`append_file`; expand carefully for `bash` and MCP later.
+
+What it does exactly:
+
+- At user-turn boundaries (when enabled), create a checkpoint record tied to session and triggering message.
+- Before a tracked mutating tool runs, snapshot pre-change file state for predicted touched paths.
+- For each tracked file, record whether it existed beforehand and store backup content (blob or backup file path).
+- `rewind_files(checkpoint_id)` replays backups:
+- Existing-before files are restored to their exact prior bytes.
+- Files created after checkpoint are removed if they did not previously exist.
+- Restore results are reported per file (restored, removed, skipped, failed) for operator visibility.
+- Rewind scope is intentionally limited to tracked paths, avoiding false certainty about untracked side effects.
+
+Use cases:
+
+- Document rollback: revert accidental changes to runbooks, reports, or SOP documents.
+- Data prep safety: undo unintended edits to local CSV/JSON artifacts used in analysis workflows.
+- Sandbox operations: run high-risk automated transformations, then rewind to known baseline.
+- Incident recovery: restore a critical subset first, then investigate remaining untracked side effects.
+
+Why this matters:
+
+- Converts risky tool-based edits into reversible operations.
+- Reduces fear of autonomous edits in real repositories.
+- Provides a concrete "undo" primitive for local agent workflows.
+
+How this compares to OpenClaw-inspired behavior:
+
+- Similar: user can recover from undesired agent edits by reverting to earlier state.
+- Different: this plan makes file rewind a first-class, explicit local primitive with per-file restoration reporting.
+
+Why this difference is intentional:
+
+- In local development environments, source-tree mutation is the highest-risk action.
+- Explicit checkpoint metadata is required for trust, diagnostics, and safe automation.
+
+### 4) Structured streaming state events
+
+What we are planning:
+
+- Emit typed lifecycle events for session/message/tool/checkpoint/rewind milestones.
+- Persist events in DB first; optional callbacks can be layered later.
+
+What it does exactly:
+
+- Emit normalized event records for milestones like `session.started`, `message.appended`, `tool.started`, `tool.completed`, and rewind lifecycle events.
+- Attach typed payloads (`payload_json`) with IDs/timestamps needed to correlate messages, tools, and checkpoints.
+- Persist events in append-only style so execution order is reconstructable after the fact.
+- Keep event emission internal-first (logs + DB) before exposing a public callback surface.
+- Enable downstream consumers to build timelines without parsing unstructured console text.
+
+Use cases:
+
+- Timeline reconstruction: answer "what happened just before this wrong output?" in support or analytics flows.
+- UI/ops visibility: render activity timelines for supervisors reviewing autonomous runs.
+- Monitoring/alerts: detect repeated tool failures, retries, or unusual rewind patterns.
+- Post-incident review: reconstruct end-to-end execution behavior for operational learning.
+
+Why this matters:
+
+- Improves observability beyond plain console logs.
+- Enables UI timelines, replay tooling, and external monitoring integrations.
+- Supports deterministic debugging of "what happened when".
+
+How this compares to OpenClaw-inspired behavior:
+
+- Similar: exposes a stream of meaningful state transitions during execution.
+- Different: event taxonomy and payloads are explicitly defined for this codebase and persisted locally.
+
+Why this difference is intentional:
+
+- This repo needs events that map directly to its own tool and file mutation lifecycle.
+- Persisted events enable offline debugging and compliance-friendly traceability.
+
+### 5) Retention and safety controls
+
+What we are planning:
+
+- Configurable caps for sessions/messages plus time-based retention.
+- Planned optional redaction filters before persistence.
+- Explicit defaults that preserve current behavior unless memory is enabled.
+
+What it does exactly:
+
+- Enforce configurable limits (`MemoryMaxSessions`, `MemoryMaxMessagesPerSession`) to prevent unbounded growth.
+- Apply time-based pruning (`MemoryRetentionDays`) for stale sessions/messages/events.
+- Keep memory opt-in (`MemoryEnabled=false` by default) so existing deployments do not change behavior silently.
+- Provide planned redaction hooks to scrub sensitive substrings before writing messages/tool outputs to disk.
+- Run pruning in controlled, transactional operations to avoid partial deletion corruption.
+
+Use cases:
+
+- Compliance hygiene: enforce finite retention windows for sensitive customer or internal content.
+- Cost/resource control: keep local storage growth stable for long-running assistant usage.
+- Shared environment safety: reduce accidental long-term retention of credentials or personal data.
+- Policy by environment: strict retention for regulated operations, longer retention for research workflows.
+
+Why this matters:
+
+- Prevents unbounded local data growth.
+- Reduces risk of retaining secrets longer than intended.
+- Keeps the feature safe-by-default for existing users.
+
+How this compares to OpenClaw-inspired behavior:
+
+- Similar: memory is governed by lifecycle controls, not infinite retention.
+- Different: retention is controlled with local config knobs and local pruning jobs.
+
+Why this difference is intentional:
+
+- Local deployments vary widely in risk tolerance and storage constraints.
+- Operators need direct control instead of service-level defaults.
+
+## Non-Goals and Deliberate Deviations
+
+Non-goals in this plan:
+
+- Reproducing any proprietary, undocumented hosted backend implementation details.
+- Adding cloud service dependencies for memory in phase 1/2.
+- Attempting complete side-effect tracking for arbitrary shell/MCP behavior in early phases.
+
+Deliberate deviations:
+
+- Local-first storage (SQLite) instead of hosted session state.
+- Explicit checkpoint/rewind contracts for file tools.
+- Deterministic startup/session resolution rules.
+- Repo-specific event schema optimized for engineering observability.
+
+These deviations are intentional because this project optimizes for local control, inspectability, reversibility, and incremental safety.
+
+## Example End-to-End Flow
+
+This example shows one concrete user turn from prompt to rewind.
+
+Scenario:
+
+- Session already exists: `session_id = sess_A1`
+- Checkpointing enabled for `write_file` and `append_file`
+- User asks the agent to update `src/app.py` and append notes to `CHANGELOG.md`
+
+Step-by-step lifecycle:
+
+1. User message received
+- Runtime appends user content to in-memory `_messages`.
+- Session manager persists message row:
+- `messages(session_id=sess_A1, seq=42, role=user, content_json=..., created_at=...)`
+- Event emitted/persisted: `message.appended`.
+
+2. Model response + tool calls generated
+- Assistant emits tool uses: `write_file(src/app.py)` and `append_file(CHANGELOG.md)`.
+- Assistant message persisted:
+- `messages(session_id=sess_A1, seq=43, role=assistant, content_json=..., created_at=...)`
+- Event emitted/persisted: `tool.started` (per tool as execution begins).
+
+3. Checkpoint created for this turn
+- Checkpoint manager creates:
+- `checkpoints(id=cp_9001, session_id=sess_A1, user_message_id=<msg-42>, scope_json=...)`
+- Event emitted/persisted: `checkpoint.created`.
+
+4. Pre-mutation snapshots captured
+- Before `write_file(src/app.py)`, system records prior bytes of `src/app.py`.
+- Before `append_file(CHANGELOG.md)`, system records prior bytes of `CHANGELOG.md`.
+- Rows inserted into `checkpoint_files` for each path with `existed_before` and backup storage reference.
+- Event emitted/persisted: `checkpoint.file_tracked` for each path.
+
+5. Tools execute and results persist
+- `write_file` executes and returns success/failure text.
+- `append_file` executes and returns success/failure text.
+- `tool_calls` rows persisted with input/result/error flags.
+- Tool result blocks are appended as user-role tool_result content and persisted as message seq 44.
+- Event emitted/persisted: `tool.completed` for each tool.
+
+6. Process crash and restart (optional branch)
+- If process stops now, on restart with resume:
+- Session manager loads messages by `seq` (42,43,44,...) and restores active context.
+- No manual transcript reconstruction required.
+
+7. Operator decides to undo changes
+- User issues `/rewind cp_9001`.
+- Event emitted/persisted: `rewind.started`.
+- Rewind manager iterates `checkpoint_files` for `cp_9001`:
+- Restores prior bytes for files that existed before checkpoint.
+- Deletes files that did not exist before checkpoint but were created during the turn.
+- Emits per-file events: `rewind.file_restored` with outcome.
+- Emits final event: `rewind.completed`.
+
+8. Rewind report returned to user
+- Console/report lists each tracked path and status:
+- `src/app.py: restored`
+- `CHANGELOG.md: restored`
+- Any failures shown explicitly with error text.
+
+What this demonstrates:
+
+- Memory continuity: context survives restart.
+- Reversibility: mutating tool effects can be rolled back deterministically.
+- Observability: event + table records reconstruct exactly what happened.
 
 ## Current Baseline (Code Touchpoints)
 
@@ -35,6 +403,12 @@ Proposed modules:
 - `src/micro_x_agent_loop/memory/pruning.py`
 
 Core rule: `Agent` is orchestration only; memory behavior lives behind `SessionManager` + `CheckpointManager`.
+
+## Related Plan
+
+Gateway/server migration is tracked separately in:
+
+- `documentation/docs/planning/PLAN-openclaw-like-gateway-architecture.md`
 
 ## Data Model (SQLite)
 
@@ -315,4 +689,3 @@ Add tests under `tests/` (new folder expected):
 5. Add `/rewind` command path
 6. Add docs and config references
 7. Add tests for each phase before expanding scope
-

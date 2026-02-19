@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
 
 from micro_x_agent_loop.compaction import CompactionStrategy, NoneCompactionStrategy
+from micro_x_agent_loop.memory.checkpoints import CheckpointManager
+from micro_x_agent_loop.memory.events import EventEmitter
+from micro_x_agent_loop.memory.session_manager import SessionManager
 from micro_x_agent_loop.tool import Tool
 
 
@@ -15,3 +18,8 @@ class AgentConfig:
     max_tool_result_chars: int = 40_000
     max_conversation_messages: int = 50
     compaction_strategy: CompactionStrategy = field(default_factory=NoneCompactionStrategy)
+    memory_enabled: bool = False
+    session_id: str | None = None
+    session_manager: SessionManager | None = None
+    checkpoint_manager: CheckpointManager | None = None
+    event_emitter: EventEmitter | None = None
