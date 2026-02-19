@@ -74,6 +74,9 @@ def get_all(
         from micro_x_agent_loop.tools.github.github_create_issue_tool import GitHubCreateIssueTool
         from micro_x_agent_loop.tools.github.github_list_issues_tool import GitHubListIssuesTool
         from micro_x_agent_loop.tools.github.github_create_pr_tool import GitHubCreatePRTool
+        from micro_x_agent_loop.tools.github.github_get_file_tool import GitHubGetFileTool
+        from micro_x_agent_loop.tools.github.github_search_code_tool import GitHubSearchCodeTool
+        from micro_x_agent_loop.tools.github.github_list_repos_tool import GitHubListReposTool
 
         tools.extend([
             GitHubListPRsTool(github_token),
@@ -81,6 +84,9 @@ def get_all(
             GitHubCreateIssueTool(github_token),
             GitHubListIssuesTool(github_token),
             GitHubCreatePRTool(github_token),
+            GitHubGetFileTool(github_token),
+            GitHubSearchCodeTool(github_token),
+            GitHubListReposTool(github_token),
         ])
 
     return tools
