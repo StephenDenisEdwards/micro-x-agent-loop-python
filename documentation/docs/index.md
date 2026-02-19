@@ -42,6 +42,10 @@ graph TD
     ADR --> ADR003[ADR-003: Streaming Responses]
     ADR --> ADR004[ADR-004: Raw HTML for Gmail]
     ADR --> ADR005[ADR-005: MCP for External Tools]
+    ADR --> ADR006[ADR-006: Separate Repos for Third-Party MCP Servers]
+    ADR --> ADR007[ADR-007: Google Contacts as Built-in Tools]
+    ADR --> ADR008[ADR-008: GitHub Built-in Tools via Raw httpx]
+    ADR --> ADR009[ADR-009: SQLite Memory + File Checkpoints]
 
     SAD --> DESIGN1
     SAD --> DESIGN2

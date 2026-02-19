@@ -30,3 +30,6 @@ What becomes easier or more difficult to do because of this change?
 | [ADR-004](ADR-004-raw-html-for-gmail.md) | Raw HTML for Gmail email content | Accepted |
 | [ADR-005](ADR-005-mcp-for-external-tools.md) | MCP for external tool integration | Accepted |
 | [ADR-006](ADR-006-separate-repos-for-third-party-mcp-servers.md) | Separate repos for third-party MCP servers | Accepted |
+| [ADR-007](ADR-007-google-contacts-built-in-tools.md) | Google Contacts as built-in tools | Accepted |
+| [ADR-008](ADR-008-github-built-in-tools-with-raw-httpx.md) | GitHub as built-in tools via raw httpx | Accepted |
+| [ADR-009](ADR-009-sqlite-memory-sessions-and-file-checkpoints.md) | SQLite memory for sessions, events, and file checkpoints | Accepted |
