@@ -619,6 +619,27 @@ Conservative finalization (less cutoff):
 | [loguru](https://pypi.org/project/loguru/) | Structured logging | Serilog |
 | [mcp](https://pypi.org/project/mcp/) | Model Context Protocol client | ModelContextProtocol |
 
+## Quality Gates
+
+This repo enforces code quality via CI and local hooks:
+
+- `ruff check src tests` (lint)
+- `ruff format --check src tests` (format)
+- `mypy` on critical architecture modules:
+  - `src/micro_x_agent_loop/agent.py`
+  - `src/micro_x_agent_loop/turn_engine.py`
+  - `src/micro_x_agent_loop/voice_runtime.py`
+  - `src/micro_x_agent_loop/mcp/`
+  - `src/micro_x_agent_loop/providers/`
+- `python -m unittest discover -s tests`
+
+Local setup:
+
+```bash
+pip install ".[dev]"
+pre-commit install
+```
+
 ## Why uv?
 
 This project uses **uv** instead of pip for package management.
