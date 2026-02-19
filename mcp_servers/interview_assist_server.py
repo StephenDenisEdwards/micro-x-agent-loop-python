@@ -44,6 +44,8 @@ class SttSession:
     session_id: str
     repo: Path
     source: str
+    mic_device_id: str | None
+    mic_device_name: str | None
     model: str
     language: str
     sample_rate: int
@@ -94,7 +96,19 @@ def _stt_capture_loop(session: SttSession) -> None:
             "chunk_seconds": session.chunk_seconds,
         },
     )
+    chunk_index = 0
     while not session.stop_event.is_set():
+        chunk_index += 1
+        chunk_started = time.perf_counter()
+        _push_stt_event(
+            session,
+            "info",
+            {
+                "message": "chunk_started",
+                "chunk_index": chunk_index,
+                "chunk_seconds": session.chunk_seconds,
+            },
+        )
         try:
             result = _run_stt_cli(
                 session.repo,
@@ -115,13 +129,45 @@ def _stt_capture_loop(session: SttSession) -> None:
                     str(max(0, session.utterance_end_ms)),
                     "--diarize",
                     "true" if session.diarize else "false",
+                    *(
+                        ["--mic-device-id", session.mic_device_id]
+                        if session.source == "microphone" and session.mic_device_id
+                        else []
+                    ),
+                    *(
+                        ["--mic-device-name", session.mic_device_name]
+                        if session.source == "microphone" and session.mic_device_name
+                        else []
+                    ),
                 ],
                 timeout_seconds=max(30, session.chunk_seconds + 20),
             )
-            payload = json.loads(result["stdout"])
-            stable_text = str(payload.get("StableTranscript", "")).strip()
-            provisional_text = str(payload.get("ProvisionalTranscript", "")).strip()
-            stable_chunks = payload.get("StableChunks", []) or []
+            payload = _parse_stt_cli_payload(result["stdout"])
+            stable_text, provisional_text, stable_chunks = _extract_transcript_fields(payload)
+            elapsed_ms = int((time.perf_counter() - chunk_started) * 1000)
+            _push_stt_event(
+                session,
+                "info",
+                {
+                    "message": "chunk_completed",
+                    "chunk_index": chunk_index,
+                    "elapsed_ms": elapsed_ms,
+                    "stable_chunks": len(stable_chunks),
+                    "has_stable_text": bool(stable_text),
+                    "has_provisional_text": bool(provisional_text),
+                },
+            )
+            if not stable_text and not provisional_text:
+                _push_stt_event(
+                    session,
+                    "info",
+                    {
+                        "message": "chunk_empty",
+                        "chunk_index": chunk_index,
+                        "payload_keys": sorted(payload.keys()),
+                        "payload_preview": _payload_preview(payload),
+                    },
+                )
             session.stable_chunk_count += len(stable_chunks)
             if stable_text:
                 session.latest_transcript = stable_text
@@ -134,25 +180,122 @@ def _stt_capture_loop(session: SttSession) -> None:
                     },
                 )
             elif provisional_text:
-                _push_stt_event(
-                    session,
-                    "info",
-                    {
-                        "message": "provisional_only",
-                        "text": provisional_text,
-                    },
-                )
+                # Some short captures return provisional text without stable chunks.
+                # Promote this to a final utterance so voice mode still progresses.
+                if provisional_text != session.latest_transcript:
+                    session.latest_transcript = provisional_text
+                    _push_stt_event(
+                        session,
+                        "utterance_final",
+                        {
+                            "text": provisional_text,
+                            "stable_chunk_count": 0,
+                            "provisional_fallback": True,
+                        },
+                    )
         except Exception as ex:
             session.error_count += 1
+            elapsed_ms = int((time.perf_counter() - chunk_started) * 1000)
             _push_stt_event(
                 session,
                 "error",
-                {"message": str(ex)},
+                {
+                    "message": str(ex),
+                    "kind": "chunk_failed",
+                    "chunk_index": chunk_index,
+                    "elapsed_ms": elapsed_ms,
+                },
             )
             # Back off slightly so repeated failures don't spin.
             time.sleep(1.0)
     session.status = "stopped"
     _push_stt_event(session, "info", {"message": "stt session stopped"})
+
+
+def _parse_stt_cli_payload(stdout: str) -> dict[str, Any]:
+    text = (stdout or "").strip()
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    # Some CLI runs include informational lines before/after JSON.
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        fragment = text[start : end + 1]
+        parsed = json.loads(fragment)
+        if isinstance(parsed, dict):
+            return parsed
+    raise ValueError("STT CLI did not return JSON payload")
+
+
+def _extract_transcript_fields(payload: dict[str, Any]) -> tuple[str, str, list[Any]]:
+    def _first_non_empty(candidates: list[str]) -> str:
+        for key in candidates:
+            value = payload.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return ""
+
+    stable_text = _first_non_empty(
+        [
+            "StableTranscript",
+            "stableTranscript",
+            "stable_transcript",
+            "FinalTranscript",
+            "finalTranscript",
+            "final_transcript",
+            "Transcript",
+            "transcript",
+            "text",
+        ]
+    )
+    provisional_text = _first_non_empty(
+        [
+            "ProvisionalTranscript",
+            "provisionalTranscript",
+            "provisional_transcript",
+            "InterimTranscript",
+            "interimTranscript",
+            "interim_transcript",
+        ]
+    )
+    stable_chunks = (
+        payload.get("StableChunks")
+        or payload.get("stableChunks")
+        or payload.get("stable_chunks")
+        or []
+    )
+    if not isinstance(stable_chunks, list):
+        stable_chunks = []
+    return stable_text, provisional_text, stable_chunks
+
+
+def _payload_preview(payload: dict[str, Any]) -> dict[str, Any]:
+    preview: dict[str, Any] = {}
+    for key in ("StableTranscript", "ProvisionalTranscript", "Transcript", "text", "Error", "error"):
+        if key in payload:
+            value = payload.get(key)
+            if isinstance(value, str) and len(value) > 120:
+                preview[key] = value[:117] + "..."
+            else:
+                preview[key] = value
+    for key in ("StableChunks", "stableChunks"):
+        if key in payload:
+            value = payload.get(key)
+            if isinstance(value, list):
+                preview[key] = f"list[{len(value)}]"
+            else:
+                preview[key] = type(value).__name__
+    return preview
 
 
 def _resolve_repo(repo_path: str | None) -> Path:
@@ -443,6 +586,8 @@ def ia_create_baseline(
 def ia_transcribe_once(
     duration_seconds: int = 8,
     source: str = "microphone",
+    mic_device_id: str | None = None,
+    mic_device_name: str | None = None,
     sample_rate: int = 16000,
     model: str = "nova-2",
     language: str = "en",
@@ -459,6 +604,16 @@ def ia_transcribe_once(
         str(max(1, duration_seconds)),
         "--source",
         source,
+        *(
+            ["--mic-device-id", mic_device_id]
+            if source == "microphone" and mic_device_id
+            else []
+        ),
+        *(
+            ["--mic-device-name", mic_device_name]
+            if source == "microphone" and mic_device_name
+            else []
+        ),
         "--sample-rate",
         str(max(8000, sample_rate)),
         "--model",
@@ -491,19 +646,27 @@ def ia_transcribe_once(
 
 
 @mcp.tool(description="List available STT audio sources.")
-def stt_list_devices() -> dict[str, Any]:
-    # Phase 1: source-level listing. Device-level enumeration can be added in interview-assist-2.
+def stt_list_devices(repo_path: str | None = None) -> dict[str, Any]:
+    repo = _resolve_repo(repo_path)
+    try:
+        result = _run_stt_cli(repo, ["--list-devices"], timeout_seconds=30)
+        payload = _parse_stt_cli_payload(result["stdout"])
+    except Exception as ex:
+        payload = {"warning": f"Failed to enumerate endpoint devices: {ex}"}
     return {
         "sources": [
             {"id": "microphone", "label": "Microphone"},
             {"id": "loopback", "label": "System Loopback"},
-        ]
+        ],
+        **payload,
     }
 
 
 @mcp.tool(description="Start a continuous STT session and return a session_id.")
 def stt_start_session(
     source: str = "microphone",
+    mic_device_id: str | None = None,
+    mic_device_name: str | None = None,
     model: str = "nova-2",
     language: str = "en",
     sample_rate: int = 16000,
@@ -519,6 +682,8 @@ def stt_start_session(
         session_id=session_id,
         repo=repo,
         source=source,
+        mic_device_id=mic_device_id,
+        mic_device_name=mic_device_name,
         model=model,
         language=language,
         sample_rate=max(8000, sample_rate),
@@ -538,6 +703,8 @@ def stt_start_session(
         "status": session.status,
         "created_utc": session.created_utc,
         "source": session.source,
+        "mic_device_id": session.mic_device_id,
+        "mic_device_name": session.mic_device_name,
     }
 
 
@@ -573,6 +740,8 @@ def stt_get_session(session_id: str) -> dict[str, Any]:
             "status": session.status,
             "created_utc": session.created_utc,
             "source": session.source,
+            "mic_device_id": session.mic_device_id,
+            "mic_device_name": session.mic_device_name,
             "model": session.model,
             "language": session.language,
             "chunk_seconds": session.chunk_seconds,

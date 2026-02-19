@@ -357,8 +357,12 @@ class Agent:
     def _print_help(self) -> None:
         print(f"{self._LINE_PREFIX}Available commands:")
         print(f"{self._LINE_PREFIX}- /help")
-        print(f"{self._LINE_PREFIX}- /voice start [microphone|loopback]")
+        print(
+            f"{self._LINE_PREFIX}- /voice start [microphone|loopback] "
+            "[--mic-device-id <id>] [--mic-device-name <name>]"
+        )
         print(f"{self._LINE_PREFIX}- /voice status")
+        print(f"{self._LINE_PREFIX}- /voice events [limit]")
         print(f"{self._LINE_PREFIX}- /voice stop")
         if self._memory_enabled:
             print(f"{self._LINE_PREFIX}- /session")
@@ -535,24 +539,72 @@ class Agent:
     async def _handle_voice_command(self, command: str) -> None:
         parts = command.split()
         if len(parts) == 1:
-            print(f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] | /voice status | /voice stop")
+            print(
+                f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] "
+                "[--mic-device-id <id>] [--mic-device-name <name>] | "
+                "/voice status | /voice events [limit] | /voice stop"
+            )
             return
 
         action = parts[1].lower()
         if action == "start":
-            source = parts[2].lower() if len(parts) >= 3 else "microphone"
-            print(await self._voice_runtime.start(source))
+            source = "microphone"
+            mic_device_id: str | None = None
+            mic_device_name: str | None = None
+            idx = 2
+            if len(parts) >= 3 and not parts[2].startswith("--"):
+                source = parts[2].lower()
+                idx = 3
+
+            while idx < len(parts):
+                token = parts[idx]
+                if token == "--mic-device-id":
+                    if idx + 1 >= len(parts):
+                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --mic-device-id <id>")
+                        return
+                    mic_device_id = parts[idx + 1]
+                    idx += 2
+                    continue
+                if token == "--mic-device-name":
+                    if idx + 1 >= len(parts):
+                        print(f"{self._LINE_PREFIX}Usage: /voice start ... --mic-device-name <name>")
+                        return
+                    mic_device_name = " ".join(parts[idx + 1 :]).strip().strip("\"'")
+                    idx = len(parts)
+                    continue
+                print(
+                    f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] "
+                    "[--mic-device-id <id>] [--mic-device-name <name>]"
+                )
+                return
+
+            print(await self._voice_runtime.start(source, mic_device_id, mic_device_name))
             return
 
         if action == "status":
             print(await self._voice_runtime.status())
             return
 
+        if action == "events":
+            limit = 50
+            if len(parts) >= 3:
+                try:
+                    limit = int(parts[2])
+                except ValueError:
+                    print(f"{self._LINE_PREFIX}Usage: /voice events [limit]")
+                    return
+            print(await self._voice_runtime.events(limit))
+            return
+
         if action == "stop":
             print(await self._voice_runtime.stop())
             return
 
-        print(f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] | /voice status | /voice stop")
+        print(
+            f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] "
+            "[--mic-device-id <id>] [--mic-device-name <name>] | "
+            "/voice status | /voice events [limit] | /voice stop"
+        )
 
     async def _process_voice_utterance(self, text: str) -> None:
         await self.run(text)

@@ -37,7 +37,12 @@ class VoiceRuntime:
     def is_running(self) -> bool:
         return self._session_id is not None
 
-    async def start(self, source: str = "microphone") -> str:
+    async def start(
+        self,
+        source: str = "microphone",
+        mic_device_id: str | None = None,
+        mic_device_name: str | None = None,
+    ) -> str:
         tool_names = self._resolve_tool_names()
         missing = [name for name, resolved in tool_names.items() if resolved is None]
         if missing:
@@ -52,10 +57,12 @@ class VoiceRuntime:
         if self._session_id is not None:
             return f"{self._line_prefix}Voice is already running (session={self._session_id})"
 
-        payload = await self._call_json_tool(
-            tool_names["start"] or "",
-            {"source": source, "chunk_seconds": 4},
-        )
+        start_input: dict[str, Any] = {"source": source, "chunk_seconds": 4}
+        if source == "microphone" and mic_device_id:
+            start_input["mic_device_id"] = mic_device_id
+        if source == "microphone" and mic_device_name:
+            start_input["mic_device_name"] = mic_device_name
+        payload = await self._call_json_tool(tool_names["start"] or "", start_input)
         session_id = str(payload.get("session_id", "")).strip()
         if not session_id:
             return f"{self._line_prefix}Voice failed: start response missing session_id"
@@ -77,10 +84,14 @@ class VoiceRuntime:
             return f"{self._line_prefix}Voice running (session={self._session_id})"
         try:
             payload = await self._call_json_tool(status_tool, {"session_id": self._session_id})
+            latest = str(payload.get("latest_transcript", "")).strip()
+            if len(latest) > 60:
+                latest = latest[:57] + "..."
             return (
                 f"{self._line_prefix}Voice session={self._session_id} "
                 f"status={payload.get('status')} queue={self._queue.qsize()} "
-                f"next_seq={payload.get('next_seq')} errors={payload.get('error_count', 0)}"
+                f"next_seq={payload.get('next_seq')} stable={payload.get('stable_chunk_count', 0)} "
+                f"errors={payload.get('error_count', 0)} latest='{latest}'"
             )
         except Exception as ex:
             return f"{self._line_prefix}Voice status check failed: {ex}"
@@ -106,6 +117,26 @@ class VoiceRuntime:
             with contextlib.suppress(Exception):
                 await self._call_json_tool(stop_tool, {"session_id": session_id})
         return f"{self._line_prefix}Voice stopped (session={session_id})"
+
+    async def events(self, limit: int = 50) -> str:
+        if self._session_id is None:
+            return f"{self._line_prefix}Voice is stopped"
+
+        tool_names = self._resolve_tool_names()
+        updates_tool = tool_names["updates"]
+        if updates_tool is None:
+            return f"{self._line_prefix}Voice unavailable: missing MCP tool stt_get_updates"
+
+        bounded_limit = max(1, min(limit, 500))
+        payload = await self._call_json_tool(
+            updates_tool,
+            {
+                "session_id": self._session_id,
+                "since_seq": 0,
+                "limit": bounded_limit,
+            },
+        )
+        return json.dumps(payload, ensure_ascii=True, indent=2)
 
     async def shutdown(self) -> None:
         if self._session_id is not None:
