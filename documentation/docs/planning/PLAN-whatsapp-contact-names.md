@@ -91,8 +91,20 @@ Instead of modifying the Go bridge (upstream code we don't control), fix name re
 - **Simple** — one new function, applied at the Python layer
 - **`full_name` available** — the Go bridge only tried `FullName` at runtime via API call; the SQLite store has it already persisted from app state sync
 
+## Deployment
+
+The fix is a **local uncommitted change** in the third-party `whatsapp-mcp` repo (`whatsapp-mcp-server/whatsapp.py`). It is not committed because `whatsapp-mcp` is an upstream repo we don't own ([lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp)) — see [ADR-006](../architecture/decisions/ADR-006-separate-repos-for-third-party-mcp-servers.md).
+
+This means:
+- The fix works locally and survives restarts (the file is modified on disk)
+- Running `git pull` in `whatsapp-mcp` may overwrite the change if upstream modifies `whatsapp.py`
+- Running `git checkout -- whatsapp-mcp-server/whatsapp.py` will revert to phone numbers
+
+If upstream pulls this fix or an equivalent, the local change becomes unnecessary.
+
 ## Limitations
 
 - **Names depend on app state sync completing.** If whatsmeow hasn't synced contacts yet, `whatsmeow_contacts` will be empty. This typically completes on first connection.
 - **Push names are not your address book names.** If you saved someone as "Mom" but their push name is "Jane Edwards", and `full_name` is empty, you'll see "Jane Edwards".
 - **LID JIDs may not resolve.** Some contacts appear with `@lid` JIDs in `messages.db` which may not match `their_jid` in `whatsmeow_contacts`.
+- **Local uncommitted change.** The fix is not version-controlled. A `git pull` or `git checkout` in the whatsapp-mcp repo will lose it.

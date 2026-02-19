@@ -256,6 +256,16 @@ The MCP servers section does not show WhatsApp tools.
 3. **Python dependency error:** Run `uv --directory /path/to/whatsapp-mcp-server sync` manually to see if dependencies install correctly.
 4. **Port 8080 conflict:** If another application uses port 8080, the bridge cannot start. Check with `netstat -an | findstr 8080` (Windows) or `lsof -i :8080` (macOS/Linux).
 
+### WhatsApp contacts show phone numbers instead of names
+
+Individual contacts appear as phone numbers (`447930348027`) instead of names. Group names work correctly.
+
+**Cause:** The Go bridge stores phone numbers as chat names in `messages.db`. The real contact names are in whatsmeow's internal database (`whatsapp-bridge/store/whatsapp.db`, table `whatsmeow_contacts`), but the Python MCP server only reads `messages.db` by default.
+
+**Fix:** A local patch to `whatsapp-mcp-server/whatsapp.py` adds name resolution from `whatsapp.db`. This is an uncommitted local change — see [PLAN-whatsapp-contact-names](../planning/PLAN-whatsapp-contact-names.md) for details.
+
+If the fix has been lost (e.g., after `git pull`), the patch needs to be reapplied. The key change is adding `_resolve_contact_name()` and `_best_name()` functions that query `whatsmeow_contacts` for `full_name`, `push_name`, or `business_name`.
+
 ### WhatsApp send_audio_message fails
 
 ```
