@@ -2,6 +2,20 @@ from tests.memory.base import MemoryStoreTestCase
 
 
 class SessionManagerTests(MemoryStoreTestCase):
+    def test_sessions_have_default_title(self) -> None:
+        sid = self._sessions.create_session("with-title")
+        session = self._sessions.get_session(sid)
+        self.assertIsNotNone(session)
+        self.assertIn("title", session)
+        self.assertTrue(str(session["title"]).startswith("Session "))
+
+    def test_set_session_title_updates_metadata(self) -> None:
+        sid = self._sessions.create_session("rename-me")
+        self._sessions.set_session_title(sid, "Interview Prep - Morning")
+        session = self._sessions.get_session(sid)
+        self.assertIsNotNone(session)
+        self.assertEqual("Interview Prep - Morning", session["title"])
+
     def test_create_append_and_load_messages(self) -> None:
         sid = self._sessions.create_session("s-test")
         self._sessions.append_message(sid, "user", "hello")
@@ -53,6 +67,7 @@ class SessionManagerTests(MemoryStoreTestCase):
         parent_row = self._sessions.get_session(fork_id)
         self.assertIsNotNone(parent_row)
         self.assertEqual("parent-session", parent_row["parent_session_id"])
+        self.assertIn("Fork of", parent_row["title"])
 
         parent_msgs = self._sessions.load_messages(sid)
         child_msgs = self._sessions.load_messages(fork_id)
@@ -70,3 +85,18 @@ class SessionManagerTests(MemoryStoreTestCase):
         sessions = self._sessions.list_sessions(limit=2)
         ids = [s["id"] for s in sessions]
         self.assertEqual(["s3", "s2"], ids)
+
+    def test_build_session_summary_includes_counts_and_previews(self) -> None:
+        sid = self._sessions.create_session("summary")
+        self._sessions.append_message(sid, "user", "First user message")
+        self._sessions.append_message(sid, "assistant", [{"type": "text", "text": "Assistant answer"}])
+        self._sessions.append_message(sid, "user", "Second user message for preview")
+
+        summary = self._sessions.build_session_summary(sid)
+        self.assertEqual("summary", summary["session_id"])
+        self.assertEqual(3, summary["message_count"])
+        self.assertEqual(2, summary["user_message_count"])
+        self.assertEqual(1, summary["assistant_message_count"])
+        self.assertEqual(0, summary["checkpoint_count"])
+        self.assertIn("Second user message", summary["last_user_preview"])
+        self.assertIn("Assistant answer", summary["last_assistant_preview"])

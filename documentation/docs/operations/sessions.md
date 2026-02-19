@@ -22,9 +22,12 @@ Resolution order:
 - `/help` - show available local commands
 - `/session` - show current active session ID
 - `/session list [limit]` - list recent sessions (default 20)
-- `/session resume <id>` - switch to an existing session and reload persisted messages
+- `/session name <title>` - rename the current session for easier identification
+- `/session resume <id>` - switch to an existing session, reload persisted messages, and print a session summary
 - `/session fork` - create a new forked session from current context
 - `/rewind <checkpoint_id>` - restore tracked files from a checkpoint
+- `/checkpoint list [limit]` - list recent checkpoints for the current session (default 20)
+- `/checkpoint rewind <checkpoint_id>` - alias for rewinding a checkpoint
 
 ## Checkpoint Scope
 

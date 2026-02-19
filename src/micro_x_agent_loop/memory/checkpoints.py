@@ -124,6 +124,33 @@ class CheckpointManager:
         )
         return session_id, outcomes
 
+    def list_checkpoints(self, session_id: str, *, limit: int = 50) -> list[dict]:
+        rows = self._store.execute(
+            """
+            SELECT id, session_id, user_message_id, created_at, scope_json
+            FROM checkpoints
+            WHERE session_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (session_id, max(1, limit)),
+        ).fetchall()
+        results: list[dict] = []
+        for row in rows:
+            item = dict(row)
+            scope_json = item.get("scope_json", "{}")
+            try:
+                scope = json.loads(scope_json) if isinstance(scope_json, str) else {}
+                if not isinstance(scope, dict):
+                    scope = {}
+            except Exception:
+                scope = {}
+            item["scope"] = scope
+            item["tools"] = scope.get("tool_names", [])
+            item["user_preview"] = scope.get("user_preview", "")
+            results.append(item)
+        return results
+
     def _snapshot_file(self, checkpoint_id: str, path: Path) -> None:
         checkpoint_row = self._store.execute(
             "SELECT session_id FROM checkpoints WHERE id = ? LIMIT 1",

@@ -51,3 +51,18 @@ class CheckpointManagerTests(MemoryStoreTestCase):
         outside = Path(__file__).resolve().parents[3] / "outside.txt"
         with self.assertRaises(ValueError):
             self._checkpoints.maybe_track_tool_input(checkpoint_id, {"path": str(outside)})
+
+    def test_list_checkpoints_returns_recent_first(self) -> None:
+        sid, checkpoint_1 = self._new_checkpoint()
+        cp2 = self._checkpoints.create_checkpoint(
+            sid,
+            self._sessions.append_message(sid, "user", "another checkpoint")[0],
+            scope={"tool_names": ["write_file"], "user_preview": "update report"},
+        )
+
+        listed = self._checkpoints.list_checkpoints(sid, limit=10)
+        self.assertEqual(2, len(listed))
+        self.assertEqual(cp2, listed[0]["id"])
+        self.assertEqual(checkpoint_1, listed[1]["id"])
+        self.assertEqual(["write_file"], listed[0]["tools"])
+        self.assertEqual("update report", listed[0]["user_preview"])

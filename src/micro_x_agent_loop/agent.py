@@ -27,6 +27,7 @@ class Agent:
         self._event_emitter = config.event_emitter
         self._active_session_id = config.session_id
         self._current_user_message_id: str | None = None
+        self._current_user_message_text: str | None = None
         self._current_checkpoint_id: str | None = None
         self._last_assistant_message_id: str | None = None
 
@@ -49,6 +50,7 @@ class Agent:
 
         self._current_checkpoint_id = None
         self._last_assistant_message_id = None
+        self._current_user_message_text = user_message
         self._current_user_message_id = self._append_message("user", user_message)
         await self._maybe_compact()
 
@@ -251,7 +253,10 @@ class Agent:
         self._current_checkpoint_id = self._checkpoint_manager.create_checkpoint(
             self._active_session_id,
             self._current_user_message_id,
-            scope={"tool_names": tool_names},
+            scope={
+                "tool_names": tool_names,
+                "user_preview": (self._current_user_message_text or "")[:120],
+            },
         )
 
     def _maybe_track_mutation(self, tool_name: str, tool: Tool, tool_input: dict) -> None:
@@ -324,6 +329,10 @@ class Agent:
             await self._handle_rewind_command(trimmed)
             return True
 
+        if trimmed.startswith("/checkpoint"):
+            await self._handle_checkpoint_command(trimmed)
+            return True
+
         if trimmed.startswith("/session"):
             await self._handle_session_command(trimmed)
             return True
@@ -337,9 +346,12 @@ class Agent:
         if self._memory_enabled:
             print(f"{self._LINE_PREFIX}- /session")
             print(f"{self._LINE_PREFIX}- /session list [limit]")
+            print(f"{self._LINE_PREFIX}- /session name <title>")
             print(f"{self._LINE_PREFIX}- /session resume <id>")
             print(f"{self._LINE_PREFIX}- /session fork")
             print(f"{self._LINE_PREFIX}- /rewind <checkpoint_id>")
+            print(f"{self._LINE_PREFIX}- /checkpoint list [limit]")
+            print(f"{self._LINE_PREFIX}- /checkpoint rewind <checkpoint_id>")
         else:
             print(
                 f"{self._LINE_PREFIX}Memory commands are available when MemoryEnabled=true "
@@ -353,7 +365,15 @@ class Agent:
 
         parts = command.split()
         if len(parts) == 1:
-            print(f"{self._LINE_PREFIX}Current session: {self._active_session_id}")
+            if self._active_session_id is None:
+                print(f"{self._LINE_PREFIX}Current session: none")
+                return
+            session = self._session_manager.get_session(self._active_session_id)
+            title = session.get("title", self._active_session_id) if session else self._active_session_id
+            print(
+                f"{self._LINE_PREFIX}Current session: {title} "
+                f"[{self._short_id(self._active_session_id)}] (id={self._active_session_id})"
+            )
             return
 
         if len(parts) >= 2 and parts[1] == "list":
@@ -372,10 +392,24 @@ class Agent:
             for s in sessions:
                 marker = "*" if s["id"] == self._active_session_id else " "
                 parent = s["parent_session_id"] or "-"
+                title = s.get("title", s["id"])
+                short_id = self._short_id(s["id"])
                 print(
-                    f"{self._LINE_PREFIX}{marker} {s['id']} "
-                    f"(status={s['status']}, updated={s['updated_at']}, parent={parent})"
+                    f"{self._LINE_PREFIX}{marker} {title} [{short_id}] (id={s['id']}) "
+                    f"(status={s['status']}, created={s['created_at']}, updated={s['updated_at']}, parent={parent})"
                 )
+            return
+
+        if len(parts) >= 3 and parts[1] == "name":
+            if self._active_session_id is None:
+                print(f"{self._LINE_PREFIX}No active session to name")
+                return
+            title = command.partition("name")[2].strip()
+            if not title:
+                print(f"{self._LINE_PREFIX}Usage: /session name <title>")
+                return
+            self._session_manager.set_session_title(self._active_session_id, title)
+            print(f"{self._LINE_PREFIX}Session named: {title}")
             return
 
         if len(parts) >= 3 and parts[1] == "resume":
@@ -386,7 +420,12 @@ class Agent:
                 return
             self._active_session_id = target
             self._messages = self._session_manager.load_messages(target)
-            print(f"{self._LINE_PREFIX}Resumed session {target} ({len(self._messages)} messages)")
+            summary = self._session_manager.build_session_summary(target)
+            print(
+                f"{self._LINE_PREFIX}Resumed session {summary['title']} "
+                f"[{target}] ({len(self._messages)} messages)"
+            )
+            self._print_resumed_session_summary(summary)
             return
 
         if len(parts) == 2 and parts[1] == "fork":
@@ -402,7 +441,7 @@ class Agent:
 
         print(
             f"{self._LINE_PREFIX}Usage: /session | /session list [limit] | "
-            "/session resume <id> | /session fork"
+            "/session name <title> | /session resume <id> | /session fork"
         )
 
     async def _handle_rewind_command(self, command: str) -> None:
@@ -426,3 +465,69 @@ class Agent:
             detail = outcome["detail"]
             suffix = f" ({detail})" if detail else ""
             print(f"{self._LINE_PREFIX}- {outcome['path']}: {outcome['status']}{suffix}")
+
+    async def _handle_checkpoint_command(self, command: str) -> None:
+        if (
+            not self._memory_enabled
+            or self._checkpoint_manager is None
+            or self._active_session_id is None
+        ):
+            print(f"{self._LINE_PREFIX}Checkpoint commands require MemoryEnabled=true")
+            return
+
+        parts = command.split()
+        if len(parts) == 1 or (len(parts) >= 2 and parts[1] == "list"):
+            limit = 20
+            if len(parts) >= 3:
+                try:
+                    limit = int(parts[2])
+                except ValueError:
+                    print(f"{self._LINE_PREFIX}Usage: /checkpoint list [limit]")
+                    return
+            checkpoints = self._checkpoint_manager.list_checkpoints(self._active_session_id, limit=limit)
+            if not checkpoints:
+                print(f"{self._LINE_PREFIX}No checkpoints found for current session.")
+                return
+            print(f"{self._LINE_PREFIX}Recent checkpoints:")
+            for cp in checkpoints:
+                tools = cp.get("tools", [])
+                tool_text = ", ".join(tools) if tools else "n/a"
+                preview = cp.get("user_preview", "")
+                preview_text = f', prompt="{preview}"' if preview else ""
+                short_id = self._short_id(cp["id"])
+                print(
+                    f"{self._LINE_PREFIX}- [{short_id}] (id={cp['id']}, created={cp['created_at']}, "
+                    f"tools={tool_text}{preview_text})"
+                )
+            return
+
+        if len(parts) == 3 and parts[1] == "rewind":
+            await self._handle_rewind_command(f"/rewind {parts[2]}")
+            return
+
+        print(
+            f"{self._LINE_PREFIX}Usage: /checkpoint list [limit] | /checkpoint rewind <checkpoint_id>"
+        )
+
+    def _short_id(self, value: str, length: int = 8) -> str:
+        if len(value) <= length:
+            return value
+        return value[:length]
+
+    def _print_resumed_session_summary(self, summary: dict) -> None:
+        print(f"{self._LINE_PREFIX}Session summary:")
+        print(
+            f"{self._LINE_PREFIX}- Created: {summary['created_at']} | "
+            f"Updated: {summary['updated_at']}"
+        )
+        print(
+            f"{self._LINE_PREFIX}- Messages: {summary['message_count']} "
+            f"(user={summary['user_message_count']}, assistant={summary['assistant_message_count']})"
+        )
+        print(f"{self._LINE_PREFIX}- Checkpoints: {summary['checkpoint_count']}")
+        last_user = summary.get("last_user_preview", "")
+        if last_user:
+            print(f"{self._LINE_PREFIX}- Last user: {last_user}")
+        last_assistant = summary.get("last_assistant_preview", "")
+        if last_assistant:
+            print(f"{self._LINE_PREFIX}- Last assistant: {last_assistant}")

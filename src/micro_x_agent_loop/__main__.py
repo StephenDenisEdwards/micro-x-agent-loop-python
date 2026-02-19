@@ -187,7 +187,8 @@ async def main() -> None:
     if memory_enabled:
         print(f"Memory: enabled (session: {active_session_id})")
         print(
-            "Memory controls: /session, /session list [limit], /session resume <id>, /session fork, /rewind <checkpoint_id>"
+            "Memory controls: /session, /session list [limit], /session name <title>, "
+            "/session resume <id>, /session fork, /checkpoint list [limit], /checkpoint rewind <id>"
         )
     if log_descriptions:
         print(f"Logging: {', '.join(log_descriptions)}")

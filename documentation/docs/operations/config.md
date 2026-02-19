@@ -168,9 +168,12 @@ Runtime commands when memory is enabled:
 
 - `/session`
 - `/session list [limit]`
+- `/session name <title>`
 - `/session resume <id>`
 - `/session fork`
 - `/rewind <checkpoint_id>`
+- `/checkpoint list [limit]`
+- `/checkpoint rewind <checkpoint_id>`
 
 ### Checkpointing
 
