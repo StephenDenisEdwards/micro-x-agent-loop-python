@@ -214,7 +214,7 @@ async def main() -> None:
     try:
         while True:
             try:
-                user_input = input("you> ")
+                user_input = await asyncio.to_thread(input, "you> ")
             except (EOFError, KeyboardInterrupt):
                 break
 
@@ -233,6 +233,7 @@ async def main() -> None:
             except Exception as ex:
                 logger.error(f"Unhandled error: {ex}")
     finally:
+        await agent.shutdown()
         if mcp_manager:
             await mcp_manager.close()
         if memory_store:

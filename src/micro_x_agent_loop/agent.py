@@ -1,5 +1,4 @@
 import asyncio
-from typing import Any
 
 from loguru import logger
 
@@ -7,6 +6,7 @@ from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.tool import Tool
+from micro_x_agent_loop.voice_runtime import VoiceRuntime
 
 
 class Agent:
@@ -31,6 +31,12 @@ class Agent:
         self._current_user_message_text: str | None = None
         self._current_checkpoint_id: str | None = None
         self._last_assistant_message_id: str | None = None
+        self._run_lock = asyncio.Lock()
+        self._voice_runtime = VoiceRuntime(
+            line_prefix=self._LINE_PREFIX,
+            tool_map=self._tool_map,
+            on_utterance=self._process_voice_utterance,
+        )
 
     _LINE_PREFIX = "assistant> "
 
@@ -46,6 +52,10 @@ class Agent:
         )
 
     async def run(self, user_message: str) -> None:
+        async with self._run_lock:
+            await self._run_inner(user_message)
+
+    async def _run_inner(self, user_message: str) -> None:
         if await self._handle_local_command(user_message):
             return
 
@@ -337,12 +347,19 @@ class Agent:
             await self._handle_session_command(trimmed)
             return True
 
+        if trimmed.startswith("/voice"):
+            await self._handle_voice_command(trimmed)
+            return True
+
         print(f"{self._LINE_PREFIX}Unknown local command: {trimmed}")
         return True
 
     def _print_help(self) -> None:
         print(f"{self._LINE_PREFIX}Available commands:")
         print(f"{self._LINE_PREFIX}- /help")
+        print(f"{self._LINE_PREFIX}- /voice start [microphone|loopback]")
+        print(f"{self._LINE_PREFIX}- /voice status")
+        print(f"{self._LINE_PREFIX}- /voice stop")
         if self._memory_enabled:
             print(f"{self._LINE_PREFIX}- /session")
             print(f"{self._LINE_PREFIX}- /session new [title]")
@@ -514,6 +531,34 @@ class Agent:
         print(
             f"{self._LINE_PREFIX}Usage: /checkpoint list [limit] | /checkpoint rewind <checkpoint_id>"
         )
+
+    async def _handle_voice_command(self, command: str) -> None:
+        parts = command.split()
+        if len(parts) == 1:
+            print(f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] | /voice status | /voice stop")
+            return
+
+        action = parts[1].lower()
+        if action == "start":
+            source = parts[2].lower() if len(parts) >= 3 else "microphone"
+            print(await self._voice_runtime.start(source))
+            return
+
+        if action == "status":
+            print(await self._voice_runtime.status())
+            return
+
+        if action == "stop":
+            print(await self._voice_runtime.stop())
+            return
+
+        print(f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] | /voice status | /voice stop")
+
+    async def _process_voice_utterance(self, text: str) -> None:
+        await self.run(text)
+
+    async def shutdown(self) -> None:
+        await self._voice_runtime.shutdown()
 
     def _short_id(self, value: str, length: int = 8) -> str:
         if len(value) <= length:

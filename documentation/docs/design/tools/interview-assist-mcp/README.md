@@ -54,6 +54,11 @@ Add this server to `config.json`:
 - `ia_regression_test`: checks current run against baseline
 - `ia_create_baseline`: creates baseline JSON from session data
 - `ia_transcribe_once`: captures live microphone/loopback audio for N seconds and returns Deepgram transcription JSON
+- `stt_list_devices`: lists logical STT sources (`microphone`, `loopback`)
+- `stt_start_session`: starts continuous STT polling session
+- `stt_get_updates`: fetches incremental STT events since sequence id
+- `stt_get_session`: reads session status/counters/latest transcript
+- `stt_stop_session`: stops session
 
 ## Notes
 
@@ -61,3 +66,4 @@ Add this server to `config.json`:
 - `ia_evaluate_session` and `ia_compare_strategies` use JSON output files where possible and return parsed data.
 - For large outputs, tools return output tails to keep responses manageable.
 - `ia_transcribe_once` reads `DEEPGRAM_API_KEY` from the MCP server process environment.
+- `stt_*` session tools are Phase 1 scaffolding: they poll repeated short captures (default 4s chunks) and emit incremental events.

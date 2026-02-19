@@ -5,6 +5,9 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -18,6 +21,138 @@ TRANSCRIPTION_CONSOLE_PROJECT = Path(
 STT_CLI_PROJECT = Path("Interview-assist-stt-cli/Interview-assist-stt-cli.csproj")
 
 mcp = FastMCP("interview-assist")
+
+
+@dataclass
+class SttEvent:
+    seq: int
+    type: str
+    timestamp_utc: str
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "seq": self.seq,
+            "type": self.type,
+            "timestamp_utc": self.timestamp_utc,
+            **self.payload,
+        }
+
+
+@dataclass
+class SttSession:
+    session_id: str
+    repo: Path
+    source: str
+    model: str
+    language: str
+    sample_rate: int
+    endpointing_ms: int
+    utterance_end_ms: int
+    diarize: bool
+    chunk_seconds: int
+    created_utc: str
+    status: str = "running"
+    next_seq: int = 1
+    events: list[SttEvent] = field(default_factory=list)
+    stable_chunk_count: int = 0
+    latest_transcript: str = ""
+    stop_event: threading.Event = field(default_factory=threading.Event)
+    worker: threading.Thread | None = None
+    error_count: int = 0
+
+
+_stt_lock = threading.Lock()
+_stt_sessions: dict[str, SttSession] = {}
+_MAX_EVENTS_PER_SESSION = 2000
+
+
+def _utc_now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _push_stt_event(session: SttSession, event_type: str, payload: dict[str, Any] | None = None) -> None:
+    event = SttEvent(
+        seq=session.next_seq,
+        type=event_type,
+        timestamp_utc=_utc_now(),
+        payload=payload or {},
+    )
+    session.next_seq += 1
+    session.events.append(event)
+    if len(session.events) > _MAX_EVENTS_PER_SESSION:
+        session.events = session.events[-_MAX_EVENTS_PER_SESSION:]
+
+
+def _stt_capture_loop(session: SttSession) -> None:
+    _push_stt_event(
+        session,
+        "info",
+        {
+            "message": "stt session started",
+            "source": session.source,
+            "chunk_seconds": session.chunk_seconds,
+        },
+    )
+    while not session.stop_event.is_set():
+        try:
+            result = _run_stt_cli(
+                session.repo,
+                [
+                    "--duration-seconds",
+                    str(max(1, session.chunk_seconds)),
+                    "--source",
+                    session.source,
+                    "--sample-rate",
+                    str(max(8000, session.sample_rate)),
+                    "--model",
+                    session.model,
+                    "--language",
+                    session.language,
+                    "--endpointing-ms",
+                    str(max(0, session.endpointing_ms)),
+                    "--utterance-end-ms",
+                    str(max(0, session.utterance_end_ms)),
+                    "--diarize",
+                    "true" if session.diarize else "false",
+                ],
+                timeout_seconds=max(30, session.chunk_seconds + 20),
+            )
+            payload = json.loads(result["stdout"])
+            stable_text = str(payload.get("StableTranscript", "")).strip()
+            provisional_text = str(payload.get("ProvisionalTranscript", "")).strip()
+            stable_chunks = payload.get("StableChunks", []) or []
+            session.stable_chunk_count += len(stable_chunks)
+            if stable_text:
+                session.latest_transcript = stable_text
+                _push_stt_event(
+                    session,
+                    "utterance_final",
+                    {
+                        "text": stable_text,
+                        "stable_chunk_count": len(stable_chunks),
+                    },
+                )
+            elif provisional_text:
+                _push_stt_event(
+                    session,
+                    "info",
+                    {
+                        "message": "provisional_only",
+                        "text": provisional_text,
+                    },
+                )
+        except Exception as ex:
+            session.error_count += 1
+            _push_stt_event(
+                session,
+                "error",
+                {"message": str(ex)},
+            )
+            # Back off slightly so repeated failures don't spin.
+            time.sleep(1.0)
+    session.status = "stopped"
+    _push_stt_event(session, "info", {"message": "stt session stopped"})
 
 
 def _resolve_repo(repo_path: str | None) -> Path:
@@ -352,6 +487,118 @@ def ia_transcribe_once(
         "output_file": str(output_path) if output_path else None,
         "result": payload,
         "stdout_tail": result["stdout"][-4000:],
+    }
+
+
+@mcp.tool(description="List available STT audio sources.")
+def stt_list_devices() -> dict[str, Any]:
+    # Phase 1: source-level listing. Device-level enumeration can be added in interview-assist-2.
+    return {
+        "sources": [
+            {"id": "microphone", "label": "Microphone"},
+            {"id": "loopback", "label": "System Loopback"},
+        ]
+    }
+
+
+@mcp.tool(description="Start a continuous STT session and return a session_id.")
+def stt_start_session(
+    source: str = "microphone",
+    model: str = "nova-2",
+    language: str = "en",
+    sample_rate: int = 16000,
+    endpointing_ms: int = 300,
+    utterance_end_ms: int = 1000,
+    diarize: bool = False,
+    chunk_seconds: int = 4,
+    repo_path: str | None = None,
+) -> dict[str, Any]:
+    repo = _resolve_repo(repo_path)
+    session_id = f"stt-{uuid4().hex}"
+    session = SttSession(
+        session_id=session_id,
+        repo=repo,
+        source=source,
+        model=model,
+        language=language,
+        sample_rate=max(8000, sample_rate),
+        endpointing_ms=max(0, endpointing_ms),
+        utterance_end_ms=max(0, utterance_end_ms),
+        diarize=diarize,
+        chunk_seconds=max(1, chunk_seconds),
+        created_utc=_utc_now(),
+    )
+    worker = threading.Thread(target=_stt_capture_loop, args=(session,), daemon=True)
+    session.worker = worker
+    with _stt_lock:
+        _stt_sessions[session_id] = session
+    worker.start()
+    return {
+        "session_id": session_id,
+        "status": session.status,
+        "created_utc": session.created_utc,
+        "source": session.source,
+    }
+
+
+@mcp.tool(description="Poll incremental STT events from a running session.")
+def stt_get_updates(
+    session_id: str,
+    since_seq: int = 0,
+    limit: int = 100,
+) -> dict[str, Any]:
+    with _stt_lock:
+        session = _stt_sessions.get(session_id)
+        if session is None:
+            raise ValueError(f"Unknown session_id: {session_id}")
+        filtered = [evt.to_dict() for evt in session.events if evt.seq > since_seq]
+    selected = filtered[: max(1, min(limit, 500))]
+    next_seq = selected[-1]["seq"] if selected else since_seq
+    return {
+        "session_id": session_id,
+        "status": session.status,
+        "events": selected,
+        "next_seq": next_seq,
+    }
+
+
+@mcp.tool(description="Get current STT session status and counters.")
+def stt_get_session(session_id: str) -> dict[str, Any]:
+    with _stt_lock:
+        session = _stt_sessions.get(session_id)
+        if session is None:
+            raise ValueError(f"Unknown session_id: {session_id}")
+        return {
+            "session_id": session.session_id,
+            "status": session.status,
+            "created_utc": session.created_utc,
+            "source": session.source,
+            "model": session.model,
+            "language": session.language,
+            "chunk_seconds": session.chunk_seconds,
+            "next_seq": session.next_seq,
+            "stable_chunk_count": session.stable_chunk_count,
+            "latest_transcript": session.latest_transcript,
+            "error_count": session.error_count,
+        }
+
+
+@mcp.tool(description="Stop an STT session.")
+def stt_stop_session(session_id: str) -> dict[str, Any]:
+    with _stt_lock:
+        session = _stt_sessions.get(session_id)
+    if session is None:
+        raise ValueError(f"Unknown session_id: {session_id}")
+    session.stop_event.set()
+    if session.worker is not None:
+        session.worker.join(timeout=10)
+    with _stt_lock:
+        session.status = "stopped"
+    return {
+        "session_id": session_id,
+        "status": session.status,
+        "stable_chunk_count": session.stable_chunk_count,
+        "error_count": session.error_count,
     }
 
 

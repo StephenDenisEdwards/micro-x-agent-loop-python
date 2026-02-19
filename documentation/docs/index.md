@@ -25,6 +25,10 @@ Central navigation hub for all project documentation.
 - [Sessions and Rewind](operations/sessions.md) - Session lifecycle, resume/fork, checkpoint rewind commands
 - [Troubleshooting](operations/troubleshooting.md) - Common issues and solutions
 
+## Planning
+
+- [Continuous Voice Agent Plan](planning/PLAN-continuous-voice-agent.md) - Session-based STT MCP and `/voice` orchestration plan
+
 ## Document Map
 
 ```mermaid
