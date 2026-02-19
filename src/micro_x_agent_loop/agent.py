@@ -365,6 +365,7 @@ class Agent:
             "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>]"
         )
         print(f"{self._LINE_PREFIX}- /voice status")
+        print(f"{self._LINE_PREFIX}- /voice devices")
         print(f"{self._LINE_PREFIX}- /voice events [limit]")
         print(f"{self._LINE_PREFIX}- /voice stop")
         if self._memory_enabled:
@@ -550,7 +551,7 @@ class Agent:
                 f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] "
                 "[--mic-device-id <id>] [--mic-device-name <name>] "
                 "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>] | "
-                "/voice status | /voice events [limit] | /voice stop"
+                "/voice status | /voice devices | /voice events [limit] | /voice stop"
             )
             return
 
@@ -647,6 +648,10 @@ class Agent:
             print(await self._voice_runtime.status())
             return
 
+        if action == "devices":
+            print(await self._voice_runtime.devices())
+            return
+
         if action == "events":
             limit = 50
             if len(parts) >= 3:
@@ -666,7 +671,7 @@ class Agent:
             f"{self._LINE_PREFIX}Usage: /voice start [microphone|loopback] "
             "[--mic-device-id <id>] [--mic-device-name <name>] "
             "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>] | "
-            "/voice status | /voice events [limit] | /voice stop"
+            "/voice status | /voice devices | /voice events [limit] | /voice stop"
         )
 
     async def _process_voice_utterance(self, text: str) -> None:

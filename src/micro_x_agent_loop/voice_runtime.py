@@ -15,6 +15,7 @@ class VoiceRuntime:
         "updates": "__stt_get_updates",
         "stop": "__stt_stop_session",
         "status": "__stt_get_session",
+        "devices": "__stt_list_devices",
     }
     # Retained for compatibility; current MCP STT session mode is streaming.
     _MIN_CHUNK_SECONDS = 1
@@ -164,6 +165,14 @@ class VoiceRuntime:
                 "limit": bounded_limit,
             },
         )
+        return json.dumps(payload, ensure_ascii=True, indent=2)
+
+    async def devices(self) -> str:
+        tool_names = self._resolve_tool_names()
+        devices_tool = tool_names["devices"]
+        if devices_tool is None:
+            return f"{self._line_prefix}Voice unavailable: missing MCP tool stt_list_devices"
+        payload = await self._call_json_tool(devices_tool, {})
         return json.dumps(payload, ensure_ascii=True, indent=2)
 
     async def shutdown(self) -> None:
