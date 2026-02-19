@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import Any
 
 from loguru import logger
@@ -29,10 +30,14 @@ class _ServerConnection:
             raise self._error
 
     async def _run_stdio(self, config: dict[str, Any]) -> None:
+        # Preserve parent process environment (including .env-loaded secrets)
+        # and allow per-server overrides from config.
+        merged_env = dict(os.environ)
+        merged_env.update(config.get("env") or {})
         async with stdio_client(StdioServerParameters(
             command=config["command"],
             args=config.get("args", []),
-            env=config.get("env"),
+            env=merged_env,
         )) as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as session:
                 await session.initialize()

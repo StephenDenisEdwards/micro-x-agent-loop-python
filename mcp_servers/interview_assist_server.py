@@ -15,6 +15,7 @@ DEFAULT_INTERVIEW_ASSIST_REPO = r"C:\Users\steph\source\repos\interview-assist-2
 TRANSCRIPTION_CONSOLE_PROJECT = Path(
     "Interview-assist-transcription-detection-console/Interview-assist-transcription-detection-console.csproj"
 )
+STT_CLI_PROJECT = Path("Interview-assist-stt-cli/Interview-assist-stt-cli.csproj")
 
 mcp = FastMCP("interview-assist")
 
@@ -32,12 +33,15 @@ def _resolve_repo(repo_path: str | None) -> Path:
     return repo
 
 
-def _run_interview_assist(
+def _run_dotnet_project(
     repo: Path,
+    project_relative_path: Path,
     args: list[str],
     timeout_seconds: int = 900,
 ) -> dict[str, Any]:
-    project = repo / TRANSCRIPTION_CONSOLE_PROJECT
+    project = repo / project_relative_path
+    if not project.exists():
+        raise FileNotFoundError(f"Project not found: {project}")
     command = [
         "dotnet",
         "run",
@@ -73,6 +77,22 @@ def _run_interview_assist(
             f"\nstderr_tail: {stderr[-2000:]}"
         )
     return result
+
+
+def _run_interview_assist(
+    repo: Path,
+    args: list[str],
+    timeout_seconds: int = 900,
+) -> dict[str, Any]:
+    return _run_dotnet_project(repo, TRANSCRIPTION_CONSOLE_PROJECT, args, timeout_seconds=timeout_seconds)
+
+
+def _run_stt_cli(
+    repo: Path,
+    args: list[str],
+    timeout_seconds: int = 120,
+) -> dict[str, Any]:
+    return _run_dotnet_project(repo, STT_CLI_PROJECT, args, timeout_seconds=timeout_seconds)
 
 
 def _find_output_line_value(output: str, prefix: str) -> str | None:
@@ -130,6 +150,7 @@ def _temp_json_path(prefix: str) -> Path:
 def ia_healthcheck(repo_path: str | None = None) -> dict[str, Any]:
     repo = _resolve_repo(repo_path)
     project = repo / TRANSCRIPTION_CONSOLE_PROJECT
+    stt_project = repo / STT_CLI_PROJECT
     dotnet = subprocess.run(
         ["dotnet", "--version"],
         capture_output=True,
@@ -140,6 +161,8 @@ def ia_healthcheck(repo_path: str | None = None) -> dict[str, Any]:
     return {
         "repo_path": str(repo),
         "project_path": str(project),
+        "stt_project_path": str(stt_project),
+        "stt_project_exists": stt_project.exists(),
         "dotnet_version": (dotnet.stdout or "").strip(),
     }
 
@@ -277,6 +300,57 @@ def ia_create_baseline(
     return {
         "output_file": str(output_path),
         "baseline": baseline,
+        "stdout_tail": result["stdout"][-4000:],
+    }
+
+
+@mcp.tool(description="Capture live microphone or loopback audio once and transcribe via Deepgram.")
+def ia_transcribe_once(
+    duration_seconds: int = 8,
+    source: str = "microphone",
+    sample_rate: int = 16000,
+    model: str = "nova-2",
+    language: str = "en",
+    endpointing_ms: int = 300,
+    utterance_end_ms: int = 1000,
+    diarize: bool = False,
+    output_file: str | None = None,
+    repo_path: str | None = None,
+    timeout_seconds: int = 180,
+) -> dict[str, Any]:
+    repo = _resolve_repo(repo_path)
+    args = [
+        "--duration-seconds",
+        str(max(1, duration_seconds)),
+        "--source",
+        source,
+        "--sample-rate",
+        str(max(8000, sample_rate)),
+        "--model",
+        model,
+        "--language",
+        language,
+        "--endpointing-ms",
+        str(max(0, endpointing_ms)),
+        "--utterance-end-ms",
+        str(max(0, utterance_end_ms)),
+        "--diarize",
+        "true" if diarize else "false",
+    ]
+    output_path: Path | None = None
+    if output_file:
+        output_path = Path(output_file).expanduser().resolve()
+        args.extend(["--output", str(output_path)])
+    result = _run_stt_cli(repo, args, timeout_seconds=timeout_seconds)
+    payload = _safe_load_json(output_path) if output_path else None
+    if payload is None:
+        try:
+            payload = json.loads(result["stdout"])
+        except json.JSONDecodeError:
+            payload = None
+    return {
+        "output_file": str(output_path) if output_path else None,
+        "result": payload,
         "stdout_tail": result["stdout"][-4000:],
     }
 

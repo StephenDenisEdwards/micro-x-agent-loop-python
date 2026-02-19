@@ -233,6 +233,8 @@ Two transports are supported:
 | `args` | string[] | No | Command-line arguments |
 | `env` | object | No | Environment variables for the process |
 
+`env` values override inherited process environment variables for that MCP server. Parent environment variables (including values loaded from `.env`) are still passed through unless explicitly overridden.
+
 **http** — connects to a remote StreamableHTTP endpoint:
 
 | Field | Type | Required | Description |
