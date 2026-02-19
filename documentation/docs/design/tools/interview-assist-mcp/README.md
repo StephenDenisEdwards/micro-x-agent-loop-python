@@ -55,7 +55,7 @@ Add this server to `config.json`:
 - `ia_create_baseline`: creates baseline JSON from session data
 - `ia_transcribe_once`: captures live microphone/loopback audio for N seconds and returns Deepgram transcription JSON (supports `mic_device_id` / `mic_device_name`)
 - `stt_list_devices`: lists logical STT sources and detected endpoint devices (capture + render)
-- `stt_start_session`: starts continuous STT polling session (supports `mic_device_id`, `mic_device_name`, `chunk_seconds`, `endpointing_ms`, `utterance_end_ms`)
+- `stt_start_session`: starts continuous STT session (supports `mic_device_id`, `mic_device_name`, `chunk_seconds`, `endpointing_ms`, `utterance_end_ms`)
 - `stt_get_updates`: fetches incremental STT events since sequence id
 - `stt_get_session`: reads session status/counters/latest transcript
 - `stt_stop_session`: stops session
@@ -66,9 +66,10 @@ Add this server to `config.json`:
 - `ia_evaluate_session` and `ia_compare_strategies` use JSON output files where possible and return parsed data.
 - For large outputs, tools return output tails to keep responses manageable.
 - Transcription tools read `DEEPGRAM_API_KEY` from the MCP server process environment.
-- `stt_*` session tools poll repeated short captures and emit incremental events.
+- `stt_*` session tools run a persistent STT stream session and expose incremental events through MCP updates.
 - Agent voice turns are triggered from `utterance_final` events.
-- Finalization behavior is primarily controlled by Deepgram timing settings (`endpointing_ms`, `utterance_end_ms`) plus `chunk_seconds`.
+- Finalization behavior is primarily controlled by Deepgram timing settings (`endpointing_ms`, `utterance_end_ms`).
+- `chunk_seconds` remains available for backward compatibility with older chunked-session behavior.
 
 ## Continuous Voice Workflow
 

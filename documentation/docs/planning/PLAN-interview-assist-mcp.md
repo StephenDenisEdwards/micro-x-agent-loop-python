@@ -6,6 +6,7 @@ Implementation snapshot:
 
 - Phase 1 analysis/evaluation MCP tools: Completed
 - STT MCP tools (`ia_transcribe_once`, `stt_*`): Completed
+  - Includes persistent `--stream-events` session mode in `Interview-assist-stt-cli`
 - Phase 2 recommendations: Planned
 
 ## Goal

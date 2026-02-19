@@ -556,7 +556,8 @@ Search my Gmail for emails from recruiters in the last week and summarise them
 Voice mode details:
 
 - The agent only executes spoken turns from `utterance_final` STT events.
-- Finalization timing is controlled by Deepgram settings passed through MCP (`endpointing_ms`, `utterance_end_ms`) and chunk cadence (`chunk_seconds`).
+- Finalization timing is controlled primarily by Deepgram settings passed through MCP (`endpointing_ms`, `utterance_end_ms`).
+- `chunk_seconds` remains in the command surface for compatibility with earlier session implementations.
 - If microphone capture is wrong/empty, use `interview-assist__stt_list_devices` and pass `--mic-device-name` or `--mic-device-id` on `/voice start`.
 
 ### Voice Tuning Quick Reference

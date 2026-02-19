@@ -9,6 +9,11 @@ Implementation snapshot:
 - Phase 3: Completed (baseline)
 - Phase 4: In progress
 
+Latest implementation note:
+
+- STT sessions now use a persistent Deepgram streaming process in `interview-assist-2`.
+- Agent still consumes session events via `stt_get_updates` polling (hybrid architecture).
+
 ## Goal
 
 Enable continuous microphone-driven interaction with the Python agent, where spoken utterances are transcribed and fed into normal agent turns without manual typing.

@@ -11,7 +11,7 @@
   "MemoryMaxMessagesPerSession": 5000,
   "MemoryRetentionDays": 30,
   "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\resources\\documents",
-  "LogLevel": "DEBUG",
+  "LogLevel": "INFO",
   "LogConsumers": [
     { "type": "console" },
     { "type": "file", "path": "C:\\Users\\steph\\source\\repos\\resources\\micro-x-agent-loop-logs\\agent.log" }
