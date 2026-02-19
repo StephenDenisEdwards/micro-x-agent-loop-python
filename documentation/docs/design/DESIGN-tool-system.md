@@ -127,10 +127,12 @@ The agent dispatches MCP tools identically to built-in tools — no special hand
 
 ### McpManager
 
-`McpManager` in `mcp/mcp_manager.py` manages the lifecycle of all MCP server connections:
+`McpManager` in `mcp/mcp_manager.py` manages the lifecycle of all MCP server connections. Each server runs in its own `asyncio.Task` with proper `async with` nesting (avoiding `AsyncExitStack`, which conflicts with anyio's cancel scopes used internally by `stdio_client`).
 
-- `connect_all()` — connects to all configured servers, returns discovered tools
-- `close()` — cleanly shuts down all connections via `AsyncExitStack`
+- `connect_all()` — starts each server in a background task, waits for it to be ready, returns discovered tools
+- `close()` — shuts down each server individually with per-server logging and a 5-second timeout
+
+Shutdown signals both the internal shutdown event and task cancellation together, ensuring both anyio and asyncio cleanup paths are triggered. On Windows, a `sys.unraisablehook` in `__main__.py` suppresses harmless "unclosed transport" noise from asyncio's proactor pipe cleanup.
 
 Connection failures for individual servers are logged but do not prevent the agent from starting. Other servers and built-in tools continue to work normally.
 
@@ -141,9 +143,9 @@ Connection failures for individual servers are logged but do not prevent the age
 | `stdio` | `command`, `args`, `env` | Local MCP servers spawned as child processes |
 | `http` | `url` | Remote MCP servers via StreamableHTTP |
 
-### Bundled MCP Server: system-info
+### Shared MCP Server: system-info
 
-The repository includes a .NET MCP server at `mcp-servers/system-info/` that demonstrates the stdio transport pattern. It exposes three tools:
+The system-info MCP server lives in the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repository (used by both the Python and .NET agents). It demonstrates the stdio transport pattern and exposes three tools:
 
 | MCP Tool | Agent Tool Name | Description |
 |----------|----------------|-------------|
@@ -153,7 +155,7 @@ The repository includes a .NET MCP server at `mcp-servers/system-info/` that dem
 
 Built with the [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) NuGet package and `Microsoft.Extensions.Hosting`. Uses `Host.CreateEmptyApplicationBuilder(settings: null)` to avoid default logging to stdout (which would corrupt the stdio transport).
 
-The server must be built before starting the agent (`dotnet build mcp-servers/system-info`). The config uses `--no-build` to skip the build step at runtime.
+The server must be built before starting the agent (`dotnet build path/to/mcp-servers/system-info/src`). The config uses `--no-build` to skip the build step at runtime, and an absolute path to the server project.
 
 ### External MCP Server: WhatsApp
 

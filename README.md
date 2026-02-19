@@ -25,7 +25,7 @@ This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/Stephe
 - (Optional) Google OAuth credentials for Gmail and Calendar tools — see [Gmail Setup](#gmail-setup)
 - (Optional) [Brave Search API key](https://brave.com/search/api/) for the `web_search` tool
 - (Optional) Anthropic Admin API key (`sk-ant-admin...`) for the `anthropic_usage` tool
-- (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the bundled system-info MCP server
+- (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the system-info MCP server (in the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo)
 - (Optional) [Go 1.21+](https://go.dev/dl/) and a C compiler (GCC) for the WhatsApp MCP server
 
 ### Install uv
@@ -188,14 +188,27 @@ Tools that appear depend on which credentials are configured in `.env` and which
 
 ### 3. MCP server setup (optional)
 
-The repository includes a bundled .NET MCP server that exposes system information tools. To enable it:
+The system-info MCP server lives in the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repository. To enable it:
 
 1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download) (or later)
-2. Build the server:
+2. Clone and build the server:
    ```bash
-   dotnet build mcp-servers/system-info
+   git clone https://github.com/StephenDenisEdwards/mcp-servers.git
+   dotnet build mcp-servers/system-info/src
    ```
-3. The `McpServers` entry in `config.json` is already configured. On next startup, the agent will show `system-info__system_info`, `system-info__disk_info`, and `system-info__network_info` in the tool list.
+3. Update the `McpServers` entry in `config.json` to point to the server:
+   ```json
+   {
+     "McpServers": {
+       "system-info": {
+         "transport": "stdio",
+         "command": "dotnet",
+         "args": ["run", "--no-build", "--project", "C:\\path\\to\\mcp-servers\\system-info\\src"]
+       }
+     }
+   }
+   ```
+4. On next startup, the agent will show `system-info__system_info`, `system-info__disk_info`, and `system-info__network_info` in the tool list.
 
 Rebuild after any code changes to the MCP server — the config uses `--no-build` to avoid build output interfering with the stdio transport.
 
@@ -262,7 +275,7 @@ App settings live in `config.json` in the project root:
     "system-info": {
       "transport": "stdio",
       "command": "dotnet",
-      "args": ["run", "--no-build", "--project", "mcp-servers/system-info"]
+      "args": ["run", "--no-build", "--project", "C:\\path\\to\\mcp-servers\\system-info\\src"]
     }
   }
 }
@@ -339,7 +352,7 @@ Calendar tools trigger a separate OAuth flow on first use, with tokens cached in
 
 ### MCP tools (dynamic)
 
-MCP tools are discovered from external servers configured in `config.json`. The bundled system-info server provides:
+MCP tools are discovered from external servers configured in `config.json`. The system-info server (from the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo) provides:
 
 | Tool | Description |
 |------|-------------|
@@ -526,7 +539,7 @@ If the OAuth browser window fails to open on a headless machine, you'll need to 
 
 ### MCP server fails with "Failed to parse JSONRPC message"
 
-The MCP server is writing non-JSONRPC data to stdout (e.g., build output or logging). For .NET servers, build separately (`dotnet build mcp-servers/system-info`) and use `--no-build` in the config. See [Troubleshooting](documentation/docs/operations/troubleshooting.md) for details.
+The MCP server is writing non-JSONRPC data to stdout (e.g., build output or logging). For .NET servers, build separately (`dotnet build path/to/mcp-servers/system-info/src`) and use `--no-build` in the config. See [Troubleshooting](documentation/docs/operations/troubleshooting.md) for details.
 
 ### WhatsApp: `gcc not found` when building the bridge
 
@@ -621,15 +634,9 @@ src/micro_x_agent_loop/
     anthropic/
       anthropic_usage_tool.py  -- Usage/cost/Claude Code reports
 
-mcp-servers/
-  system-info/             -- Bundled .NET MCP server for system information
-    SystemInfo.csproj
-    Program.cs
-    Tools/
-      SystemInfoTools.cs   -- OS, CPU, memory, uptime
-      DiskInfoTools.cs     -- Per-drive disk usage
-      NetworkInfoTools.cs  -- Network interfaces + IPs
 ```
+
+The system-info MCP server lives in the separate [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repository, shared with the .NET agent.
 
 ### How the agent loop works
 

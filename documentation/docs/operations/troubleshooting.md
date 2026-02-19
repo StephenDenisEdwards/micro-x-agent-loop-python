@@ -126,8 +126,8 @@ The MCP server is writing non-JSONRPC data to stdout (e.g., build output, restor
 
 **Fix:** Ensure the MCP server writes **only** JSONRPC messages to stdout. For .NET servers:
 
-1. Build separately: `dotnet build mcp-servers/system-info`
-2. Use `--no-build` in the config args: `["run", "--no-build", "--project", "mcp-servers/system-info"]`
+1. Build separately: `dotnet build path/to/mcp-servers/system-info/src`
+2. Use `--no-build` in the config args: `["run", "--no-build", "--project", "C:\\path\\to\\mcp-servers\\system-info\\src"]`
 3. Use `Host.CreateEmptyApplicationBuilder(settings: null)` instead of `Host.CreateDefaultBuilder()` to avoid default console logging on stdout
 
 For other runtimes, redirect all logging to stderr and ensure nothing writes to stdout except the JSONRPC transport.

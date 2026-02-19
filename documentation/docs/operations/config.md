@@ -48,7 +48,7 @@ If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail and Calendar t
     "system-info": {
       "transport": "stdio",
       "command": "dotnet",
-      "args": ["run", "--no-build", "--project", "mcp-servers/system-info"]
+      "args": ["run", "--no-build", "--project", "C:\\path\\to\\mcp-servers\\system-info\\src"]
     }
   }
 }
@@ -155,7 +155,7 @@ Two transports are supported:
 | `transport` | string | Yes | Must be `"http"` |
 | `url` | string | Yes | StreamableHTTP endpoint URL |
 
-Example — the bundled system-info server (included in this repository):
+Example — the system-info server (from the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo):
 
 ```json
 {
@@ -163,13 +163,13 @@ Example — the bundled system-info server (included in this repository):
     "system-info": {
       "transport": "stdio",
       "command": "dotnet",
-      "args": ["run", "--no-build", "--project", "mcp-servers/system-info"]
+      "args": ["run", "--no-build", "--project", "C:\\path\\to\\mcp-servers\\system-info\\src"]
     }
   }
 }
 ```
 
-> **Note:** For stdio servers that have a build step (like .NET or TypeScript projects), use `--no-build` (or equivalent) to prevent build output from being written to stdout, which would corrupt the JSONRPC transport. Build the server separately before starting the agent (e.g., `dotnet build mcp-servers/system-info`).
+> **Note:** For stdio servers that have a build step (like .NET or TypeScript projects), use `--no-build` (or equivalent) to prevent build output from being written to stdout, which would corrupt the JSONRPC transport. Build the server separately before starting the agent (e.g., `dotnet build path/to/mcp-servers/system-info/src`).
 
 Example — the external WhatsApp MCP server (see [WhatsApp MCP docs](../design/tools/whatsapp-mcp/README.md)):
 
@@ -195,7 +195,7 @@ Example with both transports:
     "system-info": {
       "transport": "stdio",
       "command": "dotnet",
-      "args": ["run", "--no-build", "--project", "mcp-servers/system-info"]
+      "args": ["run", "--no-build", "--project", "C:\\path\\to\\mcp-servers\\system-info\\src"]
     },
     "whatsapp": {
       "transport": "stdio",

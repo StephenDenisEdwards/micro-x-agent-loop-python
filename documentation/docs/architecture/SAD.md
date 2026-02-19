@@ -2,7 +2,7 @@
 
 **Project:** micro-x-agent-loop-python
 **Version:** 1.0
-**Last Updated:** 2026-02-18
+**Last Updated:** 2026-02-19
 
 ## 1. Introduction and Goals
 
@@ -71,7 +71,7 @@ The agent sits between the user and external services. The user provides natural
 | Secrets | `.env` file loaded by python-dotenv; never committed to git |
 | App config | `config.json` for non-secret settings |
 | Tool extensibility | `Tool` Protocol class; register in `tool_registry` or connect via MCP |
-| Bundled MCP server | `mcp-servers/system-info/` — .NET MCP server providing system information tools |
+| Shared MCP server | [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo — .NET MCP server providing system information tools (shared with .NET agent) |
 
 ## 5. Building Block View
 
@@ -124,7 +124,7 @@ graph TD
 | `Tool` | Protocol class: `name`, `description`, `input_schema`, `execute` |
 | `McpManager` | Connects to all configured MCP servers, discovers tools, manages lifecycle |
 | `McpToolProxy` | Adapter wrapping an MCP tool + session into the `Tool` Protocol |
-| `mcp-servers/system-info` | Bundled .NET MCP server exposing `system_info`, `disk_info`, `network_info` via stdio |
+| [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) (external) | Shared .NET MCP server exposing `system_info`, `disk_info`, `network_info` via stdio |
 | WhatsApp MCP (external) | External two-component MCP server: Go bridge (WhatsApp Web connection, SQLite, HTTP API) + Python FastMCP server (12 tools for messaging, contacts, chats) |
 | `html_utilities` | Shared HTML-to-plain-text conversion |
 | `gmail_auth` | OAuth2 flow and token caching for Gmail |

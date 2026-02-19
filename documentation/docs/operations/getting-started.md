@@ -5,7 +5,7 @@
 - [Python 3.11](https://www.python.org/downloads/) or later
 - An [Anthropic API key](https://console.anthropic.com/)
 - (Optional) Google OAuth credentials for Gmail and Calendar tools
-- (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the bundled system-info MCP server
+- (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the system-info MCP server (in the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo)
 - (Optional) [Go 1.21+](https://go.dev/dl/) and a C compiler (GCC) for the WhatsApp MCP server
 
 ## Setup
@@ -139,16 +139,31 @@ you> What meetings do I have today?
 
 ### MCP Server Setup (Optional)
 
-The repository includes a bundled .NET MCP server that exposes system information tools (`system_info`, `disk_info`, `network_info`). To enable it:
+The system-info MCP server lives in the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repository (used by both the Python and .NET agents). To enable it:
 
 1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download) (or later)
-2. Build the server:
+2. Clone and build the server:
 
 ```bash
-dotnet build mcp-servers/system-info
+git clone https://github.com/StephenDenisEdwards/mcp-servers.git
+dotnet build mcp-servers/system-info/src
 ```
 
-3. The `McpServers` entry in `config.json` is already configured. On next startup, the agent will show `system-info__system_info`, `system-info__disk_info`, and `system-info__network_info` in the tool list.
+3. Update the `McpServers` entry in `config.json` to point to the server with an absolute path:
+
+```json
+{
+  "McpServers": {
+    "system-info": {
+      "transport": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--no-build", "--project", "C:\\path\\to\\mcp-servers\\system-info\\src"]
+    }
+  }
+}
+```
+
+4. On next startup, the agent will show `system-info__system_info`, `system-info__disk_info`, and `system-info__network_info` in the tool list.
 
 Rebuild after any code changes to the MCP server — the config uses `--no-build` to avoid build output interfering with the stdio transport.
 
@@ -234,8 +249,6 @@ micro-x-agent-loop-python/
 ├── run.sh                         # macOS/Linux startup script
 ├── README.md                      # Project overview
 ├── documentation/docs/            # Full documentation
-├── mcp-servers/                   # MCP tool servers
-│   └── system-info/               # .NET MCP server for system information
 └── src/
     └── micro_x_agent_loop/
         ├── __init__.py

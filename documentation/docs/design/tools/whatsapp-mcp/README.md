@@ -4,7 +4,7 @@
 
 The WhatsApp MCP server gives the agent the ability to search, read, and send WhatsApp messages. It is an **external MCP server** — not bundled in this repository — based on the [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp) project.
 
-Unlike the bundled system-info MCP server, WhatsApp requires a **two-component architecture**: a Go bridge that maintains a persistent connection to WhatsApp Web, and a Python MCP server that the agent communicates with via stdio.
+Unlike the system-info MCP server (which is a single stdio process), WhatsApp requires a **two-component architecture**: a Go bridge that maintains a persistent connection to WhatsApp Web, and a Python MCP server that the agent communicates with via stdio.
 
 ## Architecture
 
