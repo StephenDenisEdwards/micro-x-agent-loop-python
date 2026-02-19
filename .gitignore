@@ -13,6 +13,7 @@ dist/
 .ruff_cache/
 uv.lock
 .micro_x/
+store/
 
 # .NET
 *.sln

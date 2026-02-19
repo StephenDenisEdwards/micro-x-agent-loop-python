@@ -44,3 +44,33 @@ Rewind reports per-file status:
 - `removed`
 - `skipped`
 - `failed`
+
+## How Checkpointing Works
+
+Lifecycle for a user turn with tracked mutating tools:
+
+1. User sends a message that results in one or more mutating tool calls.
+2. Agent creates one checkpoint for that turn.
+3. Before each tracked mutation, agent snapshots the file state (if a path is available).
+4. Tool executes normally.
+5. User can later run `/checkpoint list` to find checkpoint IDs and `/checkpoint rewind <id>` to restore.
+
+What is saved:
+
+- Checkpoint metadata: ID, created time, tool names, and a short prompt preview.
+- Per-file snapshot metadata: path, whether file existed before, and backup bytes when applicable.
+
+Failure semantics:
+
+- Snapshot tracking failures do not block tool execution.
+- If path tracking fails for a tool call, the tool still runs.
+- Rewind is best effort and only affects files that were successfully tracked.
+
+Typical workflow:
+
+1. Do work that edits files (for example through `write_file` / `append_file`).
+2. List checkpoints:
+- `/checkpoint list`
+3. Pick a checkpoint ID from the list and rewind:
+- `/checkpoint rewind <checkpoint_id>`
+4. Review per-file outcomes printed by the agent.
