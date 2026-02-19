@@ -27,6 +27,7 @@ This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/Stephe
 - (Optional) Anthropic Admin API key (`sk-ant-admin...`) for the `anthropic_usage` tool
 - (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the system-info MCP server (in the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo)
 - (Optional) [Go 1.21+](https://go.dev/dl/) and a C compiler (GCC) for the WhatsApp MCP server
+- (Optional) local clone of `interview-assist-2` for Interview Assist MCP tools (analysis/evaluation workflows)
 
 ### Install uv
 
@@ -250,6 +251,35 @@ The agent can send and receive WhatsApp messages via the [lharries/whatsapp-mcp]
 4. Start the agent (with the bridge still running) — WhatsApp tools will appear in the MCP servers section. Test with: `List my 5 most recent WhatsApp chats`
 
 The Go bridge must be running and authenticated before the agent starts. If the bridge shows `Client outdated (405)`, update the whatsmeow library and rebuild — see the [full WhatsApp setup guide](documentation/docs/design/tools/whatsapp-mcp/README.md#updating-the-bridge).
+
+### 5. Interview Assist MCP server setup (optional)
+
+This repo includes a local MCP wrapper for `interview-assist-2` non-interactive workflows (analyze, evaluate, compare, threshold tuning, regression, baselines).
+
+1. Build the Interview Assist console once:
+
+   ```powershell
+   dotnet build C:\Users\steph\source\repos\interview-assist-2\Interview-assist-transcription-detection-console\Interview-assist-transcription-detection-console.csproj
+   ```
+
+2. Add server config:
+
+   ```json
+   {
+     "McpServers": {
+       "interview-assist": {
+         "transport": "stdio",
+         "command": "python",
+         "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\interview_assist_server.py"],
+         "env": {
+           "INTERVIEW_ASSIST_REPO": "C:\\Users\\steph\\source\\repos\\interview-assist-2"
+         }
+       }
+     }
+   }
+   ```
+
+See [Interview Assist MCP docs](documentation/docs/design/tools/interview-assist-mcp/README.md) for tool list and details.
 
 ### Configuration
 

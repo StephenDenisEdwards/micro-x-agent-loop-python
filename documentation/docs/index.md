@@ -16,6 +16,7 @@ Central navigation hub for all project documentation.
 - [Agent Loop Design](design/DESIGN-agent-loop.md) - Core agent loop, tool dispatch, streaming
 - [Tool System Design](design/DESIGN-tool-system.md) - Tool interface, registry, built-in tools
 - [Compaction Design](design/DESIGN-compaction.md) - Conversation compaction via strategy pattern
+- [Interview Assist MCP](design/tools/interview-assist-mcp/README.md) - MCP wrapper for interview-assist-2 analysis/evaluation workflows
 
 ## Operations
 

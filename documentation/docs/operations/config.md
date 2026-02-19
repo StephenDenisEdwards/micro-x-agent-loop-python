@@ -9,18 +9,20 @@ Configuration is split into two files:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude |
+| `ANTHROPIC_API_KEY` | When `Provider` = `anthropic` | Anthropic API key for Claude |
+| `OPENAI_API_KEY` | When `Provider` = `openai` | OpenAI API key for GPT models |
 | `GOOGLE_CLIENT_ID` | No | Google OAuth client ID for Gmail and Calendar tools |
 | `GOOGLE_CLIENT_SECRET` | No | Google OAuth client secret for Gmail and Calendar tools |
 | `ANTHROPIC_ADMIN_API_KEY` | No | Anthropic Admin API key (`sk-ant-admin...`) for usage/cost reporting |
 
-If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail and Calendar tools are not registered. If `ANTHROPIC_ADMIN_API_KEY` is missing, the `anthropic_usage` tool is not registered. All other tools work normally.
+The required API key depends on the configured `Provider`. If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail and Calendar tools are not registered. If `ANTHROPIC_ADMIN_API_KEY` is missing, the `anthropic_usage` tool is not registered. All other tools work normally.
 
 ## App Settings (`config.json`)
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `Model` | string | `"claude-sonnet-4-5-20250929"` | Claude model ID to use |
+| `Provider` | string | `"anthropic"` | LLM provider: `"anthropic"` or `"openai"` |
+| `Model` | string | `"claude-sonnet-4-5-20250929"` | Model ID to use (provider-specific) |
 | `MaxTokens` | int | `8192` | Maximum tokens per API response |
 | `Temperature` | float | `1.0` | Sampling temperature (0.0 = deterministic, 1.0 = creative) |
 | `MaxToolResultChars` | int | `40000` | Maximum characters per tool result before truncation |
@@ -46,6 +48,7 @@ If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail and Calendar t
 
 ```json
 {
+  "Provider": "anthropic",
   "Model": "claude-sonnet-4-5-20250929",
   "MaxTokens": 8192,
   "Temperature": 1.0,
@@ -78,15 +81,37 @@ All settings are optional — sensible defaults are used when a setting is missi
 
 ## Setting Details
 
+### Provider
+
+Selects the LLM backend. The agent routes the API key and message format automatically.
+
+| Value | API Key Variable | Description |
+|-------|-----------------|-------------|
+| `"anthropic"` | `ANTHROPIC_API_KEY` | Anthropic Claude models (default) |
+| `"openai"` | `OPENAI_API_KEY` | OpenAI GPT models |
+
+The internal message format remains Anthropic-style regardless of provider. The OpenAI provider translates at the API boundary. See [ADR-010](../architecture/decisions/ADR-010-multi-provider-llm-support.md).
+
 ### Model
 
-The Anthropic model ID. Common values:
+The model ID to use. The value is provider-specific.
+
+**Anthropic models:**
 
 | Model | Description |
 |-------|-------------|
 | `claude-sonnet-4-5-20250929` | Good balance of capability and cost |
 | `claude-opus-4-6` | Most capable, higher cost |
 | `claude-haiku-4-5-20251001` | Fastest, lowest cost |
+
+**OpenAI models:**
+
+| Model | Description |
+|-------|-------------|
+| `gpt-4o` | Most capable GPT-4 variant |
+| `gpt-4o-mini` | Faster, lower cost |
+| `o1` | Reasoning model |
+| `o3` | Latest reasoning model |
 
 ### MaxTokens
 
@@ -246,6 +271,23 @@ Example — the external WhatsApp MCP server (see [WhatsApp MCP docs](../design/
 ```
 
 > **Note:** The WhatsApp MCP server requires a separate Go bridge process to be running. The bridge connects to WhatsApp Web and must be started manually before the agent. See [WhatsApp MCP](../design/tools/whatsapp-mcp/README.md) for the full setup guide.
+
+Example - Interview Assist MCP wrapper (see [Interview Assist MCP docs](../design/tools/interview-assist-mcp/README.md)):
+
+```json
+{
+  "McpServers": {
+    "interview-assist": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["C:\\path\\to\\micro-x-agent-loop-python\\mcp_servers\\interview_assist_server.py"],
+      "env": {
+        "INTERVIEW_ASSIST_REPO": "C:\\path\\to\\interview-assist-2"
+      }
+    }
+  }
+}
+```
 
 Example with both transports:
 
