@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from micro_x_agent_loop.memory.event_sink import AsyncEventSink
 from micro_x_agent_loop.memory.store import MemoryStore
 
 
@@ -12,10 +13,14 @@ def utc_now() -> str:
 
 
 class EventEmitter:
-    def __init__(self, store: MemoryStore):
+    def __init__(self, store: MemoryStore, sink: AsyncEventSink | None = None):
         self._store = store
+        self._sink = sink
 
     def emit(self, session_id: str, event_type: str, payload: dict) -> None:
+        if self._sink is not None:
+            self._sink.emit(session_id, event_type, payload)
+            return
         self._store.execute(
             """
             INSERT INTO events (id, session_id, type, payload_json, created_at)
