@@ -10,7 +10,7 @@ from loguru import logger
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.compaction import NoneCompactionStrategy, SummarizeCompactionStrategy
-from micro_x_agent_loop.llm_client import create_client
+from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.logging_config import setup_logging
 from micro_x_agent_loop.memory import (
     CheckpointManager,
@@ -57,9 +57,17 @@ async def main() -> None:
         consumers=config.get("LogConsumers"),
     )
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    provider_name = config.get("Provider", "anthropic").strip().lower()
+
+    if provider_name == "openai":
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+        env_var_name = "OPENAI_API_KEY"
+    else:
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        env_var_name = "ANTHROPIC_API_KEY"
+
     if not api_key:
-        logger.error("ANTHROPIC_API_KEY environment variable is required.")
+        logger.error(f"{env_var_name} environment variable is required.")
         sys.exit(1)
 
     model = config.get("Model", "claude-sonnet-4-5-20250929")
@@ -100,7 +108,7 @@ async def main() -> None:
 
     if compaction_strategy_name == "summarize":
         compaction_strategy = SummarizeCompactionStrategy(
-            client=create_client(api_key),
+            provider=create_provider(provider_name, api_key),
             model=model,
             threshold_tokens=compaction_threshold_tokens,
             protected_tail_messages=protected_tail_messages,
@@ -160,6 +168,7 @@ async def main() -> None:
             max_tokens=max_tokens,
             temperature=temperature,
             api_key=api_key,
+            provider=provider_name,
             tools=tools,
             system_prompt=get_system_prompt(),
             max_tool_result_chars=max_tool_result_chars,
@@ -174,7 +183,7 @@ async def main() -> None:
     )
     await agent.initialize_session()
 
-    print("micro-x-agent-loop (type 'exit' to quit, '/help' for commands)")
+    print(f"micro-x-agent-loop [{provider_name}:{model}] (type 'exit' to quit, '/help' for commands)")
     builtin_tools = [t for t in tools if t not in mcp_tools]
     print("Tools:")
     for t in builtin_tools:

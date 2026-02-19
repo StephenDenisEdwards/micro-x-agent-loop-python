@@ -3,7 +3,8 @@ import unittest
 from unittest.mock import patch
 
 from micro_x_agent_loop.compaction import _adjust_boundary, _rebuild_messages, estimate_tokens
-from micro_x_agent_loop.llm_client import Spinner, to_anthropic_tools
+from micro_x_agent_loop.llm_client import Spinner
+from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
 
 
 class _Tool:
@@ -68,7 +69,8 @@ class CompactionAndLlmUtilsTests(unittest.TestCase):
         self.assertIn("[CONTEXT SUMMARY]", rebuilt[0]["content"])
 
     def test_to_anthropic_tools_maps_tool_fields(self) -> None:
-        mapped = to_anthropic_tools([_Tool()])
+        provider = AnthropicProvider.__new__(AnthropicProvider)
+        mapped = provider.convert_tools([_Tool()])
         self.assertEqual("read_file", mapped[0]["name"])
         self.assertEqual("reads files", mapped[0]["description"])
 

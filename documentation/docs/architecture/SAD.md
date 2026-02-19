@@ -6,7 +6,7 @@
 
 ## 1. Introduction and Goals
 
-micro-x-agent-loop-python is a minimal AI agent loop built with Python and the Anthropic Claude API. It provides a REPL interface where users type natural-language prompts and the agent autonomously calls tools to accomplish tasks.
+micro-x-agent-loop-python is a minimal AI agent loop built with Python and a pluggable LLM backend (Anthropic Claude or OpenAI GPT). It provides a REPL interface where users type natural-language prompts and the agent autonomously calls tools to accomplish tasks.
 
 ### Key Goals
 
@@ -27,7 +27,7 @@ micro-x-agent-loop-python is a minimal AI agent loop built with Python and the A
 | Constraint | Rationale |
 |-----------|-----------|
 | Python 3.11+ | Minimum version for `typing.Protocol` features and modern syntax |
-| Anthropic Claude API | LLM provider for reasoning and tool dispatch |
+| Anthropic or OpenAI API | LLM provider for reasoning and tool dispatch (config-driven) |
 | Console application | Simplicity; no web UI overhead |
 | OAuth2 for Gmail | Required by Google API |
 
@@ -53,7 +53,8 @@ The agent sits between the user and external services. The user provides natural
 
 | Interface | Protocol | Purpose |
 |-----------|----------|---------|
-| Anthropic API | HTTPS / SSE | LLM reasoning and tool dispatch |
+| Anthropic API | HTTPS / SSE | LLM reasoning and tool dispatch (default provider) |
+| OpenAI API | HTTPS / SSE | LLM reasoning and tool dispatch (alternative provider) |
 | Gmail API | HTTPS / OAuth2 | Email search, read, send |
 | LinkedIn | HTTPS / HTML scraping | Job search and detail fetching |
 | Local shell | Process execution | Bash/cmd commands |
@@ -66,8 +67,9 @@ The agent sits between the user and external services. The user provides natural
 | Decision | Approach |
 |----------|----------|
 | Agent loop | Iterative: send message, check for tool_use, execute tools, repeat |
-| Streaming | `client.messages.stream()` prints text deltas in real time |
-| Resilience | tenacity decorator with exponential backoff for rate limits |
+| Multi-provider | `LLMProvider` Protocol with Anthropic-format canonical messages; translation at API boundary |
+| Streaming | Provider-specific streaming (Anthropic SSE / OpenAI SSE) prints text deltas in real time |
+| Resilience | tenacity decorator with exponential backoff for rate limits (per-provider) |
 | Secrets | `.env` file loaded by python-dotenv; never committed to git |
 | App config | `config.json` for non-secret settings |
 | Tool extensibility | `Tool` Protocol class; register in `tool_registry` or connect via MCP |
@@ -84,12 +86,16 @@ graph TD
     Main --> Registry["tool_registry<br/>Tool Factory"]
     Main --> McpMgr["McpManager<br/>MCP Connections"]
 
-    Agent --> LlmClient["llm_client<br/>API + Streaming"]
+    Agent --> Provider["LLMProvider<br/>Protocol"]
     Agent --> Tools["Tool Implementations"]
     Agent --> McpTools["MCP Tool Proxies"]
 
-    LlmClient --> Tenacity["tenacity<br/>Retry on 429"]
-    LlmClient --> Anthropic["anthropic SDK"]
+    Provider --> AnthropicProv["AnthropicProvider"]
+    Provider --> OpenAIProv["OpenAIProvider"]
+    AnthropicProv --> Anthropic["anthropic SDK"]
+    OpenAIProv --> OpenAISDK["openai SDK"]
+    AnthropicProv --> Tenacity["tenacity<br/>Retry on 429"]
+    OpenAIProv --> Tenacity
 
     McpMgr --> McpSDK["mcp SDK"]
     McpMgr --> McpTools
@@ -119,7 +125,10 @@ graph TD
 | `__main__` | Entry point; loads config, builds tools, initializes MCP, runs REPL |
 | `Agent` | Manages conversation history, dispatches tool calls in parallel, enforces limits |
 | `AgentConfig` | Dataclass holding all agent configuration with defaults |
-| `llm_client` | Wraps Anthropic SDK; streaming + tenacity retry |
+| `LLMProvider` | Protocol defining `stream_chat`, `create_message`, `convert_tools` |
+| `AnthropicProvider` | Anthropic SDK implementation of `LLMProvider` |
+| `OpenAIProvider` | OpenAI SDK implementation of `LLMProvider` (translates message format at API boundary) |
+| `llm_client` | Shared utilities: `Spinner` (terminal feedback), `_on_retry` (tenacity callback) |
 | `tool_registry` | Factory that assembles the built-in tool list with dependencies |
 | `Tool` | Protocol class: `name`, `description`, `input_schema`, `execute` |
 | `McpManager` | Connects to all configured MCP servers, discovers tools, manages lifecycle |
@@ -139,28 +148,28 @@ sequenceDiagram
     participant U as User
     participant M as __main__
     participant A as Agent
-    participant L as llm_client
-    participant C as Claude API
+    participant P as LLMProvider
+    participant API as LLM API
     participant T as Tools
 
     U->>M: Input prompt
     M->>A: run(prompt)
-    A->>L: stream_chat(messages)
-    L->>C: client.messages.stream()
-    C-->>L: Text deltas (SSE)
-    L-->>U: Print text in real time
-    C-->>L: tool_use blocks
-    L-->>A: (message, tool_use_blocks)
+    A->>P: stream_chat(messages)
+    P->>API: Provider-specific streaming call
+    API-->>P: Text deltas (SSE)
+    P-->>U: Print text in real time
+    API-->>P: tool_use / tool_calls
+    P-->>A: (message, tool_use_blocks, stop_reason)
 
     loop For each tool (parallel via asyncio.gather)
         A->>T: execute(input)
         T-->>A: result (truncated if > limit)
     end
 
-    A->>L: stream_chat(messages + tool results)
-    L->>C: client.messages.stream()
-    C-->>L: Final text response
-    L-->>U: Print text in real time
+    A->>P: stream_chat(messages + tool results)
+    P->>API: Provider-specific streaming call
+    API-->>P: Final text response
+    P-->>U: Print text in real time
     A-->>M: Return
 ```
 
@@ -215,6 +224,7 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-007](decisions/ADR-007-google-contacts-built-in-tools.md) | Google Contacts as built-in tools | Accepted |
 | [ADR-008](decisions/ADR-008-github-built-in-tools-with-raw-httpx.md) | GitHub as built-in tools via raw httpx | Accepted |
 | [ADR-009](decisions/ADR-009-sqlite-memory-sessions-and-file-checkpoints.md) | SQLite memory for sessions, events, and file checkpoints | Accepted |
+| [ADR-010](decisions/ADR-010-multi-provider-llm-support.md) | Multi-provider LLM support (provider abstraction) | Accepted |
 
 ## 9. Risks and Technical Debt
 

@@ -1,14 +1,7 @@
 import json
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
-import anthropic
 from loguru import logger
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 
 
 @runtime_checkable
@@ -24,12 +17,12 @@ class NoneCompactionStrategy:
 class SummarizeCompactionStrategy:
     def __init__(
         self,
-        client: anthropic.AsyncAnthropic,
+        provider: Any,
         model: str,
         threshold_tokens: int = 80_000,
         protected_tail_messages: int = 6,
     ):
-        self._client = client
+        self._provider = provider
         self._model = model
         self._threshold_tokens = threshold_tokens
         self._protected_tail_messages = protected_tail_messages
@@ -61,7 +54,7 @@ class SummarizeCompactionStrategy:
         )
 
         try:
-            summary = await _summarize(self._client, self._model, compactable)
+            summary = await _summarize(self._provider, self._model, compactable)
         except Exception as ex:
             logger.warning(f"Compaction failed: {ex}. Falling back to history trimming.")
             return messages
@@ -173,18 +166,8 @@ CONVERSATION HISTORY:
 """
 
 
-@retry(
-    retry=retry_if_exception_type((
-        anthropic.RateLimitError,
-        anthropic.APIConnectionError,
-        anthropic.APITimeoutError,
-    )),
-    wait=wait_exponential(multiplier=10, min=10, max=320),
-    stop=stop_after_attempt(5),
-    reraise=True,
-)
 async def _summarize(
-    client: anthropic.AsyncAnthropic,
+    provider: Any,
     model: str,
     messages: list[dict],
 ) -> str:
@@ -200,17 +183,12 @@ async def _summarize(
         )
 
     logger.debug(f"Compaction API request: model={model}, input_chars={len(formatted):,}")
-    response = await client.messages.create(
-        model=model,
-        max_tokens=4096,
-        temperature=0,
-        messages=[{"role": "user", "content": _SUMMARIZE_PROMPT + formatted}],
+    return await provider.create_message(
+        model,
+        4096,
+        0,
+        [{"role": "user", "content": _SUMMARIZE_PROMPT + formatted}],
     )
-
-    usage = response.usage
-    logger.debug(f"Compaction API response: input_tokens={usage.input_tokens}, output_tokens={usage.output_tokens}")
-
-    return response.content[0].text
 
 
 def _adjust_boundary(messages: list[dict], start: int, end: int) -> int:

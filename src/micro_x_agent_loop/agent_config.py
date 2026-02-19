@@ -13,6 +13,7 @@ class AgentConfig:
     max_tokens: int = 8192
     temperature: float = 1.0
     api_key: str = ""
+    provider: str = "anthropic"
     tools: list[Tool] = field(default_factory=list)
     system_prompt: str = ""
     max_tool_result_chars: int = 40_000

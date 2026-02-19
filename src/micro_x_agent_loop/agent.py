@@ -4,20 +4,21 @@ from typing import Any
 from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig
-from micro_x_agent_loop.llm_client import Spinner, create_client, stream_chat, to_anthropic_tools
+from micro_x_agent_loop.llm_client import Spinner
+from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.tool import Tool
 
 
 class Agent:
     def __init__(self, config: AgentConfig):
-        self._client = create_client(config.api_key)
+        self._provider = create_provider(config.provider, config.api_key)
         self._model = config.model
         self._max_tokens = config.max_tokens
         self._temperature = config.temperature
         self._system_prompt = config.system_prompt
         self._messages: list[dict] = []
         self._tool_map: dict[str, Tool] = {t.name: t for t in config.tools}
-        self._anthropic_tools = to_anthropic_tools(config.tools)
+        self._converted_tools = self._provider.convert_tools(config.tools)
         self._max_tool_result_chars = config.max_tool_result_chars
         self._max_conversation_messages = config.max_conversation_messages
         self._compaction_strategy = config.compaction_strategy
@@ -57,14 +58,13 @@ class Agent:
         max_tokens_attempts = 0
 
         while True:
-            message, tool_use_blocks, stop_reason = await stream_chat(
-                self._client,
+            message, tool_use_blocks, stop_reason = await self._provider.stream_chat(
                 self._model,
                 self._max_tokens,
                 self._temperature,
                 self._system_prompt,
                 self._messages,
-                self._anthropic_tools,
+                self._converted_tools,
                 line_prefix=self._LINE_PREFIX,
             )
 

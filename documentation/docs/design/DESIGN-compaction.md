@@ -120,7 +120,7 @@ while end > start + 1:
 
 2. **Cap** summarization input at 100,000 characters. If exceeded, truncate from the middle with a marker.
 
-3. **Call Claude** (non-streaming, temperature=0, max_tokens=4096) with a focused summarization prompt:
+3. **Call the configured LLM provider** (non-streaming via `provider.create_message()`, temperature=0, max_tokens=4096) with a focused summarization prompt:
 
 ```
 Summarize the following conversation history between a user and an AI assistant.
@@ -137,7 +137,7 @@ just note what was retrieved and key findings.
 Format as a concise narrative summary.
 ```
 
-The summarization call uses the same `model` as the main agent, wrapped in the existing tenacity retry decorator for rate limit resilience.
+The summarization call uses the same `model` and provider as the main agent. Retry logic is handled inside the provider's `create_message()` method.
 
 4. **Return** the summary text.
 

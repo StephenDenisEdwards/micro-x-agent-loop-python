@@ -25,19 +25,37 @@ The agent loop is the core runtime cycle of the application. It manages the conv
 `agent.py` orchestrates the loop. Key responsibilities:
 
 - Maintains the `_messages` list (conversation history)
-- Calls `stream_chat()` from `llm_client` for each turn
+- Calls `self._provider.stream_chat()` for each turn (provider-agnostic)
 - Dispatches tool calls in parallel via `_execute_tools()`
 - Enforces `MaxToolResultChars` truncation
 - Enforces `MaxConversationMessages` trimming
 - Delegates to the configured `CompactionStrategy` before trimming (see [Compaction Design](DESIGN-compaction.md))
 
+### Provider Layer
+
+The `LLMProvider` Protocol (`provider.py`) defines three methods:
+
+- `stream_chat()` — streams a response, printing text deltas in real time, returns `(message_dict, tool_use_blocks, stop_reason)` in internal format
+- `create_message()` — non-streaming message creation (used for compaction/summarization)
+- `convert_tools()` — converts `Tool` Protocol objects to provider-specific tool schema
+
+The `create_provider()` factory selects the implementation based on the configured `Provider` name.
+
+**Providers:**
+
+- `AnthropicProvider` (`providers/anthropic_provider.py`) — wraps the `anthropic` SDK, messages pass through as-is since internal format is Anthropic-native
+- `OpenAIProvider` (`providers/openai_provider.py`) — translates between internal Anthropic-format messages and OpenAI chat completion format in both directions
+
+Each provider includes its own tenacity retry targeting SDK-specific transient errors (rate limit, connection, timeout).
+
+See [ADR-010](../architecture/decisions/ADR-010-multi-provider-llm-support.md) for the architectural decision.
+
 ### llm_client
 
-`llm_client.py` handles the Anthropic API interaction:
+`llm_client.py` provides shared utilities used by both providers:
 
-- `stream_chat()` — streams the response, printing text deltas in real time
-- tenacity `@retry` decorator wraps the function for rate limit resilience
-- Returns a tuple of `(message_dict, list[tool_use_blocks])` for the agent to process
+- `Spinner` — thread-based spinner for real-time terminal feedback
+- `_on_retry` — tenacity callback for logging retry attempts
 
 ### Conversation History
 

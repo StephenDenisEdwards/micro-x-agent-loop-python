@@ -249,7 +249,7 @@ class AgentCommandTests(unittest.TestCase):
             [],
             "max_tokens",
         )
-        with patch("micro_x_agent_loop.agent.stream_chat", side_effect=[stream_result] * 3):
+        with patch.object(agent._provider, "stream_chat", side_effect=[stream_result] * 3):
             buf = io.StringIO()
             with redirect_stdout(buf):
                 asyncio.run(agent.run("hello"))

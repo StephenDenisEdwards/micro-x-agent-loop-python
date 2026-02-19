@@ -2,7 +2,7 @@ import asyncio
 import unittest
 from types import SimpleNamespace
 
-from micro_x_agent_loop.llm_client import stream_chat
+from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
 
 
 class _FakeStreamContext:
@@ -43,7 +43,12 @@ class _FakeClient:
         self.messages = _FakeMessages(stream_ctx)
 
 
-class StreamChatTests(unittest.TestCase):
+class AnthropicProviderStreamTests(unittest.TestCase):
+    def _make_provider(self, stream_ctx: _FakeStreamContext) -> AnthropicProvider:
+        provider = AnthropicProvider.__new__(AnthropicProvider)
+        provider._client = _FakeClient(stream_ctx)
+        return provider
+
     def test_stream_chat_returns_text_and_tool_use_blocks(self) -> None:
         events = [
             SimpleNamespace(
@@ -59,11 +64,10 @@ class StreamChatTests(unittest.TestCase):
                 SimpleNamespace(type="tool_use", id="t1", name="read_file", input={"path": "x"}),
             ],
         )
-        client = _FakeClient(_FakeStreamContext(events, final_message))
+        provider = self._make_provider(_FakeStreamContext(events, final_message))
 
         message, tool_use_blocks, stop_reason = asyncio.run(
-            stream_chat(
-                client,
+            provider.stream_chat(
                 model="m",
                 max_tokens=100,
                 temperature=0.5,
@@ -86,11 +90,10 @@ class StreamChatTests(unittest.TestCase):
             usage=SimpleNamespace(input_tokens=3, output_tokens=2),
             content=[SimpleNamespace(type="text", text="Done")],
         )
-        client = _FakeClient(_FakeStreamContext(events, final_message))
+        provider = self._make_provider(_FakeStreamContext(events, final_message))
 
         message, tool_use_blocks, stop_reason = asyncio.run(
-            stream_chat(
-                client,
+            provider.stream_chat(
                 model="m",
                 max_tokens=100,
                 temperature=0.1,
