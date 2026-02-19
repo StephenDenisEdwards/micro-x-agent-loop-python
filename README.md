@@ -559,6 +559,26 @@ Voice mode details:
 - Finalization timing is controlled by Deepgram settings passed through MCP (`endpointing_ms`, `utterance_end_ms`) and chunk cadence (`chunk_seconds`).
 - If microphone capture is wrong/empty, use `interview-assist__stt_list_devices` and pass `--mic-device-name` or `--mic-device-id` on `/voice start`.
 
+### Voice Tuning Quick Reference
+
+Balanced (recommended):
+
+```text
+/voice start microphone --mic-device-name "Headset (Jabra Evolve2 65)" --endpointing-ms 500 --utterance-end-ms 1500
+```
+
+Fast response (may split more):
+
+```text
+/voice start microphone --mic-device-name "Headset (Jabra Evolve2 65)" --endpointing-ms 300 --utterance-end-ms 1000
+```
+
+Conservative finalization (less cutoff):
+
+```text
+/voice start microphone --mic-device-name "Headset (Jabra Evolve2 65)" --endpointing-ms 700 --utterance-end-ms 2200
+```
+
 ## Dependencies
 
 | Package | Purpose | C# Equivalent |
