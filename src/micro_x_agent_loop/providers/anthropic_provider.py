@@ -1,13 +1,9 @@
 import anthropic
 from loguru import logger
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from tenacity import retry
 
-from micro_x_agent_loop.llm_client import Spinner, _on_retry
+from micro_x_agent_loop.llm_client import Spinner
+from micro_x_agent_loop.providers.common import default_retry_kwargs
 from micro_x_agent_loop.tool import Tool
 
 
@@ -25,17 +21,11 @@ class AnthropicProvider:
             for t in tools
         ]
 
-    @retry(
-        retry=retry_if_exception_type((
-            anthropic.RateLimitError,
-            anthropic.APIConnectionError,
-            anthropic.APITimeoutError,
-        )),
-        wait=wait_exponential(multiplier=10, min=10, max=320),
-        stop=stop_after_attempt(5),
-        before_sleep=_on_retry,
-        reraise=True,
-    )
+    @retry(**default_retry_kwargs((
+        anthropic.RateLimitError,
+        anthropic.APIConnectionError,
+        anthropic.APITimeoutError,
+    )))
     async def stream_chat(
         self,
         model: str,
@@ -109,17 +99,11 @@ class AnthropicProvider:
         message = {"role": "assistant", "content": assistant_content}
         return message, tool_use_blocks, response.stop_reason
 
-    @retry(
-        retry=retry_if_exception_type((
-            anthropic.RateLimitError,
-            anthropic.APIConnectionError,
-            anthropic.APITimeoutError,
-        )),
-        wait=wait_exponential(multiplier=10, min=10, max=320),
-        stop=stop_after_attempt(5),
-        before_sleep=_on_retry,
-        reraise=True,
-    )
+    @retry(**default_retry_kwargs((
+        anthropic.RateLimitError,
+        anthropic.APIConnectionError,
+        anthropic.APITimeoutError,
+    )))
     async def create_message(
         self,
         model: str,

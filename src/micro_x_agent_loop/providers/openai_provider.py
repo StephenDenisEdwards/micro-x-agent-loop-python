@@ -2,14 +2,10 @@ import json
 
 import openai
 from loguru import logger
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from tenacity import retry
 
-from micro_x_agent_loop.llm_client import Spinner, _on_retry
+from micro_x_agent_loop.llm_client import Spinner
+from micro_x_agent_loop.providers.common import default_retry_kwargs
 from micro_x_agent_loop.tool import Tool
 
 # Map OpenAI finish reasons to Anthropic-style stop reasons.
@@ -129,17 +125,11 @@ class OpenAIProvider:
             for t in tools
         ]
 
-    @retry(
-        retry=retry_if_exception_type((
-            openai.RateLimitError,
-            openai.APIConnectionError,
-            openai.APITimeoutError,
-        )),
-        wait=wait_exponential(multiplier=10, min=10, max=320),
-        stop=stop_after_attempt(5),
-        before_sleep=_on_retry,
-        reraise=True,
-    )
+    @retry(**default_retry_kwargs((
+        openai.RateLimitError,
+        openai.APIConnectionError,
+        openai.APITimeoutError,
+    )))
     async def stream_chat(
         self,
         model: str,
@@ -267,17 +257,11 @@ class OpenAIProvider:
         message = {"role": "assistant", "content": assistant_content}
         return message, tool_use_blocks, stop_reason
 
-    @retry(
-        retry=retry_if_exception_type((
-            openai.RateLimitError,
-            openai.APIConnectionError,
-            openai.APITimeoutError,
-        )),
-        wait=wait_exponential(multiplier=10, min=10, max=320),
-        stop=stop_after_attempt(5),
-        before_sleep=_on_retry,
-        reraise=True,
-    )
+    @retry(**default_retry_kwargs((
+        openai.RateLimitError,
+        openai.APIConnectionError,
+        openai.APITimeoutError,
+    )))
     async def create_message(
         self,
         model: str,
