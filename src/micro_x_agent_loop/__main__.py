@@ -136,5 +136,23 @@ async def main() -> None:
             await mcp_manager.close()
 
 
+def _install_transport_cleanup_hook() -> None:
+    """Suppress 'unclosed transport' noise from asyncio subprocess cleanup on Windows.
+
+    When MCP stdio servers shut down, asyncio's proactor transport __del__ methods
+    fire after pipes are already closed, producing ugly but harmless tracebacks.
+    """
+    _default_hook = sys.unraisablehook
+
+    def _hook(unraisable) -> None:
+        obj_str = str(unraisable.object) if unraisable.object is not None else ""
+        if "Transport" in obj_str and isinstance(unraisable.exc_value, (ResourceWarning, ValueError)):
+            return  # suppress
+        _default_hook(unraisable)
+
+    sys.unraisablehook = _hook
+
+
 if __name__ == "__main__":
+    _install_transport_cleanup_hook()
     asyncio.run(main())
