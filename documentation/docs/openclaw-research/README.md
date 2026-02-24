@@ -25,6 +25,11 @@ These documents cover the major subsystems of OpenClaw as reference material for
 | [15-streaming.md](15-streaming.md) | Block streaming, chunking algorithm, and Telegram preview streaming |
 | [16-gateway-protocol.md](16-gateway-protocol.md) | WebSocket protocol, roles, auth, device pairing, and network model |
 | [17-browser-tool.md](17-browser-tool.md) | Browser automation via CDP, snapshots, ref system, and profiles |
+| [18-claude-agent-sdk.md](18-claude-agent-sdk.md) | Claude Agent SDK: loop architecture, tools, subagents, sessions |
+| [19-langgraph.md](19-langgraph.md) | LangGraph: graph-based orchestration, Pregel execution, checkpointing |
+| [20-openai-agents-sdk.md](20-openai-agents-sdk.md) | OpenAI Agents SDK: lightweight loop, handoffs, guardrails, tracing |
+| [21-autogen.md](21-autogen.md) | AutoGen: conversation-based multi-agent, actor model, group chat |
+| [22-framework-comparison.md](22-framework-comparison.md) | Cross-cutting comparison of all five frameworks |
 
 ## Source Codebase
 
