@@ -16,6 +16,15 @@ These documents cover the major subsystems of OpenClaw as reference material for
 | [06-storage.md](06-storage.md) | File system layout, persistence, and state management |
 | [07-plugin-system.md](07-plugin-system.md) | Plugin architecture, registration API, slots, and distribution |
 | [08-channel-system.md](08-channel-system.md) | Messaging channel architecture, routing, queueing, and adapters |
+| [09-multi-agent.md](09-multi-agent.md) | Multi-agent routing, bindings, and per-agent configuration |
+| [10-model-failover.md](10-model-failover.md) | Auth profile rotation, cooldowns, and model fallback chains |
+| [11-system-prompt-and-context.md](11-system-prompt-and-context.md) | System prompt assembly, prompt modes, and context window |
+| [12-sandboxing.md](12-sandboxing.md) | Docker sandbox modes, scopes, and workspace access levels |
+| [13-sub-agents.md](13-sub-agents.md) | Sub-agent spawning, nesting, orchestrator pattern, and announce chain |
+| [14-exec-and-approvals.md](14-exec-and-approvals.md) | Exec tool, approval policies, allowlists, and safe bins |
+| [15-streaming.md](15-streaming.md) | Block streaming, chunking algorithm, and Telegram preview streaming |
+| [16-gateway-protocol.md](16-gateway-protocol.md) | WebSocket protocol, roles, auth, device pairing, and network model |
+| [17-browser-tool.md](17-browser-tool.md) | Browser automation via CDP, snapshots, ref system, and profiles |
 
 ## Source Codebase
 
