@@ -15,6 +15,9 @@ uv.lock
 .micro_x/
 store/
 
+# Logs
+*.log
+
 # .NET
 *.sln
 bin/
