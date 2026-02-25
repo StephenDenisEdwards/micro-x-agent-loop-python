@@ -19,6 +19,7 @@ Research notes exploring agent loop frameworks and patterns, gathered as referen
 | [swe-agent-architecture.md](swe-agent-architecture.md) | **SWE-agent** (Princeton) | Agent-Computer Interface (ACI), constrained command set, SWE-bench evaluation |
 | [haystack-architecture.md](haystack-architecture.md) | **Haystack 2.x** (deepset) | Pipeline-based DAG architecture, component system, agent-in-pipeline pattern |
 | [deep-research-compaction.md](deep-research-compaction.md) | *(cross-cutting)* | Token compaction strategies and context window management |
+| [key-insights-and-takeaways.md](key-insights-and-takeaways.md) | *(synthesis)* | Key insights, best-in-class references, and practical lessons across all research |
 
 ## Related
 
