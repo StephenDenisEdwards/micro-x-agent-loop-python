@@ -40,6 +40,23 @@ Remaining from plan:
 - MCP tool opt-in mutation tracking.
 - Additional stress/concurrency tests and deeper retention policy hardening.
 
+## Memory vs Context
+
+Memory and context are distinct concepts in this architecture:
+
+**Context** is the working set of conversation messages (`_messages`) held in process memory and sent to the LLM on each API call. It is ephemeral — bounded by the model's token limit, subject to compaction (summarisation to reclaim space), and lost when the process exits. Context is what the model can "see" right now.
+
+**Memory** is the persistent record stored in SQLite (`memory.db`). It includes the full session history (every message, tool call, checkpoint, and event) and survives process restarts, crashes, and resumption. Memory is what the system "remembers" across runs.
+
+How they relate:
+
+- On startup or session resume, memory is loaded into context — persisted messages are replayed into `_messages` so the model picks up where it left off.
+- During a conversation, each new message is written to both context (for the current turn) and memory (for durability).
+- When compaction runs, the summary replaces older messages in context to stay within token limits, but the original messages remain in memory for audit and replay.
+- Checkpoint and rewind operate on memory-tracked state (file snapshots), not on context.
+
+In short: context is the model's short-term working memory for the current API call; memory is the system's long-term persistent store for everything that happened.
+
 ## Source Inspiration and Scope
 
 Primary inspiration:
