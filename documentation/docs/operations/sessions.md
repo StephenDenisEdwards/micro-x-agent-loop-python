@@ -41,10 +41,18 @@ If multiple sessions share the same name, resume by name is rejected as ambiguou
 
 When `EnableFileCheckpointing=true`, the agent captures file snapshots before tracked mutating tools run.
 
-Current strict tracked tools:
+### Default mode (`CheckpointWriteToolsOnly=true`)
+
+Strict tracked tools:
 
 - `write_file`
 - `append_file`
+
+### Expanded mode (`CheckpointWriteToolsOnly=false`)
+
+Additionally tracks:
+
+- `bash` — best-effort heuristic parsing detects redirects (`>`/`>>`), `rm`, `mv`, `cp`, `touch`, `mkdir`, `tee`, `sed -i`, `chmod`/`chown`/`chgrp`, and chained commands. Read-only commands like `ls` or `git status` produce no snapshots. Paths outside the working directory are silently skipped.
 
 Rewind reports per-file status:
 

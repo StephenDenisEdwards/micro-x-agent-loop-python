@@ -3,6 +3,8 @@ import platform
 import subprocess
 from typing import Any
 
+from micro_x_agent_loop.tools.bash_command_parser import extract_mutated_paths
+
 _IS_WINDOWS = platform.system() == "Windows"
 
 
@@ -30,6 +32,16 @@ class BashTool:
             },
             "required": ["command"],
         }
+
+    @property
+    def is_mutating(self) -> bool:
+        return True
+
+    def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]:
+        command = tool_input.get("command", "")
+        if not isinstance(command, str):
+            return []
+        return extract_mutated_paths(command)
 
     async def execute(self, tool_input: dict[str, Any]) -> str:
         command = tool_input["command"]

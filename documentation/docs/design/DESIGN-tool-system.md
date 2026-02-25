@@ -43,9 +43,19 @@ Using `typing.Protocol` provides structural typing — any class with matching p
 
 Tools that modify files should declare `is_mutating = True` and implement `predict_touched_paths()` to return the list of file paths they will modify. When file checkpointing is enabled, the agent uses this metadata to snapshot files before mutation so they can be restored via `/rewind`.
 
-Currently `write_file` and `append_file` implement mutation metadata. Tools that don't modify files can return `False` and `[]` respectively, or omit these members entirely — the agent falls back to `getattr(tool, "is_mutating", False)` with a safe default.
+Currently three tools implement mutation metadata:
 
-See [Memory System Design](DESIGN-memory-system.md) for the full checkpoint lifecycle.
+| Tool | Strategy | Notes |
+|------|----------|-------|
+| `write_file` | Strict | Returns `[path]` from tool input |
+| `append_file` | Strict | Returns `[path]` from tool input |
+| `bash` | Best-effort | Parses the shell command to extract likely mutated paths via `bash_command_parser.extract_mutated_paths()` |
+
+Tools that don't modify files can return `False` and `[]` respectively, or omit these members entirely — the agent falls back to `getattr(tool, "is_mutating", False)` with a safe default.
+
+By default (`CheckpointWriteToolsOnly=true`), only `write_file` and `append_file` are tracked. Set `CheckpointWriteToolsOnly=false` to also track bash mutations.
+
+See [Memory System Design](DESIGN-memory-system.md) for the full checkpoint lifecycle and bash parser details.
 
 ## Tool Registry
 
@@ -80,7 +90,7 @@ Each tool has its own detailed documentation in the [tools/](tools/) directory.
 
 | Tool | Description | Mutating | Docs |
 |------|-------------|----------|------|
-| `bash` | Execute a shell command (cmd.exe on Windows, bash on Unix) | Not tracked | [bash](tools/bash/README.md) |
+| `bash` | Execute a shell command (cmd.exe on Windows, bash on Unix) | Best-effort (opt-in) | [bash](tools/bash/README.md) |
 
 ### Web
 

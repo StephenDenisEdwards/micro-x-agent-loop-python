@@ -12,13 +12,13 @@ Add memory capabilities inspired by OpenClaw memory/session workflows while pres
 
 This plan is incremental and intentionally starts with low-risk pieces.
 
-## Status (Updated February 19, 2026)
+## Status (Updated February 25, 2026)
 
 Current implementation status:
 
 - Phase 1 (Session persistence): Completed.
 - Phase 2 (Checkpoint/rewind for `write_file`/`append_file`): Completed.
-- Phase 3 (expanded mutation coverage + advanced events/callbacks): In progress.
+- Phase 3 (expanded mutation coverage + advanced events/callbacks): Partially completed.
 
 Delivered in code:
 
@@ -26,14 +26,18 @@ Delivered in code:
 - Session create/resume/fork and persisted message reload.
 - Persisted tool call records.
 - Checkpoint + rewind for `write_file` and `append_file`.
+- Best-effort `bash` mutation tracking via shell command parser (`bash_command_parser.py`).
+- `CheckpointManager.track_paths()` for multi-path best-effort snapshotting.
+- Agent refactored to use `tool.predict_touched_paths()` → `checkpoint_manager.track_paths()` pipeline.
+- Bash tracking is opt-in: only active when `CheckpointWriteToolsOnly=false`.
 - Local commands: `/help`, `/session`, `/session list [limit]`, `/session resume <id>`, `/session fork`, `/rewind <checkpoint_id>`.
 - Startup/session config wiring and startup pruning.
-- Initial automated tests for session, checkpoint, rewind, pruning, and non-blocking checkpoint tracking failures.
+- Automated tests for session, checkpoint, rewind, pruning, non-blocking checkpoint tracking failures, bash command parser (36 tests), bash tool mutation protocol (10 tests), and track_paths (6 tests).
 
 Remaining from plan:
 
-- Best-effort `bash` and broader mutation tracking.
 - Optional external event callback API.
+- MCP tool opt-in mutation tracking.
 - Additional stress/concurrency tests and deeper retention policy hardening.
 
 ## Source Inspiration and Scope
@@ -585,7 +589,10 @@ Start with logs + DB event rows. Later expose optional callback API.
 - Declare mutating metadata and touched path prediction
 
 7. `src/micro_x_agent_loop/tools/bash_tool.py`
-- Phase 3: optional parser for common file-write command patterns; default untracked warning
+- Phase 3: implements `is_mutating=True` and `predict_touched_paths()` via `bash_command_parser.py`
+
+8. `src/micro_x_agent_loop/tools/bash_command_parser.py` (new)
+- Best-effort shell command parser: `extract_mutated_paths(command)` detects redirects, rm, mv, cp, touch, mkdir, tee, sed -i, chmod/chown/chgrp, and chained commands
 
 8. `documentation/docs/operations/config.md`
 - Document new memory/session/checkpoint settings

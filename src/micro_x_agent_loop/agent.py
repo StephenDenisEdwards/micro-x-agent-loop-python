@@ -173,7 +173,13 @@ class Agent:
         if not is_mutating and tool_name not in self._MUTATING_TOOL_NAMES:
             return
         try:
-            self._checkpoint_manager.maybe_track_tool_input(self._current_checkpoint_id, tool_input)
+            predict = getattr(tool, "predict_touched_paths", None)
+            if callable(predict):
+                paths = predict(tool_input)
+                if paths:
+                    self._checkpoint_manager.track_paths(self._current_checkpoint_id, paths)
+            else:
+                self._checkpoint_manager.maybe_track_tool_input(self._current_checkpoint_id, tool_input)
         except Exception as ex:
             logger.warning(
                 f"Checkpoint tracking failed for tool '{tool_name}' "

@@ -50,6 +50,27 @@ class CheckpointManager:
         )
         return checkpoint_id
 
+    def track_paths(self, checkpoint_id: str, paths: list[str]) -> list[str]:
+        """Snapshot multiple paths (best-effort).
+
+        Resolves each path against the working directory.  Paths that are
+        outside the working directory or blank are silently skipped.
+
+        Returns the list of resolved path strings that were actually tracked.
+        """
+        tracked: list[str] = []
+        for raw in paths:
+            if not isinstance(raw, str) or not raw.strip():
+                continue
+            try:
+                resolved = self._resolve_path(raw)
+            except ValueError:
+                # Outside working directory — skip silently (best-effort).
+                continue
+            self._snapshot_file(checkpoint_id, resolved)
+            tracked.append(str(resolved))
+        return tracked
+
     def maybe_track_tool_input(self, checkpoint_id: str, tool_input: dict) -> list[str]:
         path_val = tool_input.get("path")
         if not isinstance(path_val, str) or not path_val.strip():

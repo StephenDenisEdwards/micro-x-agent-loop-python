@@ -159,8 +159,9 @@ Before each mutating tool executes:
 
 1. `_maybe_track_mutation()` checks: is the tool in `_MUTATING_TOOL_NAMES` or does it have `is_mutating=True`?
 2. If `write_tools_only=True` (default), only `write_file` and `append_file` are tracked
-3. `checkpoint_manager.maybe_track_tool_input()` resolves the path, enforces working directory boundaries, reads current bytes, and stores as `backup_blob`
-4. If tracking fails (e.g., path outside working directory), a warning is logged and a `checkpoint.file_untracked` event is emitted — the tool still executes normally
+3. If the tool implements `predict_touched_paths()`, the predicted paths are passed to `checkpoint_manager.track_paths()` which resolves each path, silently skips paths outside the working directory, and snapshots valid paths
+4. Otherwise, `checkpoint_manager.maybe_track_tool_input()` extracts `tool_input["path"]`, resolves it, enforces working directory boundaries, and stores backup bytes
+5. If tracking fails, a warning is logged and a `checkpoint.file_untracked` event is emitted — the tool still executes normally
 
 ### Rewind
 
@@ -218,10 +219,35 @@ Currently tracked mutating tools:
 |------|----------|-----|
 | `write_file` | Strict | `is_mutating=True`, `predict_touched_paths()` returns `[path]` |
 | `append_file` | Strict | `is_mutating=True`, `predict_touched_paths()` returns `[path]` |
-| `bash` | Not tracked | No mutation metadata (Phase 3 planned) |
+| `bash` | Best-effort | `is_mutating=True`, `predict_touched_paths()` delegates to `bash_command_parser.extract_mutated_paths()` |
 | MCP tools | Not tracked | No mutation protocol support (future) |
 
-The `_MUTATING_TOOL_NAMES` set in `Agent` provides a hardcoded fallback. Tools can also declare `is_mutating=True` via the `Tool` Protocol for dynamic detection.
+The `_MUTATING_TOOL_NAMES` set in `Agent` (`{"write_file", "append_file"}`) provides a hardcoded fallback for strict tools. When `CheckpointWriteToolsOnly=true` (default), only tools in this set are tracked. When `CheckpointWriteToolsOnly=false`, any tool with `is_mutating=True` is tracked — this is how bash mutation tracking is enabled.
+
+### Bash Mutation Tracking
+
+The `bash` tool uses best-effort heuristic parsing to predict which files a shell command will mutate. The parser (`bash_command_parser.py`) detects:
+
+- Output redirects (`>`, `>>`, `2>`, `&>`)
+- File removal (`rm`, `del`, `rmdir`)
+- Move/rename (`mv`, `move` — tracks source and destination)
+- Copy (`cp`, `copy` — tracks destination only)
+- Creation (`touch`, `mkdir`)
+- Pipe to file (`tee`, `tee -a`)
+- In-place edits (`sed -i`)
+- Permission changes (`chmod`, `chown`, `chgrp`)
+- Chained commands (splits on `|`, `&&`, `;` and processes each segment)
+
+The parser returns `[]` for read-only commands (`ls`, `git status`, `cat`, etc.) and never raises on malformed input.
+
+### Agent Tracking Pipeline
+
+When a tool call is about to execute, `Agent._maybe_track_mutation()` follows this pipeline:
+
+1. If `tool.predict_touched_paths(tool_input)` is callable and returns paths, pass them to `checkpoint_manager.track_paths()` (best-effort, silently skips outside-workdir paths).
+2. Otherwise, fall back to `checkpoint_manager.maybe_track_tool_input()` which extracts `tool_input["path"]` (strict, raises on outside-workdir paths).
+
+This means tools that implement `predict_touched_paths()` (like `bash`, `write_file`, `append_file`) use the new pipeline, while legacy or third-party tools that only have a `path` key in their input still work via the fallback.
 
 ## Related Documentation
 
