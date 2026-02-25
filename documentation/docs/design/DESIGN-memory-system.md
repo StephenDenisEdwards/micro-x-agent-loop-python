@@ -211,7 +211,15 @@ Three pruning dimensions:
 
 Cascade deletes handle child rows (messages, tool_calls, checkpoints, checkpoint_files, events) automatically.
 
-## Mutation Tracking Scope
+## Mutation Tracking
+
+Mutation tracking is the checkpoint system's mechanism for making tool-driven file changes reversible. Before a tool modifies a file, the system snapshots the file's current contents (or records that the file didn't exist yet) into the database. If the user later runs `/rewind`, those snapshots are used to restore every tracked file to its exact pre-mutation state — existing files get their old bytes back, and files that were newly created are deleted.
+
+Mutation tracking does **not** prevent mutations, block tool execution, or sandbox anything. It is purely a "save before, restore after" mechanism. Tools always run normally regardless of whether tracking succeeds or fails. If tracking fails for any reason (e.g. a path outside the working directory), a warning is logged and the tool still executes — the only consequence is that the file won't be restorable via rewind.
+
+For `write_file` and `append_file`, tracking is deterministic — the tool declares exactly which file path it will modify. For `bash`, tracking is best-effort heuristic parsing — the parser extracts likely mutated paths from the shell command, but cannot detect mutations from arbitrary programs, variable expansions, or complex shell constructs.
+
+### Tracked Tools
 
 Currently tracked mutating tools:
 

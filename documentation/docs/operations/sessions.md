@@ -39,7 +39,9 @@ If multiple sessions share the same name, resume by name is rejected as ambiguou
 
 ## Checkpoint Scope
 
-When `EnableFileCheckpointing=true`, the agent captures file snapshots before tracked mutating tools run.
+When `EnableFileCheckpointing=true`, the agent snapshots files before tools modify them, so changes can be undone later with `/rewind`. This is purely a "save before, restore after" mechanism — it does not prevent mutations, block tool execution, or sandbox anything. Tools always run normally. If you later decide a tool's changes were unwanted, `/rewind` restores every tracked file to its exact pre-mutation state.
+
+Tracked mutating tools:
 
 ### Default mode (`CheckpointWriteToolsOnly=true`)
 
