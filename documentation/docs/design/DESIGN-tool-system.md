@@ -20,6 +20,11 @@ class Tool(Protocol):
     @property
     def input_schema(self) -> dict[str, Any]: ...
 
+    @property
+    def is_mutating(self) -> bool: ...
+
+    def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]: ...
+
     async def execute(self, tool_input: dict[str, Any]) -> str: ...
 ```
 
@@ -28,9 +33,19 @@ class Tool(Protocol):
 | `name` | Unique identifier sent to Claude (e.g., `"read_file"`) |
 | `description` | Natural-language description Claude uses to decide when to call the tool |
 | `input_schema` | JSON Schema dict defining the expected input parameters |
+| `is_mutating` | Whether the tool modifies files (used by checkpoint tracking) |
+| `predict_touched_paths` | Returns predicted file paths the tool will modify (used for pre-mutation snapshots) |
 | `execute` | Executes the tool and returns a string result |
 
 Using `typing.Protocol` provides structural typing — any class with matching properties and methods satisfies the interface without explicit inheritance.
+
+### Mutation Metadata
+
+Tools that modify files should declare `is_mutating = True` and implement `predict_touched_paths()` to return the list of file paths they will modify. When file checkpointing is enabled, the agent uses this metadata to snapshot files before mutation so they can be restored via `/rewind`.
+
+Currently `write_file` and `append_file` implement mutation metadata. Tools that don't modify files can return `False` and `[]` respectively, or omit these members entirely — the agent falls back to `getattr(tool, "is_mutating", False)` with a safe default.
+
+See [Memory System Design](DESIGN-memory-system.md) for the full checkpoint lifecycle.
 
 ## Tool Registry
 
@@ -42,10 +57,12 @@ def get_all(
     google_client_id: str | None = None,
     google_client_secret: str | None = None,
     anthropic_admin_api_key: str | None = None,
+    brave_api_key: str | None = None,
+    github_token: str | None = None,
 ) -> list[Tool]:
 ```
 
-Gmail/Calendar tools are **conditionally registered** when both Google credentials are present. The Anthropic usage tool is conditionally registered when the admin API key is present. This prevents runtime errors when optional credentials are not configured.
+Tool groups are conditionally registered based on available credentials. Gmail/Calendar and Contacts tools require both Google credentials. The Anthropic usage tool requires the admin API key. Web search requires the Brave API key. GitHub tools require a GitHub token. This prevents runtime errors when optional credentials are not configured.
 
 ## Built-in Tools
 
@@ -53,16 +70,24 @@ Each tool has its own detailed documentation in the [tools/](tools/) directory.
 
 ### File System
 
-| Tool | Description | Docs |
-|------|-------------|------|
-| `read_file` | Read text files and `.docx` documents | [read-file](tools/read-file/README.md) |
-| `write_file` | Write content to a file, creating directories as needed | [write-file](tools/write-file/README.md) |
+| Tool | Description | Mutating | Docs |
+|------|-------------|----------|------|
+| `read_file` | Read text files and `.docx` documents | No | [read-file](tools/read-file/README.md) |
+| `write_file` | Write content to a file, creating directories as needed | Yes | [write-file](tools/write-file/README.md) |
+| `append_file` | Append content to an existing file | Yes | — |
 
 ### Shell
 
+| Tool | Description | Mutating | Docs |
+|------|-------------|----------|------|
+| `bash` | Execute a shell command (cmd.exe on Windows, bash on Unix) | Not tracked | [bash](tools/bash/README.md) |
+
+### Web
+
 | Tool | Description | Docs |
 |------|-------------|------|
-| `bash` | Execute a shell command (cmd.exe on Windows, bash on Unix) | [bash](tools/bash/README.md) |
+| `web_fetch` | Fetch and parse web content from a URL | — |
+| `web_search` | Search the web via Brave Search API (conditional on `BRAVE_API_KEY`) | — |
 
 ### LinkedIn
 
@@ -90,6 +115,34 @@ Gmail tools require OAuth2 authentication. On first use, a browser window opens 
 | `calendar_get_event` | Get full event details by ID | [calendar-get-event](tools/calendar-get-event/README.md) |
 
 Calendar tools use the same Google OAuth2 credentials as Gmail but with a separate token cache (`.calendar-tokens/`) and the `https://www.googleapis.com/auth/calendar` scope.
+
+### Google Contacts (conditional)
+
+| Tool | Description | Docs |
+|------|-------------|------|
+| `contacts_search` | Search contacts by name, email, or phone | — |
+| `contacts_list` | List contacts with pagination | — |
+| `contacts_get` | Get full contact details by resource name | — |
+| `contacts_create` | Create a new contact | — |
+| `contacts_update` | Update an existing contact | — |
+| `contacts_delete` | Delete a contact | — |
+
+Contacts tools share the same Google OAuth2 credentials as Gmail/Calendar with a separate token cache and the `https://www.googleapis.com/auth/contacts` scope. See [ADR-007](../architecture/decisions/ADR-007-google-contacts-built-in-tools.md).
+
+### GitHub (conditional)
+
+| Tool | Description | Docs |
+|------|-------------|------|
+| `github_list_repos` | List repositories for the authenticated user | — |
+| `github_list_prs` | List pull requests for a repository | — |
+| `github_get_pr` | Get full PR details | — |
+| `github_create_pr` | Create a pull request | — |
+| `github_list_issues` | List issues for a repository | — |
+| `github_create_issue` | Create an issue | — |
+| `github_get_file` | Get file contents from a repository | — |
+| `github_search_code` | Search code across repositories | — |
+
+Requires a GitHub personal access token (`GITHUB_TOKEN`). See [ADR-008](../architecture/decisions/ADR-008-github-built-in-tools-with-raw-httpx.md).
 
 ### Anthropic Admin (conditional)
 
@@ -232,9 +285,10 @@ Handles:
 1. Create a class in the `tools/` directory with matching `Tool` Protocol members
 2. Define `name`, `description`, and `input_schema` properties
 3. Implement `async execute()` with error handling (return error strings, don't raise)
-4. Register it in `tool_registry.get_all()`
+4. If the tool modifies files, set `is_mutating = True` and implement `predict_touched_paths()` to return affected paths (enables checkpoint/rewind support)
+5. Register it in `tool_registry.get_all()`
 
-Example skeleton:
+Example skeleton (read-only tool):
 
 ```python
 from typing import Any
@@ -262,11 +316,60 @@ class MyTool:
             "required": ["param"],
         }
 
+    @property
+    def is_mutating(self) -> bool:
+        return False
+
+    def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]:
+        return []
+
     async def execute(self, tool_input: dict[str, Any]) -> str:
         param = tool_input["param"]
         try:
             # Do work
             return "Result"
+        except Exception as ex:
+            return f"Error: {ex}"
+```
+
+Example skeleton (file-mutating tool):
+
+```python
+from typing import Any
+
+
+class MyWriteTool:
+    @property
+    def name(self) -> str:
+        return "my_write_tool"
+
+    @property
+    def description(self) -> str:
+        return "Writes content to a file."
+
+    @property
+    def input_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Target file path"},
+                "content": {"type": "string", "description": "Content to write"},
+            },
+            "required": ["path", "content"],
+        }
+
+    @property
+    def is_mutating(self) -> bool:
+        return True
+
+    def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]:
+        path = tool_input.get("path", "")
+        return [path] if path else []
+
+    async def execute(self, tool_input: dict[str, Any]) -> str:
+        try:
+            # Write file
+            return "Done"
         except Exception as ex:
             return f"Error: {ex}"
 ```
