@@ -1,13 +1,15 @@
 # Plan: Continuous Voice Agent via STT MCP Sessions
 
-**Status: In progress** (Updated 2026-02-19)
+**Status: Completed** (Updated 2026-02-25)
 
 Implementation snapshot:
 
 - Phase 1: Completed
 - Phase 2: Completed
-- Phase 3: Completed (baseline)
-- Phase 4: In progress
+- Phase 3: Completed
+- Phase 4: Completed (core functionality)
+
+Optional future hardening: debounce/merge short utterances, noise suppression thresholds, MCP session crash auto-recovery, confidence gating, latency/queue-depth metrics, MCP push/subscription path.
 
 Latest implementation note:
 
