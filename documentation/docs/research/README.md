@@ -11,6 +11,8 @@ Research notes exploring agent loop frameworks and patterns, gathered as referen
 | [deep-research-autogen-0.4.md](deep-research-autogen-0.4.md) | **AutoGen 0.4** (Microsoft) | Actor-model runtime, AgentChat API, group chat patterns, distributed agents, termination conditions |
 | [pydantic-ai-agent-loop-architecture.md](pydantic-ai-agent-loop-architecture.md) | **Pydantic AI** | Type-safe agents, FSM-based loop, dependency injection, structured output, model abstraction |
 | [claude-agent-sdk-architecture.md](claude-agent-sdk-architecture.md) | **Claude Agent SDK** (Anthropic) | CLI-backed agent loop, built-in tools, hooks/guardrails, subagents, MCP integration |
+| [claude-code-subagent-architecture.md](claude-code-subagent-architecture.md) | **Claude Code** (Anthropic) | Sub-agent architecture: model selection, tool isolation, context boundaries, specialization |
+| [comparison-subagents-claude-code-vs-openclaw.md](comparison-subagents-claude-code-vs-openclaw.md) | **Claude Code vs. OpenClaw** | Deep comparison of sub-agent spawn, nesting, isolation, concurrency, security, and result delivery |
 | [openai-agents-sdk-architecture.md](openai-agents-sdk-architecture.md) | **OpenAI Agents SDK** | Runner loop, handoffs, guardrails/tripwires, tracing, MCP, sessions |
 | [smolagents-architecture.md](smolagents-architecture.md) | **smolagents** (Hugging Face) | Code agents vs tool-calling agents, AST-sandboxed execution, multi-agent, MCP |
 | [dspy-architecture.md](dspy-architecture.md) | **DSPy** (Stanford) | Prompt-as-program paradigm, signatures, optimizers/compilers, ReAct module |
