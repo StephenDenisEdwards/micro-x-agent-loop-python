@@ -1,7 +1,10 @@
 import json
+from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
 
 from loguru import logger
+
+from micro_x_agent_loop.usage import UsageResult
 
 
 @runtime_checkable
@@ -21,11 +24,13 @@ class SummarizeCompactionStrategy:
         model: str,
         threshold_tokens: int = 80_000,
         protected_tail_messages: int = 6,
+        on_compaction_completed: Callable[[UsageResult, int, int, int], None] | None = None,
     ):
         self._provider = provider
         self._model = model
         self._threshold_tokens = threshold_tokens
         self._protected_tail_messages = protected_tail_messages
+        self._on_compaction_completed = on_compaction_completed
 
     async def maybe_compact(self, messages: list[dict]) -> list[dict]:
         estimated = estimate_tokens(messages)
@@ -54,19 +59,23 @@ class SummarizeCompactionStrategy:
         )
 
         try:
-            summary = await _summarize(self._provider, self._model, compactable)
+            summary, usage = await _summarize(self._provider, self._model, compactable)
         except Exception as ex:
             logger.warning(f"Compaction failed: {ex}. Falling back to history trimming.")
             return messages
 
         result = _rebuild_messages(messages, compact_end, summary)
 
+        tokens_after = estimate_tokens(result)
         summary_tokens = len(summary) // 4
-        freed = estimated - estimate_tokens(result)
+        freed = estimated - tokens_after
         logger.info(
             f"Compaction: summarized {len(compactable)} messages into ~{summary_tokens:,} tokens,"
             f" freed ~{freed:,} estimated tokens"
         )
+
+        if self._on_compaction_completed is not None:
+            self._on_compaction_completed(usage, estimated, tokens_after, len(compactable))
 
         return result
 
@@ -170,7 +179,7 @@ async def _summarize(
     provider: Any,
     model: str,
     messages: list[dict],
-) -> str:
+) -> tuple[str, UsageResult]:
     formatted = _format_for_summarization(messages)
 
     # Cap summarization input
@@ -183,12 +192,13 @@ async def _summarize(
         )
 
     logger.debug(f"Compaction API request: model={model}, input_chars={len(formatted):,}")
-    return await provider.create_message(
+    text, usage = await provider.create_message(
         model,
         4096,
         0,
         [{"role": "user", "content": _SUMMARIZE_PROMPT + formatted}],
     )
+    return text, usage
 
 
 def _adjust_boundary(messages: list[dict], start: int, end: int) -> int:

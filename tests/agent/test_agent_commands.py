@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_config import AgentConfig
+from micro_x_agent_loop.usage import UsageResult
 
 
 class _NoopTool:
@@ -177,6 +178,7 @@ class AgentCommandTests(unittest.TestCase):
         out = buf.getvalue()
         self.assertIn("/session new [title]", out)
         self.assertIn("/checkpoint list [limit]", out)
+        self.assertIn("/cost", out)
 
     def test_unknown_local_command_message(self) -> None:
         agent = self._make_agent()
@@ -248,6 +250,7 @@ class AgentCommandTests(unittest.TestCase):
             {"role": "assistant", "content": [{"type": "text", "text": "cut"}]},
             [],
             "max_tokens",
+            UsageResult(),
         )
         with patch.object(agent._provider, "stream_chat", side_effect=[stream_result] * 3):
             buf = io.StringIO()
@@ -255,6 +258,16 @@ class AgentCommandTests(unittest.TestCase):
                 asyncio.run(agent.run("hello"))
             out = buf.getvalue()
             self.assertIn("Stopped: response exceeded max_tokens", out)
+
+    def test_cost_command_prints_summary(self) -> None:
+        agent = self._make_agent()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            asyncio.run(agent._handle_cost_command("/cost"))
+        out = buf.getvalue()
+        self.assertIn("Session Cost Summary", out)
+        self.assertIn("Total API calls:", out)
+        self.assertIn("Total cost:", out)
 
 
 if __name__ == "__main__":

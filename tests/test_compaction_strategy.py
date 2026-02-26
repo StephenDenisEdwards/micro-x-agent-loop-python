@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from micro_x_agent_loop.compaction import SummarizeCompactionStrategy, _format_for_summarization
+from micro_x_agent_loop.usage import UsageResult
 
 
 class _FakeProvider:
@@ -16,7 +17,7 @@ class _FakeProvider:
             "temperature": temperature,
             "messages": messages,
         })
-        return "summary text"
+        return "summary text", UsageResult(input_tokens=100, output_tokens=50, model=model)
 
 
 class CompactionStrategyTests(unittest.TestCase):
@@ -75,6 +76,29 @@ class CompactionStrategyTests(unittest.TestCase):
         ]
         asyncio.run(strategy.maybe_compact(messages))
         self.assertGreaterEqual(len(provider.calls), 1)
+
+    def test_compaction_callback_invoked(self) -> None:
+        callback_calls: list[tuple] = []
+
+        def on_compaction(usage, tokens_before, tokens_after, messages_compacted):
+            callback_calls.append((usage, tokens_before, tokens_after, messages_compacted))
+
+        provider = _FakeProvider()
+        strategy = SummarizeCompactionStrategy(
+            provider, "m", threshold_tokens=1, protected_tail_messages=1,
+            on_compaction_completed=on_compaction,
+        )
+        messages = [
+            {"role": "user", "content": "seed"},
+            {"role": "assistant", "content": [{"type": "text", "text": "long text " * 200}]},
+            {"role": "user", "content": "tail"},
+        ]
+        asyncio.run(strategy.maybe_compact(messages))
+        self.assertEqual(1, len(callback_calls))
+        usage, tokens_before, tokens_after, messages_compacted = callback_calls[0]
+        self.assertIsInstance(usage, UsageResult)
+        self.assertGreater(tokens_before, 0)
+        self.assertEqual(1, messages_compacted)
 
 
 if __name__ == "__main__":

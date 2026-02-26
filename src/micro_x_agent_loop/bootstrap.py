@@ -117,6 +117,7 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
             session_manager=session_manager,
             checkpoint_manager=checkpoint_manager,
             event_emitter=event_emitter,
+            metrics_enabled=app.metrics_enabled,
         )
     )
 

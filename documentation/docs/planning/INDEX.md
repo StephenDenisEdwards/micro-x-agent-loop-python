@@ -8,7 +8,7 @@ What to work on next, in order. Rationale: cost reduction is the top priority �
 
 | Priority | Plan | Status | Why this order |
 |----------|------|--------|----------------|
-| **1** | [Cost Metrics Logging](PLAN-cost-metrics-logging.md) | Planning | Prerequisite for all cost work — need baseline measurements first |
+| **1** | [Cost Metrics Logging](PLAN-cost-metrics-logging.md) | **Completed** | Prerequisite for all cost work — need baseline measurements first |
 | **2** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 1 (Prompt caching, cheap compaction model) | Planning | Highest ROI cost levers, low effort, measurable with metrics from P1 |
 | **3** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 2 (Tool result reduction, smarter compaction, output reduction) | Planning | Next-highest ROI, requires per-tool data from metrics |
 | **4** | [Memory System](PLAN-claude-style-memory.md) — Phase 3 remainder | In Progress | Already partially done; event callback API, MCP mutation tracking, stress tests |
@@ -23,9 +23,9 @@ What to work on next, in order. Rationale: cost reduction is the top priority �
 
 | Status | Count |
 |--------|-------|
-| Completed | 6 |
+| Completed | 7 |
 | In Progress | 1 |
-| Planning | 2 |
+| Planning | 1 |
 | Planned | 3 |
 
 ## All Plans
@@ -40,7 +40,7 @@ What to work on next, in order. Rationale: cost reduction is the top priority �
 | [Memory System](PLAN-claude-style-memory.md) | In Progress | Phase 1+2 complete, Phase 3 partial. Remaining: event callback API, MCP mutation tracking, stress tests |
 | [Continuous Voice Agent](PLAN-continuous-voice-agent.md) | Completed | Phases 1-4 done. Optional future hardening: debounce, noise filters, crash recovery, confidence gating |
 | [Cost Reduction](PLAN-cost-reduction.md) | Planning | 12 prioritised cost levers with ROI analysis |
-| [Cost Metrics Logging](PLAN-cost-metrics-logging.md) | Planning | Structured metrics for cost analysis — prerequisite for cost reduction |
+| [Cost Metrics Logging](PLAN-cost-metrics-logging.md) | Completed | Structured metrics for cost analysis — prerequisite for cost reduction. See [DESIGN-cost-metrics.md](../design/DESIGN-cost-metrics.md) |
 | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
 | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | |
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Server/gateway architecture migration |

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
+from micro_x_agent_loop.usage import UsageResult
 
 
 class _FakeStreamContext:
@@ -111,7 +112,7 @@ class AnthropicProviderTests(unittest.TestCase):
         )
         provider = self._make_provider(stream_ctx=_FakeStreamContext(events, final_message))
 
-        message, tool_use_blocks, stop_reason = asyncio.run(
+        message, tool_use_blocks, stop_reason, usage = asyncio.run(
             provider.stream_chat("m", 100, 0.5, "sys", [{"role": "user", "content": "hi"}], [])
         )
 
@@ -120,6 +121,10 @@ class AnthropicProviderTests(unittest.TestCase):
         self.assertEqual(1, len(tool_use_blocks))
         self.assertEqual("read_file", tool_use_blocks[0]["name"])
         self.assertEqual({"path": "x"}, tool_use_blocks[0]["input"])
+        self.assertIsInstance(usage, UsageResult)
+        self.assertEqual(10, usage.input_tokens)
+        self.assertEqual(5, usage.output_tokens)
+        self.assertEqual("anthropic", usage.provider)
 
     def test_stream_chat_text_only(self) -> None:
         events: list[object] = []
@@ -130,13 +135,17 @@ class AnthropicProviderTests(unittest.TestCase):
         )
         provider = self._make_provider(stream_ctx=_FakeStreamContext(events, final_message))
 
-        message, tool_use_blocks, stop_reason = asyncio.run(
+        message, tool_use_blocks, stop_reason, usage = asyncio.run(
             provider.stream_chat("m", 100, 0.1, "sys", [{"role": "user", "content": "hi"}], [])
         )
 
         self.assertEqual("end_turn", stop_reason)
         self.assertEqual([], tool_use_blocks)
         self.assertEqual("Done", message["content"][0]["text"])
+        self.assertIsInstance(usage, UsageResult)
+        self.assertEqual(3, usage.input_tokens)
+        self.assertEqual(2, usage.output_tokens)
+        self.assertEqual("anthropic", usage.provider)
 
     def test_create_message(self) -> None:
         create_response = SimpleNamespace(
@@ -145,10 +154,14 @@ class AnthropicProviderTests(unittest.TestCase):
         )
         provider = self._make_provider(create_response=create_response)
 
-        result = asyncio.run(
+        text, usage = asyncio.run(
             provider.create_message("m", 4096, 0, [{"role": "user", "content": "summarize"}])
         )
-        self.assertEqual("summary result", result)
+        self.assertEqual("summary result", text)
+        self.assertIsInstance(usage, UsageResult)
+        self.assertEqual(5, usage.input_tokens)
+        self.assertEqual(3, usage.output_tokens)
+        self.assertEqual("anthropic", usage.provider)
 
 
 if __name__ == "__main__":

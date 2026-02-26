@@ -2,7 +2,7 @@
 
 ## Status
 
-**Planning** — Analysis of current logging gaps and design for structured cost metrics.
+**Completed** — Implemented 2026-02-26. See [DESIGN-cost-metrics.md](../design/DESIGN-cost-metrics.md) for the implementation design.
 
 ## Problem
 

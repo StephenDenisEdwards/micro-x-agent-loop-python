@@ -10,6 +10,7 @@ from micro_x_agent_loop.providers.openai_provider import (
     _to_openai_tools,
     _STOP_REASON_MAP,
 )
+from micro_x_agent_loop.usage import UsageResult
 
 
 class _FakeTool:
@@ -238,6 +239,17 @@ class OpenAIProviderStreamTests(unittest.TestCase):
         provider._client = _FakeClient(chunks)
         return provider
 
+    def _usage_chunk(self, prompt_tokens=10, completion_tokens=5):
+        """Create a usage-only chunk (final chunk with stream_options)."""
+        return SimpleNamespace(
+            choices=[],
+            usage=SimpleNamespace(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                prompt_tokens_details=None,
+            ),
+        )
+
     def test_stream_chat_text_response(self) -> None:
         chunks = [
             SimpleNamespace(choices=[
@@ -245,23 +257,24 @@ class OpenAIProviderStreamTests(unittest.TestCase):
                     finish_reason=None,
                     delta=SimpleNamespace(content="Hello", tool_calls=None),
                 )
-            ]),
+            ], usage=None),
             SimpleNamespace(choices=[
                 SimpleNamespace(
                     finish_reason=None,
                     delta=SimpleNamespace(content=" world", tool_calls=None),
                 )
-            ]),
+            ], usage=None),
             SimpleNamespace(choices=[
                 SimpleNamespace(
                     finish_reason="stop",
                     delta=SimpleNamespace(content=None, tool_calls=None),
                 )
-            ]),
+            ], usage=None),
+            self._usage_chunk(prompt_tokens=15, completion_tokens=3),
         ]
         provider = self._make_provider(chunks)
 
-        message, tool_use_blocks, stop_reason = asyncio.run(
+        message, tool_use_blocks, stop_reason, usage = asyncio.run(
             provider.stream_chat("gpt-4o", 100, 0.5, "sys", [{"role": "user", "content": "hi"}], [])
         )
 
@@ -269,6 +282,10 @@ class OpenAIProviderStreamTests(unittest.TestCase):
         self.assertEqual("end_turn", stop_reason)
         self.assertEqual([], tool_use_blocks)
         self.assertEqual("Hello world", message["content"][0]["text"])
+        self.assertIsInstance(usage, UsageResult)
+        self.assertEqual(15, usage.input_tokens)
+        self.assertEqual(3, usage.output_tokens)
+        self.assertEqual("openai", usage.provider)
 
     def test_stream_chat_tool_call_response(self) -> None:
         chunks = [
@@ -286,7 +303,7 @@ class OpenAIProviderStreamTests(unittest.TestCase):
                         ],
                     ),
                 )
-            ]),
+            ], usage=None),
             SimpleNamespace(choices=[
                 SimpleNamespace(
                     finish_reason=None,
@@ -301,17 +318,18 @@ class OpenAIProviderStreamTests(unittest.TestCase):
                         ],
                     ),
                 )
-            ]),
+            ], usage=None),
             SimpleNamespace(choices=[
                 SimpleNamespace(
                     finish_reason="tool_calls",
                     delta=SimpleNamespace(content=None, tool_calls=None),
                 )
-            ]),
+            ], usage=None),
+            self._usage_chunk(),
         ]
         provider = self._make_provider(chunks)
 
-        message, tool_use_blocks, stop_reason = asyncio.run(
+        message, tool_use_blocks, stop_reason, usage = asyncio.run(
             provider.stream_chat("gpt-4o", 100, 0.5, "sys", [{"role": "user", "content": "hi"}], [])
         )
 
@@ -320,6 +338,7 @@ class OpenAIProviderStreamTests(unittest.TestCase):
         self.assertEqual("read_file", tool_use_blocks[0]["name"])
         self.assertEqual({"path": "x"}, tool_use_blocks[0]["input"])
         self.assertEqual("call_123", tool_use_blocks[0]["id"])
+        self.assertIsInstance(usage, UsageResult)
 
     def test_stream_chat_text_and_tool_calls(self) -> None:
         chunks = [
@@ -328,7 +347,7 @@ class OpenAIProviderStreamTests(unittest.TestCase):
                     finish_reason=None,
                     delta=SimpleNamespace(content="Let me read that.", tool_calls=None),
                 )
-            ]),
+            ], usage=None),
             SimpleNamespace(choices=[
                 SimpleNamespace(
                     finish_reason=None,
@@ -343,17 +362,18 @@ class OpenAIProviderStreamTests(unittest.TestCase):
                         ],
                     ),
                 )
-            ]),
+            ], usage=None),
             SimpleNamespace(choices=[
                 SimpleNamespace(
                     finish_reason="tool_calls",
                     delta=SimpleNamespace(content=None, tool_calls=None),
                 )
-            ]),
+            ], usage=None),
+            self._usage_chunk(),
         ]
         provider = self._make_provider(chunks)
 
-        message, tool_use_blocks, stop_reason = asyncio.run(
+        message, tool_use_blocks, stop_reason, usage = asyncio.run(
             provider.stream_chat("gpt-4o", 100, 0.5, "sys", [{"role": "user", "content": "hi"}], [])
         )
 
@@ -364,6 +384,7 @@ class OpenAIProviderStreamTests(unittest.TestCase):
         self.assertEqual("text", message["content"][0]["type"])
         self.assertEqual("Let me read that.", message["content"][0]["text"])
         self.assertEqual("tool_use", message["content"][1]["type"])
+        self.assertIsInstance(usage, UsageResult)
 
     def test_stream_chat_length_stop_reason(self) -> None:
         chunks = [
@@ -372,15 +393,17 @@ class OpenAIProviderStreamTests(unittest.TestCase):
                     finish_reason="length",
                     delta=SimpleNamespace(content="truncated", tool_calls=None),
                 )
-            ]),
+            ], usage=None),
+            self._usage_chunk(),
         ]
         provider = self._make_provider(chunks)
 
-        _, _, stop_reason = asyncio.run(
+        _, _, stop_reason, usage = asyncio.run(
             provider.stream_chat("gpt-4o", 100, 0.5, "sys", [{"role": "user", "content": "hi"}], [])
         )
 
         self.assertEqual("max_tokens", stop_reason)
+        self.assertIsInstance(usage, UsageResult)
 
     def test_stream_chat_multiple_tool_calls(self) -> None:
         chunks = [
@@ -398,7 +421,7 @@ class OpenAIProviderStreamTests(unittest.TestCase):
                         ],
                     ),
                 )
-            ]),
+            ], usage=None),
             SimpleNamespace(choices=[
                 SimpleNamespace(
                     finish_reason=None,
@@ -413,17 +436,18 @@ class OpenAIProviderStreamTests(unittest.TestCase):
                         ],
                     ),
                 )
-            ]),
+            ], usage=None),
             SimpleNamespace(choices=[
                 SimpleNamespace(
                     finish_reason="tool_calls",
                     delta=SimpleNamespace(content=None, tool_calls=None),
                 )
-            ]),
+            ], usage=None),
+            self._usage_chunk(),
         ]
         provider = self._make_provider(chunks)
 
-        message, tool_use_blocks, stop_reason = asyncio.run(
+        message, tool_use_blocks, stop_reason, usage = asyncio.run(
             provider.stream_chat("gpt-4o", 100, 0.5, "sys", [{"role": "user", "content": "hi"}], [])
         )
 
@@ -431,6 +455,7 @@ class OpenAIProviderStreamTests(unittest.TestCase):
         self.assertEqual(2, len(tool_use_blocks))
         self.assertEqual("read_file", tool_use_blocks[0]["name"])
         self.assertEqual("write_file", tool_use_blocks[1]["name"])
+        self.assertIsInstance(usage, UsageResult)
 
 
 if __name__ == "__main__":

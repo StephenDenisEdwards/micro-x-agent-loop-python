@@ -48,9 +48,29 @@ class FileLogConsumer:
         return f"file ({self._path}, {level})"
 
 
+class MetricsLogConsumer:
+    def __init__(self, path: str = "metrics.jsonl"):
+        self._path = path
+
+    def register(self, level: str) -> None:
+        Path(self._path).parent.mkdir(parents=True, exist_ok=True)
+        logger.add(
+            self._path,
+            level="INFO",
+            filter=lambda record: record["extra"].get("metrics"),
+            format="{message}",
+            rotation="10 MB",
+            retention=3,
+        )
+
+    def describe(self, level: str) -> str:
+        return f"metrics ({self._path})"
+
+
 _CONSUMER_TYPES: dict[str, type] = {
     "console": ConsoleLogConsumer,
     "file": FileLogConsumer,
+    "metrics": MetricsLogConsumer,
 }
 
 _DEFAULT_CONSUMERS = [

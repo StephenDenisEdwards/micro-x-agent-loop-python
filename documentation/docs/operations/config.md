@@ -42,6 +42,7 @@ The required API key depends on the configured `Provider`. If `GOOGLE_CLIENT_ID`
 | `MemoryMaxSessions` | int | `200` | Maximum persisted sessions retained after pruning |
 | `MemoryMaxMessagesPerSession` | int | `5000` | Maximum persisted messages retained per session |
 | `MemoryRetentionDays` | int | `30` | Time-based retention window for persisted memory |
+| `MetricsEnabled` | bool | `true` | Enables structured cost metrics collection and emission |
 | `McpServers` | object | _(none)_ | MCP server configurations for external tools (see [below](#mcpservers)) |
 
 ### Example
@@ -67,6 +68,7 @@ The required API key depends on the configured `Provider`. If `GOOGLE_CLIENT_ID`
   "MemoryMaxSessions": 200,
   "MemoryMaxMessagesPerSession": 5000,
   "MemoryRetentionDays": 30,
+  "MetricsEnabled": true,
   "McpServers": {
     "system-info": {
       "transport": "stdio",
@@ -189,6 +191,10 @@ Startup session resolution:
 3. Else a new session is created.
 4. If `ForkSession=true`, the resolved session is forked into a new active session.
 
+Runtime commands (always available):
+
+- `/cost` — session cost summary (see [MetricsEnabled](#metricsenabled))
+
 Runtime commands when memory is enabled:
 
 - `/session`
@@ -217,6 +223,39 @@ Pruning runs at startup when memory is enabled:
 - Time-based retention via `MemoryRetentionDays`
 - Session cap via `MemoryMaxSessions`
 - Per-session message cap via `MemoryMaxMessagesPerSession`
+
+### MetricsEnabled
+
+When `true` (the default), the agent collects structured cost metrics for every API call, tool execution, and compaction event. Metrics are accumulated in-memory and available via the `/cost` REPL command.
+
+To persist metrics to a file, add the `"metrics"` log consumer:
+
+```json
+{
+  "LogConsumers": [
+    {"type": "console"},
+    {"type": "file", "path": "agent.log"},
+    {"type": "metrics", "path": "metrics.jsonl"}
+  ]
+}
+```
+
+The metrics file contains one JSON record per line. Records have a `type` field: `api_call`, `tool_execution`, `compaction`, or `session_summary`.
+
+Runtime commands (always available, not gated by `MemoryEnabled`):
+
+- `/cost` — prints the current session's accumulated cost summary
+
+Analysis CLI:
+
+```bash
+python -m micro_x_agent_loop.analyze_costs --file metrics.jsonl
+python -m micro_x_agent_loop.analyze_costs --session <id>
+python -m micro_x_agent_loop.analyze_costs --compare <session_a> <session_b>
+python -m micro_x_agent_loop.analyze_costs --csv
+```
+
+See [Cost Metrics Design](../design/DESIGN-cost-metrics.md) for the full architecture.
 
 ### McpServers
 

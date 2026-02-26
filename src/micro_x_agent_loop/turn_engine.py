@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -8,6 +9,7 @@ from loguru import logger
 
 from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.tool import Tool
+from micro_x_agent_loop.usage import UsageResult
 
 
 class TurnEngine:
@@ -32,6 +34,8 @@ class TurnEngine:
         on_record_tool_call: Callable[..., None],
         on_tool_started: Callable[[str, str], None],
         on_tool_completed: Callable[[str, str, bool], None],
+        on_api_call_completed: Callable[[UsageResult, str], None] | None = None,
+        on_tool_executed: Callable[[str, int, float, bool], None] | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -51,6 +55,8 @@ class TurnEngine:
         self._on_record_tool_call = on_record_tool_call
         self._on_tool_started = on_tool_started
         self._on_tool_completed = on_tool_completed
+        self._on_api_call_completed = on_api_call_completed
+        self._on_tool_executed = on_tool_executed
 
     async def run(
         self,
@@ -66,7 +72,7 @@ class TurnEngine:
         max_tokens_attempts = 0
 
         while True:
-            message, tool_use_blocks, stop_reason = await self._provider.stream_chat(
+            message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
                 self._model,
                 self._max_tokens,
                 self._temperature,
@@ -75,6 +81,9 @@ class TurnEngine:
                 self._converted_tools,
                 line_prefix=self._line_prefix,
             )
+
+            if self._on_api_call_completed is not None:
+                self._on_api_call_completed(usage, "main")
 
             last_assistant_message_id = self._on_append_message("assistant", message["content"])
 
@@ -135,6 +144,8 @@ class TurnEngine:
                     message_id=last_assistant_message_id,
                 )
                 self._on_tool_completed(tool_use_id, tool_name, True)
+                if self._on_tool_executed is not None:
+                    self._on_tool_executed(tool_name, len(content), 0.0, True)
                 return {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
@@ -142,10 +153,13 @@ class TurnEngine:
                     "is_error": True,
                 }
 
+            t_start = time.monotonic()
             try:
                 self._on_maybe_track_mutation(tool_name, tool, tool_input)
                 result = await tool.execute(tool_input)
                 result = self._truncate_tool_result(result, tool_name)
+                t_end = time.monotonic()
+                duration_ms = (t_end - t_start) * 1000
                 self._on_record_tool_call(
                     tool_call_id=tool_use_id,
                     tool_name=tool_name,
@@ -155,12 +169,16 @@ class TurnEngine:
                     message_id=last_assistant_message_id,
                 )
                 self._on_tool_completed(tool_use_id, tool_name, False)
+                if self._on_tool_executed is not None:
+                    self._on_tool_executed(tool_name, len(result), duration_ms, False)
                 return {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
                     "content": result,
                 }
             except Exception as ex:
+                t_end = time.monotonic()
+                duration_ms = (t_end - t_start) * 1000
                 content = f'Error executing tool "{tool_name}": {ex}'
                 self._on_record_tool_call(
                     tool_call_id=tool_use_id,
@@ -171,6 +189,8 @@ class TurnEngine:
                     message_id=last_assistant_message_id,
                 )
                 self._on_tool_completed(tool_use_id, tool_name, True)
+                if self._on_tool_executed is not None:
+                    self._on_tool_executed(tool_name, len(content), duration_ms, True)
                 return {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,

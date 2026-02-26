@@ -24,3 +24,4 @@ class AgentConfig:
     session_manager: SessionManager | None = None
     checkpoint_manager: CheckpointManager | None = None
     event_emitter: EventEmitter | None = None
+    metrics_enabled: bool = True

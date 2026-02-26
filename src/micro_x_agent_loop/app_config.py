@@ -42,6 +42,7 @@ class AppConfig:
     memory_retention_days: int
     mcp_server_configs: dict
     log_level: str
+    metrics_enabled: bool
     log_consumers: list | None
 
 
@@ -91,6 +92,7 @@ def parse_app_config(config: dict) -> AppConfig:
         memory_max_messages_per_session=int(config.get("MemoryMaxMessagesPerSession", 5000)),
         memory_retention_days=int(config.get("MemoryRetentionDays", 30)),
         mcp_server_configs=config.get("McpServers", {}),
+        metrics_enabled=_to_bool(config.get("MetricsEnabled", True), default=True),
         log_level=config.get("LogLevel", "INFO"),
         log_consumers=config.get("LogConsumers"),
     )

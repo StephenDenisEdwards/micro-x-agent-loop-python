@@ -7,11 +7,21 @@ from loguru import logger
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.commands.router import CommandRouter
 from micro_x_agent_loop.commands.voice_command import parse_voice_command, parse_voice_start_options
+from micro_x_agent_loop.compaction import SummarizeCompactionStrategy
+from micro_x_agent_loop.metrics import (
+    SessionAccumulator,
+    build_api_call_metric,
+    build_compaction_metric,
+    build_session_summary_metric,
+    build_tool_execution_metric,
+    emit_metric,
+)
 from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.turn_engine import TurnEngine
+from micro_x_agent_loop.usage import UsageResult
 from micro_x_agent_loop.voice_runtime import VoiceRuntime
 
 
@@ -45,6 +55,17 @@ class Agent:
         self._last_assistant_message_id: str | None = None
         self._run_lock = asyncio.Lock()
 
+        # Metrics
+        self._metrics_enabled = config.metrics_enabled
+        self._turn_number = 0
+        self._session_accumulator = SessionAccumulator(
+            session_id=config.session_id or "",
+        )
+
+        # Wire compaction callback if metrics enabled
+        if self._metrics_enabled and isinstance(self._compaction_strategy, SummarizeCompactionStrategy):
+            self._compaction_strategy._on_compaction_completed = self._on_compaction_completed
+
         self._voice_runtime = VoiceRuntime(
             line_prefix=self._LINE_PREFIX,
             tool_map=self._tool_map,
@@ -73,6 +94,8 @@ class Agent:
             on_record_tool_call=self._record_tool_call,
             on_tool_started=self._emit_tool_started,
             on_tool_completed=self._emit_tool_completed,
+            on_api_call_completed=self._on_api_call_completed if self._metrics_enabled else None,
+            on_tool_executed=self._on_tool_executed if self._metrics_enabled else None,
         )
 
         self._command_router = CommandRouter(
@@ -81,6 +104,7 @@ class Agent:
             on_checkpoint=self._handle_checkpoint_command,
             on_session=self._handle_session_command,
             on_voice=self._handle_voice_command,
+            on_cost=self._handle_cost_command,
             on_unknown=self._on_unknown_command,
         )
 
@@ -100,6 +124,9 @@ class Agent:
         if await self._handle_local_command(user_message):
             return
 
+        self._turn_number += 1
+        self._session_accumulator.total_turns = self._turn_number
+
         self._current_checkpoint_id = None
         self._last_assistant_message_id = None
         self._current_user_message_text = user_message
@@ -109,6 +136,51 @@ class Agent:
         )
         self._current_user_message_id = current_user_message_id
         self._last_assistant_message_id = last_assistant_message_id
+
+    # -- Metrics callbacks --
+
+    def _on_api_call_completed(self, usage: UsageResult, call_type: str) -> None:
+        self._session_accumulator.add_api_call(usage)
+        metric = build_api_call_metric(
+            usage,
+            session_id=self._active_session_id or "",
+            turn_number=self._turn_number,
+            call_type=call_type,
+        )
+        emit_metric(metric)
+
+    def _on_tool_executed(self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool) -> None:
+        self._session_accumulator.add_tool_call(tool_name, is_error)
+        metric = build_tool_execution_metric(
+            tool_name=tool_name,
+            result_chars=result_chars,
+            duration_ms=duration_ms,
+            is_error=is_error,
+            session_id=self._active_session_id or "",
+            turn_number=self._turn_number,
+        )
+        emit_metric(metric)
+
+    def _on_compaction_completed(
+        self, usage: UsageResult, tokens_before: int, tokens_after: int, messages_compacted: int
+    ) -> None:
+        self._session_accumulator.add_compaction(usage)
+        metric = build_compaction_metric(
+            usage=usage,
+            tokens_before=tokens_before,
+            tokens_after=tokens_after,
+            messages_compacted=messages_compacted,
+            session_id=self._active_session_id or "",
+            turn_number=self._turn_number,
+        )
+        emit_metric(metric)
+
+    # -- /cost command --
+
+    async def _handle_cost_command(self, command: str) -> None:
+        print(f"{self._LINE_PREFIX}{self._session_accumulator.format_summary()}")
+
+    # -- Existing methods --
 
     async def _maybe_compact(self) -> None:
         self._messages = await self._compaction_strategy.maybe_compact(self._messages)
@@ -253,6 +325,7 @@ class Agent:
     def _print_help(self) -> None:
         print(f"{self._LINE_PREFIX}Available commands:")
         print(f"{self._LINE_PREFIX}- /help")
+        print(f"{self._LINE_PREFIX}- /cost")
         print(
             f"{self._LINE_PREFIX}- /voice start [microphone|loopback] "
             "[--mic-device-id <id>] [--mic-device-name <name>] "
@@ -501,6 +574,8 @@ class Agent:
         print(f"\n{self._USER_PROMPT}", end="", flush=True)
 
     async def shutdown(self) -> None:
+        if self._metrics_enabled:
+            emit_metric(build_session_summary_metric(self._session_accumulator))
         await self._voice_runtime.shutdown()
 
     @property

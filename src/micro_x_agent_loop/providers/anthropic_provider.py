@@ -1,3 +1,5 @@
+import time
+
 import anthropic
 from loguru import logger
 from tenacity import retry
@@ -5,6 +7,7 @@ from tenacity import retry
 from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.providers.common import default_retry_kwargs
 from micro_x_agent_loop.tool import Tool
+from micro_x_agent_loop.usage import UsageResult
 
 
 class AnthropicProvider:
@@ -36,16 +39,19 @@ class AnthropicProvider:
         tools: list[dict],
         *,
         line_prefix: str = "",
-    ) -> tuple[dict, list[dict], str]:
+    ) -> tuple[dict, list[dict], str, UsageResult]:
         """Stream a chat response, printing text deltas to stdout in real time.
 
-        Returns (message dict, tool_use blocks, stop_reason).
+        Returns (message dict, tool_use blocks, stop_reason, usage).
         """
         tool_use_blocks: list[dict] = []
 
         spinner = Spinner(prefix=line_prefix)
         spinner.start()
         first_output = False
+
+        t_start = time.monotonic()
+        t_first_token: float | None = None
 
         try:
             logger.debug(
@@ -66,6 +72,7 @@ class AnthropicProvider:
                             if not first_output:
                                 spinner.stop()
                                 first_output = True
+                                t_first_token = time.monotonic()
                             print(event.delta.text, end="", flush=True)
 
                 if not first_output:
@@ -76,6 +83,7 @@ class AnthropicProvider:
             spinner.stop()
             raise
 
+        t_end = time.monotonic()
         usage = response.usage
         logger.debug(
             f"API response: stop_reason={response.stop_reason}, "
@@ -97,7 +105,22 @@ class AnthropicProvider:
                 tool_use_blocks.append(tool_block)
 
         message = {"role": "assistant", "content": assistant_content}
-        return message, tool_use_blocks, response.stop_reason
+
+        usage_result = UsageResult(
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_creation_input_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+            cache_read_input_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+            duration_ms=(t_end - t_start) * 1000,
+            time_to_first_token_ms=((t_first_token - t_start) * 1000) if t_first_token else 0.0,
+            provider="anthropic",
+            model=model,
+            message_count=len(messages),
+            tool_schema_count=len(tools),
+            stop_reason=response.stop_reason,
+        )
+
+        return message, tool_use_blocks, response.stop_reason, usage_result
 
     @retry(**default_retry_kwargs((
         anthropic.RateLimitError,
@@ -110,8 +133,9 @@ class AnthropicProvider:
         max_tokens: int,
         temperature: float,
         messages: list[dict],
-    ) -> str:
+    ) -> tuple[str, UsageResult]:
         """Non-streaming message creation (used for compaction/summarization)."""
+        t_start = time.monotonic()
         logger.debug(f"Compaction API request: model={model}, messages={len(messages)}")
         response = await self._client.messages.create(
             model=model,
@@ -119,9 +143,22 @@ class AnthropicProvider:
             temperature=temperature,
             messages=messages,
         )
+        t_end = time.monotonic()
         usage = response.usage
         logger.debug(
             f"Compaction API response: input_tokens={usage.input_tokens}, "
             f"output_tokens={usage.output_tokens}"
         )
-        return response.content[0].text
+
+        usage_result = UsageResult(
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_creation_input_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+            cache_read_input_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+            duration_ms=(t_end - t_start) * 1000,
+            provider="anthropic",
+            model=model,
+            message_count=len(messages),
+        )
+
+        return response.content[0].text, usage_result

@@ -12,6 +12,7 @@ class CommandRouter:
         on_checkpoint: Callable[[str], Awaitable[None]],
         on_session: Callable[[str], Awaitable[None]],
         on_voice: Callable[[str], Awaitable[None]],
+        on_cost: Callable[[str], Awaitable[None]],
         on_unknown: Callable[[str], None],
     ) -> None:
         self._on_help = on_help
@@ -19,6 +20,7 @@ class CommandRouter:
         self._on_checkpoint = on_checkpoint
         self._on_session = on_session
         self._on_voice = on_voice
+        self._on_cost = on_cost
         self._on_unknown = on_unknown
 
     async def try_handle(self, user_message: str) -> bool:
@@ -28,6 +30,9 @@ class CommandRouter:
 
         if trimmed == "/help":
             await self._on_help()
+            return True
+        if trimmed.startswith("/cost"):
+            await self._on_cost(trimmed)
             return True
         if trimmed.startswith("/rewind"):
             await self._on_rewind(trimmed)

@@ -1,6 +1,7 @@
 from typing import Protocol, runtime_checkable
 
 from micro_x_agent_loop.tool import Tool
+from micro_x_agent_loop.usage import UsageResult
 
 
 @runtime_checkable
@@ -15,10 +16,10 @@ class LLMProvider(Protocol):
         tools: list[dict],
         *,
         line_prefix: str = "",
-    ) -> tuple[dict, list[dict], str]:
+    ) -> tuple[dict, list[dict], str, UsageResult]:
         """Stream a chat response, printing text deltas to stdout in real time.
 
-        Returns (message_dict, tool_use_blocks, stop_reason) in Anthropic-style
+        Returns (message_dict, tool_use_blocks, stop_reason, usage) in Anthropic-style
         internal format.
         """
         ...
@@ -29,8 +30,11 @@ class LLMProvider(Protocol):
         max_tokens: int,
         temperature: float,
         messages: list[dict],
-    ) -> str:
-        """Non-streaming message creation (used for compaction/summarization)."""
+    ) -> tuple[str, UsageResult]:
+        """Non-streaming message creation (used for compaction/summarization).
+
+        Returns (text, usage).
+        """
         ...
 
     def convert_tools(self, tools: list[Tool]) -> list[dict]:

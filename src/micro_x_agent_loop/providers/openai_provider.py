@@ -1,4 +1,5 @@
 import json
+import time
 
 import openai
 from loguru import logger
@@ -7,6 +8,7 @@ from tenacity import retry
 from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.providers.common import default_retry_kwargs
 from micro_x_agent_loop.tool import Tool
+from micro_x_agent_loop.usage import UsageResult
 
 # Map OpenAI finish reasons to Anthropic-style stop reasons.
 _STOP_REASON_MAP = {
@@ -140,10 +142,10 @@ class OpenAIProvider:
         tools: list[dict],
         *,
         line_prefix: str = "",
-    ) -> tuple[dict, list[dict], str]:
+    ) -> tuple[dict, list[dict], str, UsageResult]:
         """Stream a chat response from OpenAI, printing text deltas in real time.
 
-        Returns (message_dict, tool_use_blocks, stop_reason) in internal
+        Returns (message_dict, tool_use_blocks, stop_reason, usage) in internal
         (Anthropic-style) format.
         """
         oai_messages = _to_openai_messages(system_prompt, messages)
@@ -153,11 +155,19 @@ class OpenAIProvider:
         spinner.start()
         first_output = False
 
+        t_start = time.monotonic()
+        t_first_token: float | None = None
+
         # Accumulate streamed content
         text_content = ""
         # tool_calls_acc: index -> {"id", "name", "arguments_parts"}
         tool_calls_acc: dict[int, dict] = {}
         finish_reason: str | None = None
+
+        # Track usage from the final chunk
+        prompt_tokens = 0
+        completion_tokens = 0
+        cached_tokens = 0
 
         try:
             logger.debug(
@@ -170,6 +180,7 @@ class OpenAIProvider:
                 temperature=temperature,
                 messages=oai_messages,
                 stream=True,
+                stream_options={"include_usage": True},
             )
             if oai_tools:
                 kwargs["tools"] = oai_tools
@@ -177,6 +188,14 @@ class OpenAIProvider:
             stream = await self._client.chat.completions.create(**kwargs)
 
             async for chunk in stream:
+                # Handle usage-only chunk (final chunk with stream_options)
+                if chunk.usage is not None:
+                    prompt_tokens = chunk.usage.prompt_tokens
+                    completion_tokens = chunk.usage.completion_tokens
+                    details = getattr(chunk.usage, "prompt_tokens_details", None)
+                    if details is not None:
+                        cached_tokens = getattr(details, "cached_tokens", 0) or 0
+
                 choice = chunk.choices[0] if chunk.choices else None
                 if choice is None:
                     continue
@@ -193,6 +212,7 @@ class OpenAIProvider:
                     if not first_output:
                         spinner.stop()
                         first_output = True
+                        t_first_token = time.monotonic()
                     print(delta.content, end="", flush=True)
                     text_content += delta.content
 
@@ -221,6 +241,8 @@ class OpenAIProvider:
         except BaseException:
             spinner.stop()
             raise
+
+        t_end = time.monotonic()
 
         # Map stop reason
         stop_reason = _STOP_REASON_MAP.get(finish_reason or "stop", "end_turn")
@@ -255,7 +277,21 @@ class OpenAIProvider:
         )
 
         message = {"role": "assistant", "content": assistant_content}
-        return message, tool_use_blocks, stop_reason
+
+        usage_result = UsageResult(
+            input_tokens=prompt_tokens,
+            output_tokens=completion_tokens,
+            cache_read_input_tokens=cached_tokens,
+            duration_ms=(t_end - t_start) * 1000,
+            time_to_first_token_ms=((t_first_token - t_start) * 1000) if t_first_token else 0.0,
+            provider="openai",
+            model=model,
+            message_count=len(messages),
+            tool_schema_count=len(tools),
+            stop_reason=stop_reason,
+        )
+
+        return message, tool_use_blocks, stop_reason, usage_result
 
     @retry(**default_retry_kwargs((
         openai.RateLimitError,
@@ -268,9 +304,10 @@ class OpenAIProvider:
         max_tokens: int,
         temperature: float,
         messages: list[dict],
-    ) -> str:
+    ) -> tuple[str, UsageResult]:
         """Non-streaming message creation (used for compaction/summarization)."""
         oai_messages = _to_openai_messages("", messages)
+        t_start = time.monotonic()
         logger.debug(f"Compaction API request: model={model}, messages={len(oai_messages)}")
         response = await self._client.chat.completions.create(
             model=model,
@@ -278,6 +315,28 @@ class OpenAIProvider:
             temperature=temperature,
             messages=oai_messages,
         )
+        t_end = time.monotonic()
         text = response.choices[0].message.content or ""
+
+        resp_usage = response.usage
+        p_tokens = resp_usage.prompt_tokens if resp_usage else 0
+        c_tokens = resp_usage.completion_tokens if resp_usage else 0
+        c_cached = 0
+        if resp_usage:
+            details = getattr(resp_usage, "prompt_tokens_details", None)
+            if details is not None:
+                c_cached = getattr(details, "cached_tokens", 0) or 0
+
         logger.debug(f"Compaction API response: len={len(text)}")
-        return text
+
+        usage_result = UsageResult(
+            input_tokens=p_tokens,
+            output_tokens=c_tokens,
+            cache_read_input_tokens=c_cached,
+            duration_ms=(t_end - t_start) * 1000,
+            provider="openai",
+            model=model,
+            message_count=len(messages),
+        )
+
+        return text, usage_result

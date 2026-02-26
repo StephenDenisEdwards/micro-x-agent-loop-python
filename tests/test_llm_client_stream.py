@@ -3,6 +3,7 @@ import unittest
 from types import SimpleNamespace
 
 from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
+from micro_x_agent_loop.usage import UsageResult
 
 
 class _FakeStreamContext:
@@ -66,7 +67,7 @@ class AnthropicProviderStreamTests(unittest.TestCase):
         )
         provider = self._make_provider(_FakeStreamContext(events, final_message))
 
-        message, tool_use_blocks, stop_reason = asyncio.run(
+        message, tool_use_blocks, stop_reason, usage = asyncio.run(
             provider.stream_chat(
                 model="m",
                 max_tokens=100,
@@ -82,6 +83,9 @@ class AnthropicProviderStreamTests(unittest.TestCase):
         self.assertEqual("tool_use", stop_reason)
         self.assertEqual(1, len(tool_use_blocks))
         self.assertEqual("read_file", tool_use_blocks[0]["name"])
+        self.assertIsInstance(usage, UsageResult)
+        self.assertEqual(10, usage.input_tokens)
+        self.assertEqual(5, usage.output_tokens)
 
     def test_stream_chat_handles_no_text_delta(self) -> None:
         events: list[object] = []
@@ -92,7 +96,7 @@ class AnthropicProviderStreamTests(unittest.TestCase):
         )
         provider = self._make_provider(_FakeStreamContext(events, final_message))
 
-        message, tool_use_blocks, stop_reason = asyncio.run(
+        message, tool_use_blocks, stop_reason, usage = asyncio.run(
             provider.stream_chat(
                 model="m",
                 max_tokens=100,
@@ -107,6 +111,8 @@ class AnthropicProviderStreamTests(unittest.TestCase):
         self.assertEqual("end_turn", stop_reason)
         self.assertEqual([], tool_use_blocks)
         self.assertEqual("Done", message["content"][0]["text"])
+        self.assertIsInstance(usage, UsageResult)
+        self.assertEqual(3, usage.input_tokens)
 
 
 if __name__ == "__main__":
