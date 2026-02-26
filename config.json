@@ -15,7 +15,7 @@
   "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\resources\\documents",
   "LogLevel": "INFO",
   "PromptCachingEnabled": true,
-  "CompactionModel": "",
+  "CompactionModel": "claude-haiku-4-5-20251001",
   "ToolResultSummarizationEnabled": false,
   "ToolResultSummarizationModel": "claude-haiku-4-5-20251001",
   "ToolResultSummarizationThreshold": 4000,

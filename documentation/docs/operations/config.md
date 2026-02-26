@@ -43,6 +43,13 @@ The required API key depends on the configured `Provider`. If `GOOGLE_CLIENT_ID`
 | `MemoryMaxMessagesPerSession` | int | `5000` | Maximum persisted messages retained per session |
 | `MemoryRetentionDays` | int | `30` | Time-based retention window for persisted memory |
 | `MetricsEnabled` | bool | `true` | Enables structured cost metrics collection and emission |
+| `PromptCachingEnabled` | bool | `true` | Enables Anthropic prompt caching for system prompt and tool schemas |
+| `CompactionModel` | string | `""` | Model for compaction summarization; empty = use main `Model` |
+| `ToolResultSummarizationEnabled` | bool | `false` | Summarize large tool results before feeding back to the main model |
+| `ToolResultSummarizationModel` | string | `""` | Model for tool result summarization; empty = use main `Model` |
+| `ToolResultSummarizationThreshold` | int | `4000` | Minimum tool result chars before summarization is attempted |
+| `SmartCompactionTriggerEnabled` | bool | `true` | Use actual API token counts instead of estimates for compaction trigger |
+| `ConciseOutputEnabled` | bool | `false` | Adds a system prompt directive to minimize output token spend |
 | `McpServers` | object | _(none)_ | MCP server configurations for external tools (see [below](#mcpservers)) |
 
 ### Example
@@ -69,6 +76,13 @@ The required API key depends on the configured `Provider`. If `GOOGLE_CLIENT_ID`
   "MemoryMaxMessagesPerSession": 5000,
   "MemoryRetentionDays": 30,
   "MetricsEnabled": true,
+  "PromptCachingEnabled": true,
+  "CompactionModel": "",
+  "ToolResultSummarizationEnabled": false,
+  "ToolResultSummarizationModel": "claude-haiku-4-5-20251001",
+  "ToolResultSummarizationThreshold": 4000,
+  "SmartCompactionTriggerEnabled": true,
+  "ConciseOutputEnabled": false,
   "McpServers": {
     "system-info": {
       "transport": "stdio",
@@ -256,6 +270,62 @@ python -m micro_x_agent_loop.analyze_costs --csv
 ```
 
 See [Cost Metrics Design](../design/DESIGN-cost-metrics.md) for the full architecture.
+
+### Cost Reduction
+
+These settings control cost optimisation features. All are optional with sensible defaults — prompt caching and smart compaction trigger are on by default; the others are opt-in.
+
+#### PromptCachingEnabled
+
+Enables Anthropic's prompt caching. When `true`, the system prompt and tool schemas are tagged with `cache_control: {"type": "ephemeral"}` breakpoints, allowing subsequent turns to read from cache at 10% of the normal input token price.
+
+- Only affects the Anthropic provider. OpenAI does automatic prefix caching — no explicit headers needed.
+- Cache hits appear in `/cost` as "Cache read tokens".
+- Requires a minimum prefix length of 1,024 tokens (system prompt + tool schemas typically exceed this).
+
+#### CompactionModel
+
+Model used for the compaction summarization call. When empty (the default), the main `Model` is used. Setting this to a cheaper model (e.g. `"claude-haiku-4-5-20251001"` at $0.25/$1.25 per MTok vs Sonnet at $3/$15) reduces compaction cost by 70-90%.
+
+Compaction is a straightforward summarization task and does not require the full reasoning capability of the main model.
+
+#### ToolResultSummarizationEnabled, ToolResultSummarizationModel, ToolResultSummarizationThreshold
+
+When enabled, tool results longer than `ToolResultSummarizationThreshold` characters are summarized by a separate LLM call before being fed back to the main model. This reduces per-turn input tokens for tool-heavy workflows (web fetches, large file reads, etc.).
+
+- `ToolResultSummarizationModel` — model for summarization; empty = use main `Model`. Haiku is recommended.
+- `ToolResultSummarizationThreshold` — minimum result size (in characters) before summarization kicks in. Default 4,000.
+- The summarization prompt preserves decision-relevant data: names, numbers, IDs, paths, errors.
+- If summarization fails, the original (truncated) result is used as a fallback.
+- Summarized tool results are flagged as `was_summarized: true` in metrics.
+
+#### SmartCompactionTriggerEnabled
+
+When `true`, the compaction trigger uses actual API-reported input token counts (from `response.usage`) instead of the tiktoken character-based estimate. The tiktoken estimate can be 10-20% off (wrong encoding for Claude, doesn't count system/tool schema overhead). Actual counts lead to better-timed compaction — neither too early (wasting a summarization call) nor too late (accumulating unnecessary input cost).
+
+Falls back to the tiktoken estimate on the first turn before any API response has been received.
+
+#### ConciseOutputEnabled
+
+When `true`, appends a directive to the system prompt instructing the model to minimize output tokens: use bullet points, omit filler, target 200 words per response. Output tokens are 5x more expensive than input ($15 vs $3 per MTok for Sonnet), so reducing verbosity directly cuts the most expensive token class.
+
+Off by default because it changes response style. Enable when cost is a higher priority than conversational tone.
+
+#### Estimated Cost Impact
+
+All estimates assume Sonnet ($3/$15 per MTok input/output) as the main model and a typical 10-turn session with moderate tool use and one compaction event.
+
+| Feature | Mechanism | Est. Saving per Session | Quality Tradeoff |
+|---------|-----------|------------------------|------------------|
+| Prompt Caching | Cache reads at 10% of input price ($0.30 vs $3.00/MTok) for system prompt + tool schemas (~5-10K tokens/turn) | ~$0.12-0.24 | None |
+| Compaction Model (Haiku) | Haiku compaction at $0.03/event vs Sonnet at $0.36/event | ~$0.33 per event | Minimal — summarization is a simple task |
+| Tool Result Summarization | Reduces large tool results (5-10K chars) to summaries (~500 chars); savings compound as summaries stay in conversation history | 30-60% of tool-result-driven input cost | Some detail loss — mitigated by preserving key data |
+| Smart Compaction Trigger | Uses actual API token counts instead of ±10-20% tiktoken estimates | 15-30% improvement in compaction timing | None |
+| Concise Output | 30-50% shorter responses at $15/MTok output price | ~$0.09-0.15 | More terse responses |
+
+**Combined estimate:** ~40-50% reduction in total session cost (from ~$2.00-2.50 to ~$1.00-1.50 for a typical session).
+
+Features enabled by default (prompt caching, smart trigger) are pure wins with no quality tradeoff. Opt-in features (tool summarization, concise output) trade some fidelity for cost. The cheapest single change is setting `CompactionModel` to Haiku — a ~91% reduction per compaction event with negligible quality impact.
 
 ### McpServers
 
