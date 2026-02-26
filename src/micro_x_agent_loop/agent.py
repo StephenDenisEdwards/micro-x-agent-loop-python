@@ -391,6 +391,8 @@ class Agent:
             new_id = self._session_manager.create_session(title=title if title else None)
             self._active_session_id = new_id
             self._messages = self._session_manager.load_messages(new_id)
+            self._session_accumulator.reset(session_id=new_id)
+            self._turn_number = 0
             session = self._session_manager.get_session(new_id) or {"title": new_id}
             print(
                 f"{self._LINE_PREFIX}Started new session: {session.get('title', new_id)} "
@@ -426,6 +428,8 @@ class Agent:
             resolved_id = session["id"]
             self._active_session_id = resolved_id
             self._messages = self._session_manager.load_messages(resolved_id)
+            self._session_accumulator.reset(session_id=resolved_id)
+            self._turn_number = 0
             summary = self._session_manager.build_session_summary(resolved_id)
             print(
                 f"{self._LINE_PREFIX}Resumed session {summary['title']} "
@@ -443,6 +447,8 @@ class Agent:
             fork_id = self._session_manager.fork_session(source_id)
             self._active_session_id = fork_id
             self._messages = self._session_manager.load_messages(fork_id)
+            self._session_accumulator.reset(session_id=fork_id)
+            self._turn_number = 0
             print(f"{self._LINE_PREFIX}Forked session {source_id} -> {fork_id}")
             return
 

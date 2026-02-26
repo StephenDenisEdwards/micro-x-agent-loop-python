@@ -124,6 +124,22 @@ class SessionAccumulator:
     tool_call_counts: dict[str, int] = field(default_factory=dict)
     total_duration_ms: float = 0.0
 
+    def reset(self, session_id: str = "") -> None:
+        """Reset all counters for a new session."""
+        self.session_id = session_id
+        self.total_turns = 0
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.total_cache_creation_tokens = 0
+        self.total_cache_read_tokens = 0
+        self.total_cost_usd = 0.0
+        self.total_api_calls = 0
+        self.total_tool_calls = 0
+        self.total_tool_errors = 0
+        self.total_compaction_events = 0
+        self.tool_call_counts.clear()
+        self.total_duration_ms = 0.0
+
     def add_api_call(self, usage: UsageResult) -> None:
         self.total_api_calls += 1
         self.total_input_tokens += usage.input_tokens
