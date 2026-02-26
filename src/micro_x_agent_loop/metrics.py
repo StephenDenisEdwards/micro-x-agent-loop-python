@@ -108,6 +108,7 @@ def build_session_summary_metric(accumulator: SessionAccumulator) -> dict:
         "total_compaction_events": accumulator.total_compaction_events,
         "tool_call_counts": dict(accumulator.tool_call_counts),
         "total_duration_ms": accumulator.total_duration_ms,
+        "model_subtotals": dict(accumulator.model_subtotals),
     }
 
 
@@ -128,6 +129,7 @@ class SessionAccumulator:
     total_compaction_events: int = 0
     tool_call_counts: dict[str, int] = field(default_factory=dict)
     total_duration_ms: float = 0.0
+    model_subtotals: dict[str, dict] = field(default_factory=dict)
 
     def reset(self, session_id: str = "") -> None:
         """Reset all counters for a new session."""
@@ -146,6 +148,19 @@ class SessionAccumulator:
         self.total_compaction_events = 0
         self.tool_call_counts.clear()
         self.total_duration_ms = 0.0
+        self.model_subtotals.clear()
+
+    def _record_model(self, usage: UsageResult) -> None:
+        cost = estimate_cost(usage)
+        model = usage.model or "unknown"
+        sub = self.model_subtotals.get(model)
+        if sub is None:
+            sub = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+            self.model_subtotals[model] = sub
+        sub["calls"] += 1
+        sub["input_tokens"] += usage.input_tokens
+        sub["output_tokens"] += usage.output_tokens
+        sub["cost_usd"] += cost
 
     def add_api_call(self, usage: UsageResult) -> None:
         self.total_api_calls += 1
@@ -158,6 +173,7 @@ class SessionAccumulator:
         self.total_cache_read_tokens += usage.cache_read_input_tokens
         self.total_cost_usd += estimate_cost(usage)
         self.total_duration_ms += usage.duration_ms
+        self._record_model(usage)
 
     def add_tool_call(self, tool_name: str, is_error: bool) -> None:
         self.total_tool_calls += 1
@@ -168,6 +184,7 @@ class SessionAccumulator:
     def add_compaction(self, usage: UsageResult) -> None:
         self.total_compaction_events += 1
         self.total_cost_usd += estimate_cost(usage)
+        self._record_model(usage)
 
     def format_summary(self) -> str:
         lines = [
@@ -193,6 +210,14 @@ class SessionAccumulator:
             f"Tool calls:         {self.total_tool_calls} ({self.total_tool_errors} errors)",
             f"Compaction events:  {self.total_compaction_events}",
         ]
+        if len(self.model_subtotals) > 1:
+            lines.append("Model breakdown:")
+            for model, sub in sorted(self.model_subtotals.items(), key=lambda x: -x[1]["cost_usd"]):
+                lines.append(
+                    f"  {model}: {sub['calls']} calls, "
+                    f"{sub['input_tokens']:,} in / {sub['output_tokens']:,} out, "
+                    f"${sub['cost_usd']:.6f}"
+                )
         if self.tool_call_counts:
             lines.append("Tool breakdown:")
             for name, count in sorted(self.tool_call_counts.items(), key=lambda x: -x[1]):
