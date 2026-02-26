@@ -11,6 +11,7 @@ class AnthropicProviderTests(unittest.TestCase):
     def _make_provider(self, stream_ctx=None, create_response=None) -> AnthropicProvider:
         provider = AnthropicProvider.__new__(AnthropicProvider)
         provider._client = FakeAnthropicClient(stream_ctx, create_response)
+        provider._prompt_caching_enabled = False
         return provider
 
     def test_convert_tools(self) -> None:

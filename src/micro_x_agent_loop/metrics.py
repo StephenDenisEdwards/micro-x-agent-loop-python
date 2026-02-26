@@ -50,6 +50,8 @@ def build_tool_execution_metric(
     is_error: bool,
     session_id: str,
     turn_number: int,
+    *,
+    was_summarized: bool = False,
 ) -> dict:
     return {
         "type": "tool_execution",
@@ -58,9 +60,10 @@ def build_tool_execution_metric(
         "turn_number": turn_number,
         "tool_name": tool_name,
         "result_chars": result_chars,
-        "result_estimated_tokens": result_chars // 4,  # approximation — actual text unavailable at metric emission time
+        "result_estimated_tokens": result_chars // 4,
         "duration_ms": duration_ms,
         "is_error": is_error,
+        "was_summarized": was_summarized,
     }
 
 

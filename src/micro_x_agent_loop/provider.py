@@ -42,12 +42,17 @@ class LLMProvider(Protocol):
         ...
 
 
-def create_provider(provider_name: str, api_key: str) -> LLMProvider:
+def create_provider(
+    provider_name: str,
+    api_key: str,
+    *,
+    prompt_caching_enabled: bool = False,
+) -> LLMProvider:
     """Factory: create an LLMProvider by name."""
     name = provider_name.strip().lower()
     if name == "anthropic":
         from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
-        return AnthropicProvider(api_key)
+        return AnthropicProvider(api_key, prompt_caching_enabled=prompt_caching_enabled)
     if name == "openai":
         from micro_x_agent_loop.providers.openai_provider import OpenAIProvider
         return OpenAIProvider(api_key)

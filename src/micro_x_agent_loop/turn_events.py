@@ -37,7 +37,10 @@ class TurnEvents(Protocol):
 
     def on_api_call_completed(self, usage: UsageResult, call_type: str) -> None: ...
 
-    def on_tool_executed(self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool) -> None: ...
+    def on_tool_executed(
+        self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool,
+        *, was_summarized: bool = False,
+    ) -> None: ...
 
 
 class BaseTurnEvents:
@@ -79,5 +82,8 @@ class BaseTurnEvents:
     def on_api_call_completed(self, usage: UsageResult, call_type: str) -> None:
         return
 
-    def on_tool_executed(self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool) -> None:
+    def on_tool_executed(
+        self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool,
+        *, was_summarized: bool = False,
+    ) -> None:
         return

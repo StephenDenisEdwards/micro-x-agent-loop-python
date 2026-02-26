@@ -26,6 +26,10 @@ class TurnEngine:
         max_tool_result_chars: int,
         max_tokens_retries: int,
         events: TurnEvents,
+        summarization_provider: Any | None = None,
+        summarization_model: str = "",
+        summarization_enabled: bool = False,
+        summarization_threshold: int = 4000,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -38,6 +42,10 @@ class TurnEngine:
         self._max_tool_result_chars = max_tool_result_chars
         self._max_tokens_retries = max_tokens_retries
         self._events = events
+        self._summarization_provider = summarization_provider
+        self._summarization_model = summarization_model
+        self._summarization_enabled = summarization_enabled
+        self._summarization_threshold = summarization_threshold
 
     async def run(
         self,
@@ -139,6 +147,7 @@ class TurnEngine:
                 self._events.on_maybe_track_mutation(tool_name, tool, tool_input)
                 result = await tool.execute(tool_input)
                 result = self._truncate_tool_result(result, tool_name)
+                result, was_summarized = await self._summarize_tool_result(result, tool_name)
                 t_end = time.monotonic()
                 duration_ms = (t_end - t_start) * 1000
                 self._events.on_record_tool_call(
@@ -150,7 +159,10 @@ class TurnEngine:
                     message_id=last_assistant_message_id,
                 )
                 self._events.on_tool_completed(tool_use_id, tool_name, False)
-                self._events.on_tool_executed(tool_name, len(result), duration_ms, False)
+                self._events.on_tool_executed(
+                    tool_name, len(result), duration_ms, False,
+                    was_summarized=was_summarized,
+                )
                 return {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
@@ -178,6 +190,39 @@ class TurnEngine:
                 }
 
         return list(await asyncio.gather(*(run_one(b) for b in tool_use_blocks)))
+
+    async def _summarize_tool_result(self, result: str, tool_name: str) -> tuple[str, bool]:
+        """Summarize a large tool result using a cheaper model.
+
+        Returns (possibly-summarized result, was_summarized).
+        """
+        if (
+            not self._summarization_enabled
+            or self._summarization_provider is None
+            or len(result) <= self._summarization_threshold
+        ):
+            return result, False
+
+        prompt = (
+            "Summarize this tool output concisely, preserving all decision-relevant "
+            "data (names, numbers, IDs, paths, errors). "
+            f"Tool: {tool_name}\n\n{result}"
+        )
+        try:
+            summary, usage = await self._summarization_provider.create_message(
+                self._summarization_model,
+                2048,
+                0,
+                [{"role": "user", "content": prompt}],
+            )
+            self._events.on_api_call_completed(usage, "tool_summarization")
+            logger.info(
+                f"Summarized {tool_name} result: {len(result):,} chars -> {len(summary):,} chars"
+            )
+            return summary, True
+        except Exception as ex:
+            logger.warning(f"Tool result summarization failed for {tool_name}: {ex}")
+            return result, False
 
     def _truncate_tool_result(self, result: str, tool_name: str) -> str:
         if self._max_tool_result_chars <= 0 or len(result) <= self._max_tool_result_chars:

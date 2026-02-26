@@ -2,7 +2,7 @@
 
 ## Status
 
-**Planning** — Prioritised inventory of cost levers, ordered by ROI.
+**Phase 1 & 2 Completed** — Phases 1 (prompt caching, cheap compaction model) and 2 (tool result summarization, smart compaction trigger, concise output) implemented. Phase 3 (architecture) remains Planning.
 
 **Prerequisite:** [Cost Metrics Logging](PLAN-cost-metrics-logging.md) — structured metrics infrastructure required to measure ROI of all levers below.
 

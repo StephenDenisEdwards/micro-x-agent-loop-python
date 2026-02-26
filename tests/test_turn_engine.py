@@ -67,8 +67,11 @@ class RecordingEvents(BaseTurnEvents):
     def on_api_call_completed(self, usage: UsageResult, call_type: str) -> None:
         self.api_call_metrics.append((usage, call_type))
 
-    def on_tool_executed(self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool) -> None:
-        self.tool_exec_metrics.append((tool_name, result_chars, duration_ms, is_error))
+    def on_tool_executed(
+        self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool,
+        *, was_summarized: bool = False,
+    ) -> None:
+        self.tool_exec_metrics.append((tool_name, result_chars, duration_ms, is_error, was_summarized))
 
 
 # ---------------------------------------------------------------------------
@@ -349,11 +352,12 @@ class TurnEngineBasicTests(unittest.TestCase):
         asyncio.run(engine.run(messages=[], user_message="read"))
 
         self.assertEqual(1, len(events.tool_exec_metrics))
-        name, chars, duration_ms, is_error = events.tool_exec_metrics[0]
+        name, chars, duration_ms, is_error, was_summarized = events.tool_exec_metrics[0]
         self.assertEqual("read_file", name)
         self.assertEqual(len("result"), chars)
         self.assertGreaterEqual(duration_ms, 0)
         self.assertFalse(is_error)
+        self.assertFalse(was_summarized)
 
 
 if __name__ == "__main__":

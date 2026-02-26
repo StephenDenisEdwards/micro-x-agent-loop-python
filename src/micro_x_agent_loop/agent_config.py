@@ -27,3 +27,8 @@ class AgentConfig:
     metrics_enabled: bool = True
     user_memory_enabled: bool = False
     user_memory_dir: str = ""
+    # Cost reduction
+    prompt_caching_enabled: bool = False
+    tool_result_summarization_enabled: bool = False
+    tool_result_summarization_model: str = ""
+    tool_result_summarization_threshold: int = 4000

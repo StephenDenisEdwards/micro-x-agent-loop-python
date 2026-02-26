@@ -37,7 +37,10 @@ class Agent:
     _MAX_TOKENS_RETRIES = 3
 
     def __init__(self, config: AgentConfig):
-        self._provider = create_provider(config.provider, config.api_key)
+        self._provider = create_provider(
+            config.provider, config.api_key,
+            prompt_caching_enabled=config.prompt_caching_enabled,
+        )
         self._model = config.model
         self._max_tokens = config.max_tokens
         self._temperature = config.temperature
@@ -92,6 +95,13 @@ class Agent:
         self._session_controller = SessionController(line_prefix=self._LINE_PREFIX)
         self._checkpoint_service = CheckpointService(line_prefix=self._LINE_PREFIX)
 
+        # Tool result summarization
+        summarization_provider = None
+        summarization_model = ""
+        if config.tool_result_summarization_enabled:
+            summarization_model = config.tool_result_summarization_model or config.model
+            summarization_provider = create_provider(config.provider, config.api_key)
+
         self._turn_engine = TurnEngine(
             provider=self._provider,
             model=self._model,
@@ -104,6 +114,10 @@ class Agent:
             max_tool_result_chars=self._max_tool_result_chars,
             max_tokens_retries=self._MAX_TOKENS_RETRIES,
             events=self,
+            summarization_provider=summarization_provider,
+            summarization_model=summarization_model,
+            summarization_enabled=config.tool_result_summarization_enabled,
+            summarization_threshold=config.tool_result_summarization_threshold,
         )
 
         self._command_router = CommandRouter(
@@ -150,6 +164,10 @@ class Agent:
     # -- TurnEvents protocol: metrics --
 
     def on_api_call_completed(self, usage: UsageResult, call_type: str) -> None:
+        # Feed actual token count to smart compaction trigger
+        if call_type == "main" and isinstance(self._compaction_strategy, SummarizeCompactionStrategy):
+            self._compaction_strategy.update_actual_tokens(usage.input_tokens)
+
         if not self._metrics_enabled:
             return
         self._session_accumulator.add_api_call(usage)
@@ -161,7 +179,10 @@ class Agent:
         )
         emit_metric(metric)
 
-    def on_tool_executed(self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool) -> None:
+    def on_tool_executed(
+        self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool,
+        *, was_summarized: bool = False,
+    ) -> None:
         if not self._metrics_enabled:
             return
         self._session_accumulator.add_tool_call(tool_name, is_error)
@@ -172,6 +193,7 @@ class Agent:
             is_error=is_error,
             session_id=self._memory.active_session_id or "",
             turn_number=self._turn_number,
+            was_summarized=was_summarized,
         )
         emit_metric(metric)
 

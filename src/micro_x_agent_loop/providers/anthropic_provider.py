@@ -11,8 +11,9 @@ from micro_x_agent_loop.usage import UsageResult
 
 
 class AnthropicProvider:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, *, prompt_caching_enabled: bool = False):
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
+        self._prompt_caching_enabled = prompt_caching_enabled
 
     def convert_tools(self, tools: list[Tool]) -> list[dict]:
         return [
@@ -54,17 +55,36 @@ class AnthropicProvider:
         t_first_token: float | None = None
 
         try:
+            # Prompt caching: wrap system prompt and tag last tool
+            if self._prompt_caching_enabled:
+                api_system = [
+                    {
+                        "type": "text",
+                        "text": system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+                if tools:
+                    api_tools = [*tools]
+                    api_tools[-1] = {**api_tools[-1], "cache_control": {"type": "ephemeral"}}
+                else:
+                    api_tools = tools
+            else:
+                api_system = system_prompt
+                api_tools = tools
+
             logger.debug(
                 f"API request: model={model}, max_tokens={max_tokens}, "
-                f"messages={len(messages)}, tools={len(tools)}"
+                f"messages={len(messages)}, tools={len(tools)}, "
+                f"prompt_caching={self._prompt_caching_enabled}"
             )
             async with self._client.messages.stream(
                 model=model,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                system=system_prompt,
+                system=api_system,
                 messages=messages,
-                tools=tools,
+                tools=api_tools,
             ) as stream:
                 async for event in stream:
                     if event.type == "content_block_delta":

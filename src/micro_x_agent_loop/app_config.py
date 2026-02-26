@@ -47,6 +47,14 @@ class AppConfig:
     user_memory_enabled: bool
     user_memory_dir: str
     user_memory_max_lines: int
+    # Cost reduction
+    prompt_caching_enabled: bool
+    compaction_model: str
+    tool_result_summarization_enabled: bool
+    tool_result_summarization_model: str
+    tool_result_summarization_threshold: int
+    smart_compaction_trigger_enabled: bool
+    concise_output_enabled: bool
 
 
 def load_json_config() -> dict:
@@ -101,6 +109,13 @@ def parse_app_config(config: dict) -> AppConfig:
         user_memory_enabled=_to_bool(config.get("UserMemoryEnabled", False), default=False),
         user_memory_dir=str(config.get("UserMemoryDir", ".micro_x/memory")),
         user_memory_max_lines=int(config.get("UserMemoryMaxLines", 200)),
+        prompt_caching_enabled=_to_bool(config.get("PromptCachingEnabled", True), default=True),
+        compaction_model=str(config.get("CompactionModel", "")).strip(),
+        tool_result_summarization_enabled=_to_bool(config.get("ToolResultSummarizationEnabled", False), default=False),
+        tool_result_summarization_model=str(config.get("ToolResultSummarizationModel", "")).strip(),
+        tool_result_summarization_threshold=int(config.get("ToolResultSummarizationThreshold", 4000)),
+        smart_compaction_trigger_enabled=_to_bool(config.get("SmartCompactionTriggerEnabled", True), default=True),
+        concise_output_enabled=_to_bool(config.get("ConciseOutputEnabled", False), default=False),
     )
 
 

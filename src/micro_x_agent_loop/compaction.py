@@ -28,15 +28,25 @@ class SummarizeCompactionStrategy:
         threshold_tokens: int = 80_000,
         protected_tail_messages: int = 6,
         on_compaction_completed: Callable[[UsageResult, int, int, int], None] | None = None,
+        smart_trigger_enabled: bool = False,
     ):
         self._provider = provider
         self._model = model
         self._threshold_tokens = threshold_tokens
         self._protected_tail_messages = protected_tail_messages
         self._on_compaction_completed = on_compaction_completed
+        self._smart_trigger_enabled = smart_trigger_enabled
+        self._last_actual_input_tokens: int | None = None
+
+    def update_actual_tokens(self, input_tokens: int) -> None:
+        """Feed actual API-reported input token count for smart compaction triggering."""
+        self._last_actual_input_tokens = input_tokens
 
     async def maybe_compact(self, messages: list[dict]) -> list[dict]:
-        estimated = estimate_tokens(messages)
+        if self._smart_trigger_enabled and self._last_actual_input_tokens is not None:
+            estimated = self._last_actual_input_tokens
+        else:
+            estimated = estimate_tokens(messages)
         if estimated < self._threshold_tokens:
             return messages
 

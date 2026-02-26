@@ -15,7 +15,21 @@ You have persistent memory in the user memory directory. As you work:
 """
 
 
-def get_system_prompt(*, user_memory: str = "", user_memory_enabled: bool = False) -> str:
+_CONCISE_OUTPUT_DIRECTIVE = """\
+
+
+IMPORTANT: Minimize output tokens. Use bullet points, not paragraphs. Omit pleasantries and \
+filler. When reporting tool results, state only the key findings — do not echo raw data back. \
+For file operations, confirm success in one line. Target maximum 200 words per response unless \
+the user asks for detail."""
+
+
+def get_system_prompt(
+    *,
+    user_memory: str = "",
+    user_memory_enabled: bool = False,
+    concise_output_enabled: bool = False,
+) -> str:
     now = datetime.now(timezone.utc)
     today = now.strftime("%A, %B %d, %Y")
     prompt = f"""\
@@ -39,4 +53,6 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
         prompt += f"\n\n# User Memory\n\n{user_memory}"
     if user_memory_enabled:
         prompt += _USER_MEMORY_GUIDANCE
+    if concise_output_enabled:
+        prompt += _CONCISE_OUTPUT_DIRECTIVE
     return prompt

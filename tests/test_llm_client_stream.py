@@ -11,6 +11,7 @@ class AnthropicProviderStreamTests(unittest.TestCase):
     def _make_provider(self, stream_ctx: FakeStreamContext) -> AnthropicProvider:
         provider = AnthropicProvider.__new__(AnthropicProvider)
         provider._client = FakeAnthropicClient(stream_ctx)
+        provider._prompt_caching_enabled = False
         return provider
 
     def test_stream_chat_returns_text_and_tool_use_blocks(self) -> None:

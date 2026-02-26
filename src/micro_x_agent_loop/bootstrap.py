@@ -55,11 +55,13 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
         tools.extend(mcp_tools)
 
     if app.compaction_strategy_name == "summarize":
+        compaction_model = app.compaction_model or app.model
         compaction_strategy = SummarizeCompactionStrategy(
             provider=create_provider(app.provider_name, env.provider_api_key),
-            model=app.model,
+            model=compaction_model,
             threshold_tokens=app.compaction_threshold_tokens,
             protected_tail_messages=app.protected_tail_messages,
+            smart_trigger_enabled=app.smart_compaction_trigger_enabled,
         )
     else:
         compaction_strategy = NoneCompactionStrategy()
@@ -130,6 +132,7 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
             system_prompt=get_system_prompt(
                 user_memory=user_memory,
                 user_memory_enabled=app.user_memory_enabled,
+                concise_output_enabled=app.concise_output_enabled,
             ),
             max_tool_result_chars=app.max_tool_result_chars,
             max_conversation_messages=app.max_conversation_messages,
@@ -142,6 +145,10 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
             metrics_enabled=app.metrics_enabled,
             user_memory_enabled=app.user_memory_enabled,
             user_memory_dir=str(user_memory_dir),
+            prompt_caching_enabled=app.prompt_caching_enabled,
+            tool_result_summarization_enabled=app.tool_result_summarization_enabled,
+            tool_result_summarization_model=app.tool_result_summarization_model,
+            tool_result_summarization_threshold=app.tool_result_summarization_threshold,
         )
     )
 
