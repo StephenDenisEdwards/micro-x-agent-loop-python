@@ -44,6 +44,9 @@ class AppConfig:
     log_level: str
     metrics_enabled: bool
     log_consumers: list | None
+    user_memory_enabled: bool
+    user_memory_dir: str
+    user_memory_max_lines: int
 
 
 def load_json_config() -> dict:
@@ -95,6 +98,9 @@ def parse_app_config(config: dict) -> AppConfig:
         metrics_enabled=_to_bool(config.get("MetricsEnabled", True), default=True),
         log_level=config.get("LogLevel", "INFO"),
         log_consumers=config.get("LogConsumers"),
+        user_memory_enabled=_to_bool(config.get("UserMemoryEnabled", False), default=False),
+        user_memory_dir=str(config.get("UserMemoryDir", ".micro_x/memory")),
+        user_memory_max_lines=int(config.get("UserMemoryMaxLines", 200)),
     )
 
 

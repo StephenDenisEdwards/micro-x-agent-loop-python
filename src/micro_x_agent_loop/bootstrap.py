@@ -27,6 +27,14 @@ class AppRuntime:
     log_descriptions: list[str]
 
 
+def _load_user_memory(memory_dir: Path, max_lines: int) -> str:
+    memory_file = memory_dir / "MEMORY.md"
+    if not memory_file.exists():
+        return ""
+    lines = memory_file.read_text(encoding="utf-8").splitlines()
+    return "\n".join(lines[:max_lines])
+
+
 async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
     log_descriptions = setup_logging(level=app.log_level, consumers=app.log_consumers)
 
@@ -100,6 +108,17 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
             retention_days=app.memory_retention_days,
         )
 
+    user_memory = ""
+    user_memory_dir = Path(app.user_memory_dir)
+    if not user_memory_dir.is_absolute():
+        user_memory_dir = Path.cwd() / user_memory_dir
+    if app.user_memory_enabled:
+        user_memory = _load_user_memory(user_memory_dir, app.user_memory_max_lines)
+
+        from micro_x_agent_loop.tools.save_memory_tool import SaveMemoryTool
+
+        tools.append(SaveMemoryTool(str(user_memory_dir), max_lines=app.user_memory_max_lines))
+
     agent = Agent(
         AgentConfig(
             model=app.model,
@@ -108,7 +127,10 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
             api_key=env.provider_api_key,
             provider=app.provider_name,
             tools=tools,
-            system_prompt=get_system_prompt(),
+            system_prompt=get_system_prompt(
+                user_memory=user_memory,
+                user_memory_enabled=app.user_memory_enabled,
+            ),
             max_tool_result_chars=app.max_tool_result_chars,
             max_conversation_messages=app.max_conversation_messages,
             compaction_strategy=compaction_strategy,
@@ -118,6 +140,8 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
             checkpoint_manager=checkpoint_manager,
             event_emitter=event_emitter,
             metrics_enabled=app.metrics_enabled,
+            user_memory_enabled=app.user_memory_enabled,
+            user_memory_dir=str(user_memory_dir),
         )
     )
 

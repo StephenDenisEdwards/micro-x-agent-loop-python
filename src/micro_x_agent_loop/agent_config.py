@@ -25,3 +25,5 @@ class AgentConfig:
     checkpoint_manager: CheckpointManager | None = None
     event_emitter: EventEmitter | None = None
     metrics_enabled: bool = True
+    user_memory_enabled: bool = False
+    user_memory_dir: str = ""

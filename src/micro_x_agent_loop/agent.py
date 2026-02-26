@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
+import subprocess
+from pathlib import Path
 
 from loguru import logger
 
@@ -64,6 +68,10 @@ class Agent:
         self._last_assistant_message_id: str | None = None
         self._run_lock = asyncio.Lock()
 
+        # User memory
+        self._user_memory_enabled = config.user_memory_enabled
+        self._user_memory_dir = config.user_memory_dir
+
         # Metrics
         self._metrics_enabled = config.metrics_enabled
         self._turn_number = 0
@@ -105,6 +113,7 @@ class Agent:
             on_session=self._handle_session_command,
             on_voice=self._handle_voice_command,
             on_cost=self._handle_cost_command,
+            on_memory=self._handle_memory_command,
             on_unknown=self._on_unknown_command,
         )
 
@@ -270,6 +279,11 @@ class Agent:
         print(f"{self._LINE_PREFIX}- /voice devices")
         print(f"{self._LINE_PREFIX}- /voice events [limit]")
         print(f"{self._LINE_PREFIX}- /voice stop")
+        if self._user_memory_enabled:
+            print(f"{self._LINE_PREFIX}- /memory")
+            print(f"{self._LINE_PREFIX}- /memory list")
+            print(f"{self._LINE_PREFIX}- /memory edit")
+            print(f"{self._LINE_PREFIX}- /memory reset")
         if self._memory_enabled:
             print(f"{self._LINE_PREFIX}- /session")
             print(f"{self._LINE_PREFIX}- /session new [title]")
@@ -285,6 +299,83 @@ class Agent:
                 f"{self._LINE_PREFIX}Memory commands are available when MemoryEnabled=true "
                 "(see operations/config.md)."
             )
+
+    async def _handle_memory_command(self, command: str) -> None:
+        if not self._user_memory_enabled or not self._user_memory_dir:
+            print(f"{self._LINE_PREFIX}User memory commands require UserMemoryEnabled=true")
+            return
+
+        parts = command.split()
+        memory_dir = Path(self._user_memory_dir)
+
+        if len(parts) == 1:
+            memory_file = memory_dir / "MEMORY.md"
+            if not memory_file.exists():
+                print(f"{self._LINE_PREFIX}No memory file found ({memory_file})")
+                return
+            content = memory_file.read_text(encoding="utf-8")
+            print(f"{self._LINE_PREFIX}Contents of MEMORY.md:\n{content}")
+            return
+
+        if len(parts) == 2 and parts[1] == "list":
+            if not memory_dir.exists():
+                print(f"{self._LINE_PREFIX}No memory files found")
+                return
+            files = sorted(p.name for p in memory_dir.iterdir() if p.suffix == ".md")
+            if not files:
+                print(f"{self._LINE_PREFIX}No memory files found")
+                return
+            print(f"{self._LINE_PREFIX}Memory files:")
+            for name in files:
+                print(f"{self._LINE_PREFIX}  - {name}")
+            return
+
+        if len(parts) == 2 and parts[1] == "edit":
+            memory_file = memory_dir / "MEMORY.md"
+            editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
+            if not editor:
+                print(
+                    f"{self._LINE_PREFIX}No $EDITOR set. "
+                    f"Edit manually: {memory_file}"
+                )
+                return
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            if not memory_file.exists():
+                memory_file.write_text("", encoding="utf-8")
+            try:
+                subprocess.run([editor, str(memory_file)], check=True)
+                print(f"{self._LINE_PREFIX}Editor closed.")
+            except Exception as ex:
+                print(f"{self._LINE_PREFIX}Failed to open editor: {ex}")
+            return
+
+        if len(parts) >= 2 and parts[1] == "reset":
+            if not memory_dir.exists():
+                print(f"{self._LINE_PREFIX}No memory directory to reset")
+                return
+            if len(parts) == 2:
+                files = [p.name for p in memory_dir.iterdir() if p.suffix == ".md"]
+                if not files:
+                    print(f"{self._LINE_PREFIX}No memory files to reset")
+                    return
+                print(
+                    f"{self._LINE_PREFIX}This will delete {len(files)} memory file(s). "
+                    f"Run '/memory reset confirm' to proceed."
+                )
+                return
+            if len(parts) == 3 and parts[2] == "confirm":
+                deleted = 0
+                for p in memory_dir.iterdir():
+                    if p.suffix == ".md":
+                        p.unlink()
+                        deleted += 1
+                if deleted:
+                    print(f"{self._LINE_PREFIX}Deleted {deleted} memory file(s).")
+                else:
+                    print(f"{self._LINE_PREFIX}No memory files to delete.")
+                return
+
+        print(f"{self._LINE_PREFIX}Usage: /memory | /memory list | /memory edit | /memory reset")
 
     async def _handle_session_command(self, command: str) -> None:
         sm = self._memory.session_manager

@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned
+**Completed** — All phases implemented.
 
 ## Problem
 
