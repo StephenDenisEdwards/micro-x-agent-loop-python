@@ -1,0 +1,48 @@
+{
+  "Provider": "anthropic",
+  "Model": "claude-sonnet-4-5-20250929",
+  "MaxTokens": 32768,
+  "CompactionStrategy": "summarize",
+  "MemoryEnabled": true,
+  "MemoryDbPath": ".micro_x/memory.db",
+  "EnableFileCheckpointing": true,
+  "CheckpointWriteToolsOnly": true,
+  "MemoryMaxSessions": 200,
+  "MemoryMaxMessagesPerSession": 5000,
+  "MemoryRetentionDays": 30,
+  "UserMemoryEnabled": true,
+  "UserMemoryDir": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\.micro_x\\memory",
+  "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\resources\\documents",
+  "LogLevel": "INFO",
+  "PromptCachingEnabled": false,
+  "CompactionModel": "",
+  "ToolResultSummarizationEnabled": false,
+  "ToolResultSummarizationModel": "",
+  "ToolResultSummarizationThreshold": 4000,
+  "SmartCompactionTriggerEnabled": false,
+  "ConciseOutputEnabled": false,
+  "LogConsumers": [
+    { "type": "console" },
+    { "type": "file", "path": "C:\\Users\\steph\\source\\repos\\resources\\micro-x-agent-loop-logs\\agent.log" }
+  ],
+  "McpServers": {
+    "system-info": {
+      "transport": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--no-build", "--project", "C:\\Users\\steph\\source\\repos\\mcp-servers\\system-info\\src"]
+    },
+    "whatsapp": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "uv", "--directory", "C:\\Users\\steph\\source\\repos\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
+    },
+    "interview-assist": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\interview_assist_server.py"],
+      "env": {
+        "INTERVIEW_ASSIST_REPO": "C:\\Users\\steph\\source\\repos\\interview-assist-2"
+      }
+    }
+  }
+}

@@ -5,6 +5,49 @@ Configuration is split into two files:
 - **`.env`** — secrets (API keys), loaded by python-dotenv
 - **`config.json`** — application settings, loaded as JSON with `dict.get()` defaults
 
+## Config File Indirection
+
+`config.json` can act as a thin pointer to the actual settings file using the `ConfigFile` field. This lets you maintain multiple config variants and switch between them by changing a single line.
+
+**Resolution order:**
+
+1. `--config <path>` CLI argument (highest priority)
+2. `ConfigFile` field in `./config.json`
+3. `./config.json` itself (backward compatible — if no `ConfigFile` field, settings are read directly)
+
+### Pointer mode
+
+```json
+{
+  "ConfigFile": "config-standard.json"
+}
+```
+
+The agent loads all settings from `config-standard.json` in the current directory. Switch profiles by changing the `ConfigFile` value:
+
+- `config-standard.json` — all cost reduction features enabled
+- `config-baseline.json` — all cost reduction features disabled (useful for A/B cost comparison)
+
+### CLI override
+
+```bash
+python -m micro_x_agent_loop --config config-baseline.json
+```
+
+This ignores `config.json` entirely and loads settings from the specified file. The path is resolved relative to the current working directory.
+
+### Backward compatible
+
+If `config.json` contains settings directly (no `ConfigFile` field), it works exactly as before — no migration needed.
+
+### Startup message
+
+The agent prints which config file is active at startup:
+
+```
+Config: config-standard.json
+```
+
 ## Secrets (`.env`)
 
 | Variable | Required | Description |
@@ -21,6 +64,7 @@ The required API key depends on the configured `Provider`. If `GOOGLE_CLIENT_ID`
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
+| `ConfigFile` | string | _(none)_ | Path to the actual config file (see [Config File Indirection](#config-file-indirection)) |
 | `Provider` | string | `"anthropic"` | LLM provider: `"anthropic"` or `"openai"` |
 | `Model` | string | `"claude-sonnet-4-5-20250929"` | Model ID to use (provider-specific) |
 | `MaxTokens` | int | `8192` | Maximum tokens per API response |

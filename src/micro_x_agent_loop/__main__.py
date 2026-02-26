@@ -8,10 +8,21 @@ from micro_x_agent_loop.app_config import load_json_config, parse_app_config, re
 from micro_x_agent_loop.bootstrap import bootstrap_runtime
 
 
+def _parse_config_arg() -> str | None:
+    """Extract ``--config <path>`` from sys.argv (simple, no argparse)."""
+    try:
+        idx = sys.argv.index("--config")
+        return sys.argv[idx + 1]
+    except (ValueError, IndexError):
+        return None
+
+
 async def main() -> None:
     load_dotenv()
 
-    raw_config = load_json_config()
+    cli_config = _parse_config_arg()
+    raw_config, config_source = load_json_config(config_path=cli_config)
+    print(f"Config: {config_source}")
     app = parse_app_config(raw_config)
     env = resolve_runtime_env(app.provider_name)
     if not env.provider_api_key:

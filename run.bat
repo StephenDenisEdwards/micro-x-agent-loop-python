@@ -16,7 +16,7 @@ if exist "%BRIDGE_DIR%\whatsapp-bridge.exe" (
     echo WhatsApp bridge started.
 )
 
-.venv\Scripts\python -m micro_x_agent_loop
+.venv\Scripts\python -m micro_x_agent_loop %*
 
 REM Clean up bridge on exit
 if "%BRIDGE_STARTED%"=="1" (

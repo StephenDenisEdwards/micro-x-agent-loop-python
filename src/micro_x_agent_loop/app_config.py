@@ -57,12 +57,43 @@ class AppConfig:
     concise_output_enabled: bool
 
 
-def load_json_config() -> dict:
-    config_path = Path.cwd() / "config.json"
-    if config_path.exists():
-        with open(config_path) as f:
-            return json.load(f)
-    return {}
+def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
+    """Load application config, supporting file indirection and CLI override.
+
+    Resolution order:
+    1. ``config_path`` argument (from ``--config`` CLI flag) — load directly
+    2. ``ConfigFile`` field inside ``./config.json`` — resolve relative to CWD
+    3. ``./config.json`` itself (backward compatible)
+
+    Returns:
+        A ``(config_dict, resolved_path)`` tuple.
+    """
+    if config_path:
+        p = Path(config_path)
+        if not p.exists():
+            raise FileNotFoundError(f"Config file not found: {p}")
+        with open(p) as f:
+            return json.load(f), str(p)
+
+    default_path = Path.cwd() / "config.json"
+    if not default_path.exists():
+        return {}, "config.json (defaults)"
+
+    with open(default_path) as f:
+        data = json.load(f)
+
+    config_file = data.get("ConfigFile")
+    if config_file:
+        target = Path.cwd() / config_file
+        if not target.exists():
+            raise FileNotFoundError(
+                f"ConfigFile target not found: {target} "
+                f"(referenced from config.json)"
+            )
+        with open(target) as f:
+            return json.load(f), str(config_file)
+
+    return data, "config.json"
 
 
 def _to_bool(value: object, default: bool = False) -> bool:
