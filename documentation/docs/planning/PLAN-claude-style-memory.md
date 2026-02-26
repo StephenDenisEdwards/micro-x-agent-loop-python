@@ -12,13 +12,13 @@ Add memory capabilities inspired by OpenClaw memory/session workflows while pres
 
 This plan is incremental and intentionally starts with low-risk pieces.
 
-## Status (Updated February 25, 2026)
+## Status: Completed (Updated February 26, 2026)
 
-Current implementation status:
+All three phases are complete:
 
 - Phase 1 (Session persistence): Completed.
 - Phase 2 (Checkpoint/rewind for `write_file`/`append_file`): Completed.
-- Phase 3 (expanded mutation coverage + advanced events/callbacks): Partially completed.
+- Phase 3 (expanded mutation coverage + advanced events/callbacks): Completed.
 
 Delivered in code:
 
@@ -32,13 +32,13 @@ Delivered in code:
 - Bash tracking is opt-in: only active when `CheckpointWriteToolsOnly=false`.
 - Local commands: `/help`, `/session`, `/session list [limit]`, `/session resume <id>`, `/session fork`, `/rewind <checkpoint_id>`.
 - Startup/session config wiring and startup pruning.
-- Automated tests for session, checkpoint, rewind, pruning, non-blocking checkpoint tracking failures, bash command parser (36 tests), bash tool mutation protocol (10 tests), and track_paths (6 tests).
+- Event callback/subscriber API on `EventEmitter` (`on()`, `on_all()`, `off()`) with best-effort error isolation.
+- Stress and retention hardening tests (concurrent checkpoints, idempotent tracking, cascading deletes, boundary pruning, async event sink concurrency).
+- Automated tests for session, checkpoint, rewind, pruning, non-blocking checkpoint tracking failures, bash command parser (36 tests), bash tool mutation protocol (10 tests), track_paths (6 tests), event callbacks (10 tests), stress/retention (11 tests).
 
-Remaining from plan:
+Extracted to separate plan:
 
-- Optional external event callback API.
-- MCP tool opt-in mutation tracking.
-- Additional stress/concurrency tests and deeper retention policy hardening.
+- MCP tool opt-in mutation tracking → [PLAN-mcp-mutation-tracking.md](PLAN-mcp-mutation-tracking.md)
 
 ## Memory vs Context
 
