@@ -7,6 +7,7 @@ Research notes exploring agent loop frameworks and patterns, gathered as referen
 | Document | Framework | Focus |
 |----------|-----------|-------|
 | [langgraph-architecture.md](langgraph-architecture.md) | **LangGraph** (LangChain) | State-graph agent loops, checkpointing, streaming, human-in-the-loop, multi-agent supervisors |
+| [langgraph-multi-agent-deep-research.md](langgraph-multi-agent-deep-research.md) | **LangGraph** (LangChain) | Deep dive: subgraph composition, handoffs/Command, supervisor pattern, fan-out/Send, cross-agent checkpointing, Store memory |
 | [crewai-architecture-research.md](crewai-architecture-research.md) | **CrewAI** | Multi-agent crews, role-based agents, ReAct loop, hierarchical orchestration, memory system |
 | [deep-research-autogen-0.4.md](deep-research-autogen-0.4.md) | **AutoGen 0.4** (Microsoft) | Actor-model runtime, AgentChat API, group chat patterns, distributed agents, termination conditions |
 | [pydantic-ai-agent-loop-architecture.md](pydantic-ai-agent-loop-architecture.md) | **Pydantic AI** | Type-safe agents, FSM-based loop, dependency injection, structured output, model abstraction |
