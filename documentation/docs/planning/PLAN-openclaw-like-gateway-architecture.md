@@ -2,7 +2,7 @@
 
 ## Status
 
-**Next Up** — Prioritised ahead of Cost Reduction Phase 3.
+**Planned** — Prioritised ahead of Cost Reduction Phase 3.
 
 ## Goal
 
