@@ -25,7 +25,8 @@ Configuration is split into two files:
 
 The agent loads all settings from `config-standard.json` in the current directory. Switch profiles by changing the `ConfigFile` value:
 
-- `config-standard.json` — all cost reduction features enabled
+- `config-standard.json` — all cost reduction features enabled (including tool result summarization — see [warning](#toolresultsummarizationenabled-toolresultsummarizationmodel-toolresultsummarizationthreshold))
+- `config-standard-no-summarization.json` — recommended for general use; all cost savings except tool result summarization
 - `config-baseline.json` — all cost reduction features disabled (useful for A/B cost comparison)
 
 ### CLI override
@@ -334,6 +335,10 @@ Model used for the compaction summarization call. When empty (the default), the 
 Compaction is a straightforward summarization task and does not require the full reasoning capability of the main model.
 
 #### ToolResultSummarizationEnabled, ToolResultSummarizationModel, ToolResultSummarizationThreshold
+
+> **Warning: not recommended for general-purpose use.** Tool result summarization is fundamentally lossy — the summarization model cannot reliably determine which parts of a tool result matter to the user's task. In practice, this causes missing data in agent output (e.g., dropped URLs from web searches, lost records from multi-item results). Mechanical truncation (head+tail) has the same problem for unstructured content. See [ADR-013](../architecture/decisions/ADR-013-tool-result-summarization-reliability.md) for the full analysis.
+>
+> Use `config-standard-no-summarization.json` for general assistant workloads. Only enable summarization for loss-tolerant tasks (e.g., log analysis where the gist suffices).
 
 When enabled, tool results longer than `ToolResultSummarizationThreshold` characters are summarized by a separate LLM call before being fed back to the main model. This reduces per-turn input tokens for tool-heavy workflows (web fetches, large file reads, etc.).
 

@@ -114,7 +114,7 @@ Each instance is independent: separate API client, separate retry state, no shar
 
 **Risks:**
 
-- **Information loss in summarization.** The summarization model may drop data the main model would have used. Mitigated by: opt-in default, preservation-focused prompt, configurable threshold, `was_summarized` metric for monitoring.
+- **Information loss in summarization.** The summarization model may drop data the main model would have used. Mitigated by: opt-in default, preservation-focused prompt, configurable threshold, `was_summarized` metric for monitoring. **Update: this risk materialised in practice — see [ADR-013](ADR-013-tool-result-summarization-reliability.md).** Tool result summarization is fundamentally unreliable for information-dense, unstructured results (web searches, email, documents) and is no longer recommended for general-purpose use.
 - **Cost break-even for summarization.** If tool results are rarely above threshold, summarization calls add cost without savings. The 4,000-char default ensures only genuinely large results are summarized.
 - **Prompt caching invalidation.** Any change to system prompt text or tool schemas invalidates the cache. Features that modify the system prompt (concise output, user memory) should be set once per session, not toggled mid-conversation.
 
