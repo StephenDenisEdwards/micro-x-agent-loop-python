@@ -12,10 +12,11 @@ What to work on next, in order. Rationale: cost reduction is the top priority �
 | **2** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 1 (Prompt caching, cheap compaction model) | Planning | Highest ROI cost levers, low effort, measurable with metrics from P1 |
 | **3** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 2 (Tool result reduction, smarter compaction, output reduction) | Planning | Next-highest ROI, requires per-tool data from metrics |
 | **4** | [Memory System](PLAN-claude-style-memory.md) — Phase 3 remainder | In Progress | Already partially done; event callback API, MCP mutation tracking, stress tests |
-| **5** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, sub-agents, schema optimisation) | Planning | Architectural changes, higher effort, depends on gateway plan |
-| **6** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
-| **7** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | |
-| **8** | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Large architectural migration; enables cost reduction Phase 3 |
+| **5** | [Cross-Session User Memory](PLAN-cross-session-user-memory.md) | Planned | Builds on session memory; persistent knowledge reduces re-explanation cost |
+| **6** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, sub-agents, schema optimisation) | Planning | Architectural changes, higher effort, depends on gateway plan |
+| **7** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
+| **8** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | |
+| **9** | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Large architectural migration; enables cost reduction Phase 3 |
 
 ---
 
@@ -26,7 +27,7 @@ What to work on next, in order. Rationale: cost reduction is the top priority �
 | Completed | 7 |
 | In Progress | 1 |
 | Planning | 1 |
-| Planned | 3 |
+| Planned | 4 |
 
 ## All Plans
 
@@ -43,4 +44,5 @@ What to work on next, in order. Rationale: cost reduction is the top priority �
 | [Cost Metrics Logging](PLAN-cost-metrics-logging.md) | Completed | Structured metrics for cost analysis — prerequisite for cost reduction. See [DESIGN-cost-metrics.md](../design/DESIGN-cost-metrics.md) |
 | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
 | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | |
+| [Cross-Session User Memory](PLAN-cross-session-user-memory.md) | Planned | Claude Code-style auto memory — persistent user knowledge across sessions |
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Server/gateway architecture migration |
