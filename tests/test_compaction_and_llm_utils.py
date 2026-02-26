@@ -1,34 +1,10 @@
 import asyncio
 import unittest
-from unittest.mock import patch
 
 from micro_x_agent_loop.compaction import _adjust_boundary, _rebuild_messages, estimate_tokens
 from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
-
-
-class _Tool:
-    @property
-    def name(self) -> str:
-        return "read_file"
-
-    @property
-    def description(self) -> str:
-        return "reads files"
-
-    @property
-    def input_schema(self) -> dict:
-        return {"type": "object"}
-
-    @property
-    def is_mutating(self) -> bool:
-        return False
-
-    def predict_touched_paths(self, tool_input: dict) -> list[str]:
-        return []
-
-    async def execute(self, tool_input: dict) -> str:
-        return "ok"
+from tests.fakes import FakeTool
 
 
 class CompactionAndLlmUtilsTests(unittest.TestCase):
@@ -70,7 +46,7 @@ class CompactionAndLlmUtilsTests(unittest.TestCase):
 
     def test_to_anthropic_tools_maps_tool_fields(self) -> None:
         provider = AnthropicProvider.__new__(AnthropicProvider)
-        mapped = provider.convert_tools([_Tool()])
+        mapped = provider.convert_tools([FakeTool("read_file", "reads files")])
         self.assertEqual("read_file", mapped[0]["name"])
         self.assertEqual("reads files", mapped[0]["description"])
 

@@ -8,30 +8,7 @@ from unittest.mock import patch
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.usage import UsageResult
-
-
-class _NoopTool:
-    @property
-    def name(self) -> str:
-        return "noop"
-
-    @property
-    def description(self) -> str:
-        return "noop"
-
-    @property
-    def input_schema(self) -> dict[str, Any]:
-        return {"type": "object"}
-
-    @property
-    def is_mutating(self) -> bool:
-        return False
-
-    def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]:
-        return []
-
-    async def execute(self, tool_input: dict[str, Any]) -> str:
-        return "ok"
+from tests.fakes import FakeEventEmitter, FakeTool
 
 
 class _SessionManagerFake:
@@ -151,22 +128,17 @@ class _CheckpointManagerFake:
         return "s1", [{"path": "x.txt", "status": "restored", "detail": ""}]
 
 
-class _EventsFake:
-    def emit(self, *args: Any, **kwargs: Any) -> None:
-        return
-
-
 class AgentCommandTests(unittest.TestCase):
     def _make_agent(self) -> Agent:
         return Agent(
             AgentConfig(
                 api_key="test",
-                tools=[_NoopTool()],
+                tools=[FakeTool()],
                 memory_enabled=True,
                 session_id="s1",
                 session_manager=_SessionManagerFake(),
                 checkpoint_manager=_CheckpointManagerFake(),
-                event_emitter=_EventsFake(),
+                event_emitter=FakeEventEmitter(),
             )
         )
 

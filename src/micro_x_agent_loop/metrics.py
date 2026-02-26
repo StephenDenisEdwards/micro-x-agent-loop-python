@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 
-from micro_x_agent_loop.usage import UsageResult, estimate_cost
+from micro_x_agent_loop.usage import PRICING, UsageResult, estimate_cost
 
 _metrics_logger = logger.bind(metrics=True)
 
@@ -58,7 +58,7 @@ def build_tool_execution_metric(
         "turn_number": turn_number,
         "tool_name": tool_name,
         "result_chars": result_chars,
-        "result_estimated_tokens": result_chars // 4,
+        "result_estimated_tokens": result_chars // 4,  # approximation — actual text unavailable at metric emission time
         "duration_ms": duration_ms,
         "is_error": is_error,
     }
@@ -111,6 +111,8 @@ def build_session_summary_metric(accumulator: SessionAccumulator) -> dict:
 @dataclass
 class SessionAccumulator:
     session_id: str = ""
+    provider: str = ""
+    model: str = ""
     total_turns: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
@@ -127,6 +129,8 @@ class SessionAccumulator:
     def reset(self, session_id: str = "") -> None:
         """Reset all counters for a new session."""
         self.session_id = session_id
+        self.provider = ""
+        self.model = ""
         self.total_turns = 0
         self.total_input_tokens = 0
         self.total_output_tokens = 0
@@ -142,6 +146,9 @@ class SessionAccumulator:
 
     def add_api_call(self, usage: UsageResult) -> None:
         self.total_api_calls += 1
+        if not self.model and usage.model:
+            self.provider = usage.provider
+            self.model = usage.model
         self.total_input_tokens += usage.input_tokens
         self.total_output_tokens += usage.output_tokens
         self.total_cache_creation_tokens += usage.cache_creation_input_tokens
@@ -163,6 +170,15 @@ class SessionAccumulator:
         lines = [
             "Session Cost Summary",
             "--------------------",
+            f"Provider/Model:     {self.provider or '—'} / {self.model or '—'}",
+        ]
+        prices = PRICING.get(self.model) if self.model else None
+        if prices:
+            inp, out, cr, cw = prices
+            lines.append(f"Pricing (per MTok):  in=${inp} out=${out} cache_read=${cr} cache_write=${cw}")
+        elif self.model:
+            lines.append("Pricing (per MTok):  (unknown model — cost estimated as $0)")
+        lines += [
             f"Total API calls:    {self.total_api_calls}",
             f"Total turns:        {self.total_turns}",
             f"Input tokens:       {self.total_input_tokens:,}",

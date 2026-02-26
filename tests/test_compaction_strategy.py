@@ -4,20 +4,7 @@ from unittest.mock import patch
 
 from micro_x_agent_loop.compaction import SummarizeCompactionStrategy, _format_for_summarization
 from micro_x_agent_loop.usage import UsageResult
-
-
-class _FakeProvider:
-    def __init__(self) -> None:
-        self.calls: list[dict] = []
-
-    async def create_message(self, model, max_tokens, temperature, messages):
-        self.calls.append({
-            "model": model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": messages,
-        })
-        return "summary text", UsageResult(input_tokens=100, output_tokens=50, model=model)
+from tests.fakes import FakeProvider
 
 
 class CompactionStrategyTests(unittest.TestCase):
@@ -39,13 +26,13 @@ class CompactionStrategyTests(unittest.TestCase):
         self.assertIn("[Tool result (1)]:", formatted)
 
     def test_maybe_compact_returns_original_below_threshold(self) -> None:
-        strategy = SummarizeCompactionStrategy(_FakeProvider(), "m", threshold_tokens=10_000)
+        strategy = SummarizeCompactionStrategy(FakeProvider(), "m", threshold_tokens=10_000)
         messages = [{"role": "user", "content": "small"}]
         out = asyncio.run(strategy.maybe_compact(messages))
         self.assertEqual(messages, out)
 
     def test_maybe_compact_summarizes_when_over_threshold(self) -> None:
-        strategy = SummarizeCompactionStrategy(_FakeProvider(), "m", threshold_tokens=1, protected_tail_messages=1)
+        strategy = SummarizeCompactionStrategy(FakeProvider(), "m", threshold_tokens=1, protected_tail_messages=1)
         messages = [
             {"role": "user", "content": "seed"},
             {"role": "assistant", "content": [{"type": "text", "text": "long text " * 200}]},
@@ -56,7 +43,7 @@ class CompactionStrategyTests(unittest.TestCase):
         self.assertIn("[CONTEXT SUMMARY]", out[0]["content"])
 
     def test_maybe_compact_falls_back_on_summary_error(self) -> None:
-        strategy = SummarizeCompactionStrategy(_FakeProvider(), "m", threshold_tokens=1, protected_tail_messages=1)
+        strategy = SummarizeCompactionStrategy(FakeProvider(), "m", threshold_tokens=1, protected_tail_messages=1)
         messages = [
             {"role": "user", "content": "seed"},
             {"role": "assistant", "content": [{"type": "text", "text": "long text " * 200}]},
@@ -67,7 +54,7 @@ class CompactionStrategyTests(unittest.TestCase):
         self.assertEqual(messages, out)
 
     def test_summarize_calls_provider_create_message(self) -> None:
-        provider = _FakeProvider()
+        provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(provider, "m", threshold_tokens=1, protected_tail_messages=1)
         messages = [
             {"role": "user", "content": "seed"},
@@ -83,7 +70,7 @@ class CompactionStrategyTests(unittest.TestCase):
         def on_compaction(usage, tokens_before, tokens_after, messages_compacted):
             callback_calls.append((usage, tokens_before, tokens_after, messages_compacted))
 
-        provider = _FakeProvider()
+        provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(
             provider, "m", threshold_tokens=1, protected_tail_messages=1,
             on_compaction_completed=on_compaction,

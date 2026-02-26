@@ -8,6 +8,7 @@ from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.commands.router import CommandRouter
 from micro_x_agent_loop.commands.voice_command import parse_voice_command, parse_voice_start_options
 from micro_x_agent_loop.compaction import SummarizeCompactionStrategy
+from micro_x_agent_loop.memory.facade import ActiveMemoryFacade, NullMemoryFacade
 from micro_x_agent_loop.metrics import (
     SessionAccumulator,
     build_api_call_metric,
@@ -30,7 +31,6 @@ class Agent:
     _USER_PROMPT = "you> "
 
     _MAX_TOKENS_RETRIES = 3
-    _MUTATING_TOOL_NAMES = {"write_file", "append_file"}
 
     def __init__(self, config: AgentConfig):
         self._provider = create_provider(config.provider, config.api_key)
@@ -45,10 +45,19 @@ class Agent:
         self._max_conversation_messages = config.max_conversation_messages
         self._compaction_strategy = config.compaction_strategy
         self._memory_enabled = config.memory_enabled
-        self._session_manager = config.session_manager
-        self._checkpoint_manager = config.checkpoint_manager
-        self._event_emitter = config.event_emitter
-        self._active_session_id = config.session_id
+
+        # Memory facade
+        if config.memory_enabled and config.session_manager is not None:
+            self._memory: ActiveMemoryFacade | NullMemoryFacade = ActiveMemoryFacade(
+                session_manager=config.session_manager,
+                checkpoint_manager=config.checkpoint_manager,
+                event_emitter=config.event_emitter,
+                active_session_id=config.session_id,
+            )
+        else:
+            self._memory = NullMemoryFacade()
+            self._memory.active_session_id = config.session_id
+
         self._current_user_message_id: str | None = None
         self._current_user_message_text: str | None = None
         self._current_checkpoint_id: str | None = None
@@ -86,16 +95,7 @@ class Agent:
             line_prefix=self._LINE_PREFIX,
             max_tool_result_chars=self._max_tool_result_chars,
             max_tokens_retries=self._MAX_TOKENS_RETRIES,
-            on_append_message=self._append_message,
-            on_user_message_appended=self._set_current_user_message_id,
-            on_maybe_compact=self._maybe_compact,
-            on_ensure_checkpoint_for_turn=self._ensure_checkpoint_for_turn,
-            on_maybe_track_mutation=self._maybe_track_mutation,
-            on_record_tool_call=self._record_tool_call,
-            on_tool_started=self._emit_tool_started,
-            on_tool_completed=self._emit_tool_completed,
-            on_api_call_completed=self._on_api_call_completed if self._metrics_enabled else None,
-            on_tool_executed=self._on_tool_executed if self._metrics_enabled else None,
+            events=self,
         )
 
         self._command_router = CommandRouter(
@@ -109,11 +109,12 @@ class Agent:
         )
 
     async def initialize_session(self) -> None:
-        if not self._memory_enabled or self._session_manager is None or self._active_session_id is None:
+        session_id = self._memory.active_session_id
+        if not self._memory_enabled or session_id is None:
             return
-        self._messages = self._session_manager.load_messages(self._active_session_id)
+        self._messages = self._memory.load_messages(session_id)
         logger.info(
-            f"Loaded {len(self._messages)} persisted messages for session {self._active_session_id}"
+            f"Loaded {len(self._messages)} persisted messages for session {session_id}"
         )
 
     async def run(self, user_message: str) -> None:
@@ -137,26 +138,30 @@ class Agent:
         self._current_user_message_id = current_user_message_id
         self._last_assistant_message_id = last_assistant_message_id
 
-    # -- Metrics callbacks --
+    # -- TurnEvents protocol: metrics --
 
-    def _on_api_call_completed(self, usage: UsageResult, call_type: str) -> None:
+    def on_api_call_completed(self, usage: UsageResult, call_type: str) -> None:
+        if not self._metrics_enabled:
+            return
         self._session_accumulator.add_api_call(usage)
         metric = build_api_call_metric(
             usage,
-            session_id=self._active_session_id or "",
+            session_id=self._memory.active_session_id or "",
             turn_number=self._turn_number,
             call_type=call_type,
         )
         emit_metric(metric)
 
-    def _on_tool_executed(self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool) -> None:
+    def on_tool_executed(self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool) -> None:
+        if not self._metrics_enabled:
+            return
         self._session_accumulator.add_tool_call(tool_name, is_error)
         metric = build_tool_execution_metric(
             tool_name=tool_name,
             result_chars=result_chars,
             duration_ms=duration_ms,
             is_error=is_error,
-            session_id=self._active_session_id or "",
+            session_id=self._memory.active_session_id or "",
             turn_number=self._turn_number,
         )
         emit_metric(metric)
@@ -170,7 +175,7 @@ class Agent:
             tokens_before=tokens_before,
             tokens_after=tokens_after,
             messages_compacted=messages_compacted,
-            session_id=self._active_session_id or "",
+            session_id=self._memory.active_session_id or "",
             turn_number=self._turn_number,
         )
         emit_metric(metric)
@@ -180,9 +185,9 @@ class Agent:
     async def _handle_cost_command(self, command: str) -> None:
         print(f"{self._LINE_PREFIX}{self._session_accumulator.format_summary()}")
 
-    # -- Existing methods --
+    # -- TurnEvents protocol: core callbacks --
 
-    async def _maybe_compact(self) -> None:
+    async def on_maybe_compact(self) -> None:
         self._messages = await self._compaction_strategy.maybe_compact(self._messages)
         self._trim_conversation_history()
 
@@ -200,94 +205,31 @@ class Agent:
             )
             del self._messages[:remove_count]
 
-    def _append_message(self, role: str, content: str | list[dict]) -> str | None:
+    def on_append_message(self, role: str, content: str | list[dict]) -> str | None:
         self._messages.append({"role": role, "content": content})
-        if (
-            self._memory_enabled
-            and self._session_manager is not None
-            and self._active_session_id is not None
-        ):
-            message_id, _ = self._session_manager.append_message(self._active_session_id, role, content)
-            return message_id
-        return None
+        return self._memory.append_message(role, content)
 
-    def _ensure_checkpoint_for_turn(self, tool_use_blocks: list[dict]) -> None:
-        if (
-            not self._memory_enabled
-            or self._checkpoint_manager is None
-            or not self._checkpoint_manager.enabled
-            or self._active_session_id is None
-            or self._current_user_message_id is None
-            or self._current_checkpoint_id is not None
-        ):
-            return
-        tool_names = [b["name"] for b in tool_use_blocks]
-        self._current_checkpoint_id = self._checkpoint_manager.create_checkpoint(
-            self._active_session_id,
-            self._current_user_message_id,
-            scope={
-                "tool_names": tool_names,
-                "user_preview": (self._current_user_message_text or "")[:120],
-            },
+    def on_ensure_checkpoint_for_turn(self, tool_use_blocks: list[dict]) -> None:
+        self._current_checkpoint_id = self._memory.ensure_checkpoint_for_turn(
+            tool_use_blocks,
+            user_message_id=self._current_user_message_id,
+            user_message_text=self._current_user_message_text,
+            current_checkpoint_id=self._current_checkpoint_id,
         )
 
-    def _maybe_track_mutation(self, tool_name: str, tool: Tool, tool_input: dict) -> None:
-        if (
-            not self._memory_enabled
-            or self._checkpoint_manager is None
-            or not self._checkpoint_manager.enabled
-            or self._current_checkpoint_id is None
-        ):
-            return
-        if self._checkpoint_manager.write_tools_only and tool_name not in self._MUTATING_TOOL_NAMES:
-            return
-        is_mutating = bool(getattr(tool, "is_mutating", False))
-        if not is_mutating and tool_name not in self._MUTATING_TOOL_NAMES:
-            return
-        try:
-            predict = getattr(tool, "predict_touched_paths", None)
-            if callable(predict):
-                paths = predict(tool_input)
-                if paths:
-                    self._checkpoint_manager.track_paths(self._current_checkpoint_id, paths)
-            else:
-                self._checkpoint_manager.maybe_track_tool_input(self._current_checkpoint_id, tool_input)
-        except Exception as ex:
-            logger.warning(
-                f"Checkpoint tracking failed for tool '{tool_name}' "
-                f"(checkpoint={self._current_checkpoint_id}): {ex}"
-            )
-            if self._event_emitter is not None and self._active_session_id is not None:
-                self._event_emitter.emit(
-                    self._active_session_id,
-                    "checkpoint.file_untracked",
-                    {
-                        "checkpoint_id": self._current_checkpoint_id,
-                        "tool_name": tool_name,
-                        "error": str(ex),
-                    },
-                )
+    def on_maybe_track_mutation(self, tool_name: str, tool: Tool, tool_input: dict) -> None:
+        self._memory.maybe_track_mutation(tool_name, tool, tool_input, self._current_checkpoint_id)
 
-    def _emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
-        if self._event_emitter is not None and self._active_session_id is not None:
-            self._event_emitter.emit(
-                self._active_session_id,
-                "tool.started",
-                {"tool_use_id": tool_use_id, "tool_name": tool_name},
-            )
+    def on_tool_started(self, tool_use_id: str, tool_name: str) -> None:
+        self._memory.emit_tool_started(tool_use_id, tool_name)
 
-    def _set_current_user_message_id(self, message_id: str | None) -> None:
+    def on_user_message_appended(self, message_id: str | None) -> None:
         self._current_user_message_id = message_id
 
-    def _emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
-        if self._event_emitter is not None and self._active_session_id is not None:
-            self._event_emitter.emit(
-                self._active_session_id,
-                "tool.completed",
-                {"tool_use_id": tool_use_id, "tool_name": tool_name, "is_error": is_error},
-            )
+    def on_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
+        self._memory.emit_tool_completed(tool_use_id, tool_name, is_error)
 
-    def _record_tool_call(
+    def on_record_tool_call(
         self,
         *,
         tool_call_id: str,
@@ -297,20 +239,13 @@ class Agent:
         is_error: bool,
         message_id: str | None,
     ) -> None:
-        if (
-            not self._memory_enabled
-            or self._session_manager is None
-            or self._active_session_id is None
-        ):
-            return
-        self._session_manager.record_tool_call(
-            self._active_session_id,
-            message_id=message_id,
+        self._memory.record_tool_call(
+            tool_call_id=tool_call_id,
             tool_name=tool_name,
             tool_input=tool_input,
             result_text=result_text,
             is_error=is_error,
-            tool_call_id=tool_call_id,
+            message_id=message_id,
         )
 
     async def _handle_local_command(self, user_message: str) -> bool:
@@ -352,20 +287,22 @@ class Agent:
             )
 
     async def _handle_session_command(self, command: str) -> None:
-        if not self._memory_enabled or self._session_manager is None:
+        sm = self._memory.session_manager
+        if not self._memory_enabled or sm is None:
             print(f"{self._LINE_PREFIX}Session commands require MemoryEnabled=true")
             return
 
         parts = command.split()
         if len(parts) == 1:
-            if self._active_session_id is None:
+            active_id = self._memory.active_session_id
+            if active_id is None:
                 print(f"{self._LINE_PREFIX}Current session: none")
                 return
-            session = self._session_manager.get_session(self._active_session_id)
-            title = session.get("title", self._active_session_id) if session else self._active_session_id
+            session = sm.get_session(active_id)
+            title = session.get("title", active_id) if session else active_id
             print(
                 f"{self._LINE_PREFIX}Current session: {title} "
-                f"[{self._session_controller.short_id(self._active_session_id)}] (id={self._active_session_id})"
+                f"[{self._session_controller.short_id(active_id)}] (id={active_id})"
             )
             return
 
@@ -377,23 +314,25 @@ class Agent:
                 except ValueError:
                     print(f"{self._LINE_PREFIX}Usage: /session list [limit]")
                     return
-            sessions = self._session_manager.list_sessions(limit=limit)
+            sessions = sm.list_sessions(limit=limit)
             if not sessions:
                 print(f"{self._LINE_PREFIX}No sessions found.")
                 return
             print(f"{self._LINE_PREFIX}Recent sessions:")
             for s in sessions:
-                print(self._session_controller.format_session_list_entry(s, active_session_id=self._active_session_id))
+                print(self._session_controller.format_session_list_entry(
+                    s, active_session_id=self._memory.active_session_id
+                ))
             return
 
         if len(parts) >= 2 and parts[1] == "new":
             title = command.partition("new")[2].strip()
-            new_id = self._session_manager.create_session(title=title if title else None)
-            self._active_session_id = new_id
-            self._messages = self._session_manager.load_messages(new_id)
+            new_id = sm.create_session(title=title if title else None)
+            self._memory.active_session_id = new_id
+            self._messages = self._memory.load_messages(new_id)
             self._session_accumulator.reset(session_id=new_id)
             self._turn_number = 0
-            session = self._session_manager.get_session(new_id) or {"title": new_id}
+            session = sm.get_session(new_id) or {"title": new_id}
             print(
                 f"{self._LINE_PREFIX}Started new session: {session.get('title', new_id)} "
                 f"[{self._session_controller.short_id(new_id)}] (id={new_id})"
@@ -401,14 +340,15 @@ class Agent:
             return
 
         if len(parts) >= 3 and parts[1] == "name":
-            if self._active_session_id is None:
+            active_id = self._memory.active_session_id
+            if active_id is None:
                 print(f"{self._LINE_PREFIX}No active session to name")
                 return
             title = command.partition("name")[2].strip()
             if not title:
                 print(f"{self._LINE_PREFIX}Usage: /session name <title>")
                 return
-            self._session_manager.set_session_title(self._active_session_id, title)
+            sm.set_session_title(active_id, title)
             print(f"{self._LINE_PREFIX}Session named: {title}")
             return
 
@@ -418,7 +358,7 @@ class Agent:
                 print(f"{self._LINE_PREFIX}Usage: /session resume <id-or-name>")
                 return
             try:
-                session = self._session_manager.resolve_session_identifier(target)
+                session = sm.resolve_session_identifier(target)
             except ValueError as ex:
                 print(f"{self._LINE_PREFIX}{ex}")
                 return
@@ -426,11 +366,11 @@ class Agent:
                 print(f"{self._LINE_PREFIX}Session not found: {target}")
                 return
             resolved_id = session["id"]
-            self._active_session_id = resolved_id
-            self._messages = self._session_manager.load_messages(resolved_id)
+            self._memory.active_session_id = resolved_id
+            self._messages = self._memory.load_messages(resolved_id)
             self._session_accumulator.reset(session_id=resolved_id)
             self._turn_number = 0
-            summary = self._session_manager.build_session_summary(resolved_id)
+            summary = sm.build_session_summary(resolved_id)
             print(
                 f"{self._LINE_PREFIX}Resumed session {summary['title']} "
                 f"[{self._session_controller.short_id(resolved_id)}] (id={resolved_id}, {len(self._messages)} messages)"
@@ -440,13 +380,14 @@ class Agent:
             return
 
         if len(parts) == 2 and parts[1] == "fork":
-            if self._active_session_id is None:
+            active_id = self._memory.active_session_id
+            if active_id is None:
                 print(f"{self._LINE_PREFIX}No active session to fork")
                 return
-            source_id = self._active_session_id
-            fork_id = self._session_manager.fork_session(source_id)
-            self._active_session_id = fork_id
-            self._messages = self._session_manager.load_messages(fork_id)
+            source_id = active_id
+            fork_id = sm.fork_session(source_id)
+            self._memory.active_session_id = fork_id
+            self._messages = self._memory.load_messages(fork_id)
             self._session_accumulator.reset(session_id=fork_id)
             self._turn_number = 0
             print(f"{self._LINE_PREFIX}Forked session {source_id} -> {fork_id}")
@@ -458,7 +399,8 @@ class Agent:
         )
 
     async def _handle_rewind_command(self, command: str) -> None:
-        if not self._memory_enabled or self._checkpoint_manager is None:
+        cm = self._memory.checkpoint_manager
+        if not self._memory_enabled or cm is None:
             print(f"{self._LINE_PREFIX}Rewind requires MemoryEnabled=true")
             return
         parts = command.split()
@@ -468,7 +410,7 @@ class Agent:
 
         checkpoint_id = parts[1]
         try:
-            _, outcomes = self._checkpoint_manager.rewind_files(checkpoint_id)
+            _, outcomes = cm.rewind_files(checkpoint_id)
         except Exception as ex:
             print(f"{self._LINE_PREFIX}Rewind failed: {ex}")
             return
@@ -477,10 +419,12 @@ class Agent:
             print(line)
 
     async def _handle_checkpoint_command(self, command: str) -> None:
+        cm = self._memory.checkpoint_manager
+        active_id = self._memory.active_session_id
         if (
             not self._memory_enabled
-            or self._checkpoint_manager is None
-            or self._active_session_id is None
+            or cm is None
+            or active_id is None
         ):
             print(f"{self._LINE_PREFIX}Checkpoint commands require MemoryEnabled=true")
             return
@@ -494,7 +438,7 @@ class Agent:
                 except ValueError:
                     print(f"{self._LINE_PREFIX}Usage: /checkpoint list [limit]")
                     return
-            checkpoints = self._checkpoint_manager.list_checkpoints(self._active_session_id, limit=limit)
+            checkpoints = cm.list_checkpoints(active_id, limit=limit)
             if not checkpoints:
                 print(f"{self._LINE_PREFIX}No checkpoints found for current session.")
                 return
@@ -586,7 +530,7 @@ class Agent:
 
     @property
     def active_session_id(self) -> str | None:
-        return self._active_session_id
+        return self._memory.active_session_id
 
     # Backward-compatible wrappers for existing tests.
     async def _execute_tools(self, tool_use_blocks: list[dict]) -> list[dict]:
@@ -600,7 +544,9 @@ class Agent:
         return self._session_controller.short_id(value)
 
     def _format_session_list_entry(self, session: dict) -> str:
-        return self._session_controller.format_session_list_entry(session, active_session_id=self._active_session_id)
+        return self._session_controller.format_session_list_entry(
+            session, active_session_id=self._memory.active_session_id
+        )
 
     def _format_checkpoint_list_entry(self, checkpoint: dict) -> str:
         return self._checkpoint_service.format_checkpoint_list_entry(checkpoint)

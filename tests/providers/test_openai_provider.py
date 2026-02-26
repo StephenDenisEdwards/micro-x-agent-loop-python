@@ -2,44 +2,15 @@ import asyncio
 import json
 import unittest
 from types import SimpleNamespace
-from typing import Any
 
 from micro_x_agent_loop.providers.openai_provider import (
+    _STOP_REASON_MAP,
     OpenAIProvider,
     _to_openai_messages,
     _to_openai_tools,
-    _STOP_REASON_MAP,
 )
 from micro_x_agent_loop.usage import UsageResult
-
-
-class _FakeTool:
-    def __init__(self, name: str, description: str, input_schema: dict):
-        self._name = name
-        self._description = description
-        self._input_schema = input_schema
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def description(self) -> str:
-        return self._description
-
-    @property
-    def input_schema(self) -> dict[str, Any]:
-        return self._input_schema
-
-    @property
-    def is_mutating(self) -> bool:
-        return False
-
-    def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]:
-        return []
-
-    async def execute(self, tool_input: dict[str, Any]) -> str:
-        return "ok"
+from tests.fakes import FakeTool
 
 
 class ToOpenAIMessagesTests(unittest.TestCase):
@@ -195,7 +166,7 @@ class OpenAIProviderConvertToolsTests(unittest.TestCase):
         provider = OpenAIProvider.__new__(OpenAIProvider)
         provider._client = None  # not used for convert_tools
         tools = [
-            _FakeTool("write_file", "Write a file", {"type": "object", "properties": {"path": {"type": "string"}}}),
+            FakeTool("write_file", "Write a file", {"type": "object", "properties": {"path": {"type": "string"}}}),
         ]
         result = provider.convert_tools(tools)
         self.assertEqual(1, len(result))
@@ -218,8 +189,8 @@ class OpenAIProviderStreamTests(unittest.TestCase):
             async def __anext__(self):
                 try:
                     return next(self._iter)
-                except StopIteration:
-                    raise StopAsyncIteration
+                except StopIteration as exc:
+                    raise StopAsyncIteration from exc
 
         class _FakeCompletions:
             def __init__(self, chunks):
@@ -431,7 +402,9 @@ class OpenAIProviderStreamTests(unittest.TestCase):
                             SimpleNamespace(
                                 index=1,
                                 id="call_b",
-                                function=SimpleNamespace(name="write_file", arguments='{"path": "b.py", "content": "x"}'),
+                                function=SimpleNamespace(
+                                    name="write_file", arguments='{"path": "b.py", "content": "x"}'
+                                ),
                             ),
                         ],
                     ),

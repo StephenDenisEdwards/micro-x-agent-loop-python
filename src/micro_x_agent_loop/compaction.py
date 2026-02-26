@@ -2,9 +2,12 @@ import json
 from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
 
+import tiktoken
 from loguru import logger
 
 from micro_x_agent_loop.usage import UsageResult
+
+_encoding = tiktoken.get_encoding("cl100k_base")
 
 
 @runtime_checkable
@@ -67,7 +70,7 @@ class SummarizeCompactionStrategy:
         result = _rebuild_messages(messages, compact_end, summary)
 
         tokens_after = estimate_tokens(result)
-        summary_tokens = len(summary) // 4
+        summary_tokens = len(_encoding.encode(summary))
         freed = estimated - tokens_after
         logger.info(
             f"Compaction: summarized {len(compactable)} messages into ~{summary_tokens:,} tokens,"
@@ -81,31 +84,31 @@ class SummarizeCompactionStrategy:
 
 
 def estimate_tokens(messages: list[dict]) -> int:
-    total_chars = 0
+    total = 0
     for msg in messages:
         content = msg.get("content", "")
         if isinstance(content, str):
-            total_chars += len(content)
+            total += len(_encoding.encode(content))
         elif isinstance(content, list):
             for block in content:
                 if isinstance(block, str):
-                    total_chars += len(block)
+                    total += len(_encoding.encode(block))
                 elif isinstance(block, dict):
                     block_type = block.get("type", "")
                     if block_type == "text":
-                        total_chars += len(block.get("text", ""))
+                        total += len(_encoding.encode(block.get("text", "")))
                     elif block_type == "tool_use":
-                        total_chars += len(block.get("name", ""))
-                        total_chars += len(json.dumps(block.get("input", {})))
+                        total += len(_encoding.encode(block.get("name", "")))
+                        total += len(_encoding.encode(json.dumps(block.get("input", {}))))
                     elif block_type == "tool_result":
                         result_content = block.get("content", "")
                         if isinstance(result_content, str):
-                            total_chars += len(result_content)
+                            total += len(_encoding.encode(result_content))
                         elif isinstance(result_content, list):
                             for sub in result_content:
                                 if isinstance(sub, dict) and sub.get("type") == "text":
-                                    total_chars += len(sub.get("text", ""))
-    return total_chars // 4
+                                    total += len(_encoding.encode(sub.get("text", "")))
+    return total
 
 
 def _format_for_summarization(messages: list[dict]) -> str:

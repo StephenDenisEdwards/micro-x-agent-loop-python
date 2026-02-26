@@ -4,50 +4,13 @@ from types import SimpleNamespace
 
 from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
 from micro_x_agent_loop.usage import UsageResult
-
-
-class _FakeStreamContext:
-    def __init__(self, events: list[object], final_message: object):
-        self._events = events
-        self._final_message = final_message
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        return False
-
-    def __aiter__(self):
-        self._iter = iter(self._events)
-        return self
-
-    async def __anext__(self):
-        try:
-            return next(self._iter)
-        except StopIteration:
-            raise StopAsyncIteration
-
-    async def get_final_message(self):
-        return self._final_message
-
-
-class _FakeMessages:
-    def __init__(self, stream_ctx: _FakeStreamContext):
-        self._stream_ctx = stream_ctx
-
-    def stream(self, **kwargs):
-        return self._stream_ctx
-
-
-class _FakeClient:
-    def __init__(self, stream_ctx: _FakeStreamContext):
-        self.messages = _FakeMessages(stream_ctx)
+from tests.fakes import FakeAnthropicClient, FakeStreamContext
 
 
 class AnthropicProviderStreamTests(unittest.TestCase):
-    def _make_provider(self, stream_ctx: _FakeStreamContext) -> AnthropicProvider:
+    def _make_provider(self, stream_ctx: FakeStreamContext) -> AnthropicProvider:
         provider = AnthropicProvider.__new__(AnthropicProvider)
-        provider._client = _FakeClient(stream_ctx)
+        provider._client = FakeAnthropicClient(stream_ctx)
         return provider
 
     def test_stream_chat_returns_text_and_tool_use_blocks(self) -> None:
@@ -65,7 +28,7 @@ class AnthropicProviderStreamTests(unittest.TestCase):
                 SimpleNamespace(type="tool_use", id="t1", name="read_file", input={"path": "x"}),
             ],
         )
-        provider = self._make_provider(_FakeStreamContext(events, final_message))
+        provider = self._make_provider(FakeStreamContext(events, final_message))
 
         message, tool_use_blocks, stop_reason, usage = asyncio.run(
             provider.stream_chat(
@@ -94,7 +57,7 @@ class AnthropicProviderStreamTests(unittest.TestCase):
             usage=SimpleNamespace(input_tokens=3, output_tokens=2),
             content=[SimpleNamespace(type="text", text="Done")],
         )
-        provider = self._make_provider(_FakeStreamContext(events, final_message))
+        provider = self._make_provider(FakeStreamContext(events, final_message))
 
         message, tool_use_blocks, stop_reason, usage = asyncio.run(
             provider.stream_chat(

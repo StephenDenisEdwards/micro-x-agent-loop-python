@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from loguru import logger
 
 from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.tool import Tool
-from micro_x_agent_loop.usage import UsageResult
+from micro_x_agent_loop.turn_events import TurnEvents
 
 
 class TurnEngine:
@@ -26,16 +25,7 @@ class TurnEngine:
         line_prefix: str,
         max_tool_result_chars: int,
         max_tokens_retries: int,
-        on_append_message: Callable[[str, str | list[dict]], str | None],
-        on_user_message_appended: Callable[[str | None], None],
-        on_maybe_compact: Callable[[], Awaitable[None]],
-        on_ensure_checkpoint_for_turn: Callable[[list[dict]], None],
-        on_maybe_track_mutation: Callable[[str, Tool, dict], None],
-        on_record_tool_call: Callable[..., None],
-        on_tool_started: Callable[[str, str], None],
-        on_tool_completed: Callable[[str, str, bool], None],
-        on_api_call_completed: Callable[[UsageResult, str], None] | None = None,
-        on_tool_executed: Callable[[str, int, float, bool], None] | None = None,
+        events: TurnEvents,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -47,16 +37,7 @@ class TurnEngine:
         self._line_prefix = line_prefix
         self._max_tool_result_chars = max_tool_result_chars
         self._max_tokens_retries = max_tokens_retries
-        self._on_append_message = on_append_message
-        self._on_user_message_appended = on_user_message_appended
-        self._on_maybe_compact = on_maybe_compact
-        self._on_ensure_checkpoint_for_turn = on_ensure_checkpoint_for_turn
-        self._on_maybe_track_mutation = on_maybe_track_mutation
-        self._on_record_tool_call = on_record_tool_call
-        self._on_tool_started = on_tool_started
-        self._on_tool_completed = on_tool_completed
-        self._on_api_call_completed = on_api_call_completed
-        self._on_tool_executed = on_tool_executed
+        self._events = events
 
     async def run(
         self,
@@ -65,9 +46,9 @@ class TurnEngine:
         user_message: str,
     ) -> tuple[str | None, str | None]:
         last_assistant_message_id: str | None = None
-        current_user_message_id = self._on_append_message("user", user_message)
-        self._on_user_message_appended(current_user_message_id)
-        await self._on_maybe_compact()
+        current_user_message_id = self._events.on_append_message("user", user_message)
+        self._events.on_user_message_appended(current_user_message_id)
+        await self._events.on_maybe_compact()
 
         max_tokens_attempts = 0
 
@@ -82,10 +63,9 @@ class TurnEngine:
                 line_prefix=self._line_prefix,
             )
 
-            if self._on_api_call_completed is not None:
-                self._on_api_call_completed(usage, "main")
+            self._events.on_api_call_completed(usage, "main")
 
-            last_assistant_message_id = self._on_append_message("assistant", message["content"])
+            last_assistant_message_id = self._events.on_append_message("assistant", message["content"])
 
             if stop_reason == "max_tokens" and not tool_use_blocks:
                 max_tokens_attempts += 1
@@ -96,7 +76,7 @@ class TurnEngine:
                         f"Try increasing MaxTokens in config.json or simplifying the request.]",
                     )
                     return current_user_message_id, last_assistant_message_id
-                self._on_append_message(
+                self._events.on_append_message(
                     "user",
                     (
                         "Your response was cut off because it exceeded the token limit. "
@@ -116,12 +96,14 @@ class TurnEngine:
             spinner = Spinner(prefix=self._line_prefix, label=f" Running {tool_names}...")
             spinner.start()
             try:
-                self._on_ensure_checkpoint_for_turn(tool_use_blocks)
-                tool_results = await self.execute_tools(tool_use_blocks, last_assistant_message_id=last_assistant_message_id)
+                self._events.on_ensure_checkpoint_for_turn(tool_use_blocks)
+                tool_results = await self.execute_tools(
+                    tool_use_blocks, last_assistant_message_id=last_assistant_message_id
+                )
             finally:
                 spinner.stop()
-            self._on_append_message("user", tool_results)
-            await self._on_maybe_compact()
+            self._events.on_append_message("user", tool_results)
+            await self._events.on_maybe_compact()
             print()
 
     async def execute_tools(self, tool_use_blocks: list[dict], *, last_assistant_message_id: str | None) -> list[dict]:
@@ -131,11 +113,11 @@ class TurnEngine:
             tool = self._tool_map.get(tool_name)
             tool_input = block["input"]
 
-            self._on_tool_started(tool_use_id, tool_name)
+            self._events.on_tool_started(tool_use_id, tool_name)
 
             if tool is None:
                 content = f'Error: unknown tool "{tool_name}"'
-                self._on_record_tool_call(
+                self._events.on_record_tool_call(
                     tool_call_id=tool_use_id,
                     tool_name=tool_name,
                     tool_input=tool_input,
@@ -143,9 +125,8 @@ class TurnEngine:
                     is_error=True,
                     message_id=last_assistant_message_id,
                 )
-                self._on_tool_completed(tool_use_id, tool_name, True)
-                if self._on_tool_executed is not None:
-                    self._on_tool_executed(tool_name, len(content), 0.0, True)
+                self._events.on_tool_completed(tool_use_id, tool_name, True)
+                self._events.on_tool_executed(tool_name, len(content), 0.0, True)
                 return {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
@@ -155,12 +136,12 @@ class TurnEngine:
 
             t_start = time.monotonic()
             try:
-                self._on_maybe_track_mutation(tool_name, tool, tool_input)
+                self._events.on_maybe_track_mutation(tool_name, tool, tool_input)
                 result = await tool.execute(tool_input)
                 result = self._truncate_tool_result(result, tool_name)
                 t_end = time.monotonic()
                 duration_ms = (t_end - t_start) * 1000
-                self._on_record_tool_call(
+                self._events.on_record_tool_call(
                     tool_call_id=tool_use_id,
                     tool_name=tool_name,
                     tool_input=tool_input,
@@ -168,9 +149,8 @@ class TurnEngine:
                     is_error=False,
                     message_id=last_assistant_message_id,
                 )
-                self._on_tool_completed(tool_use_id, tool_name, False)
-                if self._on_tool_executed is not None:
-                    self._on_tool_executed(tool_name, len(result), duration_ms, False)
+                self._events.on_tool_completed(tool_use_id, tool_name, False)
+                self._events.on_tool_executed(tool_name, len(result), duration_ms, False)
                 return {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
@@ -180,7 +160,7 @@ class TurnEngine:
                 t_end = time.monotonic()
                 duration_ms = (t_end - t_start) * 1000
                 content = f'Error executing tool "{tool_name}": {ex}'
-                self._on_record_tool_call(
+                self._events.on_record_tool_call(
                     tool_call_id=tool_use_id,
                     tool_name=tool_name,
                     tool_input=tool_input,
@@ -188,9 +168,8 @@ class TurnEngine:
                     is_error=True,
                     message_id=last_assistant_message_id,
                 )
-                self._on_tool_completed(tool_use_id, tool_name, True)
-                if self._on_tool_executed is not None:
-                    self._on_tool_executed(tool_name, len(content), duration_ms, True)
+                self._events.on_tool_completed(tool_use_id, tool_name, True)
+                self._events.on_tool_executed(tool_name, len(content), duration_ms, True)
                 return {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
