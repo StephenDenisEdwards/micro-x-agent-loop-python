@@ -1,5 +1,9 @@
 # Plan: OpenClaw-Like Gateway Architecture
 
+## Status
+
+**Next Up** — Prioritised ahead of Cost Reduction Phase 3.
+
 ## Goal
 
 Move from single-process CLI orchestration to a local daemon architecture with clear separation between client, gateway, and execution runners.
