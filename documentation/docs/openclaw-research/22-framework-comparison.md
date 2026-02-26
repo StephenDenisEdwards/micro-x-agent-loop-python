@@ -46,84 +46,86 @@ Moltbot (formerly Clawdbot) **is** OpenClaw — the project was renamed due to t
 
 ## Sub-agent architecture deep comparison
 
-Detailed comparison of how OpenClaw, Claude Code, and the OpenAI Agents SDK handle sub-agent delegation. See the full [three-way comparison](../research/comparison-subagents-claude-code-vs-openclaw.md) for code examples and architectural diagrams.
+Detailed comparison of how OpenClaw, Claude Code, the OpenAI Agents SDK, and LangGraph handle sub-agent delegation. See the full [four-way comparison](../research/comparison-subagents-claude-code-vs-openclaw.md) for code examples and architectural diagrams.
 
 ### Spawn and control flow
 
-| | OpenClaw | Claude Code | OpenAI Agents SDK |
-|---|---|---|---|
-| **Spawn mechanism** | `sessions_spawn` tool | `Task` tool with `subagent_type` | Handoff (LLM calls `transfer_to_<name>`) or `agent.as_tool()` |
-| **Blocking** | Always async (fire-and-forget) | Foreground (blocking) or background | Synchronous within `Runner.run()` |
-| **Who retains control** | Parent continues; result arrives via channel | Parent waits for summary | Handoff: target takes over; as_tool: parent retains |
-| **Result delivery** | Announce step (normalized: status, result, notes, stats) | Free-form summary (tool result) | Handoff: last agent's output; as_tool: tool result (optionally typed) |
+| | OpenClaw | Claude Code | OpenAI Agents SDK | LangGraph |
+|---|---|---|---|---|
+| **Spawn mechanism** | `sessions_spawn` tool | `Task` tool with `subagent_type` | Handoff (LLM calls `transfer_to_<name>`) or `agent.as_tool()` | Subgraph as node (build-time) or `Command`/handoff tool (runtime) |
+| **Blocking** | Always async (fire-and-forget) | Foreground (blocking) or background | Synchronous within `Runner.run()` | Synchronous within `graph.invoke()` |
+| **Who retains control** | Parent continues; result arrives via channel | Parent waits for summary | Handoff: target takes over; as_tool: parent retains | Graph topology determines; supervisor retains via agents-as-tools |
+| **Result delivery** | Announce step (normalized: status, result, notes, stats) | Free-form summary (tool result) | Handoff: last agent's output; as_tool: tool result (optionally typed) | Typed state updates via reducers |
 
 ### Nesting and depth control
 
-| | OpenClaw | Claude Code | OpenAI Agents SDK |
-|---|---|---|---|
-| **Max depth** | Configurable 1-5 (`maxSpawnDepth`, default 1) | 1 (hard limit, Task denied for sub-agents) | Unlimited (bounded by `max_turns`, default 10) |
-| **Circular delegation** | N/A (async, no return path) | Impossible (Task excluded) | Possible (A→B→A), bounded by `max_turns` |
-| **Depth enforcement** | Config parameter + session tools denied by depth | Task tool excluded from sub-agent tool sets | `max_turns` global (handoff) or per-agent (`as_tool`) |
-| **Orchestrator pattern** | Depth-1 agent with `sessions_spawn` access | Parent only | Handoff chains or nested `as_tool()` runs |
+| | OpenClaw | Claude Code | OpenAI Agents SDK | LangGraph |
+|---|---|---|---|---|
+| **Max depth** | Configurable 1-5 (`maxSpawnDepth`, default 1) | 1 (hard limit, Task denied for sub-agents) | Unlimited (bounded by `max_turns`, default 10) | Unlimited (structural, via nested subgraphs) |
+| **Circular delegation** | N/A (async, no return path) | Impossible (Task excluded) | Possible (A→B→A), bounded by `max_turns` | Possible (via `Command` routing), bounded by conditional edges |
+| **Depth enforcement** | Config parameter + session tools denied by depth | Task tool excluded from sub-agent tool sets | `max_turns` global (handoff) or per-agent (`as_tool`) | Graph structure + conditional edges + `remaining_steps` |
+| **Orchestrator pattern** | Depth-1 agent with `sessions_spawn` access | Parent only | Handoff chains or nested `as_tool()` runs | Supervisor, hierarchical teams, or swarm |
 
 ### Context and isolation
 
-| | OpenClaw | Claude Code | OpenAI Agents SDK |
-|---|---|---|---|
-| **Parent history** | Not inherited | Not inherited | Handoff: full history (default); as_tool: not inherited |
-| **Context injection** | AGENTS.md + TOOLS.md (reduced bootstrap) | Task prompt only (fresh window) | Handoff: filterable history; as_tool: tool input string |
-| **History filtering** | N/A | N/A | `input_filter`, `remove_all_tools`, `nest_handoff_history` |
-| **Shared local state** | No | No | Handoff: yes (`RunContextWrapper`); as_tool: no |
-| **System prompt** | Reduced (no SOUL.md/IDENTITY.md) | Agent-type-specific | Per-agent `instructions` field |
+| | OpenClaw | Claude Code | OpenAI Agents SDK | LangGraph |
+|---|---|---|---|---|
+| **Parent history** | Not inherited | Not inherited | Handoff: full history (default); as_tool: not inherited | Shared keys: automatic; different schemas: no; handoff: full history |
+| **Context injection** | AGENTS.md + TOOLS.md (reduced bootstrap) | Task prompt only (fresh window) | Handoff: filterable history; as_tool: tool input string | Shared state channels or explicit schema mapping |
+| **History filtering** | N/A | N/A | `input_filter`, `remove_all_tools`, `nest_handoff_history` | Custom handoff tools, `pre_model_hook` |
+| **Shared local state** | No | No | Handoff: yes (`RunContextWrapper`); as_tool: no | Via graph state (shared keys) or `Store` (namespaced) |
+| **System prompt** | Reduced (no SOUL.md/IDENTITY.md) | Agent-type-specific | Per-agent `instructions` field | Per-agent `prompt`/`system_prompt` |
 
 ### Model selection
 
-| | OpenClaw | Claude Code | OpenAI Agents SDK |
-|---|---|---|---|
-| **Default** | Inherited from caller | Per agent type (Haiku for read-only, inherit for others) | Per-agent definition (no inheritance) |
-| **Override** | `sessions_spawn.model` or config default | `model` param on Task call | `Agent(model=...)` on definition |
-| **Built-in tiers** | No (config-driven) | Yes (Haiku/Sonnet/Opus per type) | No (any OpenAI model per agent) |
+| | OpenClaw | Claude Code | OpenAI Agents SDK | LangGraph |
+|---|---|---|---|---|
+| **Default** | Inherited from caller | Per agent type (Haiku for read-only, inherit for others) | Per-agent definition (no inheritance) | Per-agent definition (no inheritance) |
+| **Override** | `sessions_spawn.model` or config default | `model` param on Task call | `Agent(model=...)` on definition | `init_chat_model(...)` on agent creation |
+| **Built-in tiers** | No (config-driven) | Yes (Haiku/Sonnet/Opus per type) | No (any OpenAI model per agent) | No (any LangChain model, provider-agnostic) |
 
 ### Tool access
 
-| | OpenClaw | Claude Code | OpenAI Agents SDK |
-|---|---|---|---|
-| **Scoping** | Depth-based + per-agent allow/deny | Per agent type (hardcoded + custom allowlists) | Per agent definition (explicit `tools` list) |
-| **Tool replacement** | N/A (isolated session) | N/A (isolated context) | Full replacement on handoff |
-| **Runtime toggling** | N/A | N/A | `is_enabled` on tools and handoffs |
-| **MCP scoping** | Per agent (config) | Per agent (SDK) | Per agent (`mcp_servers` field) |
+| | OpenClaw | Claude Code | OpenAI Agents SDK | LangGraph |
+|---|---|---|---|---|
+| **Scoping** | Depth-based + per-agent allow/deny | Per agent type (hardcoded + custom allowlists) | Per agent definition (explicit `tools` list) | Per agent definition (explicit `tools` list + ToolNode isolation) |
+| **Tool replacement** | N/A (isolated session) | N/A (isolated context) | Full replacement on handoff | Per-agent ToolNode; handoff changes active agent's tools |
+| **Runtime toggling** | N/A | N/A | `is_enabled` on tools and handoffs | Dynamic tool binding via callable models/middleware |
+| **MCP scoping** | Per agent (config) | Per agent (SDK) | Per agent (`mcp_servers` field) | Per agent (config) |
 
 ### Concurrency
 
-| | OpenClaw | Claude Code | OpenAI Agents SDK |
-|---|---|---|---|
-| **Parallelism** | Async fire-and-forget | Multiple Task calls in one response | `asyncio.gather` or `parallel_tool_calls` |
-| **Concurrency caps** | `maxConcurrent` (8) + `maxChildrenPerAgent` (5) | None | None |
-| **Lifecycle** | Cascade stop + auto-archive (60 min) | Worktree auto-cleanup | None |
+| | OpenClaw | Claude Code | OpenAI Agents SDK | LangGraph |
+|---|---|---|---|---|
+| **Parallelism** | Async fire-and-forget | Multiple Task calls in one response | `asyncio.gather` or `parallel_tool_calls` | Super-step edges, `Send()` API, or agents-as-tools |
+| **Concurrency caps** | `maxConcurrent` (8) + `maxChildrenPerAgent` (5) | None | None | `max_concurrency` config (optional) |
+| **Lifecycle** | Cascade stop + auto-archive (60 min) | Worktree auto-cleanup | None | Checkpoints persist; graph terminates at `END` |
 
 ### Security and guardrails
 
-| | OpenClaw | Claude Code | OpenAI Agents SDK |
-|---|---|---|---|
-| **Model** | Multi-layer (tools + sandbox + exec approvals) | Mode-based (5 modes) + PreToolUse/PostToolUse hooks | Tripwire guardrails + `needs_approval` |
-| **OS isolation** | Docker containers (network off, workspace ro/rw/none) | None (process-level) | None |
-| **Guardrail scope** | All agents (plugin hooks) | All agents (hooks fire for sub-agents) | Input: first agent only; output: last agent only (unless `RunConfig`) |
+| | OpenClaw | Claude Code | OpenAI Agents SDK | LangGraph |
+|---|---|---|---|---|
+| **Model** | Multi-layer (tools + sandbox + exec approvals) | Mode-based (5 modes) + PreToolUse/PostToolUse hooks | Tripwire guardrails + `needs_approval` | `interrupt()` + middleware + custom nodes |
+| **OS isolation** | Docker containers (network off, workspace ro/rw/none) | None (process-level) | None | None |
+| **Guardrail scope** | All agents (plugin hooks) | All agents (hooks fire for sub-agents) | Input: first agent only; output: last agent only (unless `RunConfig`) | Per-agent (`pre_model_hook`/`post_model_hook`) |
+| **HITL** | N/A (async) | User prompts via CLI | `needs_approval` on `as_tool()` | `interrupt()` at any graph point, checkpointed |
 
 ### Tracing and observability
 
-| | OpenClaw | Claude Code | OpenAI Agents SDK |
-|---|---|---|---|
-| **Cross-agent tracing** | Stats in announce template | No built-in | Full trace with AgentSpan, HandoffSpan, GenerationSpan |
-| **Trace linking** | Session key | N/A | `group_id` links separate `Runner.run()` calls |
-| **Cost tracking** | Per-sub-agent in announce stats | ResultMessage at parent level | Per-`RunResult` usage fields |
+| | OpenClaw | Claude Code | OpenAI Agents SDK | LangGraph |
+|---|---|---|---|---|
+| **Cross-agent tracing** | Stats in announce template | No built-in | Full trace with AgentSpan, HandoffSpan, GenerationSpan | LangSmith integration + streaming namespace tuples |
+| **Trace linking** | Session key | N/A | `group_id` links separate `Runner.run()` calls | `thread_id` links checkpoint history |
+| **Cost tracking** | Per-sub-agent in announce stats | ResultMessage at parent level | Per-`RunResult` usage fields | Via LangSmith or custom state tracking |
+| **Visual debugging** | N/A | N/A | N/A | LangGraph Studio + Mermaid graph visualization |
 
 ### Architectural philosophy
 
-| | OpenClaw | Claude Code | OpenAI Agents SDK |
-|---|---|---|---|
-| **Mental model** | **Process model** — async background workers with own lifecycle | **Function-call model** — sync, stateless, isolated, parent orchestrates | **Dual-pattern model** — handoffs (peer routing) + as_tool (manager orchestration) |
-| **Best for** | Always-on daemon with multi-channel delivery | CLI coding assistant with specialized sub-tasks | Customer support routing, parallel analysis, structured workflows |
-| **Structured I/O** | No | No | Yes (`input_type`, `parameters`, `output_type` with Pydantic) |
+| | OpenClaw | Claude Code | OpenAI Agents SDK | LangGraph |
+|---|---|---|---|---|
+| **Mental model** | **Process model** — async background workers with own lifecycle | **Function-call model** — sync, stateless, isolated, parent orchestrates | **Dual-pattern model** — handoffs (peer routing) + as_tool (manager orchestration) | **Graph/workflow-engine model** — typed state graph with structural composition |
+| **Best for** | Always-on daemon with multi-channel delivery | CLI coding assistant with specialized sub-tasks | Customer support routing, parallel analysis, structured workflows | Complex workflows with checkpoints, HITL, and fan-out/fan-in |
+| **Structured I/O** | No | No | Yes (`input_type`, `parameters`, `output_type` with Pydantic) | Yes (typed state schemas with reducers, `response_format`) |
 
 ## Security and sandboxing
 
