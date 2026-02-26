@@ -10,6 +10,7 @@
   "MemoryMaxSessions": 200,
   "MemoryMaxMessagesPerSession": 5000,
   "MemoryRetentionDays": 30,
+  "UserMemoryEnabled": true,
   "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\resources\\documents",
   "LogLevel": "INFO",
   "LogConsumers": [
