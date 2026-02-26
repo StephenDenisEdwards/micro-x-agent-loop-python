@@ -11,6 +11,7 @@
   "MemoryMaxMessagesPerSession": 5000,
   "MemoryRetentionDays": 30,
   "UserMemoryEnabled": true,
+  "UserMemoryDir": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\.micro_x\\memory",
   "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\resources\\documents",
   "LogLevel": "INFO",
   "LogConsumers": [
