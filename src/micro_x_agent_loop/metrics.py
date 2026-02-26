@@ -213,8 +213,12 @@ class SessionAccumulator:
         if len(self.model_subtotals) > 1:
             lines.append("Model breakdown:")
             for model, sub in sorted(self.model_subtotals.items(), key=lambda x: -x[1]["cost_usd"]):
+                prices = PRICING.get(model)
+                pricing_str = (
+                    f" (in=${prices[0]} out=${prices[1]})" if prices else ""
+                )
                 lines.append(
-                    f"  {model}: {sub['calls']} calls, "
+                    f"  {model}{pricing_str}: {sub['calls']} calls, "
                     f"{sub['input_tokens']:,} in / {sub['output_tokens']:,} out, "
                     f"${sub['cost_usd']:.6f}"
                 )
