@@ -421,18 +421,100 @@ Once structured metrics are flowing, the following analyses become possible:
 
 ---
 
+## Analysis Tooling
+
+Structured metrics are only useful if they can be queried. Three layers of analysis tooling, built incrementally in order of value:
+
+### Layer 1: `/cost` REPL command
+
+Immediate in-session visibility. The agent reads `metrics.jsonl` (or the in-memory `SessionAccumulator`) and prints a cost summary without leaving the REPL. This is the layer that changes behaviour — seeing cost per turn in real time makes expensive patterns visible.
+
+**Commands:**
+
+```
+/cost                     — current session summary
+/cost detail              — per-turn breakdown for current session
+/cost tools               — tool cost ranking for current session
+```
+
+**Example output:**
+
+```
+assistant> Session cost: $0.43 (8 turns, 2 compactions)
+  Input:  142,000 tokens ($0.43)  Cache hits: 45,000 (31%)
+  Output:  18,500 tokens ($0.28)
+  Compaction: 2 calls ($0.02)
+  Top tools by input tokens:
+    web_fetch         45,000 chars (3 calls)
+    linkedin_detail   37,500 chars (3 calls)
+    read_file         22,000 chars (5 calls)
+```
+
+**Implementation:** Add a `/cost` handler to `CommandRouter` in `agent.py`. For the current session, read directly from the `SessionAccumulator` (no file I/O needed). For historical queries, parse `metrics.jsonl`.
+
+### Layer 2: Python analysis module
+
+Standalone script for before/after comparisons when validating cost reduction levers. Reads `metrics.jsonl`, filters by date range, and produces summary reports.
+
+```
+python -m micro_x_agent_loop.analyze_costs                          # summary of all data
+python -m micro_x_agent_loop.analyze_costs --session abc-123        # single session deep-dive
+python -m micro_x_agent_loop.analyze_costs --since 2026-02-20       # recent sessions
+python -m micro_x_agent_loop.analyze_costs --compare 2026-02-20 2026-02-25  # before/after
+```
+
+**Reports:**
+
+- **Summary:** total cost, avg cost per session, avg cost per turn, cache hit rate, compaction frequency
+- **Session:** per-turn breakdown, tool ranking, compaction events, cache efficiency for a specific session
+- **Tool ranking:** total tokens by tool, avg result size, truncation rate
+- **Before/after:** side-by-side comparison of two date ranges for any metric
+- **CSV export:** `--csv` flag for spreadsheet analysis
+
+**Implementation:** New module `src/micro_x_agent_loop/analyze_costs.py` with a `__main__` entry point. Uses only stdlib (`json`, `csv`, `argparse`, `datetime`) — no pandas dependency. Reads JSONL line-by-line, aggregates into dicts, prints formatted tables.
+
+### Layer 3: Jupyter notebook (optional)
+
+For deeper visual exploration that the script can't answer — time-series trends, distribution plots, correlation analysis. Only reach for this when needed.
+
+**Scope:** A single notebook `documentation/notebooks/cost-analysis.ipynb` with cells for:
+- Load `metrics.jsonl` into a pandas DataFrame
+- Cost over time (line chart)
+- Token distribution by turn (histogram)
+- Cache hit rate trend (line chart)
+- Tool cost breakdown (bar chart)
+- Before/after comparison (grouped bar chart)
+
+**Dependencies:** `pandas`, `matplotlib` — optional dev dependencies only, not required for the agent itself.
+
+### Which analysis answers which question
+
+| Analysis | `/cost` command | Python module | Jupyter |
+|----------|:-:|:-:|:-:|
+| What did this session cost? | **primary** | | |
+| Which tools are most expensive? | **primary** | also | |
+| Is prompt caching working? | cache % shown | **primary** (trend) | also |
+| Compare cost before/after a change | | **primary** | also |
+| Is compaction paying for itself? | | **primary** | also |
+| Optimal compaction threshold | | | **primary** |
+| Cost trend over weeks | | | **primary** |
+
+---
+
 ## Files Changed
 
 | File | Change |
 |------|--------|
 | **New:** `usage.py` | `UsageResult` dataclass, `estimate_cost()`, `PRICING` table |
 | **New:** `metrics.py` | `emit_metric()` helper, metric record builders |
+| **New:** `analyze_costs.py` | CLI analysis module with `__main__` entry point |
 | `provider.py` | Update `LLMProvider` Protocol: `stream_chat` returns 4-tuple, `create_message` returns `(str, UsageResult)` |
 | `providers/anthropic_provider.py` | Map `response.usage` → `UsageResult`, add timing, capture cache fields |
 | `providers/openai_provider.py` | Add `stream_options`, map `usage` → `UsageResult`, add timing |
 | `turn_engine.py` | Receive `UsageResult` from `stream_chat`, tool execution timing + size metrics |
 | `compaction.py` | Destructure `(text, UsageResult)` from `create_message`, emit compaction metric |
-| `agent.py` | Turn counter, `SessionAccumulator`, emit session summary on shutdown |
+| `agent.py` | Turn counter, `SessionAccumulator`, `/cost` command handler, emit session summary on shutdown |
+| `commands/router.py` | Register `/cost` command |
 | `logging_config.py` | Add `MetricsLogConsumer` for `metrics.jsonl` |
 | `agent_config.py` | Add metrics config (enable/disable, output path) |
 
