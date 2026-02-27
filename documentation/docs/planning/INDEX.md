@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-02-26
+Last updated: 2026-02-27
 
 ## Priority Queue
 
@@ -25,7 +25,7 @@ What to work on next, in order. Rationale: cost reduction is the top priority â€
 
 | Status | Count |
 |--------|-------|
-| Completed | 10 |
+| Completed | 11 |
 | In Progress | 0 |
 | Planning | 0 |
 | Planned | 4 |
@@ -47,4 +47,5 @@ What to work on next, in order. Rationale: cost reduction is the top priority â€
 | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | |
 | [Cross-Session User Memory](PLAN-cross-session-user-memory.md) | Completed | All phases done: read path, save_memory tool, /memory commands |
 | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools via config-declared path params |
+| [Mode Selection â€” LLM Classification](PLAN-mode-selection-llm-classification.md) | Completed | Phase 2: Stage 2 LLM classification for ambiguous cases |
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Server/gateway architecture migration |
