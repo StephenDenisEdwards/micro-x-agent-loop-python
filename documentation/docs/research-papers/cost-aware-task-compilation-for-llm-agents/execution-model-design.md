@@ -273,9 +273,19 @@ Consider the concrete task: "List the last 100 emails from JobServe and create s
 | Approximate input cost | $0.15–0.20 | $0.18 | $0.015 |
 | Context pressure | High (may exceed limits) | None per call | None per call |
 
-The cost advantage of compiled mode holds even when per-item LLM calls are needed. With model downgrading for simple per-item tasks, compiled mode can be an order of magnitude cheaper.
+### 6.6 Why Compiled Mode Is Cheaper Even at the Same Model Tier
 
-### 6.6 Scaling: Linear vs Bounded
+The cost table above shows model downgrading as the dramatic win, but compiled mode is considerably cheaper even when using the exact same model for per-item calls. This is because the summarisation step is only one part of the pipeline.
+
+**The rest of the pipeline is free.** In compiled mode, scoring against numeric criteria, filtering by threshold, computing statistics (counts, averages, distributions), and rendering the final markdown report are all pure code — zero tokens. In prompt mode, the LLM performs all of these operations too: reasoning about which jobs to exclude, doing arithmetic for summary statistics, rendering structured markdown — all within that same bloated 50,000-token context, all costing tokens. The LLM in prompt mode is an expensive calculator, formatter, and template engine for work that code does for free.
+
+**Per-item context is tiny.** Even at identical per-token pricing, the compute cost of generating output while attending over 600 tokens is fundamentally lower than generating output while attending over 50,000 tokens. The total input token count is comparable (~60,000 vs ~50,000), but the per-call context size determines the actual compute cost per output token.
+
+**No compaction overhead.** Prompt mode at 100 emails is already at the edge of context limits. If the task grows to 150 or 200 emails, prompt mode requires compaction — summarising intermediate results to free context space — which itself costs tokens and risks losing information. Compiled mode has no such overhead at any batch size.
+
+Model downgrading is therefore a bonus optimisation on top of an already cheaper architecture, not the primary source of savings.
+
+### 6.7 Scaling: Linear vs Bounded
 
 Beyond cost per run, the scaling characteristics are fundamentally different.
 
