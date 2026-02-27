@@ -116,6 +116,26 @@ class SignalDetectionTests(unittest.TestCase):
         analysis = analyze_prompt("This is a recurring task")
         self.assertIn("Reproducibility", self._signal_names(analysis))
 
+    def test_batch_numeric_quantity(self) -> None:
+        analysis = analyze_prompt("list the last 100 emails")
+        self.assertIn("Batch processing", self._signal_names(analysis))
+
+    def test_batch_numeric_top_n(self) -> None:
+        analysis = analyze_prompt("get the top 50 results")
+        self.assertIn("Batch processing", self._signal_names(analysis))
+
+    def test_batch_numeric_single_item_no_signal(self) -> None:
+        analysis = analyze_prompt("Send 1 email to John")
+        self.assertNotIn("Batch processing", self._signal_names(analysis))
+
+    def test_stats_summarize(self) -> None:
+        analysis = analyze_prompt("summarize the content")
+        self.assertIn("Statistics/aggregation", self._signal_names(analysis))
+
+    def test_stats_summaries(self) -> None:
+        analysis = analyze_prompt("create summaries of each item")
+        self.assertIn("Statistics/aggregation", self._signal_names(analysis))
+
     # Negative cases
     def test_no_signals_simple_question(self) -> None:
         analysis = analyze_prompt("What's the weather in London?")
