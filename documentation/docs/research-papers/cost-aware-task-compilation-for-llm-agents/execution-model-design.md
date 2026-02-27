@@ -253,14 +253,37 @@ Not every compiled-mode task requires per-item LLM calls. Most batch operations 
 
 The presence of LLM-dependent steps does not change the mode decision. A task with 3 strong compiled-mode signals (batch processing, scoring, statistics) plus a summarization step is still a compiled-mode task. The summarization happens inside the generated code as a processing step, not as the orchestration model.
 
-### 6.5 Cost Implications
+### 6.5 Cost Comparison: Concrete Example
 
-Per-item LLM calls in compiled mode are more expensive than purely deterministic processing, but still dramatically cheaper than prompt mode for the same task:
+Consider the concrete task: "List the last 100 emails from JobServe and create summaries of the content."
 
-- **Prompt mode:** 100 emails × ~500 tokens each = 50,000 tokens of email content in a single context, plus the system prompt, plus reasoning tokens. One large, expensive call.
-- **Compiled mode with per-item calls:** 100 independent calls, each with ~500 tokens of input and ~100 tokens of output. No context accumulation between calls. Total input tokens are similar, but each call's context is small, so per-call cost is low. The calls can also use a cheaper, faster model since each task is simple and bounded.
+**Prompt mode** loads all 100 emails into a single conversation context. Assuming each email is ~500 tokens, that is 50,000 tokens of email content plus the system prompt plus the instruction. The LLM reads the entire context to produce output — paying for 50,000+ input tokens in one call, with attention cost scaling with context size. At Sonnet-class pricing (~$3/M input tokens), the input cost alone is roughly $0.15–0.20. And this assumes all 100 emails fit in context at all — at higher volumes, context limits force compaction or truncation, which introduces its own costs and reliability problems.
 
-The cost advantage of compiled mode is reduced when per-item LLM calls are needed, but the other benefits remain: deterministic orchestration, reproducible scoring and statistics, mandatory field enforcement, and the ability to process arbitrarily large batches without context window limits.
+**Compiled mode with per-item LLM calls** makes 100 independent calls, each with ~500 tokens of input (one email plus a short summarisation instruction) and ~100 tokens of output. Each call's context is tiny — roughly 600 tokens. There is no accumulation between calls. The total input tokens across all calls (~60,000) are comparable to prompt mode, but critically, each individual call is small. This enables two cost advantages:
+
+1. **No quadratic attention cost.** In prompt mode, the LLM attends over the full 50,000-token context for every output token. In compiled mode, each call attends over only ~600 tokens. The per-token compute cost is lower even at the same pricing tier.
+
+2. **Model downgrading.** Each per-item task is trivial — "summarise this one email in 2-3 sentences." This is well within the capability of a smaller, cheaper model. At Haiku-class pricing (~$0.25/M input tokens), the total cost for 100 summarisation calls is roughly $0.01–0.02. This is **10–20x cheaper** than the prompt-mode approach using a full-size model.
+
+| | Prompt Mode | Compiled Mode (Sonnet) | Compiled Mode (Haiku) |
+|---|---|---|---|
+| Input tokens per call | ~50,000 | ~600 | ~600 |
+| Number of calls | 1 | 100 | 100 |
+| Total input tokens | ~50,000 | ~60,000 | ~60,000 |
+| Approximate input cost | $0.15–0.20 | $0.18 | $0.015 |
+| Context pressure | High (may exceed limits) | None per call | None per call |
+
+The cost advantage of compiled mode holds even when per-item LLM calls are needed. With model downgrading for simple per-item tasks, compiled mode can be an order of magnitude cheaper.
+
+### 6.6 Scaling: Linear vs Bounded
+
+Beyond cost per run, the scaling characteristics are fundamentally different.
+
+Prompt mode has a **hard ceiling**. At some batch size N, the total data exceeds the context window. For 100 emails at 500 tokens each, that is 50,000 tokens of data alone — already consuming a large fraction of the context window before any reasoning. At 200 emails, or with longer emails, prompt mode simply cannot process the batch. Compaction or truncation can extend the limit, but at the cost of losing information — which defeats the purpose of batch processing where completeness matters.
+
+Compiled mode has **no upper bound on batch size**. The per-item cost is constant regardless of total batch size. Processing 100 emails or 1,000 emails costs the same per email — the total scales linearly. There is no context window to fill because each call is independent. The only constraint is wall-clock time, which can be reduced through concurrent execution of independent per-item calls.
+
+This linear scaling is the decisive advantage for tasks where completeness is required. "Score **every** job" means every job, not "as many as fit in context."
 
 ---
 
@@ -454,6 +477,7 @@ Two companion libraries enable this model. `agent_mcp` bridges the agent's MCP s
 | 2026-02-27 | Three-stage mode selection framework designed: structural classification → LLM cost estimation → user override |
 | 2026-02-27 | Asymmetric failure cost identified — threshold should lean toward compiled mode when uncertain |
 | 2026-02-27 | LLM calls within compiled mode recognised — `agent_llm` companion library for per-item semantic operations (summarization, classification, extraction) |
+| 2026-02-27 | Concrete cost comparison added — compiled mode with per-item LLM calls 10-20x cheaper via model downgrading; linear scaling vs hard context ceiling |
 
 ---
 
