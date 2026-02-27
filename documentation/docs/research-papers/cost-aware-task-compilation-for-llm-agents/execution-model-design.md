@@ -187,11 +187,90 @@ Adding a new MCP server to the agent's registry automatically makes it available
 
 ---
 
-## 6. Mode Selection: When to Compile vs When to Prompt
+## 6. LLM Calls Within Compiled Mode
+
+### 6.1 Not All Operations Are Deterministic
+
+The discussion so far implies a clean separation: the LLM reasons about the task upfront, generates code, and the code executes deterministically. But some operations that belong in compiled mode are not deterministic — they require language understanding that only an LLM can provide.
+
+Consider: "List the last 100 emails from JobServe and create summaries of the content."
+
+The batch fetch is mechanical — `agent_mcp` connects to Gmail and retrieves 100 emails. But "create summaries" requires reading each email's free-text content and producing a condensed version. This is not string manipulation or data transformation. It is a semantic operation that requires an LLM.
+
+This does not mean the task should revert to prompt mode. Loading 100 full emails into a single conversation context is exactly the problem compiled mode exists to solve. The task is still structurally a batch pipeline — it just happens to include an LLM-dependent step.
+
+### 6.2 Per-Item LLM Calls vs Single-Context Processing
+
+The distinction is between two fundamentally different ways an LLM processes multiple items:
+
+**Prompt mode (single context):** All 100 emails land in one conversation. The LLM sees them all simultaneously, reasons over the full set, and produces output in a single pass. Context grows linearly with item count. Cost grows quadratically (attention over the full context). At scale, this is the source of the cost and reliability problems documented in the white paper.
+
+**Compiled mode (per-item calls):** The generated code loops over 100 emails. For each email, it makes a small, focused LLM call: "Summarize this email in 2-3 sentences." Each call has a bounded context — one email in, one summary out. The calls are independent and can run concurrently. Total cost scales linearly with item count, and each individual call is cheap because the context is small.
+
+```python
+from agent_mcp import connect
+from agent_llm import complete
+
+async with connect("gmail") as gmail:
+    emails = await gmail.call("search", query="from:jobserve newer_than:1d")
+
+summaries = []
+for email in emails:
+    summary = await complete(
+        prompt=f"Summarize this email in 2-3 sentences:\n\n{email['body']}",
+        max_tokens=200,
+    )
+    summaries.append({"subject": email["subject"], "summary": summary})
+```
+
+The critical property is preserved: bulk data never enters the main conversation context. The LLM is involved, but in bounded, independent calls orchestrated by the generated code — not in a single monolithic context that grows with the data.
+
+### 6.3 The `agent_llm` Companion Library
+
+Just as `agent_mcp` bridges generated code to MCP servers, an `agent_llm` library (working name) bridges generated code to the LLM for semantic operations. The interface is minimal:
+
+- `complete(prompt, max_tokens)` — a single completion call for operations like summarization, classification, or extraction.
+- Uses the same model and credentials as the agent, or a cheaper model where appropriate.
+- Each call is independent — no conversation state, no message history accumulation.
+
+The library is deliberately simple. It is not a conversation engine or an agent loop — it is a function call interface for generated code that needs language understanding as a processing step.
+
+### 6.4 Which Operations Need LLM Calls?
+
+Not every compiled-mode task requires per-item LLM calls. Most batch operations are purely deterministic:
+
+| Operation | LLM Required? | Notes |
+|---|---|---|
+| Fetch data from sources | No | MCP calls, purely mechanical |
+| Score against numeric criteria | No | Weighted scoring, threshold comparison |
+| Filter by threshold | No | Comparison operator |
+| Count, total, average | No | Arithmetic |
+| Format as markdown/CSV/JSON | No | Template rendering |
+| **Summarize free-text content** | **Yes** | Semantic compression |
+| **Classify into categories** | **Yes** | Requires understanding content |
+| **Extract structured fields from prose** | **Yes** | e.g., salary from job description body |
+| **Generate per-item commentary** | **Yes** | e.g., "why this job matches your criteria" |
+
+The presence of LLM-dependent steps does not change the mode decision. A task with 3 strong compiled-mode signals (batch processing, scoring, statistics) plus a summarization step is still a compiled-mode task. The summarization happens inside the generated code as a processing step, not as the orchestration model.
+
+### 6.5 Cost Implications
+
+Per-item LLM calls in compiled mode are more expensive than purely deterministic processing, but still dramatically cheaper than prompt mode for the same task:
+
+- **Prompt mode:** 100 emails × ~500 tokens each = 50,000 tokens of email content in a single context, plus the system prompt, plus reasoning tokens. One large, expensive call.
+- **Compiled mode with per-item calls:** 100 independent calls, each with ~500 tokens of input and ~100 tokens of output. No context accumulation between calls. Total input tokens are similar, but each call's context is small, so per-call cost is low. The calls can also use a cheaper, faster model since each task is simple and bounded.
+
+The cost advantage of compiled mode is reduced when per-item LLM calls are needed, but the other benefits remain: deterministic orchestration, reproducible scoring and statistics, mandatory field enforcement, and the ability to process arbitrarily large batches without context window limits.
+
+---
+
+## 7. Mode Selection: When to Compile vs When to Prompt
+
+> **Note:** The presence of LLM-dependent operations (section 6) does not affect mode selection. Signals like "create summaries" indicate batch processing — a compiled-mode signal — regardless of whether the processing step is deterministic or LLM-assisted.
 
 The agent receives a prompt. Before execution begins, it must decide: prompt mode or compiled mode? This decision uses only the information available at that point — the user's prompt and the agent's knowledge of its registered capabilities.
 
-### 6.1 The Cost Estimation Challenge
+### 7.1 The Cost Estimation Challenge
 
 There is a chicken-and-egg problem with cost-based switching. To estimate prompt-mode cost accurately, you need to know how much data will be fetched — but you don't know that until you fetch it. The job search prompt says "search Gmail for all JobServe emails in the last 24 hours" — that could be 5 emails or 50.
 
@@ -203,7 +282,7 @@ However, precision is not required. The switching decision needs a rough estimat
 
 **Structural analysis.** Some prompts are obviously large without any estimation. "Search all emails from the last 24 hours" combined with "search LinkedIn" combined with "score each one" combined with "produce statistics" — the combinatorial structure alone signals batch processing regardless of the exact item count.
 
-### 6.2 Beyond Cost: Other Decision Signals
+### 7.2 Beyond Cost: Other Decision Signals
 
 Cost is one factor, but several other characteristics independently justify compiled mode regardless of estimated token cost.
 
@@ -220,7 +299,7 @@ Cost is one factor, but several other characteristics independently justify comp
 
 **Reproducibility.** Tasks described as recurring ("run this same search daily") or where comparison across runs is expected require deterministic execution to produce meaningful results.
 
-### 6.3 A Three-Stage Decision Framework
+### 7.3 A Three-Stage Decision Framework
 
 Mode selection operates as a pipeline of increasing cost and precision.
 
@@ -267,7 +346,7 @@ The user can always override the automatic decision:
 
 The three stages are ordered by cost: Stage 1 is free, Stage 2 is cheap, Stage 3 requires no computation at all. Most tasks will be resolved at Stage 1 — the structural signals in typical prompts are unambiguous.
 
-### 6.4 Applied to the Job Search Example
+### 7.4 Applied to the Job Search Example
 
 The agent receives the job search prompt. Stage 1 pattern matching identifies:
 
@@ -284,7 +363,7 @@ For comparison, consider "What's the weather in London tomorrow?" — no batch p
 
 The grey area — where Stage 2 earns its keep — is something like "Find me three good restaurants near the office and explain why you chose them." Small batch (3 items), some evaluation, but likely manageable in context. Stage 2 would estimate ~3 items, ~500 tokens each, total ~2,000 tokens of data plus reasoning — well within prompt mode. Correct decision: prompt mode.
 
-### 6.5 The Bootstrap Cost
+### 7.5 The Bootstrap Cost
 
 Mode selection itself uses computational resources — at minimum, Stage 1 pattern matching, and potentially a Stage 2 LLM call. This is an irreducible bootstrap cost: spending tokens to decide whether to spend tokens.
 
@@ -299,9 +378,9 @@ The penalty for false negatives is much higher than for false positives. The dec
 
 ---
 
-## 7. Remaining Open Questions
+## 8. Remaining Open Questions
 
-### 7.1 Sandboxing and Trust
+### 8.1 Sandboxing and Trust
 
 Generated code that calls real external services (reading email, posting to APIs) needs careful sandboxing:
 
@@ -310,7 +389,7 @@ Generated code that calls real external services (reading email, posting to APIs
 - Should the agent present the generated code to the user for approval before execution?
 - Should there be a dry-run mode that validates the code without executing external calls?
 
-### 7.2 Error Recovery
+### 8.2 Error Recovery
 
 What happens when generated code fails mid-execution?
 
@@ -318,7 +397,7 @@ What happens when generated code fails mid-execution?
 - Does it fall back to prompt mode for the failing portion?
 - How does it report partial results?
 
-### 7.3 Code Quality and Review
+### 8.3 Code Quality and Review
 
 Should the LLM review its own generated code before execution?
 
@@ -326,7 +405,7 @@ Should the LLM review its own generated code before execution?
 - This adds latency and token cost, but may be worth it for reliability.
 - Alternatively, static analysis or schema validation of MCP calls could catch type mismatches without an LLM pass.
 
-### 7.4 Caching and Reuse of Generated Programs
+### 8.4 Caching and Reuse of Generated Programs
 
 If the agent generates a program for "daily job search report" today, can it reuse or adapt that program tomorrow?
 
@@ -336,7 +415,7 @@ If the agent generates a program for "daily job search report" today, can it reu
 
 ---
 
-## 8. Relationship to the White Paper Example
+## 9. Relationship to the White Paper Example
 
 The engineering white paper (section 6) presents the job search report as a concrete example using the pre-built runtime model. This was chosen for clarity of exposition — it cleanly illustrates the separation of semantic reasoning from deterministic execution without introducing the additional complexity of code generation.
 
@@ -346,7 +425,7 @@ As this design matures, the white paper may be updated with a second example sho
 
 ---
 
-## 9. Summary of Current Thinking
+## 10. Summary of Current Thinking
 
 The compiled task execution model for a general-purpose personal agent should:
 
@@ -354,11 +433,12 @@ The compiled task execution model for a general-purpose personal agent should:
 2. **Program against registered MCP servers** — providing typed, known interfaces that constrain the generated code and reduce bug surface area.
 3. **Access MCP servers via a client library (`agent_mcp`)** — the library handles registry lookup, process spawning, client connection, and credential passthrough. The LLM writes against a minimal API surface (`connect`, `call`) using the same server names and tool schemas it already knows from prompt mode.
 4. **Keep bulk data out of context entirely** — the generated code fetches, processes, and outputs data without it ever entering the LLM's conversation history. The LLM only sees compact results when called back for narrative generation.
-5. **Select execution mode via a three-stage decision pipeline** — structural pattern matching (free), LLM cost estimation (cheap), and user override. The decision threshold leans toward compiled mode when uncertain, because the cost of false negatives (prompt mode for a compiled task) is much higher than false positives (compiled mode for a prompt task).
-6. **Execute in a sandbox** — with controlled access to MCP servers and appropriate permission boundaries.
-7. **Remain inspectable** — generated code can be reviewed before execution.
+5. **Support per-item LLM calls for semantic operations** — operations like summarization, classification, or structured extraction that require language understanding are handled by bounded, independent LLM calls from generated code via `agent_llm`, not by loading all data into a single context. This preserves the cost and scalability benefits of compiled mode while supporting tasks that are not purely deterministic.
+6. **Select execution mode via a three-stage decision pipeline** — structural pattern matching (free), LLM cost estimation (cheap), and user override. The decision threshold leans toward compiled mode when uncertain, because the cost of false negatives (prompt mode for a compiled task) is much higher than false positives (compiled mode for a prompt task).
+7. **Execute in a sandbox** — with controlled access to MCP servers and appropriate permission boundaries.
+8. **Remain inspectable** — generated code can be reviewed before execution.
 
-The `agent_mcp` library is the key enabling component. It is not a framework — it is connection plumbing that bridges the agent's MCP server registry into generated code. The MCP server registry becomes the unified capability layer: same servers, same schemas, same credentials, accessible from both the agent loop (prompt mode) and generated programs (compiled mode).
+Two companion libraries enable this model. `agent_mcp` bridges the agent's MCP server registry into generated code — same servers, same schemas, same credentials, accessible from both the agent loop (prompt mode) and generated programs (compiled mode). `agent_llm` provides bounded LLM access for semantic operations (summarization, classification, extraction) that cannot be reduced to deterministic code. Together they define the complete runtime environment for generated programs: data access via MCP, language understanding via LLM, and everything else in pure code.
 
 ---
 
@@ -373,6 +453,7 @@ The `agent_mcp` library is the key enabling component. It is not a framework —
 | 2026-02-27 | MCP access from generated code resolved as a design question |
 | 2026-02-27 | Three-stage mode selection framework designed: structural classification → LLM cost estimation → user override |
 | 2026-02-27 | Asymmetric failure cost identified — threshold should lean toward compiled mode when uncertain |
+| 2026-02-27 | LLM calls within compiled mode recognised — `agent_llm` companion library for per-item semantic operations (summarization, classification, extraction) |
 
 ---
 
