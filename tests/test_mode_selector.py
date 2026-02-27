@@ -1,5 +1,11 @@
+import asyncio
+import io
 import unittest
+from contextlib import redirect_stdout
+from unittest.mock import patch
 
+from micro_x_agent_loop.agent import Agent
+from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.mode_selector import (
     DetectedSignal,
     ModeAnalysis,
@@ -12,6 +18,8 @@ from micro_x_agent_loop.mode_selector import (
     format_stage2_result,
     parse_stage2_response,
 )
+from micro_x_agent_loop.usage import UsageResult
+from tests.fakes import FakeStreamProvider, FakeTool
 
 
 class SignalDetectionTests(unittest.TestCase):
@@ -357,6 +365,130 @@ class Stage2FormatTests(unittest.TestCase):
         output = format_stage2_result(result)
         self.assertIn("Single item task.", output)
         self.assertIn("Reasoning", output)
+
+
+class Stage2AgentIntegrationTests(unittest.TestCase):
+    """End-to-end: Agent._run_inner triggers (or skips) Stage 2 based on Stage 1 result."""
+
+    def _make_agent(self, *, stage2_response: str = "COMPILED\nBatch task.") -> Agent:
+        """Create an Agent with a fake provider that returns a canned Stage 2 response."""
+        fake_provider = FakeStreamProvider()
+        # Queue one response for the main turn (after mode analysis)
+        fake_provider.queue(text="Hello!", stop_reason="end_turn")
+
+        # FakeStreamProvider doesn't have create_message — add it
+        async def fake_create_message(model, max_tokens, temperature, messages):
+            return stage2_response, UsageResult(
+                input_tokens=300, output_tokens=30, model=model,
+            )
+
+        fake_provider.create_message = fake_create_message
+
+        with patch("micro_x_agent_loop.agent.create_provider", return_value=fake_provider):
+            return Agent(AgentConfig(
+                api_key="test",
+                tools=[FakeTool()],
+                mode_analysis_enabled=True,
+                stage2_classification_enabled=True,
+                stage2_model="test-model",
+            ))
+
+    def test_prompt_mode_no_stage2(self) -> None:
+        """'What's the weather in London?' → PROMPT at Stage 1, no Stage 2 call."""
+        agent = self._make_agent()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            asyncio.run(agent.run("What's the weather in London?"))
+        out = buf.getvalue()
+        self.assertIn("PROMPT", out)
+        self.assertNotIn("Stage 2", out)
+
+    def test_compiled_mode_no_stage2(self) -> None:
+        """Full job search prompt → COMPILED at Stage 1, no Stage 2 call."""
+        prompt = (
+            "Search my Gmail for all JobServe emails received in the last 24 hours. "
+            "Read the full content of each email. Then search LinkedIn for similar UK "
+            "contract roles. Score each job against my search criteria (1-10). "
+            "Exclude roles scoring below 5/10. Create a markdown file. "
+            "Include Summary Statistics: Total Jobs Found, Average Score."
+        )
+        agent = self._make_agent()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            asyncio.run(agent.run(prompt))
+        out = buf.getvalue()
+        self.assertIn("Recommendation: COMPILED", out)
+        self.assertNotIn("Stage 2", out)
+
+    def test_ambiguous_triggers_stage2_compiled(self) -> None:
+        """'List the last 50 emails...' → AMBIGUOUS at Stage 1, Stage 2 → COMPILED."""
+        agent = self._make_agent(stage2_response="COMPILED\nBatch task with 50 items.")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            asyncio.run(agent.run(
+                "List the last 50 emails from JobServe with the subject "
+                "and then a summary of the content for each."
+            ))
+        out = buf.getvalue()
+        self.assertIn("Recommendation: AMBIGUOUS", out)
+        self.assertIn("Stage 2 override: COMPILED", out)
+        self.assertIn("Batch task with 50 items.", out)
+
+    def test_ambiguous_triggers_stage2_prompt(self) -> None:
+        """'Score this document for readability' → AMBIGUOUS, Stage 2 → PROMPT."""
+        agent = self._make_agent(stage2_response="PROMPT\nSingle item, no batch structure.")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            asyncio.run(agent.run("Score this document for readability"))
+        out = buf.getvalue()
+        self.assertIn("Recommendation: AMBIGUOUS", out)
+        self.assertIn("Stage 2 override: PROMPT", out)
+        self.assertIn("Single item, no batch structure.", out)
+
+    def test_stage2_disabled_skips_classification(self) -> None:
+        """When stage2_classification_enabled=False, AMBIGUOUS stays without Stage 2."""
+        fake_provider = FakeStreamProvider()
+        fake_provider.queue(text="Hello!", stop_reason="end_turn")
+        with patch("micro_x_agent_loop.agent.create_provider", return_value=fake_provider):
+            agent = Agent(AgentConfig(
+                api_key="test",
+                tools=[FakeTool()],
+                mode_analysis_enabled=True,
+                stage2_classification_enabled=False,
+            ))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            asyncio.run(agent.run("Score this document for readability"))
+        out = buf.getvalue()
+        self.assertIn("AMBIGUOUS", out)
+        self.assertNotIn("Stage 2", out)
+
+    def test_stage2_failure_does_not_abort_turn(self) -> None:
+        """If Stage 2 LLM call fails, the turn continues normally."""
+        fake_provider = FakeStreamProvider()
+        fake_provider.queue(text="Hello!", stop_reason="end_turn")
+
+        async def failing_create_message(model, max_tokens, temperature, messages):
+            raise RuntimeError("API unavailable")
+
+        fake_provider.create_message = failing_create_message
+
+        with patch("micro_x_agent_loop.agent.create_provider", return_value=fake_provider):
+            agent = Agent(AgentConfig(
+                api_key="test",
+                tools=[FakeTool()],
+                mode_analysis_enabled=True,
+                stage2_classification_enabled=True,
+                stage2_model="test-model",
+            ))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            asyncio.run(agent.run("Score this document for readability"))
+        out = buf.getvalue()
+        self.assertIn("AMBIGUOUS", out)
+        self.assertIn("Stage 2 classification failed", out)
+        # Turn should still proceed — stream_chat was called (turn_number incremented)
+        self.assertEqual(1, agent._turn_number)
 
 
 if __name__ == "__main__":
