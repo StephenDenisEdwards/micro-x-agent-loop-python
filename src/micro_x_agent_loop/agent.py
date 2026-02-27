@@ -98,6 +98,7 @@ class Agent:
 
         # Mode analysis
         self._mode_analysis_enabled = config.mode_analysis_enabled
+        self._working_directory = config.working_directory
 
         # Tool result summarization
         summarization_provider = None
@@ -149,6 +150,23 @@ class Agent:
             await self._run_inner(user_message)
 
     async def _run_inner(self, user_message: str) -> None:
+        # /prompt <filename> — read file and use contents as the user message
+        stripped = user_message.strip()
+        if stripped.startswith("/prompt "):
+            filename = stripped[len("/prompt "):].strip()
+            if not filename:
+                print(f"{self._LINE_PREFIX}Usage: /prompt <filename>")
+                return
+            resolved = self._resolve_file(filename)
+            if resolved is None:
+                print(f"{self._LINE_PREFIX}File not found: {filename}")
+                return
+            try:
+                user_message = resolved.read_text(encoding="utf-8")
+            except OSError as ex:
+                print(f"{self._LINE_PREFIX}Error reading file: {ex}")
+                return
+
         if await self._handle_local_command(user_message):
             return
 
@@ -302,6 +320,7 @@ class Agent:
     def _print_help(self) -> None:
         print(f"{self._LINE_PREFIX}Available commands:")
         print(f"{self._LINE_PREFIX}- /help")
+        print(f"{self._LINE_PREFIX}- /prompt <filename>")
         print(f"{self._LINE_PREFIX}- /cost")
         print(
             f"{self._LINE_PREFIX}- /voice start [microphone|loopback] "
@@ -646,6 +665,20 @@ class Agent:
     async def _process_voice_utterance(self, text: str) -> None:
         await self.run(text)
         print(f"\n{self._USER_PROMPT}", end="", flush=True)
+
+    def _resolve_file(self, filename: str) -> Path | None:
+        """Resolve a filename to a Path, checking CWD then working directory."""
+        path = Path(filename)
+        if path.is_absolute():
+            return path if path.is_file() else None
+        candidate = Path.cwd() / path
+        if candidate.is_file():
+            return candidate
+        if self._working_directory:
+            candidate = Path(self._working_directory) / path
+            if candidate.is_file():
+                return candidate
+        return None
 
     async def shutdown(self) -> None:
         if self._metrics_enabled:

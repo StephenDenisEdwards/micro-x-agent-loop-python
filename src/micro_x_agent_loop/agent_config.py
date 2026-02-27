@@ -33,3 +33,4 @@ class AgentConfig:
     tool_result_summarization_model: str = ""
     tool_result_summarization_threshold: int = 4000
     mode_analysis_enabled: bool = False
+    working_directory: str | None = None
