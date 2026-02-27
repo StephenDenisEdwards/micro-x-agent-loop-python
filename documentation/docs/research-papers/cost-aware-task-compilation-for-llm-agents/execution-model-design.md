@@ -253,43 +253,94 @@ Not every compiled-mode task requires per-item LLM calls. Most batch operations 
 
 The presence of LLM-dependent steps does not change the mode decision. A task with 3 strong compiled-mode signals (batch processing, scoring, statistics) plus a summarization step is still a compiled-mode task. The summarization happens inside the generated code as a processing step, not as the orchestration model.
 
-### 6.5 Cost Comparison: Concrete Example
+### 6.5 Cost Comparison: Measured vs Estimated
 
-Consider the concrete task: "List the last 100 emails from JobServe and create summaries of the content."
+Early attempts at cost comparison using theoretical estimates were misleading. Estimates assumed small system prompts, few turns, and compact tool results. Actual measurements revealed that the real costs are dramatically higher than estimated, primarily because of factors that are difficult to predict from the prompt alone: system prompt size (including tool schemas), the number of API round-trips the agent actually takes, and the compounding effect of context accumulation across turns.
 
-**Prompt mode** loads all 100 emails into a single conversation context. Assuming each email is ~500 tokens, that is 50,000 tokens of email content plus the system prompt plus the instruction. The LLM reads the entire context and produces everything in one response: 100 summaries, scoring for each job, filtering decisions, summary statistics, and the formatted markdown report. This means substantial output — roughly 5,000–8,000 tokens of generated text. At Sonnet-class pricing (~$3/M input, ~$15/M output), the total cost is roughly $0.15 input + $0.08–0.12 output = **$0.23–0.27**. And this assumes all 100 emails fit in context at all — at higher volumes, context limits force compaction or truncation, which adds cost and risks losing information.
+The following analysis uses actual measured data from running tasks against the agent loop, supplemented by estimates for compiled mode (which is not yet implemented).
 
-**Compiled mode** splits the work between LLM calls (for semantic operations only) and code (for everything else). The LLM is called only for summarisation — 100 independent calls, each with ~600 tokens of input and ~100 tokens of output. Scoring, filtering, statistics, and rendering are pure code: zero tokens.
+#### Measured: "List the last 50 emails with summaries"
 
-At the same Sonnet-class pricing, the summarisation calls cost ~$0.18 input + $0.15 output = **$0.33**. With model downgrading — using Haiku for the trivial per-item summarisation task — the cost drops to ~$0.015 input + $0.02 output = **$0.035**.
+A simpler batch task was measured first: "List the last 50 emails from JobServe with the subject and then a summary of the content for each."
 
-| | Prompt Mode (Sonnet) | Compiled (Sonnet) | Compiled (Haiku) |
+**Prompt mode — measured:**
+
+| Metric | Value |
+|---|---|
+| Model | claude-sonnet-4-5-20250929 |
+| API calls | 7 |
+| Tool calls | 51 (1 gmail_search + 50 gmail_read) |
+| Input tokens (non-cached) | 231,231 |
+| Cache read tokens | 79,037 |
+| Output tokens | 4,988 |
+| Total cost | **$0.79** |
+| Duration | 101 seconds |
+
+The theoretical estimate for this task was ~$0.14 (assuming 3 turns and ~24,500 total input tokens). The actual cost was **5.6x higher** than estimated. The discrepancy comes from:
+
+1. **7 API calls, not 3.** The LLM could not read all 50 emails in one batch of parallel tool calls — it required multiple rounds.
+2. **310,268 total input tokens** (231K non-cached + 79K cache read), not 24,500. The system prompt with tool schemas, accumulated email contents, and conversation history compound across 7 API calls.
+3. **Prompt caching helped but not enough.** Cache read tokens were charged at $0.30/M instead of $3/M, saving ~$0.22. Without caching, the cost would have been ~$1.01.
+
+**Compiled mode — estimated:**
+
+The generated code would connect to Gmail via `agent_mcp`, fetch all 50 emails (data never enters LLM context), extract subjects (code, free), then make 50 independent LLM calls for summaries.
+
+| | Prompt (measured) | Compiled (Sonnet, est.) | Compiled (Haiku, est.) |
 |---|---|---|---|
-| **LLM calls** | | | |
-| Input tokens per call | ~50,000 | ~600 | ~600 |
-| Output tokens per call | ~5,000–8,000 | ~100 | ~100 |
-| Number of LLM calls | 1 | 100 | 100 |
-| Total input tokens | ~50,000 | ~60,000 | ~60,000 |
-| Total output tokens | ~5,000–8,000 | ~10,000 | ~10,000 |
-| Input cost | ~$0.15 | ~$0.18 | ~$0.015 |
-| Output cost | ~$0.08–0.12 | ~$0.15 | ~$0.02 |
-| **Code operations** | | | |
-| Scoring, filtering, stats | LLM (included above) | Code ($0) | Code ($0) |
-| Formatting and rendering | LLM (included above) | Code ($0) | Code ($0) |
-| **Total estimated cost** | **$0.23–0.27** | **$0.33** | **$0.035** |
-| **Context pressure** | High (may exceed limits) | None per call | None per call |
+| Code generation | — | ~5,000 in / ~1,000 out | ~5,000 in / ~1,000 out (Sonnet) |
+| Per-item LLM calls | — | 50 × ~600 in / ~100 out | 50 × ~600 in / ~100 out |
+| Multi-turn re-reading | 310K total input | — | — |
+| Total input tokens | 310,268 | ~35,000 | ~35,000 (mixed pricing) |
+| Total output tokens | 4,988 | ~6,000 | ~6,000 (mixed pricing) |
+| **Total cost** | **$0.79** | **~$0.19** | **~$0.04** |
+| **Ratio vs prompt** | 1x | ~4x cheaper | ~20x cheaper |
 
-**At the same model tier, compiled mode is slightly more expensive** — $0.33 vs $0.25 — because each of the 100 independent calls repeats the summarisation instruction, pushing total input tokens higher (60,000 vs 50,000). The raw API token cost does not favour compiled mode at the same pricing tier.
+Even this relatively simple batch task — fetch emails and summarise — shows a **4x cost advantage** for compiled mode at the same model tier, and **20x with model downgrading**. The theoretical estimate of $0.14 for prompt mode would have suggested compiled mode was *more expensive* at the same tier. The measured data shows the opposite.
 
-The primary justification for compiled mode at the same model tier is **reliability and scalability**, not cost:
+#### Estimated: The Full Job Search Prompt
 
-1. **Deterministic guarantees.** Scoring, filtering, statistics, and rendering are code — they produce exact, reproducible results. In prompt mode these operations are probabilistic: the LLM might miscalculate a total, miss an item during filtering, or render inconsistent markdown.
+The full job search prompt is substantially more complex: search Gmail for JobServe emails, search LinkedIn for matching roles, read the full content of each, score every job against detailed criteria (technology match, seniority, rate, sector, location, IR35 status), exclude below 5/10, generate summaries and score explanations, compute statistics, and write a structured markdown report in stages.
 
-2. **No context ceiling.** Prompt mode at 100 emails is already at the edge of context limits. At 200 emails it requires compaction (which costs additional tokens and risks losing information) or simply cannot process the batch. Compiled mode handles any batch size with constant per-item cost.
+Based on the measured data for the simpler task (310K input tokens for 50 email reads across 7 API calls), the full job search prompt — with two data sources, more tool calls, scoring, filtering, and multi-stage file writing — would likely require 10–12 API calls with even more context accumulation. A conservative estimate is 400,000–500,000 total input tokens.
 
-3. **Completeness.** "Score every job" means every job. In prompt mode, context pressure can cause the LLM to silently skip items or produce truncated output. In compiled mode, the code loop guarantees every item is processed.
+**Prompt mode — estimated from measured baseline:**
 
-**The cost advantage comes from model downgrading.** Each per-item summarisation task is trivial — "summarise this one email in 2-3 sentences" — well within the capability of a smaller, cheaper model. At Haiku-class pricing, compiled mode is **~7x cheaper** than prompt mode ($0.035 vs $0.25). This is the expected operating point: use the most capable model for task planning and code generation, then use the cheapest adequate model for repetitive per-item operations.
+| Metric | Estimate |
+|---|---|
+| API calls | 10–12 |
+| Tool calls | 60+ (gmail_search, gmail_read × 30, linkedin_search, linkedin_get × 20, write_file, append_file × 3) |
+| Total input tokens | ~400,000–500,000 |
+| Output tokens | ~15,000 |
+| Estimated cost | **$1.40–1.70** |
+
+**Compiled mode — estimated:**
+
+The generated code handles data fetching, scoring, filtering, statistics, and report rendering. LLM calls are needed only for per-item summaries and score explanations (~25 qualifying jobs) plus observations/recommendations (1 call).
+
+| | Prompt (est. from baseline) | Compiled (Sonnet, est.) | Compiled (Haiku, est.) |
+|---|---|---|---|
+| Code generation | — | ~5,000 in / ~2,000 out | ~5,000 in / ~2,000 out (Sonnet) |
+| Per-item LLM calls | — | 26 × ~800 in / ~200 out | 26 × ~800 in / ~200 out |
+| Multi-turn re-reading | ~450K total input | — | — |
+| Scoring, filtering, stats | LLM (output tokens) | Code ($0) | Code ($0) |
+| Report formatting | LLM (output tokens) | Code ($0) | Code ($0) |
+| **Total cost** | **~$1.50** | **~$0.19** | **~$0.06** |
+| **Ratio vs prompt** | 1x | ~8x cheaper | ~25x cheaper |
+
+#### Why Theoretical Estimates Understate Prompt Mode Cost
+
+The measured cost of $0.79 for a "simple" 50-email task — compared to the theoretical estimate of $0.14 — reveals systematic underestimation in back-of-envelope calculations:
+
+1. **System prompt and tool schemas are large.** The system prompt with registered tool schemas can be 5,000–10,000 tokens. This is re-read on every API call and is easy to overlook in estimates.
+
+2. **More API round-trips than expected.** The agent required 7 API calls for 51 tool calls. Parallel tool calling has practical limits — the LLM batches tool calls across multiple responses, each requiring a full context re-read.
+
+3. **Context accumulation compounds.** Each email content (~500–2,000 tokens) persists in the conversation history for all subsequent API calls. By the 7th call, the accumulated context includes the system prompt, all tool schemas, the user message, all assistant responses, and all 50 email contents.
+
+4. **Prompt caching reduces but does not eliminate re-reading cost.** Cache read tokens are 10x cheaper ($0.30/M vs $3/M), but the volume is so large that even cached re-reading costs $0.024 for 79K tokens. And new (non-cached) input still dominates at $0.69.
+
+These factors apply to all multi-tool prompt-mode tasks. The more tools called and the more data fetched, the larger the underestimation gap. Compiled mode avoids all of this by keeping bulk data out of the LLM context entirely.
 
 ### 6.7 Scaling: Linear vs Bounded
 
@@ -493,7 +544,7 @@ Two companion libraries enable this model. `agent_mcp` bridges the agent's MCP s
 | 2026-02-27 | Three-stage mode selection framework designed: structural classification → LLM cost estimation → user override |
 | 2026-02-27 | Asymmetric failure cost identified — threshold should lean toward compiled mode when uncertain |
 | 2026-02-27 | LLM calls within compiled mode recognised — `agent_llm` companion library for per-item semantic operations (summarization, classification, extraction) |
-| 2026-02-27 | Concrete cost comparison added — compiled mode with per-item LLM calls 10-20x cheaper via model downgrading; linear scaling vs hard context ceiling |
+| 2026-02-27 | Cost comparison revised with measured data — theoretical estimates understate prompt mode cost by ~5.6x; actual measurement: $0.79 for 50-email task vs ~$0.19 compiled (same tier), ~$0.04 compiled (Haiku) |
 
 ---
 
