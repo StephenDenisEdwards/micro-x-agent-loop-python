@@ -9,7 +9,16 @@ from pathlib import Path
 from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig
-from micro_x_agent_loop.mode_selector import analyze_prompt, format_analysis
+from micro_x_agent_loop.mode_selector import (
+    ModeAnalysis,
+    RecommendedMode,
+    Stage2Result,
+    analyze_prompt,
+    build_stage2_prompt,
+    format_analysis,
+    format_stage2_result,
+    parse_stage2_response,
+)
 from micro_x_agent_loop.commands.router import CommandRouter
 from micro_x_agent_loop.commands.voice_command import parse_voice_command, parse_voice_start_options
 from micro_x_agent_loop.compaction import SummarizeCompactionStrategy
@@ -98,6 +107,8 @@ class Agent:
 
         # Mode analysis
         self._mode_analysis_enabled = config.mode_analysis_enabled
+        self._stage2_classification_enabled = config.stage2_classification_enabled
+        self._stage2_model = config.stage2_model or config.model
         self._working_directory = config.working_directory
 
         # Tool result summarization
@@ -176,6 +187,11 @@ class Agent:
             if formatted:
                 print(formatted)
 
+            if (analysis.recommended_mode == RecommendedMode.AMBIGUOUS
+                    and self._stage2_classification_enabled):
+                stage2 = await self._classify_ambiguous(user_message, analysis)
+                print(format_stage2_result(stage2))
+
         self._turn_number += 1
         self._session_accumulator.total_turns = self._turn_number
 
@@ -188,6 +204,17 @@ class Agent:
         )
         self._current_user_message_id = current_user_message_id
         self._last_assistant_message_id = last_assistant_message_id
+
+    # -- Stage 2 LLM classification --
+
+    async def _classify_ambiguous(self, user_message: str, stage1: ModeAnalysis) -> Stage2Result:
+        """Call the LLM to classify an ambiguous prompt as PROMPT or COMPILED."""
+        prompt = build_stage2_prompt(user_message, stage1)
+        response_text, usage = await self._provider.create_message(
+            self._stage2_model, 300, 0.0, [{"role": "user", "content": prompt}]
+        )
+        self.on_api_call_completed(usage, call_type="stage2_classification")
+        return parse_stage2_response(response_text)
 
     # -- TurnEvents protocol: metrics --
 

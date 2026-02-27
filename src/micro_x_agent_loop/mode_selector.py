@@ -1,8 +1,9 @@
-"""Stage 1 structural pattern matching for mode selection.
+"""Mode selection: structural pattern matching (Stage 1) and LLM classification (Stage 2).
 
-Analyzes user prompts for signals that indicate whether compiled task mode
-or prompt mode is more appropriate. Pure computation — no dependencies on
-agent, provider, or turn engine.
+Stage 1 analyzes user prompts for signals that indicate whether compiled task
+mode or prompt mode is more appropriate.  Stage 2 builds a classification
+prompt for an LLM to resolve ambiguous cases.  Pure computation — no async,
+no provider dependency.
 """
 
 from __future__ import annotations
@@ -38,6 +39,12 @@ class ModeAnalysis:
     strong_count: int
     moderate_count: int
     supportive_count: int
+
+
+@dataclass(frozen=True)
+class Stage2Result:
+    recommended_mode: RecommendedMode
+    reasoning: str
 
 
 # ---------------------------------------------------------------------------
@@ -244,3 +251,86 @@ def format_analysis(analysis: ModeAnalysis) -> str:
         f"{analysis.supportive_count} supportive"
     )
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 — LLM classification for ambiguous cases
+# ---------------------------------------------------------------------------
+
+def build_stage2_prompt(user_message: str, stage1: ModeAnalysis) -> str:
+    """Build a classification prompt for the LLM to resolve an ambiguous case.
+
+    The prompt provides the user's original message, Stage 1 signals, and
+    guidance on how to decide between PROMPT and COMPILED modes.
+    """
+    signal_lines = "\n".join(
+        f"  - {s.name} ({s.strength.value}): \"{s.matched_text}\""
+        for s in stage1.signals
+    ) or "  (none)"
+
+    return f"""\
+You are a task classifier. Given a user's prompt and pre-detected signals,
+decide whether it should run in PROMPT mode or COMPILED mode.
+
+PROMPT mode: conversational, single-turn responses — good for questions,
+explanations, single-item tasks, and open-ended chat.
+
+COMPILED mode: structured batch execution — good for tasks involving multiple
+items, per-item processing, data collection across sources, scoring/ranking
+many items, or deterministic repeatable workflows.
+
+Consider:
+- Item count: does the task involve processing multiple items (emails, jobs,
+  documents) or just one?
+- Data volume: will the task produce or consume large amounts of structured data?
+- Deterministic requirements: does the task need to be repeatable or follow
+  strict rules for each item?
+- Batch structure: is there a clear per-item loop (fetch → process → output)?
+
+When uncertain, lean toward COMPILED — the cost of running a batch task in
+prompt mode is much higher than the cost of this classification call.
+
+User's prompt:
+{user_message}
+
+Stage 1 signals detected:
+{signal_lines}
+
+Respond with exactly two lines:
+Line 1: either PROMPT or COMPILED (nothing else)
+Line 2: a brief reason (one sentence)"""
+
+
+def parse_stage2_response(response_text: str) -> Stage2Result:
+    """Parse the LLM's classification response into a Stage2Result.
+
+    Looks for COMPILED or PROMPT (case-insensitive) in the response.
+    Defaults to COMPILED if neither is found (asymmetric failure cost).
+    """
+    lines = response_text.strip().splitlines()
+    first_line = lines[0].strip().upper() if lines else ""
+
+    if "COMPILED" in first_line:
+        mode = RecommendedMode.COMPILED
+    elif "PROMPT" in first_line:
+        mode = RecommendedMode.PROMPT
+    else:
+        # Scan the whole response as a fallback
+        upper = response_text.upper()
+        if "COMPILED" in upper:
+            mode = RecommendedMode.COMPILED
+        elif "PROMPT" in upper:
+            mode = RecommendedMode.PROMPT
+        else:
+            mode = RecommendedMode.COMPILED  # default: lean toward compiled
+
+    reasoning = lines[1].strip() if len(lines) >= 2 else ""
+    return Stage2Result(recommended_mode=mode, reasoning=reasoning)
+
+
+def format_stage2_result(result: Stage2Result) -> str:
+    """Format a Stage2Result as diagnostic CLI output."""
+    line = f"[Mode Analysis] Stage 2 override: {result.recommended_mode.value}"
+    if result.reasoning:
+        line += f'\n  Reasoning: "{result.reasoning}"'
+    return line

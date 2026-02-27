@@ -5,8 +5,12 @@ from micro_x_agent_loop.mode_selector import (
     ModeAnalysis,
     RecommendedMode,
     SignalStrength,
+    Stage2Result,
     analyze_prompt,
+    build_stage2_prompt,
     format_analysis,
+    format_stage2_result,
+    parse_stage2_response,
 )
 
 
@@ -283,6 +287,76 @@ class PromptCommandIntegrationTests(unittest.TestCase):
         # Without /prompt, a file reference has no signals — known limitation
         analysis = analyze_prompt("run my job-search-prompt.txt prompt")
         self.assertEqual(RecommendedMode.PROMPT, analysis.recommended_mode)
+
+
+class Stage2PromptTests(unittest.TestCase):
+    """Stage 2 prompt construction."""
+
+    def _make_ambiguous_analysis(self, text: str) -> ModeAnalysis:
+        analysis = analyze_prompt(text)
+        self.assertEqual(RecommendedMode.AMBIGUOUS, analysis.recommended_mode)
+        return analysis
+
+    def test_build_prompt_includes_user_message(self) -> None:
+        analysis = self._make_ambiguous_analysis("Score this document for readability")
+        prompt = build_stage2_prompt("Score this document for readability", analysis)
+        self.assertIn("Score this document for readability", prompt)
+
+    def test_build_prompt_includes_stage1_signals(self) -> None:
+        analysis = self._make_ambiguous_analysis("Score this document for readability")
+        prompt = build_stage2_prompt("Score this document for readability", analysis)
+        self.assertIn("Scoring/ranking", prompt)
+
+    def test_build_prompt_includes_classification_guidance(self) -> None:
+        analysis = self._make_ambiguous_analysis("Score this document for readability")
+        prompt = build_stage2_prompt("Score this document for readability", analysis)
+        self.assertIn("PROMPT", prompt)
+        self.assertIn("COMPILED", prompt)
+
+
+class Stage2ResponseParsingTests(unittest.TestCase):
+    """Stage 2 response parsing."""
+
+    def test_parse_compiled_response(self) -> None:
+        result = parse_stage2_response("COMPILED\nThis is a batch task with many items.")
+        self.assertEqual(RecommendedMode.COMPILED, result.recommended_mode)
+
+    def test_parse_prompt_response(self) -> None:
+        result = parse_stage2_response("PROMPT\nSingle item, no batch structure.")
+        self.assertEqual(RecommendedMode.PROMPT, result.recommended_mode)
+
+    def test_parse_extracts_reasoning(self) -> None:
+        result = parse_stage2_response("COMPILED\n50 emails with per-item summarisation is a batch task.")
+        self.assertEqual("50 emails with per-item summarisation is a batch task.", result.reasoning)
+
+    def test_parse_defaults_to_compiled(self) -> None:
+        result = parse_stage2_response("I'm not sure what to recommend here.")
+        self.assertEqual(RecommendedMode.COMPILED, result.recommended_mode)
+
+    def test_parse_case_insensitive(self) -> None:
+        for text in ["compiled\nreason", "Compiled\nreason", "COMPILED\nreason"]:
+            result = parse_stage2_response(text)
+            self.assertEqual(RecommendedMode.COMPILED, result.recommended_mode, f"Failed for: {text}")
+
+        for text in ["prompt\nreason", "Prompt\nreason", "PROMPT\nreason"]:
+            result = parse_stage2_response(text)
+            self.assertEqual(RecommendedMode.PROMPT, result.recommended_mode, f"Failed for: {text}")
+
+
+class Stage2FormatTests(unittest.TestCase):
+    """Stage 2 output formatting."""
+
+    def test_format_shows_override(self) -> None:
+        result = Stage2Result(recommended_mode=RecommendedMode.COMPILED, reasoning="Batch task.")
+        output = format_stage2_result(result)
+        self.assertIn("Stage 2", output)
+        self.assertIn("COMPILED", output)
+
+    def test_format_shows_reasoning(self) -> None:
+        result = Stage2Result(recommended_mode=RecommendedMode.PROMPT, reasoning="Single item task.")
+        output = format_stage2_result(result)
+        self.assertIn("Single item task.", output)
+        self.assertIn("Reasoning", output)
 
 
 if __name__ == "__main__":

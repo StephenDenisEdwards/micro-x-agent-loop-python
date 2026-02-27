@@ -150,6 +150,8 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
             tool_result_summarization_model=app.tool_result_summarization_model,
             tool_result_summarization_threshold=app.tool_result_summarization_threshold,
             mode_analysis_enabled=app.mode_analysis_enabled,
+            stage2_classification_enabled=app.stage2_classification_enabled,
+            stage2_model=app.stage2_model,
             working_directory=app.working_directory,
         )
     )

@@ -56,6 +56,8 @@ class AppConfig:
     smart_compaction_trigger_enabled: bool
     concise_output_enabled: bool
     mode_analysis_enabled: bool
+    stage2_classification_enabled: bool
+    stage2_model: str
 
 
 def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
@@ -149,6 +151,8 @@ def parse_app_config(config: dict) -> AppConfig:
         smart_compaction_trigger_enabled=_to_bool(config.get("SmartCompactionTriggerEnabled", True), default=True),
         concise_output_enabled=_to_bool(config.get("ConciseOutputEnabled", False), default=False),
         mode_analysis_enabled=_to_bool(config.get("ModeAnalysisEnabled", True), default=True),
+        stage2_classification_enabled=_to_bool(config.get("Stage2ClassificationEnabled", True), default=True),
+        stage2_model=str(config.get("Stage2Model", "")).strip(),
     )
 
 

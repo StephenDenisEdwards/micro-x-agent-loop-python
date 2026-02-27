@@ -33,4 +33,6 @@ class AgentConfig:
     tool_result_summarization_model: str = ""
     tool_result_summarization_threshold: int = 4000
     mode_analysis_enabled: bool = False
+    stage2_classification_enabled: bool = False
+    stage2_model: str = ""  # empty = use main model
     working_directory: str | None = None
