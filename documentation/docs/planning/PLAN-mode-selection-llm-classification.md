@@ -6,6 +6,8 @@
 
 ## Context
 
+This feature implements the execution modality switching described in [Cost-Aware Task Compilation for LLM Agents](../research-papers/cost-aware-task-compilation-for-llm-agents/research-paper.md) — specifically the mode classifier that decides between prompt-space execution and compiled task pipelines.
+
 Phase 1 (complete) implements Stage 1 structural pattern matching — zero-cost regex-based signal detection that routes clear cases directly to COMPILED or PROMPT. Ambiguous cases (1 strong signal, or only moderate/supportive signals) currently default to PROMPT, which measured data shows can be 4–20x more expensive than compiled mode for batch tasks.
 
 Phase 2 adds Stage 2: a cheap LLM classification call for AMBIGUOUS cases only. The LLM receives the user's prompt and Stage 1 signals, then recommends PROMPT or COMPILED. This costs ~$0.01 per call. Given measured prompt-mode costs of $0.79+ for batch tasks, even modest classification accuracy provides strongly positive ROI.
