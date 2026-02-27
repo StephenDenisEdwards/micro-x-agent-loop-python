@@ -187,9 +187,121 @@ Adding a new MCP server to the agent's registry automatically makes it available
 
 ---
 
-## 6. Remaining Open Questions
+## 6. Mode Selection: When to Compile vs When to Prompt
 
-### 6.1 Sandboxing and Trust
+The agent receives a prompt. Before execution begins, it must decide: prompt mode or compiled mode? This decision uses only the information available at that point — the user's prompt and the agent's knowledge of its registered capabilities.
+
+### 6.1 The Cost Estimation Challenge
+
+There is a chicken-and-egg problem with cost-based switching. To estimate prompt-mode cost accurately, you need to know how much data will be fetched — but you don't know that until you fetch it. The job search prompt says "search Gmail for all JobServe emails in the last 24 hours" — that could be 5 emails or 50.
+
+However, precision is not required. The switching decision needs a rough estimate that is good enough to distinguish "fits comfortably in context" from "will blow up the context window and the bill." Several estimation approaches are available, and they can be combined.
+
+**LLM-based estimation.** The LLM reads the prompt and produces a rough cost estimate. It understands that "search Gmail for all JobServe emails in 24 hours" likely means dozens of emails, each substantial. It can estimate approximate item count, tokens per item, total context required, and reasoning overhead. This is a small, cheap classification call — perhaps 500 tokens of input and 200 tokens of output. Trivial compared to the cost of getting the mode wrong.
+
+**Historical data.** If this is a recurring task (e.g., daily job search), the agent has seen previous runs. Yesterday's run fetched 32 emails totalling 45,000 tokens. Today's is likely similar. Historical execution data provides the most accurate estimates with zero LLM cost.
+
+**Structural analysis.** Some prompts are obviously large without any estimation. "Search all emails from the last 24 hours" combined with "search LinkedIn" combined with "score each one" combined with "produce statistics" — the combinatorial structure alone signals batch processing regardless of the exact item count.
+
+### 6.2 Beyond Cost: Other Decision Signals
+
+Cost is one factor, but several other characteristics independently justify compiled mode regardless of estimated token cost.
+
+**Deterministic execution requirements.** The prompt asks for operations that should produce exact, reproducible results:
+
+- "Score each job 1-10" — scoring should be reproducible across runs.
+- "Summary Statistics: Total Jobs Found: X (Y JobServe + Z LinkedIn)" — arithmetic must be exact.
+- "Exclude roles scoring below 5/10" — filtering must not miss items or include items that should be excluded.
+- "Include a link for each job" — mandatory field enforcement must be guaranteed, not probabilistic.
+
+**Batch structure.** The task processes N items where N is non-trivial, applies the same operation to each item (score, classify, extract), and aggregates results across items (counts, averages, distributions). Batch processing is structurally suited to code, not to single-pass text generation.
+
+**Output compliance.** The output has precise formatting requirements — specific templates, mandatory fields per item, cross-referencing requirements (anchor links between sections), or audit-trail needs. These are constraints that probabilistic generation can violate but deterministic rendering cannot.
+
+**Reproducibility.** Tasks described as recurring ("run this same search daily") or where comparison across runs is expected require deterministic execution to produce meaningful results.
+
+### 6.3 A Three-Stage Decision Framework
+
+Mode selection operates as a pipeline of increasing cost and precision.
+
+**Stage 1: Structural classification (rule-based, zero LLM cost)**
+
+Pattern-match the prompt against known signals before involving the LLM at all:
+
+| Signal | Detection Pattern | Strength |
+|---|---|---|
+| Batch processing | "each", "all", "every", iteration over a collection | Strong |
+| Scoring or ranking | "score", "rank", "rate", "evaluate", "compare" | Strong |
+| Statistics or aggregation | "count", "total", "average", "distribution", "summary" | Strong |
+| Mandatory fields | "must include", "always include", "required", "ensure" | Moderate |
+| Structured output | "format", "template", specific markdown/HTML structure | Moderate |
+| Multiple data sources | Multiple distinct fetch operations identified | Moderate |
+| Reproducibility | "daily", "recurring", "same as yesterday", "every morning" | Supportive |
+
+If multiple strong signals are present, route directly to compiled mode. No further analysis needed.
+
+If no signals are present, route directly to prompt mode.
+
+If the signal is ambiguous, proceed to Stage 2.
+
+**Stage 2: LLM cost estimation (small LLM call)**
+
+For prompts that are not obviously one mode or the other, make a cheap classification call. The LLM is asked to estimate:
+
+- How many items will be processed.
+- Approximate tokens per item from each data source.
+- Total context required if executed in prompt mode.
+- Whether deterministic guarantees are required by the task.
+- Recommended mode: prompt or compiled.
+
+This classification call costs perhaps $0.01 in tokens. If it correctly routes a task to compiled mode that would have cost $2–3 in prompt mode, the return on that investment is 200–300x.
+
+**Stage 3: User override (explicit or configured)**
+
+The user can always override the automatic decision:
+
+- Explicit instruction: "Compile this task" or "Just do it in chat."
+- Task-level configuration: "Always compile job search tasks."
+- Global preference: "Default to compiled mode for tasks involving more than 10 items."
+- If a task has been compiled before and the generated program is cached, default to compiled mode for subsequent runs.
+
+The three stages are ordered by cost: Stage 1 is free, Stage 2 is cheap, Stage 3 requires no computation at all. Most tasks will be resolved at Stage 1 — the structural signals in typical prompts are unambiguous.
+
+### 6.4 Applied to the Job Search Example
+
+The agent receives the job search prompt. Stage 1 pattern matching identifies:
+
+- "search... for all JobServe emails" → batch processing (strong)
+- "Score each job" → scoring (strong)
+- "Exclude roles scoring below 5" → filtering with threshold (strong)
+- "Summary Statistics" with counts and distributions → aggregation (strong)
+- Detailed markdown format with anchor links → structured output compliance (moderate)
+- Gmail + LinkedIn → multiple data sources (moderate)
+
+Four strong signals and two moderate signals. The decision is unambiguous at Stage 1 — compiled mode — without spending a single token on cost estimation.
+
+For comparison, consider "What's the weather in London tomorrow?" — no batch processing, no scoring, no statistics, no structured output, single data source. Zero signals. Prompt mode, resolved at Stage 1.
+
+The grey area — where Stage 2 earns its keep — is something like "Find me three good restaurants near the office and explain why you chose them." Small batch (3 items), some evaluation, but likely manageable in context. Stage 2 would estimate ~3 items, ~500 tokens each, total ~2,000 tokens of data plus reasoning — well within prompt mode. Correct decision: prompt mode.
+
+### 6.5 The Bootstrap Cost
+
+Mode selection itself uses computational resources — at minimum, Stage 1 pattern matching, and potentially a Stage 2 LLM call. This is an irreducible bootstrap cost: spending tokens to decide whether to spend tokens.
+
+This is analogous to a compiler deciding whether to apply an optimisation pass. The analysis cost is tiny compared to the execution cost difference between the two paths. A $0.01 classification call that prevents a $2.50 prompt-mode execution has a clear economic justification. Even if the classification is wrong occasionally, the expected value is strongly positive as long as the accuracy is reasonable.
+
+The classification does not need to be perfect. The failure modes are asymmetric:
+
+- **False positive (prompt task routed to compiled):** Unnecessary code generation overhead. The task still completes correctly, just with higher latency. Cost: perhaps $0.10–0.20 extra.
+- **False negative (compiled task left in prompt mode):** The original problem — high token cost, constraint drift, unreliable statistics. Cost: $1–3 extra plus reliability degradation.
+
+The penalty for false negatives is much higher than for false positives. The decision threshold should therefore lean toward compiled mode when uncertain.
+
+---
+
+## 7. Remaining Open Questions
+
+### 7.1 Sandboxing and Trust
 
 Generated code that calls real external services (reading email, posting to APIs) needs careful sandboxing:
 
@@ -198,7 +310,7 @@ Generated code that calls real external services (reading email, posting to APIs
 - Should the agent present the generated code to the user for approval before execution?
 - Should there be a dry-run mode that validates the code without executing external calls?
 
-### 6.2 Error Recovery
+### 7.2 Error Recovery
 
 What happens when generated code fails mid-execution?
 
@@ -206,7 +318,7 @@ What happens when generated code fails mid-execution?
 - Does it fall back to prompt mode for the failing portion?
 - How does it report partial results?
 
-### 6.3 Code Quality and Review
+### 7.3 Code Quality and Review
 
 Should the LLM review its own generated code before execution?
 
@@ -214,16 +326,7 @@ Should the LLM review its own generated code before execution?
 - This adds latency and token cost, but may be worth it for reliability.
 - Alternatively, static analysis or schema validation of MCP calls could catch type mismatches without an LLM pass.
 
-### 6.4 When to Compile vs When to Prompt
-
-The cost-aware switching decision itself needs design:
-
-- Is it a hard threshold (item count > N, estimated tokens > T)?
-- Does the LLM decide ("this task looks like it should be compiled")?
-- Is it user-configurable ("always compile job search tasks")?
-- Can the user force one mode or the other?
-
-### 6.5 Caching and Reuse of Generated Programs
+### 7.4 Caching and Reuse of Generated Programs
 
 If the agent generates a program for "daily job search report" today, can it reuse or adapt that program tomorrow?
 
@@ -233,7 +336,7 @@ If the agent generates a program for "daily job search report" today, can it reu
 
 ---
 
-## 7. Relationship to the White Paper Example
+## 8. Relationship to the White Paper Example
 
 The engineering white paper (section 6) presents the job search report as a concrete example using the pre-built runtime model. This was chosen for clarity of exposition — it cleanly illustrates the separation of semantic reasoning from deterministic execution without introducing the additional complexity of code generation.
 
@@ -243,7 +346,7 @@ As this design matures, the white paper may be updated with a second example sho
 
 ---
 
-## 8. Summary of Current Thinking
+## 9. Summary of Current Thinking
 
 The compiled task execution model for a general-purpose personal agent should:
 
@@ -251,8 +354,9 @@ The compiled task execution model for a general-purpose personal agent should:
 2. **Program against registered MCP servers** — providing typed, known interfaces that constrain the generated code and reduce bug surface area.
 3. **Access MCP servers via a client library (`agent_mcp`)** — the library handles registry lookup, process spawning, client connection, and credential passthrough. The LLM writes against a minimal API surface (`connect`, `call`) using the same server names and tool schemas it already knows from prompt mode.
 4. **Keep bulk data out of context entirely** — the generated code fetches, processes, and outputs data without it ever entering the LLM's conversation history. The LLM only sees compact results when called back for narrative generation.
-5. **Execute in a sandbox** — with controlled access to MCP servers and appropriate permission boundaries.
-6. **Remain inspectable** — generated code can be reviewed before execution.
+5. **Select execution mode via a three-stage decision pipeline** — structural pattern matching (free), LLM cost estimation (cheap), and user override. The decision threshold leans toward compiled mode when uncertain, because the cost of false negatives (prompt mode for a compiled task) is much higher than false positives (compiled mode for a prompt task).
+6. **Execute in a sandbox** — with controlled access to MCP servers and appropriate permission boundaries.
+7. **Remain inspectable** — generated code can be reviewed before execution.
 
 The `agent_mcp` library is the key enabling component. It is not a framework — it is connection plumbing that bridges the agent's MCP server registry into generated code. The MCP server registry becomes the unified capability layer: same servers, same schemas, same credentials, accessible from both the agent loop (prompt mode) and generated programs (compiled mode).
 
@@ -267,6 +371,8 @@ The `agent_mcp` library is the key enabling component. It is not a framework —
 | 2026-02-27 | "Agent loop fetches, code processes" approach rejected — data in context defeats the purpose |
 | 2026-02-27 | MCP client library (`agent_mcp`) concept introduced — generated code spawns MCP servers directly |
 | 2026-02-27 | MCP access from generated code resolved as a design question |
+| 2026-02-27 | Three-stage mode selection framework designed: structural classification → LLM cost estimation → user override |
+| 2026-02-27 | Asymmetric failure cost identified — threshold should lean toward compiled mode when uncertain |
 
 ---
 
