@@ -189,8 +189,12 @@ class Agent:
 
             if (analysis.recommended_mode == RecommendedMode.AMBIGUOUS
                     and self._stage2_classification_enabled):
-                stage2 = await self._classify_ambiguous(user_message, analysis)
-                print(format_stage2_result(stage2))
+                try:
+                    stage2 = await self._classify_ambiguous(user_message, analysis)
+                    print(format_stage2_result(stage2))
+                except Exception as ex:
+                    logger.warning(f"Stage 2 classification failed: {ex}")
+                    print(f"[Mode Analysis] Stage 2 classification failed: {ex}")
 
         self._turn_number += 1
         self._session_accumulator.total_turns = self._turn_number
