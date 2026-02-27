@@ -257,33 +257,37 @@ The presence of LLM-dependent steps does not change the mode decision. A task wi
 
 Consider the concrete task: "List the last 100 emails from JobServe and create summaries of the content."
 
-**Prompt mode** loads all 100 emails into a single conversation context. Assuming each email is ~500 tokens, that is 50,000 tokens of email content plus the system prompt plus the instruction. The LLM reads the entire context to produce output — paying for 50,000+ input tokens in one call, with attention cost scaling with context size. At Sonnet-class pricing (~$3/M input tokens), the input cost alone is roughly $0.15–0.20. And this assumes all 100 emails fit in context at all — at higher volumes, context limits force compaction or truncation, which introduces its own costs and reliability problems.
+**Prompt mode** loads all 100 emails into a single conversation context. Assuming each email is ~500 tokens, that is 50,000 tokens of email content plus the system prompt plus the instruction. The LLM reads the entire context and produces everything in one response: 100 summaries, scoring for each job, filtering decisions, summary statistics, and the formatted markdown report. This means substantial output — roughly 5,000–8,000 tokens of generated text. At Sonnet-class pricing (~$3/M input, ~$15/M output), the total cost is roughly $0.15 input + $0.08–0.12 output = **$0.23–0.27**. And this assumes all 100 emails fit in context at all — at higher volumes, context limits force compaction or truncation, which adds cost and risks losing information.
 
-**Compiled mode with per-item LLM calls** makes 100 independent calls, each with ~500 tokens of input (one email plus a short summarisation instruction) and ~100 tokens of output. Each call's context is tiny — roughly 600 tokens. There is no accumulation between calls. The total input tokens across all calls (~60,000) are comparable to prompt mode, but critically, each individual call is small. This enables two cost advantages:
+**Compiled mode** splits the work between LLM calls (for semantic operations only) and code (for everything else). The LLM is called only for summarisation — 100 independent calls, each with ~600 tokens of input and ~100 tokens of output. Scoring, filtering, statistics, and rendering are pure code: zero tokens. This is the key structural difference — in prompt mode the LLM is an expensive calculator, formatter, and template engine for work that code does for free.
 
-1. **No quadratic attention cost.** In prompt mode, the LLM attends over the full 50,000-token context for every output token. In compiled mode, each call attends over only ~600 tokens. The per-token compute cost is lower even at the same pricing tier.
+At the same Sonnet-class pricing, the summarisation calls cost ~$0.18 input + $0.15 output = **$0.33**. However, with model downgrading — using Haiku for the trivial per-item summarisation task — the cost drops to ~$0.015 input + $0.02 output = **$0.035**.
 
-2. **Model downgrading.** Each per-item task is trivial — "summarise this one email in 2-3 sentences." This is well within the capability of a smaller, cheaper model. At Haiku-class pricing (~$0.25/M input tokens), the total cost for 100 summarisation calls is roughly $0.01–0.02. This is **10–20x cheaper** than the prompt-mode approach using a full-size model.
-
-| | Prompt Mode | Compiled Mode (Sonnet) | Compiled Mode (Haiku) |
+| | Prompt Mode (Sonnet) | Compiled (Sonnet) | Compiled (Haiku) |
 |---|---|---|---|
+| **LLM calls** | | | |
 | Input tokens per call | ~50,000 | ~600 | ~600 |
-| Number of calls | 1 | 100 | 100 |
+| Output tokens per call | ~5,000–8,000 | ~100 | ~100 |
+| Number of LLM calls | 1 | 100 | 100 |
 | Total input tokens | ~50,000 | ~60,000 | ~60,000 |
-| Approximate input cost | $0.15–0.20 | $0.18 | $0.015 |
-| Context pressure | High (may exceed limits) | None per call | None per call |
+| Total output tokens | ~5,000–8,000 | ~10,000 | ~10,000 |
+| Input cost | ~$0.15 | ~$0.18 | ~$0.015 |
+| Output cost | ~$0.08–0.12 | ~$0.15 | ~$0.02 |
+| **Code operations** | | | |
+| Scoring, filtering, stats | LLM (included above) | Code ($0) | Code ($0) |
+| Formatting and rendering | LLM (included above) | Code ($0) | Code ($0) |
+| **Total estimated cost** | **$0.23–0.27** | **$0.33** | **$0.035** |
+| **Context pressure** | High (may exceed limits) | None per call | None per call |
 
-### 6.6 Why Compiled Mode Is Cheaper Even at the Same Model Tier
+At Sonnet-class pricing for both modes, the total token cost is actually comparable — compiled mode uses more total tokens because each of the 100 calls repeats the summarisation instruction. But this comparison understates the prompt-mode cost for three reasons:
 
-The cost table above shows model downgrading as the dramatic win, but compiled mode is considerably cheaper even when using the exact same model for per-item calls. This is because the summarisation step is only one part of the pipeline.
+1. **Attention cost scales with context size.** In prompt mode, every output token is generated while attending over the full 50,000-token context. In compiled mode, each output token attends over only ~600 tokens. The per-token compute cost is fundamentally lower, even though the API pricing may not fully reflect this.
 
-**The rest of the pipeline is free.** In compiled mode, scoring against numeric criteria, filtering by threshold, computing statistics (counts, averages, distributions), and rendering the final markdown report are all pure code — zero tokens. In prompt mode, the LLM performs all of these operations too: reasoning about which jobs to exclude, doing arithmetic for summary statistics, rendering structured markdown — all within that same bloated 50,000-token context, all costing tokens. The LLM in prompt mode is an expensive calculator, formatter, and template engine for work that code does for free.
+2. **Prompt mode output is doing work that code does for free.** The 5,000–8,000 output tokens in prompt mode include scoring logic, filtering decisions, arithmetic, and markdown rendering — all of which are free code operations in compiled mode. Compiled mode's LLM output is purely summaries.
 
-**Per-item context is tiny.** Even at identical per-token pricing, the compute cost of generating output while attending over 600 tokens is fundamentally lower than generating output while attending over 50,000 tokens. The total input token count is comparable (~60,000 vs ~50,000), but the per-call context size determines the actual compute cost per output token.
+3. **No compaction overhead.** Prompt mode at 100 emails is already at the edge of context limits. If the task grows to 150 or 200 emails, prompt mode requires compaction — summarising intermediate results to free context space — which itself costs tokens and risks losing information. Compiled mode has no such overhead at any batch size.
 
-**No compaction overhead.** Prompt mode at 100 emails is already at the edge of context limits. If the task grows to 150 or 200 emails, prompt mode requires compaction — summarising intermediate results to free context space — which itself costs tokens and risks losing information. Compiled mode has no such overhead at any batch size.
-
-Model downgrading is therefore a bonus optimisation on top of an already cheaper architecture, not the primary source of savings.
+The decisive cost advantage comes with model downgrading. Each per-item summarisation task is trivial — well within the capability of a smaller, cheaper model. At Haiku-class pricing, compiled mode is **~7x cheaper** than prompt mode. This is the expected operating point: use the most capable model for task planning and code generation, then use the cheapest adequate model for repetitive per-item operations.
 
 ### 6.7 Scaling: Linear vs Bounded
 
