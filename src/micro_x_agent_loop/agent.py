@@ -171,8 +171,7 @@ class Agent:
             return
 
         if self._mode_analysis_enabled:
-            full_prompt = self._system_prompt + "\n\n" + user_message
-            analysis = analyze_prompt(full_prompt)
+            analysis = analyze_prompt(user_message)
             formatted = format_analysis(analysis)
             if formatted:
                 print(formatted)

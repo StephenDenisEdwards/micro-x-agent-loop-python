@@ -247,37 +247,22 @@ class FullPromptIntegrationTests(unittest.TestCase):
         self.assertEqual(RecommendedMode.COMPILED, analysis.recommended_mode)
 
 
-class FullPromptAnalysisTests(unittest.TestCase):
-    """Analysis against system_prompt + user_message (the full prompt sent to LLM)."""
+class PromptCommandIntegrationTests(unittest.TestCase):
+    """Tests for /prompt command flow — file contents analyzed as user message."""
 
-    def test_system_prompt_with_user_memory_provides_signals(self) -> None:
-        system_prompt = (
-            "You are a helpful AI assistant.\n\n"
-            "# User Memory\n\n"
-            "## Job Search Workflow\n"
-            "- Search Gmail for all JobServe emails, score each job 1-10\n"
-            "- Show Summary Statistics with total count and average\n"
-            "- Create markdown report with LinkedIn and Gmail results\n"
-        )
-        user_message = "run my job-search-prompt.txt prompt"
-        analysis = analyze_prompt(system_prompt + "\n\n" + user_message)
-        self.assertEqual(RecommendedMode.COMPILED, analysis.recommended_mode)
-        self.assertGreaterEqual(analysis.strong_count, 2)
-
-    def test_plain_system_prompt_no_false_signals(self) -> None:
-        system_prompt = "You are a helpful AI assistant. Today is Monday."
-        user_message = "What's the weather in London?"
-        analysis = analyze_prompt(system_prompt + "\n\n" + user_message)
-        self.assertEqual(RecommendedMode.PROMPT, analysis.recommended_mode)
-
-    def test_direct_paste_still_works(self) -> None:
-        system_prompt = "You are a helpful AI assistant."
-        user_message = (
+    def test_file_contents_as_user_message_compiled(self) -> None:
+        # Simulates what /prompt does: file contents become the user message
+        file_contents = (
             "Search my Gmail for all JobServe emails. Score each job 1-10. "
             "Show Summary Statistics with total count."
         )
-        analysis = analyze_prompt(system_prompt + "\n\n" + user_message)
+        analysis = analyze_prompt(file_contents)
         self.assertEqual(RecommendedMode.COMPILED, analysis.recommended_mode)
+
+    def test_bare_meta_instruction_prompt(self) -> None:
+        # Without /prompt, a file reference has no signals — known limitation
+        analysis = analyze_prompt("run my job-search-prompt.txt prompt")
+        self.assertEqual(RecommendedMode.PROMPT, analysis.recommended_mode)
 
 
 if __name__ == "__main__":
