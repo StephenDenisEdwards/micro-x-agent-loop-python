@@ -109,20 +109,87 @@ The MCP schemas act as the "standard library" for generated programs. The LLM do
 
 ---
 
-## 4. Open Questions
+## 4. The Critical Constraint: Data Must Not Touch Context
 
-### 4.1 MCP Access from Generated Code
+During design exploration, a simpler approach was considered: the agent loop fetches data via normal MCP tool calls (prompt mode), saves it to intermediate files, and then generated code processes those files. This would avoid the complexity of MCP access from generated code entirely.
 
-How does generated code call MCP servers?
+This approach is fatally flawed. When the agent loop calls MCP tools to fetch 30 emails and 20 job listings, those results — 50,000+ tokens of raw data — land in the conversation history. The data passes through the LLM's context even though the LLM doesn't need to reason over it. This defeats the entire purpose of compiled task mode, which exists precisely to keep bulk data out of context.
 
-Options:
-- **Generated code imports an MCP client library** that the sandbox provides. The library handles connection, authentication, and schema validation.
-- **The sandbox exposes MCP servers as local HTTP endpoints** that generated code calls with standard HTTP libraries.
-- **The runtime wraps MCP servers in a Python SDK** auto-generated from server schemas, providing typed function calls.
+**The generated code must handle fetching itself.** Data must flow from source to file to processing to output without ever passing through the LLM's context window. This means the generated code needs direct access to MCP servers.
 
-This is an infrastructure question with significant implications for developer experience and reliability.
+---
 
-### 4.2 Sandboxing and Trust
+## 5. The MCP Client Library
+
+The question of how generated code accesses MCP servers resolves cleanly once you recognise that MCP servers are just processes. The generated code can spawn MCP server instances directly, connect as a client, make calls, and get results. No special infrastructure required — just a library that wraps the mechanics.
+
+### 5.1 The Library Interface
+
+```python
+from agent_mcp import connect
+
+async with connect("gmail") as gmail:
+    emails = await gmail.call("search", query="from:jobserve newer_than:1d")
+
+async with connect("linkedin") as linkedin:
+    jobs = await linkedin.call("search", query="(.NET OR Azure) contract UK")
+
+# From here, pure Python — no MCP, no LLM
+for job in jobs:
+    job["score"] = compute_weighted_score(job, rubric)
+
+qualified = [j for j in jobs if j["score"] >= 5]
+ranked = sorted(qualified, key=lambda j: j["score"], reverse=True)
+
+render_report(ranked, template="todays-jobs-report")
+```
+
+### 5.2 What the Library Handles
+
+The `agent_mcp` library (working name) provides the bridge between generated code and the agent's registered MCP servers:
+
+- **Registry lookup.** Resolves server names ("gmail", "linkedin") to their configuration from the agent's MCP server registry.
+- **Process management.** Spawns the MCP server process, manages its lifecycle, shuts it down cleanly when the context manager exits.
+- **Client connection.** Connects to the spawned server using the MCP protocol.
+- **Credential passthrough.** Passes through authentication credentials (OAuth tokens, API keys) that the MCP servers already have access to in prompt mode.
+- **Schema exposure.** Makes the server's tool schemas available to the generated code, enabling the LLM to write calls that match the expected parameters.
+
+### 5.3 Why This Works
+
+The library is small and focused — it is not a framework, it is connection plumbing. The complexity it absorbs is mechanical (process spawning, protocol connection, credential management), not semantic. The LLM does not need to understand the library internals. It needs to know:
+
+- Server names (same names it already uses in prompt mode)
+- Tool names and parameters (same schemas it already sees in prompt mode)
+- The `connect` / `call` pattern
+
+This is a trivial API surface. The LLM already knows how to call these servers — it does it every time it uses a tool in prompt mode. The library just provides the same access from inside generated code.
+
+### 5.4 Architectural Symmetry
+
+The MCP server registry now serves as a unified capability layer across both execution modes:
+
+```
+Prompt Mode:
+  User prompt → LLM → tool call → agent loop → MCP server → result → LLM → response
+
+Compiled Mode:
+  User prompt → LLM → generates program →
+    program imports agent_mcp →
+    program spawns MCP servers directly →
+    program does deterministic processing →
+    program writes output →
+  LLM reads compact results → narrative
+```
+
+Same servers. Same schemas. Same credentials. The only difference is who orchestrates the calls — the agent loop or the generated code.
+
+Adding a new MCP server to the agent's registry automatically makes it available in both modes. The LLM sees it as a new tool in prompt mode and as a new `connect("server_name")` target in compiled mode.
+
+---
+
+## 6. Remaining Open Questions
+
+### 6.1 Sandboxing and Trust
 
 Generated code that calls real external services (reading email, posting to APIs) needs careful sandboxing:
 
@@ -131,7 +198,7 @@ Generated code that calls real external services (reading email, posting to APIs
 - Should the agent present the generated code to the user for approval before execution?
 - Should there be a dry-run mode that validates the code without executing external calls?
 
-### 4.3 Error Recovery
+### 6.2 Error Recovery
 
 What happens when generated code fails mid-execution?
 
@@ -139,7 +206,7 @@ What happens when generated code fails mid-execution?
 - Does it fall back to prompt mode for the failing portion?
 - How does it report partial results?
 
-### 4.4 Code Quality and Review
+### 6.3 Code Quality and Review
 
 Should the LLM review its own generated code before execution?
 
@@ -147,7 +214,7 @@ Should the LLM review its own generated code before execution?
 - This adds latency and token cost, but may be worth it for reliability.
 - Alternatively, static analysis or schema validation of MCP calls could catch type mismatches without an LLM pass.
 
-### 4.5 When to Compile vs When to Prompt
+### 6.4 When to Compile vs When to Prompt
 
 The cost-aware switching decision itself needs design:
 
@@ -156,7 +223,7 @@ The cost-aware switching decision itself needs design:
 - Is it user-configurable ("always compile job search tasks")?
 - Can the user force one mode or the other?
 
-### 4.6 Caching and Reuse of Generated Programs
+### 6.5 Caching and Reuse of Generated Programs
 
 If the agent generates a program for "daily job search report" today, can it reuse or adapt that program tomorrow?
 
@@ -166,27 +233,40 @@ If the agent generates a program for "daily job search report" today, can it reu
 
 ---
 
-## 5. Relationship to the White Paper Example
+## 7. Relationship to the White Paper Example
 
 The engineering white paper (section 6) presents the job search report as a concrete example using the pre-built runtime model. This was chosen for clarity of exposition — it cleanly illustrates the separation of semantic reasoning from deterministic execution without introducing the additional complexity of code generation.
 
-The hybrid MCP model described here is the intended general-purpose mechanism. The white paper example remains valid as an illustration of *what* compiled mode achieves (cost reduction, deterministic guarantees, reproducibility). This document explores *how* it achieves it in a general-purpose agent.
+The hybrid MCP model with the `agent_mcp` client library described here is the intended general-purpose mechanism. The white paper example remains valid as an illustration of *what* compiled mode achieves (cost reduction, deterministic guarantees, reproducibility). This document explores *how* it achieves it in a general-purpose agent.
 
 As this design matures, the white paper may be updated with a second example showing the MCP-based execution model, or a reference to this document may be added.
 
 ---
 
-## 6. Summary of Current Thinking
+## 8. Summary of Current Thinking
 
 The compiled task execution model for a general-purpose personal agent should:
 
 1. **Use LLM-generated code** — not pre-built runtimes — to maintain generality.
 2. **Program against registered MCP servers** — providing typed, known interfaces that constrain the generated code and reduce bug surface area.
-3. **Leverage the existing MCP server registry** — so that the agent's capabilities are defined once and available in both prompt mode and compiled mode.
-4. **Execute in a sandbox** — with controlled access to MCP servers and appropriate permission boundaries.
-5. **Remain inspectable** — generated code can be reviewed before execution.
+3. **Access MCP servers via a client library (`agent_mcp`)** — the library handles registry lookup, process spawning, client connection, and credential passthrough. The LLM writes against a minimal API surface (`connect`, `call`) using the same server names and tool schemas it already knows from prompt mode.
+4. **Keep bulk data out of context entirely** — the generated code fetches, processes, and outputs data without it ever entering the LLM's conversation history. The LLM only sees compact results when called back for narrative generation.
+5. **Execute in a sandbox** — with controlled access to MCP servers and appropriate permission boundaries.
+6. **Remain inspectable** — generated code can be reviewed before execution.
 
-The MCP server registry becomes the bridge between the agent's conversational tool-use capabilities and its programmatic execution capabilities. Same servers, different orchestration.
+The `agent_mcp` library is the key enabling component. It is not a framework — it is connection plumbing that bridges the agent's MCP server registry into generated code. The MCP server registry becomes the unified capability layer: same servers, same schemas, same credentials, accessible from both the agent loop (prompt mode) and generated programs (compiled mode).
+
+---
+
+## Design Evolution Log
+
+| Date | Key Decision |
+|---|---|
+| Initial | Three execution models identified: pre-built runtime, fully dynamic, hybrid MCP |
+| Initial | Hybrid MCP model selected as most promising direction |
+| 2026-02-27 | "Agent loop fetches, code processes" approach rejected — data in context defeats the purpose |
+| 2026-02-27 | MCP client library (`agent_mcp`) concept introduced — generated code spawns MCP servers directly |
+| 2026-02-27 | MCP access from generated code resolved as a design question |
 
 ---
 
