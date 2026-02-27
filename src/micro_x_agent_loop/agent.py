@@ -9,6 +9,7 @@ from pathlib import Path
 from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig
+from micro_x_agent_loop.mode_selector import analyze_prompt, format_analysis
 from micro_x_agent_loop.commands.router import CommandRouter
 from micro_x_agent_loop.commands.voice_command import parse_voice_command, parse_voice_start_options
 from micro_x_agent_loop.compaction import SummarizeCompactionStrategy
@@ -95,6 +96,9 @@ class Agent:
         self._session_controller = SessionController(line_prefix=self._LINE_PREFIX)
         self._checkpoint_service = CheckpointService(line_prefix=self._LINE_PREFIX)
 
+        # Mode analysis
+        self._mode_analysis_enabled = config.mode_analysis_enabled
+
         # Tool result summarization
         summarization_provider = None
         summarization_model = ""
@@ -147,6 +151,13 @@ class Agent:
     async def _run_inner(self, user_message: str) -> None:
         if await self._handle_local_command(user_message):
             return
+
+        if self._mode_analysis_enabled:
+            full_prompt = self._system_prompt + "\n\n" + user_message
+            analysis = analyze_prompt(full_prompt)
+            formatted = format_analysis(analysis)
+            if formatted:
+                print(formatted)
 
         self._turn_number += 1
         self._session_accumulator.total_turns = self._turn_number

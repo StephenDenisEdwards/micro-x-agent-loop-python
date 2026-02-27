@@ -87,3 +87,4 @@ class BaseTurnEvents:
         *, was_summarized: bool = False,
     ) -> None:
         return
+

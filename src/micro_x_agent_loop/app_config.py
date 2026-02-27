@@ -55,6 +55,7 @@ class AppConfig:
     tool_result_summarization_threshold: int
     smart_compaction_trigger_enabled: bool
     concise_output_enabled: bool
+    mode_analysis_enabled: bool
 
 
 def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
@@ -147,6 +148,7 @@ def parse_app_config(config: dict) -> AppConfig:
         tool_result_summarization_threshold=int(config.get("ToolResultSummarizationThreshold", 4000)),
         smart_compaction_trigger_enabled=_to_bool(config.get("SmartCompactionTriggerEnabled", True), default=True),
         concise_output_enabled=_to_bool(config.get("ConciseOutputEnabled", False), default=False),
+        mode_analysis_enabled=_to_bool(config.get("ModeAnalysisEnabled", True), default=True),
     )
 
 

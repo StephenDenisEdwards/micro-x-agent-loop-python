@@ -1,0 +1,284 @@
+import unittest
+
+from micro_x_agent_loop.mode_selector import (
+    DetectedSignal,
+    ModeAnalysis,
+    RecommendedMode,
+    SignalStrength,
+    analyze_prompt,
+    format_analysis,
+)
+
+
+class SignalDetectionTests(unittest.TestCase):
+    """Individual signal detection."""
+
+    def _signal_names(self, analysis: ModeAnalysis) -> set[str]:
+        return {s.name for s in analysis.signals}
+
+    def test_batch_processing_each(self) -> None:
+        analysis = analyze_prompt("Score each job against my criteria")
+        self.assertIn("Batch processing", self._signal_names(analysis))
+
+    def test_batch_processing_all(self) -> None:
+        analysis = analyze_prompt("search Gmail for all emails received today")
+        self.assertIn("Batch processing", self._signal_names(analysis))
+
+    def test_batch_processing_every(self) -> None:
+        analysis = analyze_prompt("check every listing for duplicates")
+        self.assertIn("Batch processing", self._signal_names(analysis))
+
+    def test_scoring_score(self) -> None:
+        analysis = analyze_prompt("Score each job 1-10")
+        self.assertIn("Scoring/ranking", self._signal_names(analysis))
+
+    def test_scoring_rank(self) -> None:
+        analysis = analyze_prompt("Rank the candidates by experience")
+        self.assertIn("Scoring/ranking", self._signal_names(analysis))
+
+    def test_scoring_evaluate(self) -> None:
+        analysis = analyze_prompt("Evaluate each option carefully")
+        self.assertIn("Scoring/ranking", self._signal_names(analysis))
+
+    def test_scoring_compare(self) -> None:
+        analysis = analyze_prompt("Compare the two proposals")
+        self.assertIn("Scoring/ranking", self._signal_names(analysis))
+
+    def test_stats_total(self) -> None:
+        analysis = analyze_prompt("Show the total number of jobs found")
+        self.assertIn("Statistics/aggregation", self._signal_names(analysis))
+
+    def test_stats_average(self) -> None:
+        analysis = analyze_prompt("Calculate the average score")
+        self.assertIn("Statistics/aggregation", self._signal_names(analysis))
+
+    def test_stats_distribution(self) -> None:
+        analysis = analyze_prompt("Show the distribution of scores")
+        self.assertIn("Statistics/aggregation", self._signal_names(analysis))
+
+    def test_stats_summary_statistics(self) -> None:
+        analysis = analyze_prompt("Include Summary Statistics at the end")
+        self.assertIn("Statistics/aggregation", self._signal_names(analysis))
+
+    def test_mandatory_fields_must_include(self) -> None:
+        analysis = analyze_prompt("Each entry must include a link")
+        self.assertIn("Mandatory fields", self._signal_names(analysis))
+
+    def test_mandatory_fields_always_include(self) -> None:
+        analysis = analyze_prompt("Always include the source URL")
+        self.assertIn("Mandatory fields", self._signal_names(analysis))
+
+    def test_mandatory_fields_required(self) -> None:
+        analysis = analyze_prompt("The score field is required")
+        self.assertIn("Mandatory fields", self._signal_names(analysis))
+
+    def test_mandatory_fields_ensure(self) -> None:
+        analysis = analyze_prompt("Ensure every job has a salary listed")
+        self.assertIn("Mandatory fields", self._signal_names(analysis))
+
+    def test_structured_output_markdown(self) -> None:
+        analysis = analyze_prompt("Create a markdown file with the results")
+        self.assertIn("Structured output", self._signal_names(analysis))
+
+    def test_structured_output_json(self) -> None:
+        analysis = analyze_prompt("Output the results as json")
+        self.assertIn("Structured output", self._signal_names(analysis))
+
+    def test_structured_output_csv(self) -> None:
+        analysis = analyze_prompt("Export the data to csv")
+        self.assertIn("Structured output", self._signal_names(analysis))
+
+    def test_structured_output_template(self) -> None:
+        analysis = analyze_prompt("Use the standard template for the report")
+        self.assertIn("Structured output", self._signal_names(analysis))
+
+    def test_multiple_sources_gmail_linkedin(self) -> None:
+        analysis = analyze_prompt("Search Gmail and LinkedIn for jobs")
+        self.assertIn("Multiple data sources", self._signal_names(analysis))
+
+    def test_multiple_sources_email_calendar(self) -> None:
+        analysis = analyze_prompt("Check my email and calendar for conflicts")
+        self.assertIn("Multiple data sources", self._signal_names(analysis))
+
+    def test_single_source_no_signal(self) -> None:
+        analysis = analyze_prompt("Search Gmail for emails")
+        self.assertNotIn("Multiple data sources", self._signal_names(analysis))
+
+    def test_reproducibility_daily(self) -> None:
+        analysis = analyze_prompt("Run this daily")
+        self.assertIn("Reproducibility", self._signal_names(analysis))
+
+    def test_reproducibility_every_morning(self) -> None:
+        analysis = analyze_prompt("Do this every morning at 9am")
+        self.assertIn("Reproducibility", self._signal_names(analysis))
+
+    def test_reproducibility_recurring(self) -> None:
+        analysis = analyze_prompt("This is a recurring task")
+        self.assertIn("Reproducibility", self._signal_names(analysis))
+
+    # Negative cases
+    def test_no_signals_simple_question(self) -> None:
+        analysis = analyze_prompt("What's the weather in London?")
+        self.assertEqual(0, len(analysis.signals))
+
+    def test_no_signals_greeting(self) -> None:
+        analysis = analyze_prompt("Hello, how are you?")
+        self.assertEqual(0, len(analysis.signals))
+
+    def test_batch_not_triggered_by_standalone_each(self) -> None:
+        # "each" without action verb or collection noun context
+        analysis = analyze_prompt("Tell me about each of the planets")
+        # This may or may not trigger — the pattern checks for
+        # action verb + each OR each + collection noun.
+        # "about each" doesn't match either pattern, so no batch signal.
+        self.assertNotIn("Batch processing", self._signal_names(analysis))
+
+
+class DecisionLogicTests(unittest.TestCase):
+    """Decision logic: strong/moderate/supportive counts → mode."""
+
+    def test_two_strong_signals_compiled(self) -> None:
+        analysis = analyze_prompt("Score each job and calculate the total count")
+        self.assertEqual(RecommendedMode.COMPILED, analysis.recommended_mode)
+        self.assertGreaterEqual(analysis.strong_count, 2)
+
+    def test_three_strong_signals_compiled(self) -> None:
+        analysis = analyze_prompt(
+            "Search all emails, score each one, and show the total distribution"
+        )
+        self.assertEqual(RecommendedMode.COMPILED, analysis.recommended_mode)
+        self.assertGreaterEqual(analysis.strong_count, 2)
+
+    def test_zero_signals_prompt(self) -> None:
+        analysis = analyze_prompt("What's the weather in London?")
+        self.assertEqual(RecommendedMode.PROMPT, analysis.recommended_mode)
+        self.assertEqual(0, len(analysis.signals))
+
+    def test_single_strong_ambiguous(self) -> None:
+        analysis = analyze_prompt("Score this document for readability")
+        self.assertEqual(1, analysis.strong_count)
+        self.assertEqual(RecommendedMode.AMBIGUOUS, analysis.recommended_mode)
+
+    def test_moderate_only_ambiguous(self) -> None:
+        analysis = analyze_prompt("Output the result as json, ensure it is valid")
+        self.assertEqual(0, analysis.strong_count)
+        self.assertGreater(len(analysis.signals), 0)
+        self.assertEqual(RecommendedMode.AMBIGUOUS, analysis.recommended_mode)
+
+    def test_supportive_only_ambiguous(self) -> None:
+        analysis = analyze_prompt("Do this daily please")
+        self.assertEqual(0, analysis.strong_count)
+        self.assertGreater(len(analysis.signals), 0)
+        self.assertEqual(RecommendedMode.AMBIGUOUS, analysis.recommended_mode)
+
+
+class FormatAnalysisTests(unittest.TestCase):
+    """Output formatting."""
+
+    def test_prompt_single_line(self) -> None:
+        analysis = analyze_prompt("What time is it?")
+        output = format_analysis(analysis)
+        self.assertEqual(
+            "[Mode Analysis] Recommendation: PROMPT (no compiled-mode signals detected)",
+            output,
+        )
+        self.assertNotIn("\n", output)
+
+    def test_compiled_lists_signals(self) -> None:
+        analysis = analyze_prompt(
+            "Score each job against criteria and show the total count"
+        )
+        output = format_analysis(analysis)
+        self.assertIn("[Mode Analysis] Recommendation: COMPILED", output)
+        self.assertIn("strong", output)
+        self.assertIn("Signals:", output)
+
+    def test_ambiguous_lists_signals(self) -> None:
+        analysis = analyze_prompt("Score this document")
+        output = format_analysis(analysis)
+        self.assertIn("[Mode Analysis] Recommendation: AMBIGUOUS", output)
+        self.assertIn("Scoring/ranking", output)
+
+    def test_compiled_shows_signal_count_line(self) -> None:
+        analysis = analyze_prompt(
+            "Score each job and calculate the average across all results"
+        )
+        output = format_analysis(analysis)
+        # Should have a summary line like "Signals: N strong, N moderate, N supportive"
+        self.assertRegex(output, r"Signals: \d+ strong, \d+ moderate, \d+ supportive")
+
+
+class FullPromptIntegrationTests(unittest.TestCase):
+    """End-to-end tests with realistic prompts."""
+
+    def test_job_search_prompt_compiled(self) -> None:
+        prompt = (
+            "Search my Gmail for all JobServe emails received in the last 24 hours. "
+            "Read the full content of each email. Then search LinkedIn for similar UK "
+            "contract roles. Score each job against my search criteria (1-10). "
+            "Exclude roles scoring below 5/10. Create a markdown file. "
+            "Include Summary Statistics: Total Jobs Found, Average Score."
+        )
+        analysis = analyze_prompt(prompt)
+        self.assertEqual(RecommendedMode.COMPILED, analysis.recommended_mode)
+        self.assertGreaterEqual(analysis.strong_count, 2)
+
+    def test_weather_question_prompt(self) -> None:
+        analysis = analyze_prompt("What's the weather in London?")
+        self.assertEqual(RecommendedMode.PROMPT, analysis.recommended_mode)
+
+    def test_simple_restaurant_prompt_or_ambiguous(self) -> None:
+        analysis = analyze_prompt("Find me 3 good restaurants near the office")
+        self.assertIn(
+            analysis.recommended_mode,
+            {RecommendedMode.PROMPT, RecommendedMode.AMBIGUOUS},
+        )
+
+    def test_code_help_prompt(self) -> None:
+        analysis = analyze_prompt("How do I reverse a string in Python?")
+        self.assertEqual(RecommendedMode.PROMPT, analysis.recommended_mode)
+
+    def test_multi_source_with_scoring_compiled(self) -> None:
+        prompt = (
+            "Check my Gmail and Slack for any mentions of the project deadline, "
+            "then score each message by urgency and show a count of high-priority items"
+        )
+        analysis = analyze_prompt(prompt)
+        self.assertEqual(RecommendedMode.COMPILED, analysis.recommended_mode)
+
+
+class FullPromptAnalysisTests(unittest.TestCase):
+    """Analysis against system_prompt + user_message (the full prompt sent to LLM)."""
+
+    def test_system_prompt_with_user_memory_provides_signals(self) -> None:
+        system_prompt = (
+            "You are a helpful AI assistant.\n\n"
+            "# User Memory\n\n"
+            "## Job Search Workflow\n"
+            "- Search Gmail for all JobServe emails, score each job 1-10\n"
+            "- Show Summary Statistics with total count and average\n"
+            "- Create markdown report with LinkedIn and Gmail results\n"
+        )
+        user_message = "run my job-search-prompt.txt prompt"
+        analysis = analyze_prompt(system_prompt + "\n\n" + user_message)
+        self.assertEqual(RecommendedMode.COMPILED, analysis.recommended_mode)
+        self.assertGreaterEqual(analysis.strong_count, 2)
+
+    def test_plain_system_prompt_no_false_signals(self) -> None:
+        system_prompt = "You are a helpful AI assistant. Today is Monday."
+        user_message = "What's the weather in London?"
+        analysis = analyze_prompt(system_prompt + "\n\n" + user_message)
+        self.assertEqual(RecommendedMode.PROMPT, analysis.recommended_mode)
+
+    def test_direct_paste_still_works(self) -> None:
+        system_prompt = "You are a helpful AI assistant."
+        user_message = (
+            "Search my Gmail for all JobServe emails. Score each job 1-10. "
+            "Show Summary Statistics with total count."
+        )
+        analysis = analyze_prompt(system_prompt + "\n\n" + user_message)
+        self.assertEqual(RecommendedMode.COMPILED, analysis.recommended_mode)
+
+
+if __name__ == "__main__":
+    unittest.main()
