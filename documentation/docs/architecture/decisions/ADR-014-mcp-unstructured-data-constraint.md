@@ -1,26 +1,30 @@
-# ADR-014: MCP Returns Unstructured Text — Constraint on Compiled Mode
+# ADR-014: Tool Results Are Unstructured Text — Design Choice Affecting Compiled Mode
 
 ## Status
 
 Open
 
+## Correction Notice
+
+The original version of this ADR incorrectly attributed the unstructured data problem to the MCP protocol specification. MCP is a JSON-RPC protocol and **can return structured JSON** in text content blocks. The constraint is self-imposed by our tool implementations and proxy layer, not by the protocol. See [ISSUE-001](../../issues/ISSUE-001-adr-014-flawed-premise.md) for the full correction record.
+
 ## Context
 
 The compiled mode architecture (described in [Cost-Aware Task Compilation for LLM Agents](../../research-papers/cost-aware-task-compilation-for-llm-agents/research-paper.md)) assumes that LLM-generated programs can process data programmatically: iterate over items, filter, score, rank, and write structured output. This requires structured input data — records with typed fields that code can index, compare, and manipulate.
 
-MCP (Model Context Protocol) is the standard interface through which the agent accesses external services. The agent currently connects to both built-in tools and third-party MCP servers for Gmail, calendar, LinkedIn, and other data sources.
+The agent accesses external services through both built-in tools and MCP servers. Currently, **all tools return human-readable text strings** rather than structured JSON. This is a design choice in our code, not a protocol limitation.
 
-### The fundamental problem
+### The actual problem
 
-**MCP servers return unstructured text content blocks.** This is by design — the MCP specification defines content blocks as text intended for LLM consumption, not programmatic processing. Third-party MCP servers follow this convention. We do not control their implementations and cannot require them to change.
+**Our tool implementations flatten structured data to human-readable text before returning.**
 
-This means:
+1. **Built-in tools** (Gmail, GitHub, etc.) receive structured JSON from their underlying APIs but format it as human-readable text. For example, `GmailSearchTool.execute()` receives JSON from the Gmail API and returns `f"ID: {msg['id']}\n  Date: {date}\n..."`.
 
-1. A compiled mode program calls an MCP server (e.g., Gmail search)
-2. It receives a text string — human-readable, unstructured, format varies by server
-3. It cannot reliably parse this text into structured data for programmatic processing
+2. **`McpToolProxy`** extracts `.text` from MCP content blocks and joins with newlines, discarding any JSON structure that may be present in the response.
 
-This constraint undermines the core assumption of compiled mode. A generated program that receives text like:
+3. **Third-party MCP servers** may return JSON or prose in their text content blocks — we don't control this per server, but the protocol supports both.
+
+This means a compiled mode program receiving tool results gets text like:
 
 ```
 ID: 18abc123
@@ -30,11 +34,16 @@ ID: 18abc123
   Snippet: We found 5 new roles matching...
 ```
 
-...cannot reliably extract fields, iterate over records, or perform deterministic operations on the data. The text format is not guaranteed, varies between servers, and may change without notice.
+...instead of parseable JSON. The program cannot reliably extract fields, iterate over records, or perform deterministic operations on this text.
 
-### This is not specific to our tools
+### What is tractable
 
-Our built-in Gmail tools flatten API JSON responses to text before returning — but even if we changed them to return JSON, the problem remains for every third-party MCP server we integrate. The constraint is architectural: MCP is a text protocol designed for LLMs, not for programmatic data processing.
+Since the constraint is in our code, not the protocol:
+
+- **Built-in tools** can be changed to return JSON strings. The Gmail API already returns JSON — we just need to stop flattening it.
+- **Our own MCP servers** can return JSON in their text content blocks. This is valid MCP.
+- **`McpToolProxy`** can be updated to detect and preserve JSON responses.
+- **Third-party MCP servers** are the only true unknown — some return JSON, some return prose, and we don't control this.
 
 ### Why this matters for the roadmap
 
@@ -44,58 +53,49 @@ The phased roadmap assumes:
 - **Phase 4** (code generation and sandbox execution): LLM writes programs against MCP servers
 - **Phase 5** (narrative callback): LLM returns for prose from compact results
 
-Phase 4 is directly blocked by this constraint. If MCP servers return text, the generated program cannot perform structured data processing without additional interpretation.
+Phase 4 requires structured data for programmatic processing. This is achievable for tools we control. For third-party MCP servers returning prose, a fallback strategy is needed.
 
-### Options considered but not yet decided
+### Options
 
-**Option A: Per-item LLM interpretation within the generated program**
+**Option A: Change our tools to return JSON**
 
-The generated code calls MCP, then calls the LLM to extract structured data from each text response. The pipeline becomes: MCP call → LLM extraction → structured processing → output.
+Built-in tools return JSON strings. `McpToolProxy` passes through content block text as-is (which may be JSON from well-designed MCP servers). The agent formats JSON as human-readable text only when injecting into prompt mode context.
 
-- Pro: Works with any MCP server, no changes to the protocol
-- Con: Compiled mode is no longer "deterministic execution" — it's "deterministic orchestration with per-item LLM calls." Cost savings still exist (N small calls vs 1 massive context) but the cost model and reliability guarantees change significantly
-- Con: Each extraction call introduces potential for information loss or misinterpretation — the same problem ADR-013 identified for tool result summarization, now embedded in the execution pipeline
+- Pro: Fixes the problem at source for all tools we control
+- Pro: No protocol changes needed — JSON in text content blocks is valid MCP
+- Pro: Compiled mode programs get structured input from our tools
+- Con: Third-party MCP servers that return prose still need handling
 
-**Option B: Structured MCP server variants**
+**Option B: Per-item LLM interpretation as fallback**
 
-Build MCP server wrappers that return JSON in their text content blocks. Third-party servers get adapter layers that call the underlying server and structure the response.
+For tool results that are not valid JSON, the generated program calls the LLM to extract structured data. Only needed for third-party MCP servers that return prose.
 
-- Pro: Generated code gets clean structured input
-- Con: Requires building and maintaining adapters for every third-party server
-- Con: Adapter must parse unstructured text from the underlying server — same fragility problem, just moved to a different layer
+- Pro: Works with any MCP server regardless of response format
+- Con: Adds per-item LLM cost for non-JSON responses
+- Con: Potential for information loss in extraction
 
-**Option C: Hybrid approach — use MCP for discovery, raw APIs for execution**
+**Option C: Combine A and B**
 
-The agent uses MCP servers normally in prompt mode. In compiled mode, the generated program bypasses MCP and calls the underlying APIs directly (Gmail API, LinkedIn API, etc.) where structured responses are available.
+Return JSON from our tools (Option A). For third-party MCP servers, attempt `json.loads()` on the response — if it parses, use structured data; if not, fall back to LLM extraction (Option B).
 
-- Pro: Clean structured data from APIs
-- Con: Requires API credentials and client libraries for every service
-- Con: Duplicates access paths — MCP for prompt mode, direct API for compiled mode
-- Con: Not all services have accessible APIs (some are only available via MCP)
-
-**Option D: Accept the constraint and limit compiled mode scope**
-
-Compiled mode only applies to tasks where structured data is available — either from tools we control (built-in tools returning JSON) or from MCP servers that happen to return parseable structured content. For other data sources, prompt mode is used.
-
-- Pro: No architectural changes, honest about limitations
-- Con: Significantly reduces the applicability of compiled mode
-- Con: The user doesn't know which tools return structured vs unstructured data
+- Pro: Best of both — structured when available, graceful fallback when not
+- Pro: No changes needed to third-party servers
+- Con: Slightly more complex pipeline
 
 ## Decision
 
-None yet. This constraint requires further analysis before committing to an approach.
+None yet. Option C (our tools return JSON + auto-detect + LLM fallback) is the most promising direction but requires further analysis.
 
 ## Consequences
 
 **Immediate:**
 
 - Phase 3 (`agent_mcp` client library) can proceed — it's a bridge layer regardless of data format
-- Phase 4 (code generation) is blocked until a data handling strategy is chosen
-- The research paper's cost model assumes zero LLM cost for compiled execution, which is incorrect if Option A is adopted
+- Phase 4 (code generation) is not blocked by the MCP protocol but requires a data handling strategy for mixed structured/unstructured responses
+- The research paper's cost model for compiled mode remains valid for tools returning JSON; a cost adjustment is needed only for the LLM extraction fallback path
 
 **Questions to resolve:**
 
-- What proportion of real-world compiled mode tasks depend on third-party MCP servers vs built-in tools we control?
-- Is the per-item LLM extraction cost (Option A) low enough to preserve the cost advantage over prompt mode?
-- Can the MCP specification evolve to support structured content types, or is text-only a permanent constraint?
-- Is there a way to detect at runtime whether an MCP server's response is parseable as structured data, allowing automatic strategy selection?
+- What proportion of real-world compiled mode tasks depend on third-party MCP servers vs tools we control?
+- For third-party servers, what proportion return JSON vs prose?
+- Should the tool return format change be a separate ADR given it affects prompt mode context injection?

@@ -166,7 +166,7 @@ Requires an Anthropic Admin API key (`sk-ant-admin...`), separate from the infer
 
 The agent supports dynamically discovering tools from external **MCP (Model Context Protocol)** servers. MCP tools are configured in `config.json` under `McpServers` — no code changes are needed to add new tool servers.
 
-See [ADR-005](../architecture/decisions/ADR-005-mcp-for-external-tools.md) for the architectural decision. Note: MCP tools return unstructured text content blocks by protocol design — this is a constraint on compiled mode's ability to process MCP results programmatically. See [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).
+See [ADR-005](../architecture/decisions/ADR-005-mcp-for-external-tools.md) for the architectural decision. Note: MCP tools currently return unstructured text — this is a design choice in our tool implementations (not a protocol limitation; MCP supports structured JSON), but it constrains compiled mode's ability to process results programmatically. See [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).
 
 ### How It Works
 

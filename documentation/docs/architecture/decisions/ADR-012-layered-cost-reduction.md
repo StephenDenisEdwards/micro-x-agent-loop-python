@@ -120,7 +120,7 @@ Each instance is independent: separate API client, separate retry state, no shar
 
 **Related:**
 
-- [ADR-014](ADR-014-mcp-unstructured-data-constraint.md) identifies a deeper constraint: MCP servers return unstructured text by protocol design, which limits both tool result processing (this ADR's Layer 3) and the compiled mode execution model that would bypass these cost layers entirely.
+- [ADR-014](ADR-014-mcp-unstructured-data-constraint.md) — our tools currently return human-readable text instead of structured JSON. This is a design choice (not an MCP protocol limitation) that affects both tool result processing (this ADR's Layer 3) and the compiled mode execution model.
 
 **Future layers (Phase 3):**
 

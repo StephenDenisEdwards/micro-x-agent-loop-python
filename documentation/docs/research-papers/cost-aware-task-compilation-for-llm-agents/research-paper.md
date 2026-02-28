@@ -172,7 +172,7 @@ The approach introduces complexity:
 - Code generation requires sandboxing.
 - DSL design may introduce brittleness.
 - System architecture becomes more layered.
-- **MCP protocol constraint:** MCP servers return unstructured text content blocks by specification. Generated programs cannot assume structured (JSON) inputs from MCP tool calls, which limits deterministic programmatic processing. This may require per-item LLM interpretation within the compiled pipeline, changing the cost model from "zero LLM cost for execution" to "N small LLM calls." See [ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).
+- **Tool result format:** Tools currently return human-readable text rather than structured JSON. This is a design choice in the tool implementations (not an MCP protocol limitation — MCP supports JSON in content blocks). Compiled mode requires structured data for programmatic processing, so tools must be updated to return JSON before Phase 4. Third-party MCP servers that return prose may need per-item LLM extraction as a fallback. See [ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).
 
 However, these are engineering trade-offs rather than conceptual weaknesses.
 

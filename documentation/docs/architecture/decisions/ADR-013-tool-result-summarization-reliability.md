@@ -69,7 +69,7 @@ The honest architecture for a general assistant is: **reliable tools for reliabl
 
 **Related:**
 
-- [ADR-014](ADR-014-mcp-unstructured-data-constraint.md) shows this problem is even more fundamental than tool result summarization: MCP servers return unstructured text by protocol design, which constrains compiled mode's ability to process data programmatically — not just the agent's ability to summarize it.
+- [ADR-014](ADR-014-mcp-unstructured-data-constraint.md) — our tools return human-readable text instead of structured JSON (a design choice, not an MCP protocol limitation). Changing tools to return JSON would make structured processing tractable and reduce the need for summarization.
 
 **Open questions:**
 
