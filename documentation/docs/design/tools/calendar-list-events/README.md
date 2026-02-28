@@ -20,13 +20,13 @@ List Google Calendar events by date range or search query.
 - Recurring events are expanded into individual instances (`singleEvents=True`)
 - Results are sorted by start time (`orderBy="startTime"`)
 - The event ID can be used with `calendar_get_event` to fetch full details
-- **Conditional registration:** Only available when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set in `.env`
+- **Availability:** Requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the `google` MCP server's `env` config
 
 ## Implementation
 
-- Source: `src/micro_x_agent_loop/tools/calendar/calendar_list_events_tool.py`
-- Uses `google-api-python-client` for Calendar API access
-- OAuth2 via `calendar_auth.get_calendar_service()`
+- Server: `mcp_servers/ts/packages/google/src/tools/calendar-list-events.ts`
+- Uses `googleapis` for Calendar API access
+- OAuth2 via unified Google auth module
 
 ## Example
 

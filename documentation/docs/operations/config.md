@@ -59,7 +59,7 @@ Config: config-standard.json
 | `GOOGLE_CLIENT_SECRET` | No | Google OAuth client secret for Gmail and Calendar tools |
 | `ANTHROPIC_ADMIN_API_KEY` | No | Anthropic Admin API key (`sk-ant-admin...`) for usage/cost reporting |
 
-The required API key depends on the configured `Provider`. If `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is missing, Gmail and Calendar tools are not registered. If `ANTHROPIC_ADMIN_API_KEY` is missing, the `anthropic_usage` tool is not registered. All other tools work normally.
+The required API key depends on the configured `Provider`. Service-specific credentials (Google, Brave, GitHub, Anthropic Admin) are passed to MCP servers via `env` blocks in `McpServers` config — they no longer need to be in `.env`.
 
 ## App Settings (`config.json`)
 
@@ -95,7 +95,9 @@ The required API key depends on the configured `Provider`. If `GOOGLE_CLIENT_ID`
 | `ToolResultSummarizationThreshold` | int | `4000` | Minimum tool result chars before summarization is attempted |
 | `SmartCompactionTriggerEnabled` | bool | `true` | Use actual API token counts instead of estimates for compaction trigger |
 | `ConciseOutputEnabled` | bool | `false` | Adds a system prompt directive to minimize output token spend |
-| `McpServers` | object | _(none)_ | MCP server configurations for external tools (see [below](#mcpservers)) |
+| `ToolFormatting` | object | `{}` | Per-tool format rules for structured result formatting (see [Tool System Design](../design/DESIGN-tool-system.md#tool-result-formatting)) |
+| `DefaultFormat` | object | `{"format": "json"}` | Default format when no per-tool rule matches |
+| `McpServers` | object | _(none)_ | MCP server configurations (see [below](#mcpservers)) |
 
 ### Example
 
@@ -378,7 +380,7 @@ Features enabled by default (prompt caching, smart trigger) are pure wins with n
 
 ### McpServers
 
-Configures external tool servers using the **Model Context Protocol (MCP)**. Each key is a server name, and the value is a transport configuration object. MCP tools are discovered at startup and merged with built-in tools.
+Configures tool servers using the **Model Context Protocol (MCP)**. Each key is a server name, and the value is a transport configuration object. All tools in the system come from MCP servers — there are no built-in Python tools.
 
 Two transports are supported:
 
@@ -432,15 +434,15 @@ Example — the external WhatsApp MCP server (see [WhatsApp MCP docs](../design/
 
 > **Note:** The WhatsApp MCP server requires a separate Go bridge process to be running. The bridge connects to WhatsApp Web and must be started manually before the agent. See [WhatsApp MCP](../design/tools/whatsapp-mcp/README.md) for the full setup guide.
 
-Example - Interview Assist MCP wrapper (see [Interview Assist MCP docs](../design/tools/interview-assist-mcp/README.md)):
+Example - Interview Assist MCP server (see [Interview Assist MCP docs](../design/tools/interview-assist-mcp/README.md)):
 
 ```json
 {
   "McpServers": {
     "interview-assist": {
       "transport": "stdio",
-      "command": "python",
-      "args": ["C:\\path\\to\\micro-x-agent-loop-python\\mcp_servers\\interview_assist_server.py"],
+      "command": "node",
+      "args": ["C:\\path\\to\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\interview-assist\\dist\\index.js"],
       "env": {
         "INTERVIEW_ASSIST_REPO": "C:\\path\\to\\interview-assist-2"
       }

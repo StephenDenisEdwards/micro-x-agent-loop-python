@@ -18,9 +18,9 @@ Write content to a file, creating it and any parent directories if they don't ex
 
 ## Implementation
 
-- Source: `src/micro_x_agent_loop/tools/write_file_tool.py`
-- Path resolution: same logic as `read_file`
-- Uses `pathlib.Path.write_text()` for atomic write
+- Server: `mcp_servers/ts/packages/filesystem/src/tools/write-file.ts`
+- Path resolution: same logic as `read_file` (relative to `FILESYSTEM_WORKING_DIR`)
+- Auto-creates parent directories
 
 ## Example
 

@@ -16,11 +16,11 @@ Fetch the full job description from a LinkedIn job URL.
 
 ## Implementation
 
-- Source: `src/micro_x_agent_loop/tools/linkedin/linkedin_job_detail_tool.py`
-- Uses `httpx.AsyncClient` for async HTTP requests
-- Parses with `BeautifulSoup` + `lxml`
+- Server: `mcp_servers/ts/packages/linkedin/src/tools/linkedin-job-detail.ts`
+- Uses HTTP client for async requests
+- Parses with `cheerio`
 - Multiple CSS selector fallbacks for title, company, location, and description elements
-- Uses shared `html_utilities.html_to_text()` for HTML conversion
+- HTML-to-text conversion for job descriptions
 
 ## Example
 

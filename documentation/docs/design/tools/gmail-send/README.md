@@ -15,14 +15,14 @@ Send a plain-text email from the authenticated Gmail account.
 - Composes a MIME message with `Content-Type: text/plain; charset=utf-8`
 - Encodes the message as base64url and sends via the Gmail API
 - Returns the sent message ID on success
-- **Conditional registration:** Only available when Google credentials are configured
+- **Availability:** Requires Google credentials in the `google` MCP server's `env` config
 
 ## Implementation
 
-- Source: `src/micro_x_agent_loop/tools/gmail/gmail_send_tool.py`
-- Constructs raw RFC 2822 message text
-- Uses `base64.urlsafe_b64encode` for encoding
-- Sends via `gmail.users().messages().send()`
+- Server: `mcp_servers/ts/packages/google/src/tools/gmail-send.ts`
+- Uses `googleapis` for Gmail API access
+- Constructs RFC 2822 message and base64url encodes
+- Sends via Gmail API `messages.send`
 
 ## Example
 

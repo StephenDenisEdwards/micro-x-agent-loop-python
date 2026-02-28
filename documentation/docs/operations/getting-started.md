@@ -4,6 +4,7 @@
 
 - [Python 3.11](https://www.python.org/downloads/) or later
 - An [Anthropic API key](https://console.anthropic.com/)
+- [Node.js 18+](https://nodejs.org/) — required for TypeScript MCP tool servers
 - (Optional) Google OAuth credentials for Gmail and Calendar tools
 - (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the system-info MCP server (in the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo)
 - (Optional) [Go 1.21+](https://go.dev/dl/) and a C compiler (GCC) for the WhatsApp MCP server
@@ -28,7 +29,7 @@ GOOGLE_CLIENT_SECRET=your-client-secret
 ANTHROPIC_ADMIN_API_KEY=sk-ant-admin...
 ```
 
-The Google credentials are optional — if omitted, the Gmail and Calendar tools will not be registered. The Anthropic Admin API key is optional — if omitted, the `anthropic_usage` tool will not be registered. All other tools work normally.
+The Google credentials are optional — they are passed to the `google` MCP server via its `env` block in `config.json`. If the server is not configured, Google tools will not be available. The Anthropic Admin API key is optional — it is passed to the `anthropic-admin` MCP server. All other tools work normally.
 
 ### 3. Configure settings
 
@@ -68,23 +69,14 @@ You should see:
 
 ```
 micro-x-agent-loop (type 'exit' to quit)
-Tools:
-  - bash
-  - read_file
-  - write_file
-  - append_file
-  - linkedin_jobs
-  - linkedin_job_detail
-  - web_fetch
-  - gmail_search
-  - gmail_read
-  - gmail_send
-  - calendar_list_events
-  - calendar_create_event
-  - calendar_get_event
-  - anthropic_usage
-  - web_search
 MCP servers:
+  - filesystem: bash, read_file, write_file, append_file, save_memory
+  - web: web_fetch, web_search
+  - linkedin: linkedin_jobs, linkedin_job_detail
+  - github: list_prs, get_pr, create_pr, list_issues, create_issue, get_file, search_code, list_repos
+  - google: gmail_search, gmail_read, gmail_send, calendar_list_events, ...
+  - anthropic-admin: anthropic_usage
+  - interview-assist: ia_healthcheck, ia_list_recordings, ...
   - system-info: system_info, disk_info, network_info
   - whatsapp: search_contacts, list_messages, list_chats, get_chat, ...
 Working directory: C:\path\to\your\documents
@@ -92,7 +84,7 @@ Working directory: C:\path\to\your\documents
 you>
 ```
 
-If Google credentials or the Anthropic Admin API key are not configured, their respective tools will not appear in the tool list. If the .NET SDK is not installed or the system-info MCP server has not been built, the MCP servers section will not appear (a warning is logged but the agent starts normally). The same applies to the WhatsApp MCP server — if it is not configured or the bridge is not set up, the agent starts without WhatsApp tools.
+All tools are provided by MCP servers. If a server fails to connect (e.g. missing credentials, unbuilt project), a warning is logged but the agent starts normally with the remaining servers.
 
 **Alternative — pip install:**
 
@@ -243,45 +235,44 @@ See [WhatsApp MCP](../design/tools/whatsapp-mcp/README.md) for the full setup gu
 micro-x-agent-loop-python/
 ├── .env                           # Secrets (not in git)
 ├── .env.example                   # Template for .env
-├── config.json                    # App configuration
+├── config.json                    # App configuration (pointer to active config file)
 ├── pyproject.toml                 # Python package metadata and dependencies
 ├── run.bat                        # Windows startup script
 ├── run.sh                         # macOS/Linux startup script
 ├── README.md                      # Project overview
 ├── documentation/docs/            # Full documentation
+├── mcp_servers/ts/                # TypeScript MCP servers (npm workspaces monorepo)
+│   ├── package.json               # Workspaces root
+│   ├── tsconfig.base.json
+│   └── packages/
+│       ├── shared/                # @micro-x/mcp-shared (validation, logging, errors)
+│       ├── filesystem/            # bash, read_file, write_file, append_file, save_memory
+│       ├── web/                   # web_fetch, web_search
+│       ├── linkedin/              # linkedin_jobs, linkedin_job_detail
+│       ├── github/                # 8 GitHub tools
+│       ├── google/                # 12 Google tools (Gmail, Calendar, Contacts)
+│       ├── anthropic-admin/       # anthropic_usage
+│       └── interview-assist/      # 14 interview-assist + STT tools
 └── src/
     └── micro_x_agent_loop/
         ├── __init__.py
         ├── __main__.py            # Entry point and REPL
         ├── agent.py               # Agent loop orchestrator
         ├── agent_config.py        # Configuration dataclass
-        ├── llm_client.py          # Anthropic API + streaming + tenacity
+        ├── app_config.py          # Config parsing (AppConfig, RuntimeEnv)
+        ├── bootstrap.py           # Runtime factory (wires MCP, memory, provider)
+        ├── tool.py                # Tool Protocol + ToolResult dataclass
+        ├── tool_result_formatter.py # Structured → text formatting (json, table, text, key_value)
+        ├── llm_client.py          # Shared utilities (Spinner, retry callback)
         ├── system_prompt.py       # System prompt text
-        ├── tool.py                # Tool Protocol (interface)
+        ├── turn_engine.py         # LLM turn loop with parallel tool dispatch
         ├── mcp/
         │   ├── __init__.py
-        │   ├── mcp_tool_proxy.py  # Adapter: MCP tool -> Tool Protocol
-        │   └── mcp_manager.py     # MCP server connection lifecycle
-        └── tools/
-            ├── tool_registry.py   # Tool assembly and registration
-            ├── bash_tool.py       # Shell command execution
-            ├── read_file_tool.py  # File reading (.txt, .docx)
-            ├── write_file_tool.py # File writing
-            ├── html_utilities.py  # Shared HTML-to-text
-            ├── anthropic/
-            │   └── anthropic_usage_tool.py  # Usage/cost/Claude Code reports
-            ├── linkedin/
-            │   ├── linkedin_jobs_tool.py    # Job search
-            │   └── linkedin_job_detail_tool.py # Job detail fetch
-            ├── gmail/
-            │   ├── gmail_auth.py      # OAuth2 flow
-            │   ├── gmail_parser.py    # MIME parsing
-            │   ├── gmail_search_tool.py # Email search
-            │   ├── gmail_read_tool.py   # Email reading
-            │   └── gmail_send_tool.py   # Email sending
-            └── calendar/
-                ├── calendar_auth.py             # OAuth2 flow (separate tokens)
-                ├── calendar_list_events_tool.py  # Event listing
-                ├── calendar_create_event_tool.py # Event creation
-                └── calendar_get_event_tool.py    # Event detail
+        │   ├── mcp_tool_proxy.py  # Adapter: MCP tool → Tool Protocol + ToolResult
+        │   └── mcp_manager.py     # MCP server connection lifecycle (parallel startup)
+        └── memory/
+            ├── store.py           # SQLite connection and schema
+            ├── session_manager.py # Session CRUD, message persistence
+            ├── checkpoints.py     # File snapshotting and rewind
+            └── ...
 ```

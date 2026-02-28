@@ -20,13 +20,13 @@ Create a Google Calendar event with optional attendees, location, and descriptio
 - Detects all-day events vs timed events based on format: date-only (`YYYY-MM-DD`) uses `date`, ISO 8601 with `T` uses `dateTime`
 - Returns the created event ID, summary, start/end times, and HTML link
 - Attendees receive email invitations automatically
-- **Conditional registration:** Only available when Google credentials are configured
+- **Availability:** Requires Google credentials in the `google` MCP server's `env` config
 
 ## Implementation
 
-- Source: `src/micro_x_agent_loop/tools/calendar/calendar_create_event_tool.py`
-- Uses `google-api-python-client` for Calendar API access
-- OAuth2 via `calendar_auth.get_calendar_service()`
+- Server: `mcp_servers/ts/packages/google/src/tools/calendar-create-event.ts`
+- Uses `googleapis` for Calendar API access
+- OAuth2 via unified Google auth module
 
 ## Example
 

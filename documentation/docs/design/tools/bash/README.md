@@ -46,11 +46,11 @@ Read-only commands (`ls`, `git status`, `cat`, `grep`, etc.) return `[]` — no 
 
 ## Implementation
 
-- Source: `src/micro_x_agent_loop/tools/bash_tool.py`
-- Parser: `src/micro_x_agent_loop/tools/bash_command_parser.py`
-- Uses `asyncio.create_subprocess_shell` for non-blocking execution
-- `asyncio.wait_for` enforces the 30-second timeout
-- On timeout, the process is killed and `[timed out after 30s]` is returned
+- Server: `mcp_servers/ts/packages/filesystem/src/tools/bash.ts`
+- Mutation parser: `bash_command_parser.py` (Python client-side, for checkpoint tracking)
+- Uses `child_process.execFile` for non-blocking execution
+- 30-second timeout; process is killed if exceeded
+- On timeout, `[timed out after 30s]` is returned
 
 ## Example
 

@@ -1,8 +1,8 @@
 # Software Architecture Document
 
 **Project:** micro-x-agent-loop-python
-**Version:** 1.1
-**Last Updated:** 2026-02-25
+**Version:** 2.0
+**Last Updated:** 2026-02-28
 
 ## 1. Introduction and Goals
 
@@ -62,7 +62,7 @@ The agent sits between the user and external services. The user provides natural
 | Gmail API | HTTPS / OAuth2 | Email search, read, send |
 | Google Contacts API | HTTPS / OAuth2 | Contact search, create, update, delete |
 | Google Calendar API | HTTPS / OAuth2 | Event listing, creation, retrieval |
-| GitHub API | HTTPS (raw httpx) | Repos, PRs, issues, code search, file access |
+| GitHub API | HTTPS (Octokit) | Repos, PRs, issues, code search, file access |
 | Brave Search API | HTTPS | Web search results |
 | LinkedIn | HTTPS / HTML scraping | Job search and detail fetching |
 | Local shell | Process execution | Bash/cmd commands |
@@ -82,7 +82,7 @@ The agent sits between the user and external services. The user provides natural
 | Resilience | tenacity decorator with exponential backoff for rate limits (per-provider) |
 | Secrets | `.env` file loaded by python-dotenv; never committed to git |
 | App config | `config.json` for non-secret settings |
-| Tool extensibility | `Tool` Protocol class; register in `tool_registry` or connect via MCP |
+| Tool extensibility | `Tool` Protocol class; all tools are TypeScript MCP servers discovered at startup |
 | Session persistence | Opt-in SQLite-backed memory for sessions, messages, tool calls, checkpoints, and events |
 | File safety | Checkpoint/rewind for mutating tools (`write_file`, `append_file`) |
 | Shared MCP server | [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo — .NET MCP server providing system information tools (shared with .NET agent) |
@@ -96,16 +96,15 @@ graph TD
     Main["__main__.py<br/>Entry Point"] --> Bootstrap["bootstrap.py<br/>Runtime Factory"]
     Bootstrap --> Agent["Agent<br/>Orchestrator"]
     Bootstrap --> Config["app_config.py<br/>config.json + .env"]
-    Bootstrap --> Registry["tool_registry<br/>Tool Factory"]
     Bootstrap --> McpMgr["McpManager<br/>MCP Connections"]
     Bootstrap --> Memory["memory/<br/>SQLite Persistence"]
 
     Agent --> TurnEngine["TurnEngine<br/>LLM Turn Loop"]
     Agent --> CmdRouter["CommandRouter<br/>Local Commands"]
     Agent --> VoiceRT["VoiceRuntime<br/>STT Integration"]
+    Agent --> Formatter["ToolResultFormatter<br/>Structured → Text"]
 
     TurnEngine --> Provider["LLMProvider<br/>Protocol"]
-    TurnEngine --> Tools["Tool Implementations"]
     TurnEngine --> McpTools["MCP Tool Proxies"]
 
     Agent --> Memory
@@ -129,21 +128,18 @@ graph TD
         Pruning["prune_memory"]
     end
 
-    subgraph Tools
+    subgraph McpServers["TypeScript MCP Servers"]
         direction TB
-        Bash[BashTool]
-        ReadFile[ReadFileTool]
-        WriteFile[WriteFileTool]
-        AppendFile[AppendFileTool]
-        WebFetch[WebFetchTool]
-        WebSearch[WebSearchTool]
-        LI1[LinkedInJobsTool]
-        Gmail1[Gmail Tools]
-        Calendar1[Calendar Tools]
-        Contacts1[Contacts Tools]
-        GitHub1[GitHub Tools]
-        Anthropic1[AnthropicUsageTool]
+        FS["filesystem<br/>bash, read_file, write_file,<br/>append_file, save_memory"]
+        Web["web<br/>web_fetch, web_search"]
+        LI["linkedin<br/>linkedin_jobs, linkedin_job_detail"]
+        GH["github<br/>8 tools"]
+        Google["google<br/>12 tools"]
+        Admin["anthropic-admin<br/>anthropic_usage"]
+        IA["interview-assist<br/>14 tools"]
     end
+
+    McpMgr --> McpServers
 
     subgraph McpTools["MCP Tool Proxies"]
         direction TB
@@ -156,11 +152,12 @@ graph TD
 | Module | Responsibility |
 |--------|---------------|
 | `__main__` | Entry point; loads config, delegates to bootstrap, runs REPL |
-| `bootstrap` | Factory that wires all runtime components (tools, providers, memory, MCP) into an `AppRuntime` |
+| `bootstrap` | Factory that wires all runtime components (MCP tools, providers, memory) into an `AppRuntime` |
 | `app_config` | Parses `config.json` into `AppConfig` dataclass; resolves runtime environment variables into `RuntimeEnv` |
 | `Agent` | Top-level orchestrator: holds conversation state, routes commands, delegates turns to `TurnEngine` |
 | `AgentConfig` | Dataclass holding all agent configuration (model, tools, memory components, compaction) |
 | `TurnEngine` | Executes a single LLM turn: streams response, dispatches tools in parallel, handles retries |
+| `ToolResultFormatter` | Formats `ToolResult.structured` into LLM-friendly text using per-tool config (json, table, text, key_value strategies) |
 | `CommandRouter` | Routes `/help`, `/session`, `/checkpoint`, `/voice` commands to handlers |
 | `SessionController` | Formatting service for session list entries, summaries, and short IDs |
 | `CheckpointService` | Formatting service for checkpoint list entries and rewind outcome reports |
@@ -169,8 +166,8 @@ graph TD
 | `AnthropicProvider` | Anthropic SDK implementation of `LLMProvider` |
 | `OpenAIProvider` | OpenAI SDK implementation of `LLMProvider` (translates message format at API boundary) |
 | `llm_client` | Shared utilities: `Spinner` (terminal feedback), `_on_retry` (tenacity callback) |
-| `tool_registry` | Factory that assembles the built-in tool list with conditional groups based on available credentials |
 | `Tool` | Protocol class: `name`, `description`, `input_schema`, `is_mutating`, `predict_touched_paths`, `execute` |
+| `ToolResult` | Dataclass: `text`, `structured` (dict or None), `is_error` — returned by `Tool.execute()` |
 | `memory/store` | SQLite connection, schema bootstrap (6 tables), transaction context manager |
 | `memory/session_manager` | Session CRUD, message persistence with monotonic sequencing, fork, tool call recording |
 | `memory/checkpoints` | File snapshotting before mutations, rewind with per-file outcome reporting |
@@ -178,13 +175,11 @@ graph TD
 | `memory/event_sink` | Async batched event emission (queue + periodic flush) |
 | `memory/pruning` | Time-based and count-based retention enforcement |
 | `memory/models` | Frozen dataclasses for `SessionRecord` and `MessageRecord` |
-| `McpManager` | Connects to all configured MCP servers, discovers tools, manages lifecycle |
-| `McpToolProxy` | Adapter wrapping an MCP tool + session into the `Tool` Protocol |
+| `McpManager` | Connects to all configured MCP servers in parallel, discovers tools, manages lifecycle |
+| `McpToolProxy` | Adapter wrapping an MCP tool + session into the `Tool` Protocol; extracts `structuredContent` into `ToolResult.structured` |
+| `mcp_servers/ts/` | TypeScript npm workspaces monorepo containing 7 first-party MCP servers (filesystem, web, linkedin, github, google, anthropic-admin, interview-assist) plus shared utilities |
 | [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) (external) | Shared .NET MCP server exposing `system_info`, `disk_info`, `network_info` via stdio |
 | WhatsApp MCP (external) | External two-component MCP server: Go bridge (WhatsApp Web connection, SQLite, HTTP API) + Python FastMCP server (12 tools for messaging, contacts, chats) |
-| `html_utilities` | Shared HTML-to-plain-text conversion |
-| `gmail_auth` | OAuth2 flow and token caching for Gmail |
-| `gmail_parser` | Base64url decoding, MIME parsing, text extraction |
 
 ## 6. Runtime View
 
@@ -272,15 +267,16 @@ See [Memory System Design](../design/DESIGN-memory-system.md) and [ADR-009](deci
 
 - API keys stored in `.env`, loaded at startup, never logged
 - `.env` is in `.gitignore`
-- Gmail tokens stored in `.gmail-tokens/` (also gitignored)
-- BashTool executes arbitrary commands (by design for agent autonomy)
+- Service-specific credentials (Google, Brave, GitHub, Anthropic Admin) flow to MCP servers via `env` blocks in `McpServers` config
+- The `bash` tool executes arbitrary commands (by design for agent autonomy)
 - Checkpoint file backups are stored in the local SQLite database
 
 ### Configuration Layers
 
 | Layer | Source | Purpose |
 |-------|--------|---------|
-| Secrets | `.env` | API keys (Anthropic, Google, Brave, GitHub) |
+| Secrets | `.env` | LLM provider API key (Anthropic or OpenAI) |
+| MCP server env | `config.json` `McpServers.*.env` | Per-server credentials (Google, Brave, GitHub, etc.) |
 | App settings | `config.json` | Model, tokens, temperature, limits, paths, memory, MCP servers |
 | Defaults | Code | Fallback values when config is missing |
 
@@ -303,6 +299,7 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-009](decisions/ADR-009-sqlite-memory-sessions-and-file-checkpoints.md) | SQLite memory for sessions, events, and file checkpoints | Accepted |
 | [ADR-010](decisions/ADR-010-multi-provider-llm-support.md) | Multi-provider LLM support (provider abstraction) | Accepted |
 | [ADR-011](decisions/ADR-011-continuous-voice-mode-via-stt-mcp-sessions.md) | Continuous voice mode via STT MCP sessions | Accepted |
+| [ADR-015](decisions/ADR-015-all-tools-as-typescript-mcp-servers.md) | All tools as TypeScript MCP servers | Accepted |
 
 ## 9. Risks and Technical Debt
 

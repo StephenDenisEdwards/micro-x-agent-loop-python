@@ -23,9 +23,9 @@ Search for job postings on LinkedIn.
 
 ## Implementation
 
-- Source: `src/micro_x_agent_loop/tools/linkedin/linkedin_jobs_tool.py`
-- Uses `httpx.AsyncClient` for async HTTP requests
-- Parses response HTML with `BeautifulSoup` + `lxml`
+- Server: `mcp_servers/ts/packages/linkedin/src/tools/linkedin-jobs.ts`
+- Uses HTTP client for async requests
+- Parses response HTML with `cheerio`
 - Uses a browser-like User-Agent header
 
 ## Example

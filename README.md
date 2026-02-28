@@ -12,7 +12,7 @@ This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/Stephe
 - **Conversation compaction** — LLM-based summarization keeps long conversations within context limits
 - **MCP tool servers** — extend the agent with external tools via the Model Context Protocol (stdio and HTTP transports)
 - **Configurable logging** — structured logging via loguru to console and/or file
-- **Conditional tools** — Gmail, Calendar, Anthropic usage, and web search tools only load when their credentials are present
+- **All tools as MCP servers** — every tool is a TypeScript MCP server with structured output; tool availability determined by config
 - **Cross-platform** — works on Windows, macOS, and Linux
 
 ## Quick Start
@@ -25,6 +25,7 @@ This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/Stephe
   - [Anthropic API key](https://console.anthropic.com/) when `Provider=anthropic` (default), or
   - OpenAI API key when `Provider=openai`
 - (Optional) Google OAuth credentials for Gmail and Calendar tools — see [Gmail Setup](#gmail-setup)
+- [Node.js 18+](https://nodejs.org/) — required for TypeScript MCP tool servers
 - (Optional) [Brave Search API key](https://brave.com/search/api/) for the `web_search` tool
 - (Optional) Anthropic Admin API key (`sk-ant-admin...`) for the `anthropic_usage` tool
 - (Optional) GitHub personal access token (`GITHUB_TOKEN`) for `github_*` tools
@@ -181,23 +182,14 @@ python -m micro_x_agent_loop
 
 ```
 micro-x-agent-loop (type 'exit' to quit)
-Tools:
-  - bash
-  - read_file
-  - write_file
-  - append_file
-  - linkedin_jobs
-  - linkedin_job_detail
-  - web_fetch
-  - gmail_search
-  - gmail_read
-  - gmail_send
-  - calendar_list_events
-  - calendar_create_event
-  - calendar_get_event
-  - anthropic_usage
-  - web_search
 MCP servers:
+  - filesystem: bash, read_file, write_file, append_file, save_memory
+  - web: web_fetch, web_search
+  - linkedin: linkedin_jobs, linkedin_job_detail
+  - github: list_prs, get_pr, create_pr, list_issues, create_issue, get_file, search_code, list_repos
+  - google: gmail_search, gmail_read, gmail_send, calendar_list_events, ...
+  - anthropic-admin: anthropic_usage
+  - interview-assist: ia_healthcheck, ia_list_recordings, ...
   - system-info: system_info, disk_info, network_info
   - whatsapp: search_contacts, list_messages, list_chats, get_chat, ...
 Working directory: C:\path\to\your\documents
@@ -209,7 +201,7 @@ you>
 
 Type a natural-language prompt and press Enter. The agent will stream its response and call tools as needed. Type `exit` or `quit` to stop.
 
-Tools that appear depend on which credentials are configured in `.env` and which MCP servers are available.
+All tools are provided by MCP servers. If a server fails to connect, a warning is logged but the agent starts normally with the remaining servers.
 
 ### 3. MCP server setup (optional)
 
@@ -278,7 +270,7 @@ The Go bridge must be running and authenticated before the agent starts. If the 
 
 ### 5. Interview Assist MCP server setup (optional)
 
-This repo includes a local MCP wrapper for `interview-assist-2` analysis/evaluation workflows and STT tools for voice mode.
+This repo includes a TypeScript MCP server for `interview-assist-2` analysis/evaluation workflows and STT tools for voice mode.
 
 1. Build the Interview Assist console once:
 
@@ -294,10 +286,10 @@ This repo includes a local MCP wrapper for `interview-assist-2` analysis/evaluat
      "McpServers": {
        "interview-assist": {
          "transport": "stdio",
-         "command": "python",
-         "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\interview_assist_server.py"],
+         "command": "node",
+         "args": ["C:\\path\\to\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\interview-assist\\dist\\index.js"],
          "env": {
-           "INTERVIEW_ASSIST_REPO": "C:\\Users\\steph\\source\\repos\\interview-assist-2"
+           "INTERVIEW_ASSIST_REPO": "C:\\path\\to\\interview-assist-2"
          }
        }
      }
@@ -382,34 +374,23 @@ Calendar tools trigger a separate OAuth flow on first use, with tokens cached in
 
 ## Tools
 
-### Always available
+All tools are implemented as TypeScript MCP servers. Tool names are prefixed as `{server}__{tool}` (e.g., `filesystem__bash`). See [ADR-015](documentation/docs/architecture/decisions/ADR-015-all-tools-as-typescript-mcp-servers.md).
 
-| Tool | Description |
-|------|-------------|
-| `bash` | Execute shell commands (cmd.exe on Windows, bash on Unix). 30s timeout. |
-| `read_file` | Read text files and `.docx` documents. Relative paths resolve against `WorkingDirectory`. |
-| `write_file` | Write content to a file, creating parent directories as needed. |
-| `append_file` | Append content to an existing file, creating it if it doesn't exist. |
-| `linkedin_jobs` | Search LinkedIn job postings with filters (keyword, location, date, type, remote, experience, limit). |
-| `linkedin_job_detail` | Fetch full job description from a LinkedIn job URL. |
-| `web_fetch` | Fetch and extract content from a URL (HTML converted to text, JSON pretty-printed). |
+### First-party MCP servers
 
-### Conditional (require credentials)
+| Server | Tools | Key Credential |
+|--------|-------|----------------|
+| `filesystem` | bash, read_file, write_file, append_file, save_memory | `FILESYSTEM_WORKING_DIR` |
+| `web` | web_fetch, web_search | `BRAVE_API_KEY` |
+| `linkedin` | linkedin_jobs, linkedin_job_detail | _(scraping)_ |
+| `github` | list_prs, get_pr, create_pr, list_issues, create_issue, get_file, search_code, list_repos | `GITHUB_TOKEN` |
+| `google` | gmail_search, gmail_read, gmail_send, calendar_list_events, calendar_create_event, calendar_get_event, contacts_search, contacts_list, contacts_get, contacts_create, contacts_update, contacts_delete | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` |
+| `anthropic-admin` | anthropic_usage | `ANTHROPIC_ADMIN_API_KEY` |
+| `interview-assist` | 14 tools (ia_* + stt_*) | `INTERVIEW_ASSIST_REPO` |
 
-| Tool | Required credential | Description |
-|------|-------------------|-------------|
-| `gmail_search` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Search Gmail using Gmail search syntax |
-| `gmail_read` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Read full email content by message ID |
-| `gmail_send` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Send a plain-text email |
-| `calendar_list_events` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | List events by date range or search query |
-| `calendar_create_event` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Create events with title, time, attendees |
-| `calendar_get_event` | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` | Get full event details by ID |
-| `anthropic_usage` | `ANTHROPIC_ADMIN_API_KEY` | Query usage, cost, and Claude Code productivity reports |
-| `web_search` | `BRAVE_API_KEY` | Search the web via Brave Search API |
+### Third-party MCP servers
 
-### MCP tools (dynamic)
-
-MCP tools are discovered from external servers configured in `config.json`. The system-info server (from the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo) provides:
+The system-info server (from the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo) provides:
 
 | Tool | Description |
 |------|-------------|
@@ -611,13 +592,10 @@ Conservative finalization (less cutoff):
 | [anthropic](https://pypi.org/project/anthropic/) | Claude API (official SDK) | Anthropic.SDK |
 | [python-dotenv](https://pypi.org/project/python-dotenv/) | Load `.env` files | DotNetEnv |
 | [tenacity](https://pypi.org/project/tenacity/) | Retry with exponential backoff | Polly |
-| [python-docx](https://pypi.org/project/python-docx/) | Read `.docx` files | DocumentFormat.OpenXml |
-| [beautifulsoup4](https://pypi.org/project/beautifulsoup4/) + [lxml](https://pypi.org/project/lxml/) | HTML parsing and conversion | HtmlAgilityPack |
-| [httpx](https://pypi.org/project/httpx/) | Async HTTP client | HttpClient |
-| [google-api-python-client](https://pypi.org/project/google-api-python-client/) | Gmail and Calendar API | Google.Apis.Gmail.v1 |
-| [google-auth-oauthlib](https://pypi.org/project/google-auth-oauthlib/) | Google OAuth2 flow | Google.Apis.Auth |
 | [loguru](https://pypi.org/project/loguru/) | Structured logging | Serilog |
 | [mcp](https://pypi.org/project/mcp/) | Model Context Protocol client | ModelContextProtocol |
+
+Tool-specific dependencies (HTTP clients, Google APIs, HTML parsing, docx reading) are now in the TypeScript MCP servers under `mcp_servers/ts/`.
 
 ## Quality Gates
 
@@ -750,49 +728,35 @@ When the conversation exceeds 50 messages, the oldest messages are removed. Enab
 
 ```
 src/micro_x_agent_loop/
-  __main__.py              -- Entry point: loads config, builds tools, initializes MCP, starts REPL
+  __main__.py              -- Entry point: loads config, connects MCP servers, starts REPL
   agent.py                 -- Agent loop: streaming, parallel tool dispatch, history management
   agent_config.py          -- Configuration dataclass
-  llm_client.py            -- Anthropic API streaming + tenacity retry
+  bootstrap.py             -- Runtime factory: wires MCP, memory, provider into AppRuntime
+  tool.py                  -- Tool Protocol + ToolResult dataclass
+  tool_result_formatter.py -- Structured → text formatting (json, table, text, key_value)
+  turn_engine.py           -- LLM turn loop with parallel tool dispatch
+  llm_client.py            -- Shared utilities (Spinner, retry callback)
   compaction.py            -- Conversation compaction strategies (none, summarize)
-  logging_config.py        -- Loguru logging setup from config
   system_prompt.py         -- System prompt text
-  tool.py                  -- Tool Protocol (structural typing interface)
-  tool_registry.py         -- Assembles tools with dependencies (conditional registration)
   mcp/
-    mcp_manager.py         -- MCP server connection lifecycle
-    mcp_tool_proxy.py      -- Adapter: MCP tool -> Tool Protocol
-  tools/
-    bash_tool.py
-    read_file_tool.py
-    write_file_tool.py
-    append_file_tool.py
-    html_utilities.py      -- Shared HTML-to-text conversion
-    web/
-      web_fetch_tool.py    -- Fetch and extract web content
-      web_search_tool.py   -- Web search via Brave Search API
-      search_provider.py   -- Search provider abstraction
-      brave_search_provider.py
-    linkedin/
-      linkedin_jobs_tool.py
-      linkedin_job_detail_tool.py
-    gmail/
-      gmail_auth.py        -- OAuth2 flow + token caching
-      gmail_parser.py      -- MIME parsing + body extraction
-      gmail_search_tool.py
-      gmail_read_tool.py
-      gmail_send_tool.py
-    calendar/
-      calendar_auth.py     -- OAuth2 flow (separate tokens)
-      calendar_list_events_tool.py
-      calendar_create_event_tool.py
-      calendar_get_event_tool.py
-    anthropic/
-      anthropic_usage_tool.py  -- Usage/cost/Claude Code reports
+    mcp_manager.py         -- MCP server connection lifecycle (parallel startup)
+    mcp_tool_proxy.py      -- Adapter: MCP tool → Tool Protocol + ToolResult
+  memory/
+    store.py, session_manager.py, checkpoints.py, ...
 
+mcp_servers/ts/            -- TypeScript MCP servers (npm workspaces monorepo)
+  packages/
+    shared/                -- @micro-x/mcp-shared (validation, logging, errors)
+    filesystem/            -- bash, read_file, write_file, append_file, save_memory
+    web/                   -- web_fetch, web_search
+    linkedin/              -- linkedin_jobs, linkedin_job_detail
+    github/                -- 8 GitHub tools (via Octokit)
+    google/                -- 12 Google tools (Gmail, Calendar, Contacts via googleapis)
+    anthropic-admin/       -- anthropic_usage
+    interview-assist/      -- 14 tools (ia_* + stt_*)
 ```
 
-The system-info MCP server lives in the separate [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repository, shared with the .NET agent.
+All tools are TypeScript MCP servers — the Python agent loop is a pure MCP orchestrator. The system-info MCP server lives in the separate [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repository, shared with the .NET agent.
 
 ### How the agent loop works
 
@@ -810,7 +774,7 @@ The system-info MCP server lives in the separate [mcp-servers](https://github.co
 Full documentation is available in the [documentation/docs/](documentation/docs/index.md) directory:
 
 - [Software Architecture Document](documentation/docs/architecture/SAD.md) — system overview, components, data flow
-- [Tool System Design](documentation/docs/design/DESIGN-tool-system.md) — tool interface, registry, MCP integration
+- [Tool System Design](documentation/docs/design/DESIGN-tool-system.md) — tool interface, MCP servers, ToolResultFormatter
 - [Compaction Design](documentation/docs/design/DESIGN-compaction.md) — conversation compaction algorithm
 - [WhatsApp MCP Setup](documentation/docs/design/tools/whatsapp-mcp/README.md) — WhatsApp integration guide, prerequisites, pain points
 - [Configuration Reference](documentation/docs/operations/config.md) — all settings with types and defaults

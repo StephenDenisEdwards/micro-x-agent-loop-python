@@ -14,14 +14,14 @@ Search Gmail using Gmail's native search syntax.
 - Uses the Gmail API `messages.list` endpoint with the query
 - Returns a formatted list with: message ID, date, from, subject, and snippet
 - The message ID can be used with `gmail_read` to fetch the full content
-- **Conditional registration:** Only available when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set in `.env`
+- **Availability:** Requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the `google` MCP server's `env` config
 
 ## Implementation
 
-- Source: `src/micro_x_agent_loop/tools/gmail/gmail_search_tool.py`
-- Uses `google-api-python-client` for Gmail API access
+- Server: `mcp_servers/ts/packages/google/src/tools/gmail-search.ts`
+- Uses `googleapis` for Gmail API access
 - Fetches metadata headers (From, Subject, Date) for each result
-- OAuth2 via `gmail_auth.get_gmail_service()`
+- OAuth2 via unified Google auth module
 
 ## Example
 

@@ -2,12 +2,23 @@
 
 ## Overview
 
-The tool system provides Claude with the ability to interact with the outside world. Each tool is a self-contained unit that accepts a dict input, performs an action, and returns a string result.
+The tool system provides the LLM with the ability to interact with the outside world. All tools are implemented as **TypeScript MCP (Model Context Protocol) servers** that communicate with the Python agent loop over stdio. Each tool accepts a JSON input, performs an action, and returns a `ToolResult` containing both text and optional structured data.
+
+See [ADR-015](../architecture/decisions/ADR-015-all-tools-as-typescript-mcp-servers.md) for the architectural decision behind the migration from built-in Python tools to TypeScript MCP servers.
 
 ## Tool Protocol
 
 ```python
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
+
+
+@dataclass
+class ToolResult:
+    text: str
+    structured: dict[str, Any] | None = None
+    is_error: bool = False
+
 
 @runtime_checkable
 class Tool(Protocol):
@@ -25,179 +36,206 @@ class Tool(Protocol):
 
     def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]: ...
 
-    async def execute(self, tool_input: dict[str, Any]) -> str: ...
+    async def execute(self, tool_input: dict[str, Any]) -> ToolResult: ...
 ```
 
 | Member | Purpose |
 |--------|---------|
-| `name` | Unique identifier sent to Claude (e.g., `"read_file"`) |
-| `description` | Natural-language description Claude uses to decide when to call the tool |
+| `name` | Unique identifier sent to the LLM (e.g., `"filesystem__read_file"`) |
+| `description` | Natural-language description the LLM uses to decide when to call the tool |
 | `input_schema` | JSON Schema dict defining the expected input parameters |
-| `is_mutating` | Whether the tool modifies files (used by checkpoint tracking) |
+| `is_mutating` | Whether the tool modifies files (used by checkpoint tracking); derived from MCP `destructiveHint` annotation |
 | `predict_touched_paths` | Returns predicted file paths the tool will modify (used for pre-mutation snapshots) |
-| `execute` | Executes the tool and returns a string result |
+| `execute` | Executes the tool and returns a `ToolResult` |
 
-Using `typing.Protocol` provides structural typing — any class with matching properties and methods satisfies the interface without explicit inheritance.
+Using `typing.Protocol` provides structural typing — any class with matching properties and methods satisfies the interface without explicit inheritance. All tools are `McpToolProxy` instances at runtime.
+
+### ToolResult
+
+`ToolResult` carries both human-readable text and machine-parseable structured data:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `text` | `str` | Plain text extracted from MCP `TextContent` blocks — used as fallback for the LLM context window |
+| `structured` | `dict \| None` | JSON data from MCP `structuredContent` — used by `ToolResultFormatter` for optimised formatting |
+| `is_error` | `bool` | Whether the tool execution failed |
 
 ### Mutation Metadata
 
-Tools that modify files should declare `is_mutating = True` and implement `predict_touched_paths()` to return the list of file paths they will modify. When file checkpointing is enabled, the agent uses this metadata to snapshot files before mutation so they can be restored via `/rewind`.
+Tools that modify files declare mutation intent via MCP annotations. `McpToolProxy` reads the `destructiveHint` annotation to set `is_mutating`. When file checkpointing is enabled, the agent snapshots files before mutation so they can be restored via `/rewind`.
 
-Currently three tools implement mutation metadata:
+Currently tracked mutations:
 
 | Tool | Strategy | Notes |
 |------|----------|-------|
-| `write_file` | Strict | Returns `[path]` from tool input |
-| `append_file` | Strict | Returns `[path]` from tool input |
-| `bash` | Best-effort | Parses the shell command to extract likely mutated paths via `bash_command_parser.extract_mutated_paths()` |
-
-Tools that don't modify files can return `False` and `[]` respectively, or omit these members entirely — the agent falls back to `getattr(tool, "is_mutating", False)` with a safe default.
+| `filesystem__write_file` | Strict | Returns `[path]` from tool input |
+| `filesystem__append_file` | Strict | Returns `[path]` from tool input |
+| `filesystem__bash` | Best-effort | Parses the shell command to extract likely mutated paths via `bash_command_parser.extract_mutated_paths()` (Python client-side) |
 
 By default (`CheckpointWriteToolsOnly=true`), only `write_file` and `append_file` are tracked. Set `CheckpointWriteToolsOnly=false` to also track bash mutations.
 
 See [Memory System Design](DESIGN-memory-system.md) for the full checkpoint lifecycle and bash parser details.
 
-## Tool Registry
+## Tool Discovery
 
-`tool_registry.get_all()` assembles the tool list with their dependencies:
+All tools come from MCP servers. At startup, `bootstrap.py` creates an `McpManager` which connects to all configured servers in parallel, discovers their tools, and wraps each in a `McpToolProxy`.
 
 ```python
-def get_all(
-    working_directory: str | None = None,
-    google_client_id: str | None = None,
-    google_client_secret: str | None = None,
-    anthropic_admin_api_key: str | None = None,
-    brave_api_key: str | None = None,
-    github_token: str | None = None,
-) -> list[Tool]:
+# src/micro_x_agent_loop/bootstrap.py
+mcp_manager: McpManager | None = None
+tools: list = []
+if app.mcp_server_configs:
+    mcp_manager = McpManager(app.mcp_server_configs)
+    tools = await mcp_manager.connect_all()
 ```
 
-Tool groups are conditionally registered based on available credentials. Gmail/Calendar and Contacts tools require both Google credentials. The Anthropic usage tool requires the admin API key. Web search requires the Brave API key. GitHub tools require a GitHub token. This prevents runtime errors when optional credentials are not configured.
+There is no `tool_registry` — tool availability is determined entirely by which MCP servers are configured in `config.json` under `McpServers`. Credentials flow to servers via `env` blocks in the server config.
 
-## Built-in Tools
+## MCP Servers
+
+All first-party tools are implemented as TypeScript MCP servers in `mcp_servers/ts/`, organised as an npm workspaces monorepo.
+
+### Server Grouping
+
+| Server | Tools | Key Credential |
+|--------|-------|----------------|
+| `filesystem` | bash, read_file, write_file, append_file, save_memory | `FILESYSTEM_WORKING_DIR`, `USER_MEMORY_DIR` |
+| `web` | web_fetch, web_search | `BRAVE_API_KEY` |
+| `linkedin` | linkedin_jobs, linkedin_job_detail | _(scraping)_ |
+| `github` | list_prs, get_pr, create_pr, list_issues, create_issue, get_file, search_code, list_repos | `GITHUB_TOKEN` |
+| `google` | gmail_search, gmail_read, gmail_send, calendar_list_events, calendar_create_event, calendar_get_event, contacts_search, contacts_list, contacts_get, contacts_create, contacts_update, contacts_delete | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
+| `anthropic-admin` | anthropic_usage | `ANTHROPIC_ADMIN_API_KEY` |
+| `interview-assist` | ia_healthcheck, ia_list_recordings, ia_analyze_session, ia_evaluate_session, ia_compare_strategies, ia_tune_threshold, ia_regression_test, ia_create_baseline, ia_transcribe_once, stt_list_devices, stt_start_session, stt_get_updates, stt_get_session, stt_stop_session | `INTERVIEW_ASSIST_REPO` |
 
 Each tool has its own detailed documentation in the [tools/](tools/) directory.
 
-### File System
+### Project Structure
 
-| Tool | Description | Mutating | Docs |
-|------|-------------|----------|------|
-| `read_file` | Read text files and `.docx` documents | No | [read-file](tools/read-file/README.md) |
-| `write_file` | Write content to a file, creating directories as needed | Yes | [write-file](tools/write-file/README.md) |
-| `append_file` | Append content to an existing file | Yes | — |
+```
+mcp_servers/ts/
+  package.json                    # npm workspaces root
+  tsconfig.base.json
+  packages/
+    shared/                       # @micro-x/mcp-shared
+      src/
+        validation.ts             # Zod input/output validation
+        logging.ts                # Structured JSON stderr logger
+        errors.ts                 # ValidationError, UpstreamError, PermissionError
+        server-factory.ts         # stdio/HTTP transport factory
+    filesystem/                   # @micro-x/mcp-filesystem
+      src/index.ts
+      src/tools/{bash,read-file,write-file,append-file,save-memory}.ts
+    web/                          # @micro-x/mcp-web
+    linkedin/                     # @micro-x/mcp-linkedin
+    github/                       # @micro-x/mcp-github
+    google/                       # @micro-x/mcp-google
+    anthropic-admin/              # @micro-x/mcp-anthropic-admin
+    interview-assist/             # @micro-x/mcp-interview-assist
+```
 
-### Shell
+### Best Practices
 
-| Tool | Description | Mutating | Docs |
-|------|-------------|----------|------|
-| `bash` | Execute a shell command (cmd.exe on Windows, bash on Unix) | Best-effort (opt-in) | [bash](tools/bash/README.md) |
+Each server follows the standards defined in [MCP Server Best Practices](../best-practice/mcp-servers.md):
 
-### Web
+- **Tight schemas** — `additionalProperties: false` on `inputSchema`
+- **outputSchema** — declared per-tool for structured validation
+- **structuredContent** — machine-parseable JSON alongside TextContent
+- **Structured logging** — JSON lines to stderr (never stdout)
+- **MCP annotations** — `readOnlyHint` / `destructiveHint` for mutation tracking
 
-| Tool | Description | Docs |
-|------|-------------|------|
-| `web_fetch` | Fetch and parse web content from a URL | — |
-| `web_search` | Search the web via Brave Search API (conditional on `BRAVE_API_KEY`) | — |
+## Tool Result Formatting
 
-### LinkedIn
+`ToolResultFormatter` converts `ToolResult.structured` into LLM-friendly text before it enters the context window. Format rules are configured per-tool in the `ToolFormatting` config section.
 
-| Tool | Description | Docs |
-|------|-------------|------|
-| `linkedin_jobs` | Search LinkedIn job postings with filters | [linkedin-jobs](tools/linkedin-jobs/README.md) |
-| `linkedin_job_detail` | Fetch full job description from a LinkedIn URL | [linkedin-job-detail](tools/linkedin-job-detail/README.md) |
+### Strategies
 
-### Gmail (conditional)
+| Strategy | Config | Behaviour |
+|----------|--------|-----------|
+| `json` | `{"format": "json"}` | Pretty-printed JSON (default) |
+| `text` | `{"format": "text", "field": "content"}` | Extract a single string field |
+| `table` | `{"format": "table", "max_rows": 20}` | Markdown table from an array of objects |
+| `key_value` | `{"format": "key_value"}` | `key: value` lines |
 
-| Tool | Description | Docs |
-|------|-------------|------|
-| `gmail_search` | Search Gmail using Gmail search syntax | [gmail-search](tools/gmail-search/README.md) |
-| `gmail_read` | Read full email content by message ID | [gmail-read](tools/gmail-read/README.md) |
-| `gmail_send` | Send a plain-text email | [gmail-send](tools/gmail-send/README.md) |
+When no `structuredContent` is present, the formatter falls back to `ToolResult.text`.
 
-Gmail tools require OAuth2 authentication. On first use, a browser window opens for Google sign-in. Tokens are cached in `.gmail-tokens/`. See [ADR-004](../architecture/decisions/ADR-004-raw-html-for-gmail.md) for the decision to pass raw HTML to the LLM.
+### Configuration
 
-### Google Calendar (conditional)
+```json
+{
+  "ToolFormatting": {
+    "filesystem__bash": { "format": "text", "field": "stdout" },
+    "filesystem__read_file": { "format": "text", "field": "content" },
+    "filesystem__write_file": { "format": "key_value" },
+    "web__web_search": { "format": "table", "max_rows": 20 },
+    "google__gmail_search": { "format": "table", "max_rows": 15 }
+  },
+  "DefaultFormat": { "format": "json" }
+}
+```
 
-| Tool | Description | Docs |
-|------|-------------|------|
-| `calendar_list_events` | List events by date range or search query | [calendar-list-events](tools/calendar-list-events/README.md) |
-| `calendar_create_event` | Create events with title, time, attendees | [calendar-create-event](tools/calendar-create-event/README.md) |
-| `calendar_get_event` | Get full event details by ID | [calendar-get-event](tools/calendar-get-event/README.md) |
+See the config files (`config-standard.json`, etc.) for the complete mapping of all 44 tools.
 
-Calendar tools use the same Google OAuth2 credentials as Gmail but with a separate token cache (`.calendar-tokens/`) and the `https://www.googleapis.com/auth/calendar` scope.
+## MCP Tool Adapter (McpToolProxy)
 
-### Google Contacts (conditional)
+`McpToolProxy` wraps an MCP tool definition and session into a `Tool` Protocol object. All tools in the system are `McpToolProxy` instances.
 
-| Tool | Description | Docs |
-|------|-------------|------|
-| `contacts_search` | Search contacts by name, email, or phone | — |
-| `contacts_list` | List contacts with pagination | — |
-| `contacts_get` | Get full contact details by resource name | — |
-| `contacts_create` | Create a new contact | — |
-| `contacts_update` | Update an existing contact | — |
-| `contacts_delete` | Delete a contact | — |
+```python
+# src/micro_x_agent_loop/mcp/mcp_tool_proxy.py
+class McpToolProxy:
+    def __init__(
+        self,
+        server_name: str,
+        tool_name: str,
+        tool_description: str | None,
+        tool_input_schema: dict[str, Any],
+        session: ClientSession,
+        *,
+        is_mutating: bool = False,
+        output_schema: dict[str, Any] | None = None,
+    ): ...
 
-Contacts tools share the same Google OAuth2 credentials as Gmail/Calendar with a separate token cache and the `https://www.googleapis.com/auth/contacts` scope. See [ADR-007](../architecture/decisions/ADR-007-google-contacts-built-in-tools.md).
+    @property
+    def name(self) -> str:
+        return f"{self._server_name}__{self._tool_name}"
 
-### GitHub (conditional)
+    @property
+    def output_schema(self) -> dict[str, Any] | None:
+        return self._output_schema
 
-| Tool | Description | Docs |
-|------|-------------|------|
-| `github_list_repos` | List repositories for the authenticated user | — |
-| `github_list_prs` | List pull requests for a repository | — |
-| `github_get_pr` | Get full PR details | — |
-| `github_create_pr` | Create a pull request | — |
-| `github_list_issues` | List issues for a repository | — |
-| `github_create_issue` | Create an issue | — |
-| `github_get_file` | Get file contents from a repository | — |
-| `github_search_code` | Search code across repositories | — |
+    async def execute(self, tool_input: dict[str, Any]) -> ToolResult:
+        result = await self._session.call_tool(self._tool_name, arguments=tool_input)
+        text_parts = [block.text for block in result.content if isinstance(block, TextContent)]
+        output = "\n".join(text_parts) if text_parts else "(no output)"
 
-Requires a GitHub personal access token (`GITHUB_TOKEN`). See [ADR-008](../architecture/decisions/ADR-008-github-built-in-tools-with-raw-httpx.md).
+        # Extract structuredContent if present
+        structured: dict[str, Any] | None = None
+        if hasattr(result, "structuredContent") and result.structuredContent is not None:
+            structured = dict(result.structuredContent)
 
-### Anthropic Admin (conditional)
-
-| Tool | Description | Docs |
-|------|-------------|------|
-| `anthropic_usage` | Query usage, cost, and Claude Code productivity reports | [anthropic-usage](tools/anthropic-usage/README.md) |
-
-Requires an Anthropic Admin API key (`sk-ant-admin...`), separate from the inference key. See [DESIGN-account-management-apis](DESIGN-account-management-apis.md) for full API surface details.
-
-## MCP Tools (dynamic)
-
-The agent supports dynamically discovering tools from external **MCP (Model Context Protocol)** servers. MCP tools are configured in `config.json` under `McpServers` — no code changes are needed to add new tool servers.
-
-See [ADR-005](../architecture/decisions/ADR-005-mcp-for-external-tools.md) for the architectural decision. Note: MCP tools currently return unstructured text — this is a design choice in our tool implementations (not a protocol limitation; MCP supports structured JSON), but it constrains compiled mode's ability to process results programmatically. See [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).
-
-### How It Works
-
-1. At startup, `McpManager` reads the `McpServers` config and connects to each server
-2. For each server, it calls `list_tools()` to discover available tools
-3. Each discovered tool is wrapped in `McpToolProxy`, which adapts it to the `Tool` Protocol
-4. MCP tools are merged with built-in tools and passed to the agent
-
-The agent dispatches MCP tools identically to built-in tools — no special handling is needed.
-
-### McpToolProxy
-
-`McpToolProxy` is an adapter class in `mcp/mcp_tool_proxy.py` that wraps an MCP tool definition and session into a `Tool` Protocol object:
+        if result.isError:
+            return ToolResult(text=output, structured=structured, is_error=True)
+        return ToolResult(text=output, structured=structured)
+```
 
 | Member | Behavior |
 |--------|----------|
-| `name` | `{server_name}__{tool_name}` — prefixed to avoid collisions with built-in tools |
+| `name` | `{server_name}__{tool_name}` — prefixed to avoid collisions across servers |
 | `description` | From the MCP tool's metadata |
 | `input_schema` | From the MCP tool's `inputSchema` |
-| `execute()` | Calls `session.call_tool(name, arguments)`, extracts text from result content blocks |
+| `is_mutating` | Derived from MCP `destructiveHint` annotation |
+| `output_schema` | From the MCP tool's `outputSchema` (captured at discovery time) |
+| `execute()` | Calls `session.call_tool(name, arguments)`, extracts `TextContent` and `structuredContent`, returns `ToolResult` |
 
-### McpManager
+## McpManager
 
-`McpManager` in `mcp/mcp_manager.py` manages the lifecycle of all MCP server connections. Each server runs in its own `asyncio.Task` with proper `async with` nesting (avoiding `AsyncExitStack`, which conflicts with anyio's cancel scopes used internally by `stdio_client`).
+`McpManager` in `mcp/mcp_manager.py` manages the lifecycle of all MCP server connections. Each server runs in its own `asyncio.Task` with proper `async with` nesting.
 
-- `connect_all()` — starts each server in a background task, waits for it to be ready, returns discovered tools
-- `close()` — shuts down each server individually with per-server logging and a 5-second timeout
+- All servers start **concurrently** — processes launch in parallel, then readiness is awaited
+- `connect_all()` discovers tools from each server and wraps them as `McpToolProxy` instances
+- `close()` shuts down each server individually with per-server logging and a 5-second timeout
+- `outputSchema` is captured from MCP tool definitions at discovery time
 
-Shutdown signals both the internal shutdown event and task cancellation together, ensuring both anyio and asyncio cleanup paths are triggered. On Windows, a `sys.unraisablehook` in `__main__.py` suppresses harmless "unclosed transport" noise from asyncio's proactor pipe cleanup.
-
-Connection failures for individual servers are logged but do not prevent the agent from starting. Other servers and built-in tools continue to work normally.
+Connection failures for individual servers are logged but do not prevent the agent from starting. Other servers continue to work normally.
 
 ### Supported Transports
 
@@ -206,9 +244,11 @@ Connection failures for individual servers are logged but do not prevent the age
 | `stdio` | `command`, `args`, `env` | Local MCP servers spawned as child processes |
 | `http` | `url` | Remote MCP servers via StreamableHTTP |
 
-### Shared MCP Server: system-info
+### Third-Party MCP Servers
 
-The system-info MCP server lives in the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repository (used by both the Python and .NET agents). It demonstrates the stdio transport pattern and exposes three tools:
+In addition to the 7 first-party TypeScript servers, the agent connects to external MCP servers:
+
+**system-info** — shared .NET MCP server from [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers):
 
 | MCP Tool | Agent Tool Name | Description |
 |----------|----------------|-------------|
@@ -216,20 +256,7 @@ The system-info MCP server lives in the shared [mcp-servers](https://github.com/
 | `disk_info` | `system-info__disk_info` | Per-drive disk usage (fixed drives) |
 | `network_info` | `system-info__network_info` | Network interfaces with IP addresses |
 
-Built with the [ModelContextProtocol](https://www.nuget.org/packages/ModelContextProtocol) NuGet package and `Microsoft.Extensions.Hosting`. Uses `Host.CreateEmptyApplicationBuilder(settings: null)` to avoid default logging to stdout (which would corrupt the stdio transport).
-
-The server must be built before starting the agent (`dotnet build path/to/mcp-servers/system-info/src`). The config uses `--no-build` to skip the build step at runtime, and an absolute path to the server project.
-
-### External MCP Server: WhatsApp
-
-The agent can also connect to the [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp) external MCP server for WhatsApp messaging. Unlike system-info, this server lives outside this repository and has a two-component architecture:
-
-| Component | Role |
-|-----------|------|
-| Go bridge (`whatsapp-bridge/`) | Connects to WhatsApp Web via whatsmeow, stores messages in SQLite, exposes HTTP API on port 8080 |
-| Python MCP server (`whatsapp-mcp-server/`) | FastMCP server that queries SQLite for messages and calls the bridge API for sending. Runs via `uv` as a stdio MCP server. |
-
-The Go bridge must be running before the agent starts. The Python MCP server is spawned by McpManager as a child process.
+**WhatsApp** — external [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp):
 
 | MCP Tool | Agent Tool Name | Description |
 |----------|----------------|-------------|
@@ -241,145 +268,35 @@ The Go bridge must be running before the agent starts. The Python MCP server is 
 | `get_contact_chats` | `whatsapp__get_contact_chats` | All chats involving a contact |
 | `get_last_interaction` | `whatsapp__get_last_interaction` | Most recent message with a contact |
 | `get_message_context` | `whatsapp__get_message_context` | Messages surrounding a specific message |
-| `send_message` | `whatsapp__send_message` | Send text to phone number or group JID |
-| `send_file` | `whatsapp__send_file` | Send file (image, video, document) |
-| `send_audio_message` | `whatsapp__send_audio_message` | Send audio as voice message (requires ffmpeg) |
+| `send_message` | `whatsapp__send_message` | Send text to a phone number or group JID |
+| `send_file` | `whatsapp__send_file` | Send a file (image, video, document) |
+| `send_audio_message` | `whatsapp__send_audio_message` | Send audio as a voice message (requires ffmpeg) |
 | `download_media` | `whatsapp__download_media` | Download media from a message |
 
-See [WhatsApp MCP](tools/whatsapp-mcp/README.md) for the full setup guide, prerequisites (Go, GCC, uv), Windows CGO pain points, and known limitations.
-
-### External MCP Server: Interview Assist
-
-The agent can also connect to the local Interview Assist MCP wrapper for session analysis/evaluation and speech-to-text workflows.
-
-| MCP Tool | Agent Tool Name | Description |
-|----------|----------------|-------------|
-| `ia_healthcheck` | `interview-assist__ia_healthcheck` | Validate Interview Assist repo/project setup |
-| `ia_evaluate_session` | `interview-assist__ia_evaluate_session` | Evaluate transcript/session detection metrics |
-| `ia_transcribe_once` | `interview-assist__ia_transcribe_once` | One-shot microphone/loopback transcription |
-| `stt_list_devices` | `interview-assist__stt_list_devices` | List STT sources and detected endpoint devices |
-| `stt_start_session` | `interview-assist__stt_start_session` | Start continuous STT polling session |
-| `stt_get_updates` | `interview-assist__stt_get_updates` | Retrieve incremental STT events |
-| `stt_get_session` | `interview-assist__stt_get_session` | Read STT session status/counters |
-| `stt_stop_session` | `interview-assist__stt_stop_session` | Stop STT session |
-
-See [Interview Assist MCP](tools/interview-assist-mcp/README.md) for setup and tool details.
+See [WhatsApp MCP](tools/whatsapp-mcp/README.md) for the full setup guide.
 
 ### Configuration
 
 See [Configuration Reference](../operations/config.md#mcpservers) for the full config format.
 
-## Shared Utilities
-
-### HtmlUtilities
-
-`html_utilities.html_to_text(html)` converts HTML to readable plain text. Used by LinkedIn tools for job description extraction.
-
-Handles:
-- Block elements (p, div, h1-h6, blockquote, tr) with newlines
-- Link URL preservation (`<a href="url">text</a>` becomes `text (url)`)
-- List items with bullet markers
-- Table cells with tab separation
-- Script/style removal
-- HTML entity decoding
-- Whitespace normalization
-
-### GmailParser
-
-- `decode_body` — base64url decoding for Gmail message bodies
-- `extract_text` — recursive MIME parsing, prefers HTML over plain text for multipart/alternative
-- `get_header` — case-insensitive header lookup
-
 ## Adding a New Tool
 
-1. Create a class in the `tools/` directory with matching `Tool` Protocol members
-2. Define `name`, `description`, and `input_schema` properties
-3. Implement `async execute()` with error handling (return error strings, don't raise)
-4. If the tool modifies files, set `is_mutating = True` and implement `predict_touched_paths()` to return affected paths (enables checkpoint/rewind support)
-5. Register it in `tool_registry.get_all()`
+New tools are added as TypeScript MCP servers — no Python code changes are needed.
 
-Example skeleton (read-only tool):
+### Option A: Add a tool to an existing server
 
-```python
-from typing import Any
+1. Create a new tool file in the relevant server's `src/tools/` directory
+2. Define `inputSchema` with `additionalProperties: false` and an `outputSchema`
+3. Implement the tool handler, returning both `TextContent` and `structuredContent`
+4. Register the tool in the server's `src/index.ts`
+5. Add a `ToolFormatting` entry in the config files for the new tool
+6. Rebuild the server (`npm run build` in the server package)
 
+### Option B: Create a new MCP server
 
-class MyTool:
-    @property
-    def name(self) -> str:
-        return "my_tool"
-
-    @property
-    def description(self) -> str:
-        return "Does something useful."
-
-    @property
-    def input_schema(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "param": {
-                    "type": "string",
-                    "description": "A required parameter",
-                }
-            },
-            "required": ["param"],
-        }
-
-    @property
-    def is_mutating(self) -> bool:
-        return False
-
-    def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]:
-        return []
-
-    async def execute(self, tool_input: dict[str, Any]) -> str:
-        param = tool_input["param"]
-        try:
-            # Do work
-            return "Result"
-        except Exception as ex:
-            return f"Error: {ex}"
-```
-
-Example skeleton (file-mutating tool):
-
-```python
-from typing import Any
-
-
-class MyWriteTool:
-    @property
-    def name(self) -> str:
-        return "my_write_tool"
-
-    @property
-    def description(self) -> str:
-        return "Writes content to a file."
-
-    @property
-    def input_schema(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "Target file path"},
-                "content": {"type": "string", "description": "Content to write"},
-            },
-            "required": ["path", "content"],
-        }
-
-    @property
-    def is_mutating(self) -> bool:
-        return True
-
-    def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]:
-        path = tool_input.get("path", "")
-        return [path] if path else []
-
-    async def execute(self, tool_input: dict[str, Any]) -> str:
-        try:
-            # Write file
-            return "Done"
-        except Exception as ex:
-            return f"Error: {ex}"
-```
+1. Create a new package under `mcp_servers/ts/packages/`
+2. Use `@micro-x/mcp-shared` for validation, logging, and server factory
+3. Register tools with tight schemas, `outputSchema`, and `structuredContent`
+4. Add the server to `config.json` under `McpServers` with the appropriate `command`, `args`, and `env`
+5. Add `ToolFormatting` entries for all tools in the new server
+6. The agent will discover and expose the tools at next startup — no Python code changes needed

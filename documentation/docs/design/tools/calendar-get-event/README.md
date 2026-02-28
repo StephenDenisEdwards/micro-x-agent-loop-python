@@ -13,13 +13,13 @@ Get full details of a Google Calendar event by its event ID.
 
 - Fetches the full event using the Google Calendar API `events.get` endpoint
 - Returns: summary, status, start/end times, location, description, organizer, creator, attendees with response status, conference link, and recurrence rules
-- **Conditional registration:** Only available when Google credentials are configured
+- **Availability:** Requires Google credentials in the `google` MCP server's `env` config
 
 ## Implementation
 
-- Source: `src/micro_x_agent_loop/tools/calendar/calendar_get_event_tool.py`
-- Uses `google-api-python-client` for Calendar API access
-- OAuth2 via `calendar_auth.get_calendar_service()`
+- Server: `mcp_servers/ts/packages/google/src/tools/calendar-get-event.ts`
+- Uses `googleapis` for Calendar API access
+- OAuth2 via unified Google auth module
 
 ## Example
 

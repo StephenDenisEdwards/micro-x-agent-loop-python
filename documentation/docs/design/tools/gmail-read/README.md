@@ -15,14 +15,14 @@ Read the full content of a Gmail email by its message ID.
 - Email body is returned as **raw HTML** for the LLM to parse directly (see [ADR-004](../../architecture/decisions/ADR-004-raw-html-for-gmail.md))
 - For multipart messages, prefers HTML content over plain text
 - Recursive MIME parsing handles nested multipart structures
-- **Conditional registration:** Only available when Google credentials are configured
+- **Availability:** Requires Google credentials in the `google` MCP server's `env` config
 
 ## Implementation
 
-- Source: `src/micro_x_agent_loop/tools/gmail/gmail_read_tool.py`
-- Uses `gmail_parser.extract_text()` for recursive MIME body extraction
-- Uses `gmail_parser.get_header()` for case-insensitive header lookup
-- Base64url decoding handled by `gmail_parser.decode_body()`
+- Server: `mcp_servers/ts/packages/google/src/tools/gmail-read.ts`
+- Uses `googleapis` for Gmail API access
+- Recursive MIME body extraction, prefers HTML over plain text
+- Base64url decoding for message bodies
 
 ## Example
 

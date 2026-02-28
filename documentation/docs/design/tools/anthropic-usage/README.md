@@ -34,12 +34,12 @@ Calls `GET /v1/organizations/usage_report/claude_code`. Returns per-user, per-da
 - Builds query params from input, handling `group_by` as repeated `group_by[]` params
 - Returns pretty-printed JSON prefixed with a report type header
 - Returns error strings on HTTP failures (never raises)
-- **Conditional registration:** Only available when `ANTHROPIC_ADMIN_API_KEY` is set in `.env`
+- **Availability:** Requires `ANTHROPIC_ADMIN_API_KEY` in the `anthropic-admin` MCP server's `env` config
 
 ## Implementation
 
-- Source: `src/micro_x_agent_loop/tools/anthropic/anthropic_usage_tool.py`
-- Uses `httpx` for direct HTTP calls (Anthropic SDKs do not cover Admin API)
+- Server: `mcp_servers/ts/packages/anthropic-admin/src/tools/usage.ts`
+- Uses HTTP client for direct API calls (Anthropic SDKs do not cover Admin API)
 - Base URL: `https://api.anthropic.com/v1/organizations`
 
 ## Example
