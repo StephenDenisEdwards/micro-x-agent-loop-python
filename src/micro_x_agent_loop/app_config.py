@@ -10,11 +10,6 @@ from pathlib import Path
 class RuntimeEnv:
     provider_api_key: str
     provider_env_var: str
-    google_client_id: str | None
-    google_client_secret: str | None
-    anthropic_admin_api_key: str | None
-    brave_api_key: str | None
-    github_token: str | None
 
 
 @dataclass
@@ -167,9 +162,4 @@ def resolve_runtime_env(provider_name: str) -> RuntimeEnv:
     return RuntimeEnv(
         provider_api_key=provider_api_key,
         provider_env_var=provider_env_var,
-        google_client_id=os.environ.get("GOOGLE_CLIENT_ID"),
-        google_client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
-        anthropic_admin_api_key=os.environ.get("ANTHROPIC_ADMIN_API_KEY"),
-        brave_api_key=os.environ.get("BRAVE_API_KEY"),
-        github_token=os.environ.get("GITHUB_TOKEN"),
     )

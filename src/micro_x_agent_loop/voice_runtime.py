@@ -259,8 +259,8 @@ class VoiceRuntime:
         tool = self._tool_map.get(tool_name)
         if tool is None:
             raise ValueError(f"Tool not found: {tool_name}")
-        raw = await tool.execute(tool_input)
-        return self._parse_json_object(raw)
+        result = await tool.execute(tool_input)
+        return self._parse_json_object(result.text)
 
     def _parse_json_object(self, raw: str) -> dict[str, Any]:
         text = raw.strip()

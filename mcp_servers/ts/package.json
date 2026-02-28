@@ -1,0 +1,11 @@
+{
+  "name": "@micro-x/mcp-servers",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w packages/shared && npm run build --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present"
+  }
+}

@@ -50,6 +50,7 @@ class _ServerConnection:
                         tool_description=tool.description,
                         tool_input_schema=tool.inputSchema,
                         session=session,
+                        is_mutating=bool(getattr(tool.annotations, "destructiveHint", False)) if tool.annotations else False,
                     )
                     for tool in tools_result.tools
                 ]
@@ -69,6 +70,7 @@ class _ServerConnection:
                         tool_description=tool.description,
                         tool_input_schema=tool.inputSchema,
                         session=session,
+                        is_mutating=bool(getattr(tool.annotations, "destructiveHint", False)) if tool.annotations else False,
                     )
                     for tool in tools_result.tools
                 ]

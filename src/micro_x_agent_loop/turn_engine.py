@@ -145,28 +145,30 @@ class TurnEngine:
             t_start = time.monotonic()
             try:
                 self._events.on_maybe_track_mutation(tool_name, tool, tool_input)
-                result = await tool.execute(tool_input)
-                result = self._truncate_tool_result(result, tool_name)
-                result, was_summarized = await self._summarize_tool_result(result, tool_name)
+                tool_result = await tool.execute(tool_input)
+                if tool_result.is_error:
+                    raise RuntimeError(tool_result.text)
+                result_text = self._truncate_tool_result(tool_result.text, tool_name)
+                result_text, was_summarized = await self._summarize_tool_result(result_text, tool_name)
                 t_end = time.monotonic()
                 duration_ms = (t_end - t_start) * 1000
                 self._events.on_record_tool_call(
                     tool_call_id=tool_use_id,
                     tool_name=tool_name,
                     tool_input=tool_input,
-                    result_text=result,
+                    result_text=result_text,
                     is_error=False,
                     message_id=last_assistant_message_id,
                 )
                 self._events.on_tool_completed(tool_use_id, tool_name, False)
                 self._events.on_tool_executed(
-                    tool_name, len(result), duration_ms, False,
+                    tool_name, len(result_text), duration_ms, False,
                     was_summarized=was_summarized,
                 )
                 return {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
-                    "content": result,
+                    "content": result_text,
                 }
             except Exception as ex:
                 t_end = time.monotonic()

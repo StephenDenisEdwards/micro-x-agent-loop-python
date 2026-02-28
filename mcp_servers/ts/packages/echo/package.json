@@ -1,0 +1,23 @@
+{
+  "name": "@micro-x/mcp-echo",
+  "version": "0.1.0",
+  "description": "Echo MCP server for integration testing",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-echo": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@micro-x/mcp-shared": "*",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

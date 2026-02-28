@@ -27,8 +27,8 @@ class PollingVoiceIngress:
             return
 
         while True:
-            raw = await tool.execute({"session_id": session_id, "since_seq": last_seq, "limit": 100})
-            payload = _parse_json_object(raw)
+            result = await tool.execute({"session_id": session_id, "since_seq": last_seq, "limit": 100})
+            payload = _parse_json_object(result.text)
             events = payload.get("events", []) or []
             for event in events:
                 seq = int(event.get("seq", 0))

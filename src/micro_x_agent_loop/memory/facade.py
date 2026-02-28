@@ -12,7 +12,7 @@ from loguru import logger
 
 from micro_x_agent_loop.tool import Tool
 
-_MUTATING_TOOL_NAMES = {"write_file", "append_file"}
+_MUTATING_TOOL_NAMES = {"write_file", "append_file", "filesystem__write_file", "filesystem__append_file"}
 
 
 @runtime_checkable

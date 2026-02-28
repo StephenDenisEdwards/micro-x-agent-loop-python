@@ -26,6 +26,49 @@
     { "type": "file", "path": "C:\\Users\\steph\\source\\repos\\resources\\micro-x-agent-loop-logs\\agent.log" }
   ],
   "McpServers": {
+    "filesystem": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\filesystem\\dist\\index.js"],
+      "env": {
+        "FILESYSTEM_WORKING_DIR": "C:\\Users\\steph\\source\\repos\\resources\\documents",
+        "USER_MEMORY_DIR": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\.micro_x\\memory",
+        "USER_MEMORY_MAX_LINES": "200"
+      }
+    },
+    "web": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\web\\dist\\index.js"]
+    },
+    "linkedin": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\linkedin\\dist\\index.js"]
+    },
+    "github": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\github\\dist\\index.js"]
+    },
+    "google": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\google\\dist\\index.js"]
+    },
+    "anthropic-admin": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\anthropic-admin\\dist\\index.js"]
+    },
+    "interview-assist": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\interview-assist\\dist\\index.js"],
+      "env": {
+        "INTERVIEW_ASSIST_REPO": "C:\\Users\\steph\\source\\repos\\interview-assist-2"
+      }
+    },
     "system-info": {
       "transport": "stdio",
       "command": "dotnet",
@@ -35,14 +78,6 @@
       "transport": "stdio",
       "command": "python",
       "args": ["-m", "uv", "--directory", "C:\\Users\\steph\\source\\repos\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
-    },
-    "interview-assist": {
-      "transport": "stdio",
-      "command": "python",
-      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\interview_assist_server.py"],
-      "env": {
-        "INTERVIEW_ASSIST_REPO": "C:\\Users\\steph\\source\\repos\\interview-assist-2"
-      }
     }
   }
 }

@@ -1,0 +1,23 @@
+{
+  "name": "@micro-x/mcp-interview-assist",
+  "version": "0.1.0",
+  "description": "Interview Assist MCP server (analysis + STT tools)",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-interview-assist": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@micro-x/mcp-shared": "*",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

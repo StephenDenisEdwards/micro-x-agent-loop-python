@@ -39,9 +39,6 @@ async def main() -> None:
     await agent.initialize_session()
 
     print(f"micro-x-agent-loop [{app.provider_name}:{app.model}] (type 'exit' to quit, '/help' for commands)")
-    print("Tools:")
-    for t in runtime.builtin_tools:
-        print(f"  - {t.name}")
     if runtime.mcp_tools:
         mcp_names: dict[str, list[str]] = {}
         for t in runtime.mcp_tools:

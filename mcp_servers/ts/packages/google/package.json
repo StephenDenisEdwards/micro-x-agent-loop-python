@@ -1,0 +1,26 @@
+{
+  "name": "@micro-x/mcp-google",
+  "version": "0.1.0",
+  "description": "Google MCP server (Gmail, Calendar, Contacts)",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-google": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@micro-x/mcp-shared": "*",
+    "google-auth-library": "^9.15.0",
+    "googleapis": "^144.0.0",
+    "open": "^10.1.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -13,7 +13,6 @@ from micro_x_agent_loop.memory import CheckpointManager, EventEmitter, MemorySto
 from micro_x_agent_loop.memory.event_sink import AsyncEventSink
 from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.system_prompt import get_system_prompt
-from micro_x_agent_loop.tool_registry import get_all
 
 
 @dataclass
@@ -22,7 +21,6 @@ class AppRuntime:
     mcp_manager: McpManager | None
     memory_store: MemoryStore | None
     event_sink: AsyncEventSink | None
-    builtin_tools: list
     mcp_tools: list
     log_descriptions: list[str]
 
@@ -38,21 +36,11 @@ def _load_user_memory(memory_dir: Path, max_lines: int) -> str:
 async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
     log_descriptions = setup_logging(level=app.log_level, consumers=app.log_consumers)
 
-    tools = get_all(
-        app.working_directory,
-        env.google_client_id,
-        env.google_client_secret,
-        env.anthropic_admin_api_key,
-        env.brave_api_key,
-        env.github_token,
-    )
-
     mcp_manager: McpManager | None = None
-    mcp_tools: list = []
+    tools: list = []
     if app.mcp_server_configs:
         mcp_manager = McpManager(app.mcp_server_configs)
-        mcp_tools = await mcp_manager.connect_all()
-        tools.extend(mcp_tools)
+        tools = await mcp_manager.connect_all()
 
     if app.compaction_strategy_name == "summarize":
         compaction_model = app.compaction_model or app.model
@@ -117,10 +105,6 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
     if app.user_memory_enabled:
         user_memory = _load_user_memory(user_memory_dir, app.user_memory_max_lines)
 
-        from micro_x_agent_loop.tools.save_memory_tool import SaveMemoryTool
-
-        tools.append(SaveMemoryTool(str(user_memory_dir), max_lines=app.user_memory_max_lines))
-
     agent = Agent(
         AgentConfig(
             model=app.model,
@@ -161,7 +145,6 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
         mcp_manager=mcp_manager,
         memory_store=memory_store,
         event_sink=event_sink,
-        builtin_tools=[t for t in tools if t not in mcp_tools],
-        mcp_tools=mcp_tools,
+        mcp_tools=tools,
         log_descriptions=log_descriptions,
     )
