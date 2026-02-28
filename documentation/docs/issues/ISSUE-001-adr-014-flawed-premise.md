@@ -2,7 +2,7 @@
 
 ## Status
 
-Open
+**Resolved** — ADR-014 rewritten and all 11 cross-references corrected in `4ebb728`.
 
 ## Summary
 
@@ -44,13 +44,13 @@ ADR-014 was cross-referenced into 11 documents. All references propagate the fla
 | DESIGN-tool-system.md | Note on MCP tools |
 | Agent loop tool calls | Summary note |
 
-## Required Corrections
+## Corrections Applied
 
-1. **ADR-014** must be rewritten or superseded. The title, context, and framing are wrong. The actual issue is our tool implementation choices, not the MCP protocol.
+1. **ADR-014** rewritten with corrected title ("Tool Results Are Unstructured Text — Design Choice Affecting Compiled Mode") and correction notice referencing this issue.
 
-2. **All 11 cross-references** must be updated to reflect the corrected understanding.
+2. **All 11 cross-references** updated to state that unstructured text is a design choice in our tool implementations, not an MCP protocol limitation.
 
-3. **The actual problem** — that our tools return human-readable text instead of structured JSON — should be documented accurately, either as a corrected ADR-014 or a new ADR.
+3. **The actual problem** — that our tools return human-readable text instead of structured JSON — is now documented accurately in the corrected ADR-014.
 
 ## Root Cause
 
@@ -58,5 +58,6 @@ The error originated from observing that `McpToolProxy.execute()` returns plain 
 
 ## Commits Affected
 
-- `07ce35b` — ADR-014 created
+- `07ce35b` — ADR-014 created (flawed premise)
 - `b8f3406` — 11 documents cross-referenced with flawed premise
+- `4ebb728` — ADR-014 rewritten and all 11 cross-references corrected
