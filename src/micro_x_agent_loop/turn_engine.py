@@ -8,6 +8,7 @@ from loguru import logger
 
 from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.tool import Tool
+from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
 from micro_x_agent_loop.turn_events import TurnEvents
 
 
@@ -30,6 +31,7 @@ class TurnEngine:
         summarization_model: str = "",
         summarization_enabled: bool = False,
         summarization_threshold: int = 4000,
+        formatter: ToolResultFormatter | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -46,6 +48,7 @@ class TurnEngine:
         self._summarization_model = summarization_model
         self._summarization_enabled = summarization_enabled
         self._summarization_threshold = summarization_threshold
+        self._formatter = formatter or ToolResultFormatter()
 
     async def run(
         self,
@@ -148,7 +151,8 @@ class TurnEngine:
                 tool_result = await tool.execute(tool_input)
                 if tool_result.is_error:
                     raise RuntimeError(tool_result.text)
-                result_text = self._truncate_tool_result(tool_result.text, tool_name)
+                formatted = self._formatter.format(tool_name, tool_result.text, tool_result.structured)
+                result_text = self._truncate_tool_result(formatted, tool_name)
                 result_text, was_summarized = await self._summarize_tool_result(result_text, tool_name)
                 t_end = time.monotonic()
                 duration_ms = (t_end - t_start) * 1000

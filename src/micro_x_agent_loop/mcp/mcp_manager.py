@@ -12,6 +12,28 @@ from micro_x_agent_loop.tool import Tool
 _SHUTDOWN_TIMEOUT = 5.0
 
 
+def _build_proxies(server_name: str, tools_result: Any, session: ClientSession) -> list[Tool]:
+    """Build McpToolProxy instances from discovered MCP tools."""
+    proxies: list[Tool] = []
+    for tool in tools_result.tools:
+        is_mutating = bool(getattr(tool.annotations, "destructiveHint", False)) if tool.annotations else False
+        output_schema: dict[str, Any] | None = None
+        if hasattr(tool, "outputSchema") and tool.outputSchema is not None:
+            output_schema = dict(tool.outputSchema)
+        proxies.append(
+            McpToolProxy(
+                server_name=server_name,
+                tool_name=tool.name,
+                tool_description=tool.description,
+                tool_input_schema=tool.inputSchema,
+                session=session,
+                is_mutating=is_mutating,
+                output_schema=output_schema,
+            )
+        )
+    return proxies
+
+
 class _ServerConnection:
     """Holds a running server's session and shutdown control."""
 
@@ -43,17 +65,7 @@ class _ServerConnection:
                 await session.initialize()
                 self.session = session
                 tools_result = await session.list_tools()
-                self.tools = [
-                    McpToolProxy(
-                        server_name=self.name,
-                        tool_name=tool.name,
-                        tool_description=tool.description,
-                        tool_input_schema=tool.inputSchema,
-                        session=session,
-                        is_mutating=bool(getattr(tool.annotations, "destructiveHint", False)) if tool.annotations else False,
-                    )
-                    for tool in tools_result.tools
-                ]
+                self.tools = _build_proxies(self.name, tools_result, session)
                 self._ready.set()
                 await self._shutdown.wait()
 
@@ -63,17 +75,7 @@ class _ServerConnection:
                 await session.initialize()
                 self.session = session
                 tools_result = await session.list_tools()
-                self.tools = [
-                    McpToolProxy(
-                        server_name=self.name,
-                        tool_name=tool.name,
-                        tool_description=tool.description,
-                        tool_input_schema=tool.inputSchema,
-                        session=session,
-                        is_mutating=bool(getattr(tool.annotations, "destructiveHint", False)) if tool.annotations else False,
-                    )
-                    for tool in tools_result.tools
-                ]
+                self.tools = _build_proxies(self.name, tools_result, session)
                 self._ready.set()
                 await self._shutdown.wait()
 
@@ -115,20 +117,23 @@ class McpManager:
         self._connections: list[_ServerConnection] = []
 
     async def connect_all(self) -> list[Tool]:
-        """Connect to all configured MCP servers and return discovered tools."""
-        all_tools: list[Tool] = []
-
+        """Connect to all configured MCP servers in parallel and return discovered tools."""
+        connections: list[_ServerConnection] = []
         for server_name, config in self._server_configs.items():
             conn = _ServerConnection(server_name)
+            connections.append(conn)
             self._connections.append(conn)
+            await conn.start(config)
 
+        # Wait for all servers to become ready in parallel.
+        all_tools: list[Tool] = []
+        for conn in connections:
             try:
-                await conn.start(config)
                 await conn.wait_ready()
                 all_tools.extend(conn.tools)
-                logger.info(f"MCP server '{server_name}': {len(conn.tools)} tool(s) discovered")
+                logger.info(f"MCP server '{conn.name}': {len(conn.tools)} tool(s) discovered")
             except Exception as ex:
-                logger.error(f"Failed to connect to MCP server '{server_name}': {ex}")
+                logger.error(f"Failed to connect to MCP server '{conn.name}': {ex}")
 
         return all_tools
 

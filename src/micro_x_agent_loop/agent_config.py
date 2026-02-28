@@ -36,3 +36,6 @@ class AgentConfig:
     stage2_classification_enabled: bool = False
     stage2_model: str = ""  # empty = use main model
     working_directory: str | None = None
+    # Tool result formatting
+    tool_formatting: dict = field(default_factory=dict)
+    default_format: dict = field(default_factory=lambda: {"format": "json"})

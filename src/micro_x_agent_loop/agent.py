@@ -35,6 +35,7 @@ from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
 from micro_x_agent_loop.tool import Tool
+from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult
 from micro_x_agent_loop.voice_runtime import VoiceRuntime
@@ -118,6 +119,11 @@ class Agent:
             summarization_model = config.tool_result_summarization_model or config.model
             summarization_provider = create_provider(config.provider, config.api_key)
 
+        self._tool_result_formatter = ToolResultFormatter(
+            tool_formatting=config.tool_formatting,
+            default_format=config.default_format,
+        )
+
         self._turn_engine = TurnEngine(
             provider=self._provider,
             model=self._model,
@@ -134,6 +140,7 @@ class Agent:
             summarization_model=summarization_model,
             summarization_enabled=config.tool_result_summarization_enabled,
             summarization_threshold=config.tool_result_summarization_threshold,
+            formatter=self._tool_result_formatter,
         )
 
         self._command_router = CommandRouter(

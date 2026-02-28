@@ -20,6 +20,7 @@ class McpToolProxy:
         session: ClientSession,
         *,
         is_mutating: bool = False,
+        output_schema: dict[str, Any] | None = None,
     ):
         self._server_name = server_name
         self._tool_name = tool_name
@@ -27,6 +28,7 @@ class McpToolProxy:
         self._input_schema = tool_input_schema
         self._session = session
         self._is_mutating = is_mutating
+        self._output_schema = output_schema
 
     @property
     def name(self) -> str:
@@ -43,6 +45,10 @@ class McpToolProxy:
     @property
     def is_mutating(self) -> bool:
         return self._is_mutating
+
+    @property
+    def output_schema(self) -> dict[str, Any] | None:
+        return self._output_schema
 
     def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]:
         return []

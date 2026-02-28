@@ -137,6 +137,8 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
             stage2_classification_enabled=app.stage2_classification_enabled,
             stage2_model=app.stage2_model,
             working_directory=app.working_directory,
+            tool_formatting=app.tool_formatting,
+            default_format=app.default_format,
         )
     )
 
