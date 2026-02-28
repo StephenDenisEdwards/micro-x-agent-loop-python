@@ -171,3 +171,5 @@ class McpToolProxy:
 ## Summary
 
 The agent loop uses a single tool execution path for both built-in and MCP tools. MCP servers are connected at startup, their tools are wrapped in `McpToolProxy`, and those proxies are merged into the same tool map. During each turn, the provider returns `tool_use` blocks, the turn engine executes them in parallel via `Tool.execute(...)`, and results are appended back into the conversation.
+
+**Note:** All tool results — both built-in and MCP — are returned as unstructured text strings. For MCP tools, this is inherent to the protocol (`TextContent` blocks). This design works for prompt mode (the LLM interprets text naturally) but constrains compiled mode, where generated code needs structured data for programmatic processing. See [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).

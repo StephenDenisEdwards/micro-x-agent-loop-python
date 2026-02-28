@@ -289,4 +289,4 @@ Enable prompt caching, use Haiku for compaction. Both are low effort with immedi
 Reduce tool result sizes, use real token counts for compaction triggers, tighten output verbosity. Requires per-tool analysis using `tool_execution` metrics from Phase 0.
 
 **Phase 3 — Architecture (Levers 5, 6, 7):**
-Per-turn model routing and sub-agent delegation. Higher effort but unlocks the largest long-term savings. Depends on gateway architecture.
+Per-turn model routing and sub-agent delegation. Higher effort but unlocks the largest long-term savings. Depends on gateway architecture. Note: compiled mode execution (the most significant cost reduction for batch tasks) is constrained by [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) — MCP servers return unstructured text, which limits deterministic programmatic processing.

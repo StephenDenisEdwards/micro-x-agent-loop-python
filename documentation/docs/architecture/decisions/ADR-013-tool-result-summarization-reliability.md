@@ -67,6 +67,10 @@ The honest architecture for a general assistant is: **reliable tools for reliabl
 - Cost reduction for tool-heavy workflows is limited to the other four layers (prompt caching, cheaper compaction model, smart compaction trigger, concise output)
 - Workflows that process many large tool results will consume more tokens per session
 
+**Related:**
+
+- [ADR-014](ADR-014-mcp-unstructured-data-constraint.md) shows this problem is even more fundamental than tool result summarization: MCP servers return unstructured text by protocol design, which constrains compiled mode's ability to process data programmatically — not just the agent's ability to summarize it.
+
 **Open questions:**
 
 - Whether a hybrid approach could work: summarize old tool results during compaction (when they're already stale) but never summarize the current turn's results. This preserves data when it matters most (the turn it arrives) while still reducing context growth over time.

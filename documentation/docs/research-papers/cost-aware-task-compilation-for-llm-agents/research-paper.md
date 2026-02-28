@@ -172,6 +172,7 @@ The approach introduces complexity:
 - Code generation requires sandboxing.
 - DSL design may introduce brittleness.
 - System architecture becomes more layered.
+- **MCP protocol constraint:** MCP servers return unstructured text content blocks by specification. Generated programs cannot assume structured (JSON) inputs from MCP tool calls, which limits deterministic programmatic processing. This may require per-item LLM interpretation within the compiled pipeline, changing the cost model from "zero LLM cost for execution" to "N small LLM calls." See [ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).
 
 However, these are engineering trade-offs rather than conceptual weaknesses.
 

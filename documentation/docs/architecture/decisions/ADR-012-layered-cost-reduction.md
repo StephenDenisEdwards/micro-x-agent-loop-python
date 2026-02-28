@@ -118,6 +118,10 @@ Each instance is independent: separate API client, separate retry state, no shar
 - **Cost break-even for summarization.** If tool results are rarely above threshold, summarization calls add cost without savings. The 4,000-char default ensures only genuinely large results are summarized.
 - **Prompt caching invalidation.** Any change to system prompt text or tool schemas invalidates the cache. Features that modify the system prompt (concise output, user memory) should be set once per session, not toggled mid-conversation.
 
+**Related:**
+
+- [ADR-014](ADR-014-mcp-unstructured-data-constraint.md) identifies a deeper constraint: MCP servers return unstructured text by protocol design, which limits both tool result processing (this ADR's Layer 3) and the compiled mode execution model that would bypass these cost layers entirely.
+
 **Future layers (Phase 3):**
 
 - Per-turn model routing — route simple turns to Haiku

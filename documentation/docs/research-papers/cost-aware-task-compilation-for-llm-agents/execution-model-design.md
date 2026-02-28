@@ -83,8 +83,9 @@ The LLM writes a program, but programs against a known set of capabilities expos
 - MCP servers must be callable from generated code, not just from the agent loop. This may require an SDK or client library accessible from the sandbox.
 - Error handling in generated code may be naive — network failures, rate limits, malformed responses.
 - Sandboxing must be robust enough to run generated code that makes real external calls (Gmail, LinkedIn).
+- **MCP servers return unstructured text content blocks, not structured JSON.** The description above assumes the generated code can "fetch data via MCP, transform/score/validate in code" — but the data it receives is human-readable text, not typed records. The code cannot reliably parse this into structured data without per-item LLM interpretation. This is a protocol-level constraint, not a per-server issue. See [ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).
 
-**Verdict:** The most promising direction. Combines general-purpose flexibility with meaningful guardrails from the MCP server contracts.
+**Verdict:** The most promising direction. Combines general-purpose flexibility with meaningful guardrails from the MCP server contracts. However, the MCP unstructured text constraint ([ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md)) must be resolved before this model can deliver fully deterministic execution.
 
 ---
 

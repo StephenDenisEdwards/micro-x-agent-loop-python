@@ -47,5 +47,5 @@ What to work on next, in order. Rationale: cost reduction is the top priority �
 | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | |
 | [Cross-Session User Memory](PLAN-cross-session-user-memory.md) | Completed | All phases done: read path, save_memory tool, /memory commands |
 | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools via config-declared path params |
-| [Mode Selection — LLM Classification](PLAN-mode-selection-llm-classification.md) | Completed | Phase 2: Stage 2 LLM classification for ambiguous cases |
+| [Mode Selection — LLM Classification](PLAN-mode-selection-llm-classification.md) | Completed | Phase 2 complete. Phase 4 blocked by [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) (MCP unstructured data) |
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Server/gateway architecture migration |

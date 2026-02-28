@@ -287,6 +287,7 @@ This approach introduces trade-offs:
 - DSL design may introduce brittleness.
 - System complexity increases.
 - Mode selection policy must remain simple and deterministic.
+- **MCP protocol constraint:** The data sources accessed via MCP servers return unstructured text content blocks, not structured JSON. The per-item semantic extraction described in Section 6.2 Phase 1 requires LLM calls to interpret this text into structured records. This is acknowledged in the design (line 184: "interpreting messy email HTML") but the constraint is deeper than anticipated — it is inherent to the MCP specification and applies to all third-party MCP servers, not just email. See [ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) for the full analysis.
 
 However, these risks are engineering challenges, not conceptual flaws.
 
