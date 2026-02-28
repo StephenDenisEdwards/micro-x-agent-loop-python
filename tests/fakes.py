@@ -106,6 +106,31 @@ class FakeTool:
         return self._execute_result
 
 
+class FakeMcpTool(FakeTool):
+    """FakeTool with output_schema, simulating an McpToolProxy."""
+
+    def __init__(
+        self,
+        *,
+        name: str = "server__tool",
+        description: str = "mcp tool",
+        input_schema: dict[str, Any] | None = None,
+        output_schema: dict[str, Any] | None = None,
+        is_mutating: bool = False,
+    ):
+        super().__init__(
+            name=name,
+            description=description,
+            input_schema=input_schema,
+            is_mutating=is_mutating,
+        )
+        self._output_schema = output_schema
+
+    @property
+    def output_schema(self) -> dict[str, Any] | None:
+        return self._output_schema
+
+
 # ---------------------------------------------------------------------------
 # Provider fake
 # ---------------------------------------------------------------------------

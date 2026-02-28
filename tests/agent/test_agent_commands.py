@@ -8,7 +8,7 @@ from unittest.mock import patch
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.usage import UsageResult
-from tests.fakes import FakeEventEmitter, FakeTool
+from tests.fakes import FakeEventEmitter, FakeMcpTool, FakeTool
 
 
 class _SessionManagerFake:
@@ -240,6 +240,136 @@ class AgentCommandTests(unittest.TestCase):
         self.assertIn("Session Cost Summary", out)
         self.assertIn("Total API calls:", out)
         self.assertIn("Total cost:", out)
+
+
+class ToolCommandTests(unittest.TestCase):
+    """Tests for the /tool introspection command."""
+
+    def _make_agent(
+        self,
+        tools: list | None = None,
+        tool_formatting: dict | None = None,
+        default_format: dict | None = None,
+    ) -> Agent:
+        if tools is None:
+            tools = [
+                FakeMcpTool(
+                    name="filesystem__bash",
+                    description="Run a shell command",
+                    input_schema={"type": "object", "properties": {"cmd": {"type": "string"}}},
+                    output_schema={"type": "object", "properties": {"stdout": {"type": "string"}}},
+                    is_mutating=True,
+                ),
+                FakeMcpTool(
+                    name="filesystem__read_file",
+                    description="Read a file",
+                    input_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+                    is_mutating=False,
+                ),
+                FakeMcpTool(
+                    name="git__bash",
+                    description="Run git bash",
+                    input_schema={"type": "object"},
+                    is_mutating=True,
+                ),
+            ]
+        kwargs = {}
+        if tool_formatting is not None:
+            kwargs["tool_formatting"] = tool_formatting
+        if default_format is not None:
+            kwargs["default_format"] = default_format
+        return Agent(AgentConfig(api_key="test", tools=tools, **kwargs))
+
+    def _run(self, agent: Agent, command: str) -> str:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            asyncio.run(agent._handle_local_command(command))
+        return buf.getvalue()
+
+    # -- /tool (list) --
+
+    def test_tool_list_groups_by_server(self) -> None:
+        out = self._run(self._make_agent(), "/tool")
+        self.assertIn("[filesystem]", out)
+        self.assertIn("[git]", out)
+        self.assertIn("bash", out)
+        self.assertIn("read_file", out)
+
+    def test_tool_list_empty(self) -> None:
+        out = self._run(self._make_agent(tools=[]), "/tool")
+        self.assertIn("No tools loaded", out)
+
+    def test_tool_list_builtin_group(self) -> None:
+        out = self._run(self._make_agent(tools=[FakeTool(name="noop")]), "/tool")
+        self.assertIn("(built-in)", out)
+        self.assertIn("noop", out)
+
+    # -- /tool <name> (details) --
+
+    def test_tool_details_by_full_name(self) -> None:
+        out = self._run(self._make_agent(), "/tool filesystem__bash")
+        self.assertIn("Name: filesystem__bash", out)
+        self.assertIn("Description: Run a shell command", out)
+        self.assertIn("Mutating: True", out)
+
+    def test_tool_details_by_short_name(self) -> None:
+        out = self._run(self._make_agent(), "/tool read_file")
+        self.assertIn("Name: filesystem__read_file", out)
+        self.assertIn("Description: Read a file", out)
+        self.assertIn("Mutating: False", out)
+
+    def test_tool_not_found(self) -> None:
+        out = self._run(self._make_agent(), "/tool nonexistent")
+        self.assertIn("Tool not found: nonexistent", out)
+
+    def test_tool_ambiguous_short_name(self) -> None:
+        out = self._run(self._make_agent(), "/tool bash")
+        self.assertIn("Ambiguous tool name 'bash'", out)
+        self.assertIn("filesystem__bash", out)
+        self.assertIn("git__bash", out)
+
+    # -- /tool <name> schema --
+
+    def test_tool_schema_shows_input_and_output(self) -> None:
+        out = self._run(self._make_agent(), "/tool filesystem__bash schema")
+        self.assertIn("Input schema:", out)
+        self.assertIn('"cmd"', out)
+        self.assertIn("Output schema:", out)
+        self.assertIn('"stdout"', out)
+
+    def test_tool_schema_no_output_schema(self) -> None:
+        out = self._run(self._make_agent(), "/tool read_file schema")
+        self.assertIn("Input schema:", out)
+        self.assertNotIn("Output schema:", out)
+
+    # -- /tool <name> config --
+
+    def test_tool_config_shows_specific(self) -> None:
+        formatting = {"filesystem__bash": {"format": "text", "field": "stdout"}}
+        agent = self._make_agent(tool_formatting=formatting)
+        out = self._run(agent, "/tool filesystem__bash config")
+        self.assertIn("ToolFormatting config for filesystem__bash:", out)
+        self.assertIn('"format": "text"', out)
+        self.assertNotIn("using default", out)
+
+    def test_tool_config_shows_default(self) -> None:
+        agent = self._make_agent()
+        out = self._run(agent, "/tool filesystem__bash config")
+        self.assertIn("(using default)", out)
+        self.assertIn('"format": "json"', out)
+
+    # -- /help includes /tool --
+
+    def test_help_includes_tool_commands(self) -> None:
+        agent = self._make_agent()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            asyncio.run(agent._handle_local_command("/help"))
+        out = buf.getvalue()
+        self.assertIn("/tool", out)
+        self.assertIn("/tool <name>", out)
+        self.assertIn("/tool <name> schema", out)
+        self.assertIn("/tool <name> config", out)
 
 
 if __name__ == "__main__":

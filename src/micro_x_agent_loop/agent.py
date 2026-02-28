@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import subprocess
@@ -151,6 +152,7 @@ class Agent:
             on_voice=self._handle_voice_command,
             on_cost=self._handle_cost_command,
             on_memory=self._handle_memory_command,
+            on_tool=self._handle_tool_command,
             on_unknown=self._on_unknown_command,
         )
 
@@ -368,6 +370,10 @@ class Agent:
         print(f"{self._LINE_PREFIX}- /voice devices")
         print(f"{self._LINE_PREFIX}- /voice events [limit]")
         print(f"{self._LINE_PREFIX}- /voice stop")
+        print(f"{self._LINE_PREFIX}- /tool")
+        print(f"{self._LINE_PREFIX}- /tool <name>")
+        print(f"{self._LINE_PREFIX}- /tool <name> schema")
+        print(f"{self._LINE_PREFIX}- /tool <name> config")
         if self._user_memory_enabled:
             print(f"{self._LINE_PREFIX}- /memory")
             print(f"{self._LINE_PREFIX}- /memory list")
@@ -465,6 +471,89 @@ class Agent:
                 return
 
         print(f"{self._LINE_PREFIX}Usage: /memory | /memory list | /memory edit | /memory reset")
+
+    # -- /tool command --
+
+    async def _handle_tool_command(self, command: str) -> None:
+        parts = command.split()
+        if len(parts) == 1:
+            self._print_tool_list()
+            return
+        name_arg = parts[1]
+        tool = self._resolve_tool_name(name_arg)
+        if tool is None:
+            return
+        if len(parts) == 2:
+            self._print_tool_details(tool)
+            return
+        sub = parts[2].lower()
+        if sub == "schema":
+            self._print_tool_schema(tool)
+            return
+        if sub == "config":
+            self._print_tool_config(tool)
+            return
+        print(
+            f"{self._LINE_PREFIX}Usage: /tool | /tool <name> | "
+            "/tool <name> schema | /tool <name> config"
+        )
+
+    def _resolve_tool_name(self, name_arg: str) -> Tool | None:
+        # Exact match first
+        if name_arg in self._tool_map:
+            return self._tool_map[name_arg]
+        # Short-name match: name_arg matches the part after "__"
+        matches = [
+            t for t in self._tool_map.values()
+            if "__" in t.name and t.name.split("__", 1)[1] == name_arg
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            print(f"{self._LINE_PREFIX}Ambiguous tool name '{name_arg}'. Matches:")
+            for t in sorted(matches, key=lambda t: t.name):
+                print(f"{self._LINE_PREFIX}  - {t.name}")
+            return None
+        print(f"{self._LINE_PREFIX}Tool not found: {name_arg}")
+        return None
+
+    def _print_tool_list(self) -> None:
+        if not self._tool_map:
+            print(f"{self._LINE_PREFIX}No tools loaded.")
+            return
+        # Group by server prefix
+        groups: dict[str, list[str]] = {}
+        for name in sorted(self._tool_map):
+            if "__" in name:
+                server, short = name.split("__", 1)
+            else:
+                server, short = "(built-in)", name
+            groups.setdefault(server, []).append(short)
+        for server in sorted(groups):
+            print(f"{self._LINE_PREFIX}[{server}]")
+            for short in sorted(groups[server]):
+                print(f"{self._LINE_PREFIX}  - {short}")
+
+    def _print_tool_details(self, tool: Tool) -> None:
+        print(f"{self._LINE_PREFIX}Name: {tool.name}")
+        print(f"{self._LINE_PREFIX}Description: {tool.description}")
+        print(f"{self._LINE_PREFIX}Mutating: {tool.is_mutating}")
+
+    def _print_tool_schema(self, tool: Tool) -> None:
+        print(f"{self._LINE_PREFIX}Input schema:")
+        print(json.dumps(tool.input_schema, indent=2))
+        if hasattr(tool, "output_schema") and tool.output_schema is not None:
+            print(f"{self._LINE_PREFIX}Output schema:")
+            print(json.dumps(tool.output_schema, indent=2))
+
+    def _print_tool_config(self, tool: Tool) -> None:
+        fmt = self._tool_result_formatter._tool_formatting.get(tool.name)
+        if fmt is not None:
+            print(f"{self._LINE_PREFIX}ToolFormatting config for {tool.name}:")
+            print(json.dumps(fmt, indent=2))
+        else:
+            print(f"{self._LINE_PREFIX}ToolFormatting config for {tool.name} (using default):")
+            print(json.dumps(self._tool_result_formatter._default_format, indent=2))
 
     async def _handle_session_command(self, command: str) -> None:
         sm = self._memory.session_manager
