@@ -182,6 +182,14 @@ export function registerGmailRead(
         );
 
         return {
+          structuredContent: {
+            messageId: input.messageId,
+            from: fromAddr,
+            to: toAddr,
+            date,
+            subject,
+            body,
+          },
           content: [{ type: "text" as const, text }],
         };
       } catch (err: unknown) {

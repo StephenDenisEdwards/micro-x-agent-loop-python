@@ -63,7 +63,8 @@ export function registerGmailSearch(
           };
         }
 
-        const results: string[] = [];
+        const structured: Array<{ id: string; date: string; from: string; subject: string; snippet: string }> = [];
+        const textLines: string[] = [];
         for (const msg of messages) {
           if (!msg.id) continue;
 
@@ -80,7 +81,8 @@ export function registerGmailSearch(
           const date = getHeader(headers, "Date");
           const snippet = detail.data.snippet ?? "";
 
-          results.push(
+          structured.push({ id: msg.id, date, from: fromAddr, subject, snippet });
+          textLines.push(
             `ID: ${msg.id}\n` +
             `  Date: ${date}\n` +
             `  From: ${fromAddr}\n` +
@@ -89,14 +91,15 @@ export function registerGmailSearch(
           );
         }
 
-        const text = results.join("\n\n");
+        const text = textLines.join("\n\n");
         const durationMs = Date.now() - startTime;
         logger.info(
-          { tool: "gmail_search", request_id: requestId, duration_ms: durationMs, outcome: "success", count: results.length },
+          { tool: "gmail_search", request_id: requestId, duration_ms: durationMs, outcome: "success", count: structured.length },
           "tool_call_end",
         );
 
         return {
+          structuredContent: { messages: structured, total_found: structured.length },
           content: [{ type: "text" as const, text }],
         };
       } catch (err: unknown) {
