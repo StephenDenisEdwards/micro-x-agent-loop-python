@@ -10,6 +10,7 @@ from pathlib import Path
 from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig
+from micro_x_agent_loop.api_payload_store import ApiPayloadStore
 from micro_x_agent_loop.mode_selector import (
     ModeAnalysis,
     RecommendedMode,
@@ -125,6 +126,8 @@ class Agent:
             default_format=config.default_format,
         )
 
+        self._api_payload_store = ApiPayloadStore()
+
         self._turn_engine = TurnEngine(
             provider=self._provider,
             model=self._model,
@@ -142,6 +145,7 @@ class Agent:
             summarization_enabled=config.tool_result_summarization_enabled,
             summarization_threshold=config.tool_result_summarization_threshold,
             formatter=self._tool_result_formatter,
+            api_payload_store=self._api_payload_store,
         )
 
         self._command_router = CommandRouter(
@@ -153,6 +157,7 @@ class Agent:
             on_cost=self._handle_cost_command,
             on_memory=self._handle_memory_command,
             on_tool=self._handle_tool_command,
+            on_debug=self._handle_debug_command,
             on_unknown=self._on_unknown_command,
         )
 
@@ -374,6 +379,7 @@ class Agent:
         print(f"{self._LINE_PREFIX}- /tool <name>")
         print(f"{self._LINE_PREFIX}- /tool <name> schema")
         print(f"{self._LINE_PREFIX}- /tool <name> config")
+        print(f"{self._LINE_PREFIX}- /debug show-api-payload [N]")
         if self._user_memory_enabled:
             print(f"{self._LINE_PREFIX}- /memory")
             print(f"{self._LINE_PREFIX}- /memory list")
@@ -554,6 +560,92 @@ class Agent:
         else:
             print(f"{self._LINE_PREFIX}ToolFormatting config for {tool.name} (using default):")
             print(json.dumps(self._tool_result_formatter._default_format, indent=2))
+
+    # -- /debug command --
+
+    async def _handle_debug_command(self, command: str) -> None:
+        parts = command.split()
+        if len(parts) >= 2 and parts[1] == "show-api-payload":
+            index = 0
+            if len(parts) >= 3:
+                try:
+                    index = int(parts[2])
+                except ValueError:
+                    print(f"{self._LINE_PREFIX}Usage: /debug show-api-payload [N]")
+                    return
+            self._print_api_payload(index)
+            return
+        print(f"{self._LINE_PREFIX}Usage: /debug show-api-payload [N]")
+
+    def _print_api_payload(self, index: int) -> None:
+        from datetime import datetime
+
+        payload = self._api_payload_store.get(index)
+        if payload is None:
+            if len(self._api_payload_store) == 0:
+                print(f"{self._LINE_PREFIX}No API payloads recorded yet.")
+            else:
+                print(
+                    f"{self._LINE_PREFIX}Payload index {index} out of range "
+                    f"(0..{len(self._api_payload_store) - 1})."
+                )
+            return
+
+        ts = datetime.fromtimestamp(payload.timestamp).strftime("%Y-%m-%d %H:%M:%S")
+
+        # Extract last user message text (skip tool_result messages)
+        last_user_msg = ""
+        for msg in reversed(payload.messages):
+            if msg.get("role") != "user":
+                continue
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                last_user_msg = content
+                break
+            if isinstance(content, list):
+                # Tool results are list[dict] with type=tool_result; skip those
+                if any(b.get("type") == "tool_result" for b in content if isinstance(b, dict)):
+                    continue
+                texts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+                last_user_msg = " ".join(texts)
+                break
+
+        # Extract response text (or tool names if pure tool_use)
+        response_text = ""
+        if payload.response_message:
+            resp_content = payload.response_message.get("content", [])
+            if isinstance(resp_content, str):
+                response_text = resp_content
+            elif isinstance(resp_content, list):
+                texts = [b.get("text", "") for b in resp_content if isinstance(b, dict) and b.get("type") == "text"]
+                tool_names = [b.get("name", "") for b in resp_content if isinstance(b, dict) and b.get("type") == "tool_use"]
+                if texts:
+                    response_text = " ".join(texts)
+                if tool_names:
+                    tool_label = "tool_use: " + ", ".join(tool_names)
+                    response_text = f"{response_text}  [{tool_label}]" if response_text else f"[{tool_label}]"
+
+        # Usage info
+        usage_str = "n/a"
+        if payload.usage:
+            u = payload.usage
+            usage_str = f"in={u.input_tokens} out={u.output_tokens}"
+            if u.cache_read_input_tokens:
+                usage_str += f" cache_read={u.cache_read_input_tokens}"
+            if u.cache_creation_input_tokens:
+                usage_str += f" cache_create={u.cache_creation_input_tokens}"
+
+        p = self._LINE_PREFIX
+        print(f"{p}API Payload #{index} (most recent):" if index == 0 else f"{p}API Payload #{index}:")
+        print(f"{p}  Timestamp:    {ts}")
+        print(f"{p}  Model:        {payload.model}")
+        print(f"{p}  System prompt: {payload.system_prompt[:80]}... ({len(payload.system_prompt)} chars)")
+        print(f"{p}  Messages:     {len(payload.messages)}")
+        print(f"{p}  Last user msg: {last_user_msg[:80]}")
+        print(f"{p}  Tools:        {payload.tools_count}")
+        print(f"{p}  Stop reason:  {payload.stop_reason}")
+        print(f"{p}  Response:     {response_text[:80]}... ({len(response_text)} chars)")
+        print(f"{p}  Usage:        {usage_str}")
 
     async def _handle_session_command(self, command: str) -> None:
         sm = self._memory.session_manager

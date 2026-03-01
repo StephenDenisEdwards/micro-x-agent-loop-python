@@ -372,5 +372,130 @@ class ToolCommandTests(unittest.TestCase):
         self.assertIn("/tool <name> config", out)
 
 
+class DebugCommandTests(unittest.TestCase):
+    """Tests for the /debug command."""
+
+    def _make_agent(self) -> Agent:
+        return Agent(AgentConfig(api_key="test", tools=[FakeTool()]))
+
+    def _run(self, agent: Agent, command: str) -> str:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            asyncio.run(agent._handle_local_command(command))
+        return buf.getvalue()
+
+    def test_debug_no_payloads(self) -> None:
+        out = self._run(self._make_agent(), "/debug show-api-payload")
+        self.assertIn("No API payloads recorded yet", out)
+
+    def test_debug_show_payload(self) -> None:
+        import time
+        from micro_x_agent_loop.api_payload_store import ApiPayload
+
+        agent = self._make_agent()
+        agent._api_payload_store.record(ApiPayload(
+            timestamp=time.time(),
+            model="claude-haiku-4-5-20251001",
+            system_prompt="You are a helpful assistant.",
+            messages=[
+                {"role": "user", "content": "list files"},
+            ],
+            tools_count=59,
+            response_message={
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Let me list the files."}],
+            },
+            stop_reason="tool_use",
+            usage=UsageResult(
+                input_tokens=24417, output_tokens=68,
+                cache_read_input_tokens=11993,
+            ),
+        ))
+        out = self._run(agent, "/debug show-api-payload")
+        self.assertIn("API Payload #0 (most recent):", out)
+        self.assertIn("claude-haiku-4-5-20251001", out)
+        self.assertIn("Messages:     1", out)
+        self.assertIn("Tools:        59", out)
+        self.assertIn("tool_use", out)
+        self.assertIn("in=24417", out)
+        self.assertIn("cache_read=11993", out)
+        self.assertIn("list files", out)
+
+    def test_debug_skips_tool_result_for_last_user_msg(self) -> None:
+        import time
+        from micro_x_agent_loop.api_payload_store import ApiPayload
+
+        agent = self._make_agent()
+        agent._api_payload_store.record(ApiPayload(
+            timestamp=time.time(),
+            model="m",
+            system_prompt="sys",
+            messages=[
+                {"role": "user", "content": "list files"},
+                {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "bash", "input": {}}]},
+                {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "file1.txt"}]},
+            ],
+            tools_count=5,
+            response_message={"role": "assistant", "content": [{"type": "text", "text": "Done."}]},
+            stop_reason="end_turn",
+            usage=UsageResult(input_tokens=100, output_tokens=10),
+        ))
+        out = self._run(agent, "/debug show-api-payload")
+        # Should show the original user message, not the tool_result
+        self.assertIn("list files", out)
+
+    def test_debug_shows_tool_names_in_response(self) -> None:
+        import time
+        from micro_x_agent_loop.api_payload_store import ApiPayload
+
+        agent = self._make_agent()
+        agent._api_payload_store.record(ApiPayload(
+            timestamp=time.time(),
+            model="m",
+            system_prompt="sys",
+            messages=[{"role": "user", "content": "read a.py"}],
+            tools_count=5,
+            response_message={
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "t1", "name": "read_file", "input": {"path": "a.py"}}],
+            },
+            stop_reason="tool_use",
+            usage=UsageResult(input_tokens=100, output_tokens=10),
+        ))
+        out = self._run(agent, "/debug show-api-payload")
+        self.assertIn("tool_use: read_file", out)
+
+    def test_debug_show_payload_out_of_range(self) -> None:
+        import time
+        from micro_x_agent_loop.api_payload_store import ApiPayload
+
+        agent = self._make_agent()
+        agent._api_payload_store.record(ApiPayload(
+            timestamp=time.time(),
+            model="m",
+            system_prompt="sys",
+            messages=[],
+            tools_count=0,
+            response_message=None,
+            stop_reason="end_turn",
+            usage=None,
+        ))
+        out = self._run(agent, "/debug show-api-payload 5")
+        self.assertIn("out of range", out)
+
+    def test_debug_usage_message(self) -> None:
+        out = self._run(self._make_agent(), "/debug")
+        self.assertIn("Usage:", out)
+        self.assertIn("show-api-payload", out)
+
+    def test_help_includes_debug_command(self) -> None:
+        agent = self._make_agent()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            asyncio.run(agent._handle_local_command("/help"))
+        out = buf.getvalue()
+        self.assertIn("/debug show-api-payload", out)
+
+
 if __name__ == "__main__":
     unittest.main()

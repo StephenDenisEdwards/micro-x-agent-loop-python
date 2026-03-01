@@ -15,6 +15,7 @@ class CommandRouter:
         on_cost: Callable[[str], Awaitable[None]],
         on_memory: Callable[[str], Awaitable[None]],
         on_tool: Callable[[str], Awaitable[None]],
+        on_debug: Callable[[str], Awaitable[None]],
         on_unknown: Callable[[str], None],
     ) -> None:
         self._on_help = on_help
@@ -25,6 +26,7 @@ class CommandRouter:
         self._on_cost = on_cost
         self._on_memory = on_memory
         self._on_tool = on_tool
+        self._on_debug = on_debug
         self._on_unknown = on_unknown
 
     async def try_handle(self, user_message: str) -> bool:
@@ -55,6 +57,9 @@ class CommandRouter:
             return True
         if trimmed.startswith("/tool"):
             await self._on_tool(trimmed)
+            return True
+        if trimmed.startswith("/debug"):
+            await self._on_debug(trimmed)
             return True
 
         self._on_unknown(trimmed)

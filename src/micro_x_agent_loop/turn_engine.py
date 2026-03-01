@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from typing import Any
 
 from loguru import logger
 
+from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
 from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.system_prompt import resolve_system_prompt
 from micro_x_agent_loop.tool import Tool
@@ -33,6 +35,7 @@ class TurnEngine:
         summarization_enabled: bool = False,
         summarization_threshold: int = 4000,
         formatter: ToolResultFormatter | None = None,
+        api_payload_store: ApiPayloadStore | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -50,6 +53,7 @@ class TurnEngine:
         self._summarization_enabled = summarization_enabled
         self._summarization_threshold = summarization_threshold
         self._formatter = formatter or ToolResultFormatter()
+        self._api_payload_store = api_payload_store
 
     async def run(
         self,
@@ -77,6 +81,11 @@ class TurnEngine:
             )
 
             self._events.on_api_call_completed(usage, "main")
+
+            if self._api_payload_store is not None:
+                self._record_api_payload(
+                    system_prompt, messages, message, stop_reason, usage,
+                )
 
             last_assistant_message_id = self._events.on_append_message("assistant", message["content"])
 
@@ -247,3 +256,44 @@ class TurnEngine:
             f"to {self._max_tool_result_chars:,} chars"
         )
         return truncated + message
+
+    def _record_api_payload(
+        self,
+        system_prompt: str,
+        messages: list[dict],
+        response_message: dict,
+        stop_reason: str,
+        usage: Any,
+    ) -> None:
+        payload = ApiPayload(
+            timestamp=time.time(),
+            model=self._model,
+            system_prompt=system_prompt,
+            messages=list(messages),
+            tools_count=len(self._converted_tools),
+            response_message=response_message,
+            stop_reason=stop_reason,
+            usage=usage,
+        )
+        self._api_payload_store.record(payload)
+        try:
+            log_data = {
+                "timestamp": payload.timestamp,
+                "model": payload.model,
+                "system_prompt_chars": len(payload.system_prompt),
+                "messages_count": len(payload.messages),
+                "tools_count": payload.tools_count,
+                "stop_reason": payload.stop_reason,
+                "response_message": payload.response_message,
+                "usage": {
+                    "input_tokens": usage.input_tokens if usage else 0,
+                    "output_tokens": usage.output_tokens if usage else 0,
+                    "cache_read_input_tokens": usage.cache_read_input_tokens if usage else 0,
+                    "cache_creation_input_tokens": usage.cache_creation_input_tokens if usage else 0,
+                },
+                "system_prompt": payload.system_prompt,
+                "messages": payload.messages,
+            }
+            logger.bind(api_payload=True).debug(json.dumps(log_data, default=str))
+        except Exception:
+            pass

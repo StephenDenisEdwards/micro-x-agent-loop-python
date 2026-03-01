@@ -67,10 +67,30 @@ class MetricsLogConsumer:
         return f"metrics ({self._path})"
 
 
+class ApiPayloadLogConsumer:
+    def __init__(self, path: str = "api_payloads.jsonl"):
+        self._path = path
+
+    def register(self, level: str) -> None:
+        Path(self._path).parent.mkdir(parents=True, exist_ok=True)
+        logger.add(
+            self._path,
+            level="DEBUG",
+            filter=lambda record: record["extra"].get("api_payload"),
+            format="{message}",
+            rotation="10 MB",
+            retention=3,
+        )
+
+    def describe(self, level: str) -> str:
+        return f"api_payload ({self._path})"
+
+
 _CONSUMER_TYPES: dict[str, type] = {
     "console": ConsoleLogConsumer,
     "file": FileLogConsumer,
     "metrics": MetricsLogConsumer,
+    "api_payload": ApiPayloadLogConsumer,
 }
 
 _DEFAULT_CONSUMERS = [
