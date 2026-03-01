@@ -6,10 +6,26 @@ Adapt `tools/template/` into a console app that produces the same output as the 
 
 1. **Copy first, then code.** Your FIRST action must be `cp -r tools/template tools/<task_name>`. NEVER modify files in `tools/template/` or any other existing directory. All new code goes in the copy only.
 2. **No LLM API calls unless you can prove Python can't do it.** Scoring, ranking, filtering, counting, formatting, report generation — all Python. The LLM is only for irreducible natural language generation (synthesising unstructured free-text into prose that no template can produce). If you must use one, exactly one Haiku call. Justify it in a code comment.
-3. **No documentation.** No README, no docstrings beyond one-liners, no comments explaining obvious code, no type stubs, no changelog. Just working code.
+3. **No documentation.** Do not create README, IMPLEMENTATION, QUICKSTART, SUMMARY, or any other non-code files. No docstrings beyond one-liners. No comments explaining obvious code. Only create `.py` files.
 4. **Only connect MCP servers the task actually uses.**
 5. **Use relative imports.** All imports between modules in your package must use relative imports (`from .scorer import ...`, not `from scorer import ...`). The app runs as `python -m tools.<task_name>` which requires this.
-6. **Verify it runs.** After writing all files, run `python -m tools.<task_name>` and fix any errors before finishing.
+6. **Do not run the app.** Just write the code. The user will test it.
+7. **Do not explore the codebase.** Everything you need is in `tools/template/` (already copied) and this prompt. Read only the files in your copy. Do not search, grep, or browse any other directory.
+
+## Exact Steps
+
+1. `cp -r tools/template tools/<task_name>`
+2. Read the user prompt below. Decide which MCP tools you need and what Python logic to write.
+3. Create these files in `tools/<task_name>/` (only the ones you need):
+   - `collector.py` — async functions that call MCP tools and return lists of dicts
+   - `scorer.py` — pure Python scoring/ranking functions (no MCP, no LLM)
+   - `processor.py` — report generation using f-strings (no LLM)
+4. Edit `__main__.py`:
+   - Import your new modules with relative imports
+   - Filter `mcp_configs` to only needed servers in `main()`
+   - Replace `run_task()` body with: collect → score → generate report → write file
+   - Remove `discover_tools()` and `print_tool_catalog()` calls (not needed)
+5. Do NOT create any other files. You are done.
 
 ## structuredContent Shapes
 
@@ -38,20 +54,11 @@ Before reaching for the LLM, use these:
 | Text extraction/parsing | `re`, `BeautifulSoup`, field access on structured data |
 | Fuzzy matching | `rapidfuzz`, `difflib.SequenceMatcher` |
 | Date/time | `datetime`, `dateutil.parser` |
-| "Why this score" prose | Template from scoring breakdown: `f"Matches {n} techs ({techs}). {rate_note}."` |
-| "Key Observations" | Derive from aggregated data: `f"{pct}% of roles are contract"`, `f"Most common tech is {top}"` |
-| "Recommendations" | Sort by score, template: `f"Apply to {title} — highest match at {score}/10"` |
+| "Why this score" prose | Template: `f"Matches {n} techs ({techs}). {rate_note}."` |
+| "Key Observations" | Derive from data: `f"{pct}% of roles are contract"` |
+| "Recommendations" | Sort by score: `f"Apply to {title} — highest match at {score}/10"` |
 
-## How to Implement
-
-1. **Copy first:** `cp -r tools/template tools/<task_name>`
-2. Read the user prompt. List every action the agent would take.
-3. For each action: MCP tool call (data collection) or Python code (everything else). LLM only if proven necessary.
-4. Implement: `collector.py` for MCP calls, `scorer.py` / `processor.py` for Python logic, wire in `run_task()`.
-5. Only connect needed MCP servers — filter `mcp_configs` or hardcode connections.
-6. **Run it:** `python -m tools.<task_name>` — fix any errors.
-
-### Patterns
+## Patterns
 
 **Data collection:**
 ```python
