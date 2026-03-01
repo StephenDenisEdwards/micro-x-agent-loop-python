@@ -105,9 +105,73 @@ If those 12,692 tokens were charged at the full input rate ($1.00/MTok) instead 
 
 Caching saved **$0.046 across just 4 API calls** — an 82% reduction in total session cost.
 
-## Key Takeaway
+## Longer Session: 8-Call Analysis
 
-Prompt caching does not make per-turn costs decrease. It makes them **dramatically lower than they would otherwise be**. The savings are relative to the no-caching baseline, not to previous turns. As conversation history grows, per-turn cost will still rise — but the dominant cost component (system prompt + tools) is served at a 90% discount on every call.
+The short session above is best-case for caching — the cached tokens (12,692) dwarf the conversation history. In a longer, more realistic session, the balance shifts. The following data comes from an 8-call job-search session logged to `api_payloads.jsonl`.
+
+### API Payload Log
+
+```
+Call 1:  Messages=1   Stop=tool_use  in=1,796   out=142    cache_rd=0       cache_wr=12,692  Cost=$0.018371
+Call 2:  Messages=3   Stop=tool_use  in=11,580  out=271    cache_rd=12,692  cache_wr=0       Cost=$0.014204
+Call 3:  Messages=5   Stop=tool_use  in=13,375  out=340    cache_rd=12,692  cache_wr=0       Cost=$0.016344
+Call 4:  Messages=7   Stop=tool_use  in=15,661  out=320    cache_rd=12,692  cache_wr=0       Cost=$0.018530
+Call 5:  Messages=9   Stop=tool_use  in=18,694  out=338    cache_rd=12,692  cache_wr=0       Cost=$0.021653
+Call 6:  Messages=11  Stop=tool_use  in=22,396  out=307    cache_rd=12,692  cache_wr=0       Cost=$0.025200
+Call 7:  Messages=13  Stop=tool_use  in=25,015  out=7,206  cache_rd=12,692  cache_wr=0       Cost=$0.062314
+Call 8:  Messages=15  Stop=end_turn  in=32,275  out=402    cache_rd=12,692  cache_wr=0       Cost=$0.035554
+```
+
+### Session Totals
+
+| Metric | Value |
+|--------|-------|
+| Total API calls | 8 |
+| Fresh input tokens | 140,792 (58.1%) |
+| Cache-read tokens | 88,844 (36.7%) |
+| Cache-create tokens | 12,692 (5.2%) |
+| Output tokens | 9,326 |
+| **Total cost (with caching)** | **$0.212** |
+| **Total cost (without caching)** | **$0.289** |
+| **Savings** | **$0.077 (26.6%)** |
+
+### Observations
+
+1. **Cache write on Call 1** — The first call pays $0.016 for cache creation (12,692 × $1.25/MTok) with no cache reads. This one-time cost pays for itself by Call 2.
+
+2. **Diminishing caching returns** — Savings drop from 82% (short session) to 26.6% here. As conversation history grows, fresh input tokens dominate and the fixed-size cached portion becomes a smaller fraction of total input.
+
+3. **Cost progression** — Costs rise steadily from $0.014 to $0.036 as conversation history accumulates (1,796 → 32,275 input tokens), interrupted by one output spike.
+
+4. **Output spike on Call 7** — A 7,206-token output (vs. ~300 typical) cost $0.062, more than Calls 2–5 combined. Output tokens are expensive ($5.00/MTok for Haiku) and not subject to caching.
+
+### Token Composition Over Time
+
+```
+Call 1:  [====] in=1.8K                          cache_rd=0     cache_wr=12.7K
+Call 2:  [============] in=11.6K                  cache_rd=12.7K
+Call 3:  [==============] in=13.4K                cache_rd=12.7K
+Call 4:  [================] in=15.7K              cache_rd=12.7K
+Call 5:  [===================] in=18.7K           cache_rd=12.7K
+Call 6:  [======================] in=22.4K        cache_rd=12.7K
+Call 7:  [=========================] in=25.0K     cache_rd=12.7K  out=7.2K !!
+Call 8:  [================================] in=32.3K  cache_rd=12.7K
+```
+
+The cached portion (12.7K) stays constant while fresh input grows from 1.8K to 32.3K — a 18× increase. By Call 8, cached tokens are only 28% of total input.
+
+## Key Takeaways
+
+1. **Prompt caching does not make per-turn costs decrease.** It makes them dramatically lower than they would otherwise be. The savings are relative to the no-caching baseline, not to previous turns.
+
+2. **Caching has diminishing returns in longer sessions.** When conversation history is small (short sessions), caching the system prompt + tools saves ~80%. As history grows, savings shrink because the cached portion becomes a smaller fraction of total input.
+
+3. **For longer sessions, other cost levers matter more:**
+   - **Compaction** — reducing conversation history size has more impact than caching when history dominates input
+   - **Output control** — a single verbose response can cost more than several normal turns (Call 7 above)
+   - **Cheaper models** — Haiku 4.5 is already the cheapest option; model choice is the largest single lever
+
+4. **Cache creation has a cost.** The first call pays a write premium ($1.25/MTok vs. $1.00/MTok input). For very short sessions (1–2 calls), caching can actually cost slightly more than not caching.
 
 ## Related
 
