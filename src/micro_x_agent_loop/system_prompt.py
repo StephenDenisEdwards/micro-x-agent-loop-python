@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+import sys
+from datetime import datetime
 
 _USER_MEMORY_GUIDANCE = """\
 
@@ -29,14 +30,24 @@ def get_system_prompt(
     user_memory: str = "",
     user_memory_enabled: bool = False,
     concise_output_enabled: bool = False,
+    working_directory: str | None = None,
 ) -> str:
-    now = datetime.now(timezone.utc)
-    today = now.strftime("%A, %B %d, %Y")
+    is_windows = sys.platform == "win32"
+    if is_windows:
+        platform_line = (
+            "You are running on Windows. Use Windows shell commands (dir, type, copy, etc.) "
+            "— not Unix commands (ls, cat, cp, head, tail, etc.)."
+        )
+    else:
+        platform_line = "You are running on a Unix-like system. Use standard shell commands."
+
     prompt = f"""\
-You are a helpful AI assistant with access to tools. You can execute bash commands, \
+You are a helpful AI assistant with access to tools. You can execute shell commands, \
 read files, and write files to help the user with their tasks.
 
-Today's date is {today} (UTC).
+{platform_line}
+
+Today's date is {{current_date}}.
 
 When the user asks you to do something, use the available tools to accomplish it. \
 Think step by step about what tools you need to use, then use them.
@@ -49,6 +60,11 @@ If a tool call fails, read the error message carefully and try a different appro
 
 Be concise in your responses. When you've completed a task, briefly summarize what you did.\
 """
+    if working_directory:
+        prompt += f"\n\nYour working directory is: {working_directory}\n"
+        prompt += "All relative file paths and shell commands should be relative to this directory. "
+        prompt += "When the user asks to list files, read files, or perform operations without "
+        prompt += "specifying a path, use this directory as the default."
     if user_memory:
         prompt += f"\n\n# User Memory\n\n{user_memory}"
     if user_memory_enabled:
@@ -56,3 +72,13 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
     if concise_output_enabled:
         prompt += _CONCISE_OUTPUT_DIRECTIVE
     return prompt
+
+
+def resolve_system_prompt(template: str) -> str:
+    """Replace ``{current_date}`` with the current local date.
+
+    Called before each API request so the date is always accurate,
+    even for long-running sessions that span midnight.
+    """
+    today = datetime.now().strftime("%A, %B %d, %Y")
+    return template.replace("{current_date}", today)

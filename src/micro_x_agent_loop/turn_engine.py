@@ -7,6 +7,7 @@ from typing import Any
 from loguru import logger
 
 from micro_x_agent_loop.llm_client import Spinner
+from micro_x_agent_loop.system_prompt import resolve_system_prompt
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
 from micro_x_agent_loop.turn_events import TurnEvents
@@ -37,7 +38,7 @@ class TurnEngine:
         self._model = model
         self._max_tokens = max_tokens
         self._temperature = temperature
-        self._system_prompt = system_prompt
+        self._system_prompt_template = system_prompt
         self._converted_tools = converted_tools
         self._tool_map = tool_map
         self._line_prefix = line_prefix
@@ -64,11 +65,12 @@ class TurnEngine:
         max_tokens_attempts = 0
 
         while True:
+            system_prompt = resolve_system_prompt(self._system_prompt_template)
             message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
                 self._model,
                 self._max_tokens,
                 self._temperature,
-                self._system_prompt,
+                system_prompt,
                 messages,
                 self._converted_tools,
                 line_prefix=self._line_prefix,

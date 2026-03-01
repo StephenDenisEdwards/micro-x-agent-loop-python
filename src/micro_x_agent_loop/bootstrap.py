@@ -117,6 +117,7 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
                 user_memory=user_memory,
                 user_memory_enabled=app.user_memory_enabled,
                 concise_output_enabled=app.concise_output_enabled,
+                working_directory=app.working_directory,
             ),
             max_tool_result_chars=app.max_tool_result_chars,
             max_conversation_messages=app.max_conversation_messages,

@@ -13,7 +13,7 @@ from micro_x_agent_loop.compaction import SummarizeCompactionStrategy
 from micro_x_agent_loop.metrics import build_tool_execution_metric
 from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
 from micro_x_agent_loop.provider import create_provider
-from micro_x_agent_loop.system_prompt import get_system_prompt
+from micro_x_agent_loop.system_prompt import get_system_prompt, resolve_system_prompt
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.turn_events import BaseTurnEvents
@@ -498,6 +498,41 @@ class ConciseOutputSystemPromptTests(unittest.TestCase):
         self.assertIn("some memory", prompt)
         self.assertIn("Minimize output tokens", prompt)
         self.assertIn("User Memory Guidance", prompt)
+
+    def test_working_directory_absent_by_default(self) -> None:
+        prompt = get_system_prompt()
+        self.assertNotIn("working directory", prompt.lower())
+
+    def test_working_directory_present_when_set(self) -> None:
+        prompt = get_system_prompt(working_directory="/home/user/projects")
+        self.assertIn("/home/user/projects", prompt)
+        self.assertIn("working directory", prompt.lower())
+
+    def test_working_directory_absent_when_none(self) -> None:
+        prompt = get_system_prompt(working_directory=None)
+        self.assertNotIn("working directory", prompt.lower())
+
+    def test_platform_info_included(self) -> None:
+        import sys
+        prompt = get_system_prompt()
+        if sys.platform == "win32":
+            self.assertIn("Windows", prompt)
+            self.assertIn("dir", prompt)
+            self.assertNotIn("Unix commands (ls", prompt.lower())
+        else:
+            self.assertIn("Unix-like", prompt)
+
+    def test_date_is_placeholder_in_template(self) -> None:
+        template = get_system_prompt()
+        self.assertIn("{current_date}", template)
+
+    def test_resolve_replaces_date_placeholder(self) -> None:
+        from datetime import datetime
+        template = get_system_prompt()
+        resolved = resolve_system_prompt(template)
+        self.assertNotIn("{current_date}", resolved)
+        today = datetime.now().strftime("%A, %B %d, %Y")
+        self.assertIn(today, resolved)
 
 
 # ---------------------------------------------------------------------------
