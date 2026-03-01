@@ -9,6 +9,7 @@ from loguru import logger
 
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
 from micro_x_agent_loop.llm_client import Spinner
+from micro_x_agent_loop.usage import estimate_cost
 from micro_x_agent_loop.system_prompt import resolve_system_prompt
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
@@ -290,6 +291,7 @@ class TurnEngine:
                     "output_tokens": usage.output_tokens if usage else 0,
                     "cache_read_input_tokens": usage.cache_read_input_tokens if usage else 0,
                     "cache_creation_input_tokens": usage.cache_creation_input_tokens if usage else 0,
+                    "cost_usd": round(estimate_cost(usage), 6) if usage else 0,
                 },
                 "system_prompt": payload.system_prompt,
                 "messages": payload.messages,

@@ -626,7 +626,9 @@ class Agent:
                     response_text = f"{response_text}  [{tool_label}]" if response_text else f"[{tool_label}]"
 
         # Usage info
+        from micro_x_agent_loop.usage import estimate_cost
         usage_str = "n/a"
+        cost_str = ""
         if payload.usage:
             u = payload.usage
             usage_str = f"in={u.input_tokens} out={u.output_tokens}"
@@ -634,6 +636,8 @@ class Agent:
                 usage_str += f" cache_read={u.cache_read_input_tokens}"
             if u.cache_creation_input_tokens:
                 usage_str += f" cache_create={u.cache_creation_input_tokens}"
+            cost = estimate_cost(u)
+            cost_str = f"${cost:.6f}" if cost > 0 else "n/a (unknown model)"
 
         p = self._LINE_PREFIX
         print(f"{p}API Payload #{index} (most recent):" if index == 0 else f"{p}API Payload #{index}:")
@@ -646,6 +650,7 @@ class Agent:
         print(f"{p}  Stop reason:  {payload.stop_reason}")
         print(f"{p}  Response:     {response_text[:80]}... ({len(response_text)} chars)")
         print(f"{p}  Usage:        {usage_str}")
+        print(f"{p}  Cost:         {cost_str}")
 
     async def _handle_session_command(self, command: str) -> None:
         sm = self._memory.session_manager
