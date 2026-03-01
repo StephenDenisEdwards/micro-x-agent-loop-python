@@ -8,40 +8,50 @@ Adapt `tools/template/` into a console app that produces the same output as the 
 2. **No LLM API calls unless you can prove Python can't do it.** Scoring, ranking, filtering, counting, formatting, report generation — all Python. The LLM is only for irreducible natural language generation (synthesising unstructured free-text into prose that no template can produce). If you must use one, exactly one Haiku call. Justify it in a code comment.
 3. **No documentation.** Do not create README, IMPLEMENTATION, QUICKSTART, SUMMARY, or any other non-code files. No docstrings beyond one-liners. No comments explaining obvious code. Only create `.py` files.
 4. **Only connect MCP servers the task actually uses.**
-5. **Use relative imports.** All imports between modules in your package must use relative imports (`from .scorer import ...`, not `from scorer import ...`). The app runs as `python -m tools.<task_name>` which requires this.
+5. **Use relative imports.** All imports between modules in your package must use relative imports (`from .tools import ...`, not `from tools import ...`). The app runs as `python -m tools.<task_name>` which requires this.
 6. **Do not run the app.** Just write the code. The user will test it.
 7. **Do not explore the codebase.** Everything you need is in `tools/template/` (already copied) and this prompt. Read only the files in your copy. Do not search, grep, or browse any other directory.
 8. **Use `write_file()` from `__main__.py`** to write output files. Do not use `open()` directly for output.
+9. **Use `tools.py` for all MCP calls.** Do not call `client.call_tool()` directly. Import functions from `.tools` instead. They handle server routing, error checking, and response parsing.
 
 ## Exact Steps
 
 1. `cp -r tools/template tools/<task_name>`
-2. Read the user prompt below. Decide which MCP tools you need and what Python logic to write.
-3. Create these files in `tools/<task_name>/` (only the ones you need):
-   - `collector.py` — async functions that call MCP tools and return lists of dicts
+2. Read `tools/<task_name>/tools.py` to see available MCP functions and their return types.
+3. Read the user prompt below. Decide which functions from `tools.py` you need and what Python logic to write.
+4. Create these files in `tools/<task_name>/` (only the ones you need):
+   - `collector.py` — async functions that call `tools.py` wrappers and return lists of dicts
    - `scorer.py` — pure Python scoring/ranking functions (no MCP, no LLM)
    - `processor.py` — report generation using f-strings (no LLM)
-4. Edit `__main__.py`:
+5. Edit `__main__.py`:
    - Import your new modules with relative imports
    - Filter `mcp_configs` to only needed servers in `main()`
    - Replace `run_task()` body with: collect → score → generate report → write file
    - Remove `discover_tools()` and `print_tool_catalog()` calls (not needed)
-5. Do NOT create any other files. You are done.
+6. Do NOT create any other files. You are done.
 
-## structuredContent Shapes
+## Available MCP Functions (tools.py)
 
-`call_tool()` returns a dict (structuredContent) or str (text fallback). Check `isinstance(result, str)`. Never `json.loads()` on results. Key return shapes:
+All functions take `clients` dict as first arg. Import with `from .tools import gmail_search, linkedin_search, ...`
 
-| Tool | structuredContent fields |
-|------|------------------------|
-| `gmail_search` | `{ messages: [{ id, date, from, subject, snippet }], total_found }` |
-| `gmail_read` | `{ messageId, from, to, date, subject, body }` |
-| `linkedin_jobs` | `{ jobs: [{ index, title, company, location, posted, salary, url }], total_found }` |
-| `linkedin_job_detail` | `{ title, company, location, description, url }` |
-| `web_search` | `{ results: [{ title, url, description }], total_found }` |
-| `web_fetch` | `{ url, content, contentLength }` |
+**Gmail** (server: `google`):
+- `gmail_search(clients, query, max_results=10)` → `list[{id, date, from, subject, snippet}]`
+- `gmail_read(clients, message_id)` → `{messageId, from, to, date, subject, body}` or `None`
+- `gmail_send(clients, to, subject, body)` → status text
 
-For other tools, run `python -m tools.template` for the full catalog or read `tools/template/README.md`.
+**LinkedIn** (server: `linkedin`):
+- `linkedin_search(clients, keyword, location, date_posted, job_type, experience, limit, sort_by)` → `list[{index, title, company, location, posted, salary, url}]`
+- `linkedin_detail(clients, url)` → `{title, company, location, description, url}` or `None`
+- `linkedin_search_with_details(clients, keyword, limit, batch_size, **kwargs)` → `list[{...job, detail: {title, company, location, description, url}}]`
+
+**Web** (server: `web`):
+- `web_search(clients, query, count=5)` → `list[{title, url, description}]`
+- `web_fetch(clients, url, max_chars=50000)` → `{url, content, content_length, ...}` or `None`
+
+**Filesystem** (server: `filesystem`):
+- `fs_read(clients, path)` → content string or `None`
+- `fs_write(clients, path, content)` → `True`/`False`
+- `fs_bash(clients, command)` → `{stdout, stderr, exit_code}`
 
 ## Python-First Alternatives
 
@@ -61,19 +71,17 @@ Before reaching for the LLM, use these:
 
 ## Patterns
 
-**Data collection:**
+**Data collection using tools.py:**
 ```python
-result = await client.call_tool("tool_name", {"arg": "value"})
-if isinstance(result, str):
-    return []
-items = result.get("items", [])
-```
+from .tools import gmail_search, gmail_read, linkedin_search_with_details
 
-**Parallel detail fetching:**
-```python
-for i in range(0, len(items), 5):
-    batch = items[i:i + 5]
-    results = await asyncio.gather(*(fetch_detail(client, x) for x in batch))
+emails = await gmail_search(clients, "from:jobserve.com newer_than:1d", max_results=50)
+for msg in emails:
+    full = await gmail_read(clients, msg["id"])
+    if full:
+        process(full)
+
+jobs = await linkedin_search_with_details(clients, keyword=".NET Azure", limit=15, location="United Kingdom")
 ```
 
 **LLM fallback (only if unavoidable):**
