@@ -4,13 +4,14 @@ Adapt `tools/template/` into a console app that produces the same output as the 
 
 ## Rules
 
-1. **Copy first, then code.** Your FIRST action must be `cp -r tools/template tools/<task_name>`. NEVER modify files in `tools/template/` or any other existing directory. All new code goes in the copy only.
+1. **Copy first, then code.** Your FIRST action must be `cp -r tools/template tools/<task_name>`. If the target already exists, delete it first (`rm -rf tools/<task_name>`). NEVER modify files in `tools/template/` or any other existing directory. All new code goes in the copy only.
 2. **No LLM API calls unless you can prove Python can't do it.** Scoring, ranking, filtering, counting, formatting, report generation — all Python. The LLM is only for irreducible natural language generation (synthesising unstructured free-text into prose that no template can produce). If you must use one, exactly one Haiku call. Justify it in a code comment.
 3. **No documentation.** Do not create README, IMPLEMENTATION, QUICKSTART, SUMMARY, or any other non-code files. No docstrings beyond one-liners. No comments explaining obvious code. Only create `.py` files.
 4. **Only connect MCP servers the task actually uses.**
 5. **Use relative imports.** All imports between modules in your package must use relative imports (`from .scorer import ...`, not `from scorer import ...`). The app runs as `python -m tools.<task_name>` which requires this.
 6. **Do not run the app.** Just write the code. The user will test it.
 7. **Do not explore the codebase.** Everything you need is in `tools/template/` (already copied) and this prompt. Read only the files in your copy. Do not search, grep, or browse any other directory.
+8. **Use `write_file()` from `__main__.py`** to write output files. Do not use `open()` directly for output.
 
 ## Exact Steps
 

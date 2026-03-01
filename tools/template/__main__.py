@@ -144,6 +144,17 @@ def print_tool_catalog(catalog: dict[str, list[tuple[str, str]]]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# File output
+# ---------------------------------------------------------------------------
+
+
+def write_file(path: str, content: str) -> None:
+    """Write content to a file (UTF-8)."""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+# ---------------------------------------------------------------------------
 # Task placeholder — REPLACE THIS with your own logic
 # ---------------------------------------------------------------------------
 
