@@ -173,6 +173,46 @@ The cached portion (12.7K) stays constant while fresh input grows from 1.8K to 3
 
 4. **Cache creation has a cost.** The first call pays a write premium ($1.25/MTok vs. $1.00/MTok input). For very short sessions (1–2 calls), caching can actually cost slightly more than not caching.
 
+## API vs. Chat Subscription: When Does the API Make Sense?
+
+The per-token costs above are specific to the **Anthropic API**. Claude Chat (claude.ai) uses a flat subscription model with no per-token charges. This raises a natural question: is the API massively more expensive for the same work?
+
+### Cost Comparison
+
+| | Anthropic API | Claude Chat Pro | Claude Chat Max |
+|---|---|---|---|
+| Pricing | Per-token | $20/month flat | $100/month flat |
+| Models available | All (choose per call) | Sonnet, Opus | Sonnet, Opus |
+| Rate limits | None (pay for what you use) | Usage caps | Higher caps |
+
+**Break-even analysis for the 8-call session above ($0.21 on Haiku 4.5):**
+
+- vs. Pro ($20/mo): ~95 similar sessions/month before API exceeds subscription cost
+- vs. Max ($100/mo): ~476 similar sessions/month
+
+**But model choice changes the equation dramatically.** The session above used Haiku 4.5 ($1.00/$5.00 per MTok). The same session on other models:
+
+| Model | Estimated session cost | Sessions to exceed Pro ($20/mo) |
+|-------|----------------------|-------------------------------|
+| Haiku 4.5 | ~$0.21 | ~95 |
+| Sonnet 4.6 | ~$0.64 | ~31 |
+| Opus 4.6 | ~$1.06 | ~19 |
+
+Chat Pro includes Sonnet and Opus at no extra per-token cost, so for interactive conversational use, the subscription is almost always cheaper.
+
+### When the API Is Worth It
+
+The API's per-token cost is justified when you need capabilities Chat doesn't offer:
+
+- **Custom tools** — this project uses 59 MCP tools (filesystem, web search, etc.)
+- **Custom system prompts** — tailored instructions, user memory, dynamic context
+- **Programmatic control** — automated workflows, agent loops, batch processing
+- **Prompt caching** — reduces costs for repeated system prompts across calls
+- **Structured cost tracking** — per-call metrics, session budgets, cost analysis
+- **Model flexibility** — use Haiku for simple tasks, Opus for complex ones, per call
+
+**Bottom line:** For casual interactive use, Chat subscriptions are far cheaper. The API makes economic sense when you need automation, custom tooling, or are building a product — things Chat cannot do.
+
 ## Related
 
 - [ADR-012: Layered Cost Reduction](../architecture/decisions/ADR-012-layered-cost-reduction.md) — prompt caching is Layer 1
