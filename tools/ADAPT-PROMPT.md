@@ -21,9 +21,9 @@ Adapt `tools/template/` into a console app that produces the same output as the 
 
 1. Copy the template using absolute paths:
    ```
-   robocopy "C:\Users\steph\source\repos\micro-x-agent-loop-python\tools\template" "C:\Users\steph\source\repos\micro-x-agent-loop-python\tools\<task_name>" /E
+   xcopy C:\Users\steph\source\repos\micro-x-agent-loop-python\tools\template C:\Users\steph\source\repos\micro-x-agent-loop-python\tools\<task_name> /E /I /Y
    ```
-   (robocopy exit code 1 = success on Windows)
+   Do NOT wrap paths in quotes. xcopy exit code 0 = success.
 2. Read `tools.py` in your copy to see available MCP functions and their return types.
 3. Read the user prompt below. Decide which functions from `tools.py` you need and what Python logic to write.
 4. Create these files in your copy (only the ones you need), using `write_file` or `read_file` with absolute paths:
