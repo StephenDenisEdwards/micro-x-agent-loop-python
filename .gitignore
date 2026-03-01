@@ -17,6 +17,10 @@ store/
 node_modules/
 .vscode/
 
+# Agent-generated task apps (only tools/template/ is tracked)
+tools/*/
+!tools/template/
+
 # Logs
 *.log
 
