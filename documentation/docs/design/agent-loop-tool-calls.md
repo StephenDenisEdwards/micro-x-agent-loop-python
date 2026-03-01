@@ -22,24 +22,35 @@ The loop lives in `src/micro_x_agent_loop/turn_engine.py`. The provider returns 
 # src/micro_x_agent_loop/turn_engine.py
 async def run(self, *, messages: list[dict], user_message: str) -> tuple[str | None, str | None]:
     last_assistant_message_id: str | None = None
-    current_user_message_id = self._on_append_message("user", user_message)
-    self._on_user_message_appended(current_user_message_id)
-    await self._on_maybe_compact()
+    current_user_message_id = self._events.on_append_message("user", user_message)
+    self._events.on_user_message_appended(current_user_message_id)
+    await self._events.on_maybe_compact()
 
     max_tokens_attempts = 0
 
     while True:
-        message, tool_use_blocks, stop_reason = await self._provider.stream_chat(
+        # Resolve {current_date} in the system prompt template on each iteration,
+        # so the date stays accurate across midnight boundaries.
+        system_prompt = resolve_system_prompt(self._system_prompt_template)
+
+        message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
             self._model,
             self._max_tokens,
             self._temperature,
-            self._system_prompt,
+            system_prompt,
             messages,
             self._converted_tools,
             line_prefix=self._line_prefix,
         )
 
-        last_assistant_message_id = self._on_append_message("assistant", message["content"])
+        self._events.on_api_call_completed(usage, "main")
+
+        # Record full request/response payload to the in-memory ring buffer
+        # and log to api_payloads.jsonl (if the api_payload LogConsumer is configured).
+        if self._api_payload_store is not None:
+            self._record_api_payload(system_prompt, messages, message, stop_reason, usage)
+
+        last_assistant_message_id = self._events.on_append_message("assistant", message["content"])
 
         if stop_reason == "max_tokens" and not tool_use_blocks:
             ...
@@ -47,13 +58,13 @@ async def run(self, *, messages: list[dict], user_message: str) -> tuple[str | N
         if not tool_use_blocks:
             return current_user_message_id, last_assistant_message_id
 
-        self._on_ensure_checkpoint_for_turn(tool_use_blocks)
+        self._events.on_ensure_checkpoint_for_turn(tool_use_blocks)
         tool_results = await self.execute_tools(
             tool_use_blocks,
             last_assistant_message_id=last_assistant_message_id,
         )
-        self._on_append_message("user", tool_results)
-        await self._on_maybe_compact()
+        self._events.on_append_message("user", tool_results)
+        await self._events.on_maybe_compact()
         print()
 ```
 

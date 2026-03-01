@@ -259,13 +259,17 @@ micro-x-agent-loop-python/
         ├── __main__.py            # Entry point and REPL
         ├── agent.py               # Agent loop orchestrator
         ├── agent_config.py        # Configuration dataclass
+        ├── api_payload_store.py   # In-memory ring buffer for API request/response payloads
         ├── app_config.py          # Config parsing (AppConfig, RuntimeEnv)
         ├── bootstrap.py           # Runtime factory (wires MCP, memory, provider)
         ├── tool.py                # Tool Protocol + ToolResult dataclass
         ├── tool_result_formatter.py # Structured → text formatting (json, table, text, key_value)
         ├── llm_client.py          # Shared utilities (Spinner, retry callback)
-        ├── system_prompt.py       # System prompt text
+        ├── logging_config.py      # Log consumer registry (console, file, metrics, api_payload)
+        ├── system_prompt.py       # System prompt template + resolve_system_prompt()
         ├── turn_engine.py         # LLM turn loop with parallel tool dispatch
+        ├── commands/
+        │   └── router.py          # Slash command dispatch (/help, /tool, /debug, etc.)
         ├── mcp/
         │   ├── __init__.py
         │   ├── mcp_tool_proxy.py  # Adapter: MCP tool → Tool Protocol + ToolResult

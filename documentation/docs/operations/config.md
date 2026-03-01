@@ -97,6 +97,10 @@ The required API key depends on the configured `Provider`. Service-specific cred
 | `ConciseOutputEnabled` | bool | `false` | Adds a system prompt directive to minimize output token spend |
 | `ToolFormatting` | object | `{}` | Per-tool format rules for structured result formatting (see [Tool System Design](../design/DESIGN-tool-system.md#tool-result-formatting)) |
 | `DefaultFormat` | object | `{"format": "json"}` | Default format when no per-tool rule matches |
+| `LogLevel` | string | `"INFO"` | Minimum log level for console and file consumers |
+| `LogConsumers` | array | console + file | Log sink configuration (see [below](#logconsumers)) |
+| `UserMemoryEnabled` | bool | `false` | Enables persistent user memory (MEMORY.md files) |
+| `UserMemoryDir` | string | _(none)_ | Directory for user memory files (requires `UserMemoryEnabled=true`) |
 | `McpServers` | object | _(none)_ | MCP server configurations (see [below](#mcpservers)) |
 
 ### Example
@@ -303,9 +307,50 @@ To persist metrics to a file, add the `"metrics"` log consumer:
 
 The metrics file contains one JSON record per line. Records have a `type` field: `api_call`, `tool_execution`, `compaction`, or `session_summary`.
 
+### LogConsumers
+
+Controls where log output is written. Each entry in the array is a sink with a `type` field and optional parameters.
+
+| Type | Description | Parameters |
+|------|-------------|------------|
+| `console` | Writes to stderr | _(none)_ |
+| `file` | Structured log file | `path` (default: `agent.log`) |
+| `metrics` | JSON Lines metrics | `path` (default: `metrics.jsonl`) |
+| `api_payload` | Full API request/response payloads | `path` (default: `api_payloads.jsonl`) |
+
+Default when `LogConsumers` is not specified: `[{"type": "console"}, {"type": "file"}]`.
+
+The `api_payload` consumer captures every API request/response as a JSON line, including the resolved system prompt, full message array, tool count, response, usage, and estimated cost. Useful for debugging prompt issues, cost surprises, or unexpected LLM behaviour. The payloads are also kept in an in-memory ring buffer (last 50) accessible via `/debug show-api-payload [N]`.
+
+Example with all consumers:
+
+```json
+{
+  "LogConsumers": [
+    {"type": "console"},
+    {"type": "file", "path": "agent.log"},
+    {"type": "metrics", "path": "metrics.jsonl"},
+    {"type": "api_payload", "path": "api_payloads.jsonl"}
+  ]
+}
+```
+
 Runtime commands (always available, not gated by `MemoryEnabled`):
 
 - `/cost` — prints the current session's accumulated cost summary
+- `/tool` — list all loaded tools grouped by MCP server
+- `/tool <name>` — show tool name, description, and mutating flag
+- `/tool <name> schema` — show input (and output) JSON schema
+- `/tool <name> config` — show ToolFormatting config for the tool
+- `/debug show-api-payload [N]` — inspect the Nth most recent API request/response (0 = latest)
+- `/prompt <filename>` — read a file and use its contents as the user message
+
+Runtime commands when `UserMemoryEnabled=true`:
+
+- `/memory` — show contents of MEMORY.md
+- `/memory list` — list all memory files
+- `/memory edit` — open MEMORY.md in `$EDITOR`
+- `/memory reset` — delete all memory files (requires `/memory reset confirm`)
 
 Analysis CLI:
 
