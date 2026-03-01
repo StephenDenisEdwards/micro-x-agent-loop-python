@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 
 from .mcp_client import McpClient
 from .task import SERVERS, run_task
+from .utils import write_file  # noqa: F401 — re-exported for backwards compat
 
 
 def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
@@ -69,27 +70,6 @@ async def connect_servers(
             print(f"  {name}: FAILED ({ex})")
 
     return connected
-
-
-def get_output_dir(config: dict) -> Path:
-    """Return WorkingDirectory from config, or CWD."""
-    wd = config.get("WorkingDirectory")
-    if wd:
-        p = Path(wd)
-        p.mkdir(parents=True, exist_ok=True)
-        return p
-    return Path.cwd()
-
-
-def write_file(path: str, content: str, config: dict | None = None) -> Path:
-    """Write UTF-8 file. Relative paths resolve against WorkingDirectory."""
-    p = Path(path)
-    if not p.is_absolute() and config:
-        p = get_output_dir(config) / p
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w", encoding="utf-8") as f:
-        f.write(content)
-    return p
 
 
 async def main() -> None:

@@ -1,7 +1,7 @@
 {
   "Provider": "openai",
   "Model": "gpt-4o-mini",
-  "MaxTokens": 32768,
+  "MaxTokens": 16384,
   "CompactionStrategy": "summarize",
   "MemoryEnabled": true,
   "MemoryDbPath": ".micro_x/memory.db",
