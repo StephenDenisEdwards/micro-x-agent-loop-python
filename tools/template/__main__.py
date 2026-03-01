@@ -148,10 +148,25 @@ def print_tool_catalog(catalog: dict[str, list[tuple[str, str]]]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def write_file(path: str, content: str) -> None:
-    """Write content to a file (UTF-8)."""
-    with open(path, "w", encoding="utf-8") as f:
+def get_output_dir(config: dict) -> Path:
+    """Return the output directory — WorkingDirectory from config, or CWD."""
+    wd = config.get("WorkingDirectory")
+    if wd:
+        p = Path(wd)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    return Path.cwd()
+
+
+def write_file(path: str, content: str, config: dict | None = None) -> Path:
+    """Write content to a file (UTF-8). Relative paths resolve against WorkingDirectory."""
+    p = Path(path)
+    if not p.is_absolute() and config:
+        p = get_output_dir(config) / p
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
         f.write(content)
+    return p
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ Adapt `tools/template/` into a console app that produces the same output as the 
 5. **Use relative imports.** All imports between modules in your package must use relative imports (`from .tools import ...`, not `from tools import ...`). The app runs as `python -m tools.<task_name>` which requires this.
 6. **Do not run the app.** Just write the code. The user will test it.
 7. **Do not explore the codebase.** Everything you need is in `tools/template/` (already copied) and this prompt. Read only the files in your copy. Do not search, grep, or browse any other directory.
-8. **Use `write_file()` from `__main__.py`** to write output files. Do not use `open()` directly for output.
+8. **Use `write_file(filename, content, config)` from `__main__.py`** to write output files. Pass `config` so relative paths resolve to `WorkingDirectory`. Do not use `open()` directly for output.
 9. **Use `tools.py` for all MCP calls.** Do not call `client.call_tool()` directly. Import functions from `.tools` instead. They handle server routing, error checking, and response parsing.
 
 ## Exact Steps
