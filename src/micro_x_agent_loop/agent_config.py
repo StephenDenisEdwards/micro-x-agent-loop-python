@@ -35,6 +35,7 @@ class AgentConfig:
     mode_analysis_enabled: bool = False
     stage2_classification_enabled: bool = False
     stage2_model: str = ""  # empty = use main model
+    tool_search_enabled: str = "false"
     working_directory: str | None = None
     # Tool result formatting
     tool_formatting: dict = field(default_factory=dict)

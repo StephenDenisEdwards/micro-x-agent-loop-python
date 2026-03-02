@@ -38,6 +38,7 @@ from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
+from micro_x_agent_loop.tool_search import ToolSearchManager, should_activate_tool_search
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult
 from micro_x_agent_loop.voice_runtime import VoiceRuntime
@@ -61,6 +62,26 @@ class Agent:
         self._messages: list[dict] = []
         self._tool_map: dict[str, Tool] = {t.name: t for t in config.tools}
         self._converted_tools = self._provider.convert_tools(config.tools)
+
+        # Tool search (on-demand tool discovery)
+        self._tool_search_active = should_activate_tool_search(
+            config.tool_search_enabled,
+            self._converted_tools,
+            config.model,
+        )
+        self._tool_search_manager: ToolSearchManager | None = None
+        if self._tool_search_active:
+            self._tool_search_manager = ToolSearchManager(
+                all_tools=config.tools,
+                converted_tools=self._converted_tools,
+            )
+            from micro_x_agent_loop.system_prompt import _TOOL_SEARCH_DIRECTIVE
+            self._system_prompt += _TOOL_SEARCH_DIRECTIVE
+            logger.info(
+                f"Tool search active: {len(config.tools)} tools deferred, "
+                "LLM will discover tools via tool_search"
+            )
+
         self._max_tool_result_chars = config.max_tool_result_chars
         self._max_conversation_messages = config.max_conversation_messages
         self._compaction_strategy = config.compaction_strategy
@@ -146,6 +167,7 @@ class Agent:
             summarization_threshold=config.tool_result_summarization_threshold,
             formatter=self._tool_result_formatter,
             api_payload_store=self._api_payload_store,
+            tool_search_manager=self._tool_search_manager,
         )
 
         self._command_router = CommandRouter(

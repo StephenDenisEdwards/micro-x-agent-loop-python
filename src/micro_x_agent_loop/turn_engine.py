@@ -13,6 +13,7 @@ from micro_x_agent_loop.usage import UsageResult, estimate_cost
 from micro_x_agent_loop.system_prompt import resolve_system_prompt
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
+from micro_x_agent_loop.tool_search import ToolSearchManager
 from micro_x_agent_loop.turn_events import TurnEvents
 
 
@@ -37,6 +38,7 @@ class TurnEngine:
         summarization_threshold: int = 4000,
         formatter: ToolResultFormatter | None = None,
         api_payload_store: ApiPayloadStore | None = None,
+        tool_search_manager: ToolSearchManager | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -55,6 +57,7 @@ class TurnEngine:
         self._summarization_threshold = summarization_threshold
         self._formatter = formatter or ToolResultFormatter()
         self._api_payload_store = api_payload_store
+        self._tool_search_manager = tool_search_manager
 
     async def run(
         self,
@@ -67,17 +70,28 @@ class TurnEngine:
         self._events.on_user_message_appended(current_user_message_id)
         await self._events.on_maybe_compact()
 
+        if self._tool_search_manager is not None:
+            self._tool_search_manager.begin_turn()
+
         max_tokens_attempts = 0
 
         while True:
             system_prompt = resolve_system_prompt(self._system_prompt_template)
+
+            # When tool search is active, send only the search tool + loaded tools
+            api_tools = (
+                self._tool_search_manager.get_tools_for_api_call()
+                if self._tool_search_manager is not None
+                else self._converted_tools
+            )
+
             message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
                 self._model,
                 self._max_tokens,
                 self._temperature,
                 system_prompt,
                 messages,
-                self._converted_tools,
+                api_tools,
                 line_prefix=self._line_prefix,
             )
 
@@ -86,6 +100,7 @@ class TurnEngine:
             if self._api_payload_store is not None:
                 self._record_api_payload(
                     system_prompt, messages, message, stop_reason, usage,
+                    tools_count=len(api_tools),
                 )
 
             last_assistant_message_id = self._events.on_append_message("assistant", message["content"])
@@ -115,19 +130,73 @@ class TurnEngine:
             if not tool_use_blocks:
                 return current_user_message_id, last_assistant_message_id
 
-            tool_names = ", ".join(b["name"] for b in tool_use_blocks)
-            spinner = Spinner(prefix=self._line_prefix, label=f" Running {tool_names}...")
+            # Separate tool_search calls from regular tool calls
+            search_blocks: list[dict] = []
+            regular_blocks: list[dict] = []
+            if self._tool_search_manager is not None:
+                for block in tool_use_blocks:
+                    if ToolSearchManager.is_tool_search_call(block["name"]):
+                        search_blocks.append(block)
+                    else:
+                        regular_blocks.append(block)
+            else:
+                regular_blocks = tool_use_blocks
+
+            # Handle tool_search calls inline (no MCP execution needed)
+            search_results: list[dict] = []
+            for block in search_blocks:
+                query = block["input"].get("query", "")
+                result_text = self._tool_search_manager.handle_tool_search(query)
+                search_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block["id"],
+                    "content": result_text,
+                })
+                logger.info(f"tool_search query={query!r} loaded={self._tool_search_manager.loaded_tool_count}")
+
+            # If only search calls (no regular tools), append results and continue
+            if search_blocks and not regular_blocks:
+                self._events.on_append_message("user", search_results)
+                print()
+                continue
+
+            # Execute regular tool calls
+            display_names = ", ".join(b["name"] for b in regular_blocks)
+            spinner = Spinner(prefix=self._line_prefix, label=f" Running {display_names}...")
             spinner.start()
             try:
-                self._events.on_ensure_checkpoint_for_turn(tool_use_blocks)
-                tool_results = await self.execute_tools(
-                    tool_use_blocks, last_assistant_message_id=last_assistant_message_id
+                self._events.on_ensure_checkpoint_for_turn(regular_blocks)
+                regular_results = await self.execute_tools(
+                    regular_blocks, last_assistant_message_id=last_assistant_message_id
                 )
             finally:
                 spinner.stop()
-            self._events.on_append_message("user", tool_results)
+
+            # Combine results in original order
+            if search_results:
+                all_results = self._merge_tool_results(
+                    tool_use_blocks, search_results, regular_results,
+                )
+            else:
+                all_results = regular_results
+
+            self._events.on_append_message("user", all_results)
             await self._events.on_maybe_compact()
             print()
+
+    @staticmethod
+    def _merge_tool_results(
+        original_blocks: list[dict],
+        search_results: list[dict],
+        regular_results: list[dict],
+    ) -> list[dict]:
+        """Merge search and regular tool results in the order of the original blocks."""
+        by_id: dict[str, dict] = {}
+        for r in search_results:
+            by_id[r["tool_use_id"]] = r
+        for r in regular_results:
+            by_id[r["tool_use_id"]] = r
+        return [by_id[b["id"]] for b in original_blocks if b["id"] in by_id]
 
     async def execute_tools(self, tool_use_blocks: list[dict], *, last_assistant_message_id: str | None) -> list[dict]:
         async def run_one(block: dict) -> dict:
@@ -285,13 +354,15 @@ class TurnEngine:
         response_message: dict,
         stop_reason: str,
         usage: Any,
+        *,
+        tools_count: int | None = None,
     ) -> None:
         payload = ApiPayload(
             timestamp=time.time(),
             model=self._model,
             system_prompt=system_prompt,
             messages=list(messages),
-            tools_count=len(self._converted_tools),
+            tools_count=tools_count if tools_count is not None else len(self._converted_tools),
             response_message=response_message,
             stop_reason=stop_reason,
             usage=usage,

@@ -16,6 +16,24 @@ You have persistent memory in the user memory directory. As you work:
 """
 
 
+_TOOL_SEARCH_DIRECTIVE = """\
+
+
+# Tool Discovery
+
+You have access to many tools, but their full schemas are not loaded by default. \
+Use the `tool_search` tool to discover available tools by searching with keywords. \
+After searching, the matching tools will become available for you to call directly.
+
+Tips:
+- Search before attempting to call a tool you haven't used yet in this conversation
+- Use descriptive keywords (e.g., "read file", "search web", "send email")
+- Once a tool is loaded via search, you can call it directly without searching again
+- If you're unsure what tools are available, search with broad terms like \
+"file", "web", "email", "code"\
+"""
+
+
 _CONCISE_OUTPUT_DIRECTIVE = """\
 
 
@@ -30,6 +48,7 @@ def get_system_prompt(
     user_memory: str = "",
     user_memory_enabled: bool = False,
     concise_output_enabled: bool = False,
+    tool_search_active: bool = False,
     working_directory: str | None = None,
 ) -> str:
     is_windows = sys.platform == "win32"
@@ -69,6 +88,8 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
         prompt += f"\n\n# User Memory\n\n{user_memory}"
     if user_memory_enabled:
         prompt += _USER_MEMORY_GUIDANCE
+    if tool_search_active:
+        prompt += _TOOL_SEARCH_DIRECTIVE
     if concise_output_enabled:
         prompt += _CONCISE_OUTPUT_DIRECTIVE
     return prompt

@@ -53,6 +53,7 @@ class AppConfig:
     mode_analysis_enabled: bool
     stage2_classification_enabled: bool
     stage2_model: str
+    tool_search_enabled: str
     # Tool result formatting
     tool_formatting: dict
     default_format: dict
@@ -151,6 +152,7 @@ def parse_app_config(config: dict) -> AppConfig:
         mode_analysis_enabled=_to_bool(config.get("ModeAnalysisEnabled", True), default=True),
         stage2_classification_enabled=_to_bool(config.get("Stage2ClassificationEnabled", True), default=True),
         stage2_model=str(config.get("Stage2Model", "")).strip(),
+        tool_search_enabled=str(config.get("ToolSearchEnabled", "false")).strip().lower(),
         tool_formatting=config.get("ToolFormatting", {}),
         default_format=config.get("DefaultFormat", {"format": "json"}),
     )
