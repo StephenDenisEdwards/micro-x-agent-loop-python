@@ -1,4 +1,5 @@
 import asyncio
+import signal
 import sys
 
 from dotenv import load_dotenv
@@ -6,6 +7,8 @@ from loguru import logger
 
 from micro_x_agent_loop.app_config import load_json_config, parse_app_config, resolve_runtime_env
 from micro_x_agent_loop.bootstrap import bootstrap_runtime
+
+_current_task: asyncio.Task | None = None
 
 
 def _parse_config_arg() -> str | None:
@@ -65,6 +68,18 @@ async def main() -> None:
         print(f"Logging: {', '.join(runtime.log_descriptions)}")
     print()
 
+    # --- Ctrl+C signal handler ---
+    global _current_task
+    _default_sigint = signal.getsignal(signal.SIGINT)
+
+    def _sigint_handler(signum, frame):
+        if _current_task is not None and not _current_task.done():
+            _current_task.cancel()
+        else:
+            _default_sigint(signum, frame)
+
+    signal.signal(signal.SIGINT, _sigint_handler)
+
     try:
         while True:
             try:
@@ -80,7 +95,14 @@ async def main() -> None:
 
             try:
                 print()
-                await agent.run(trimmed)
+                task = asyncio.create_task(agent.run(trimmed))
+                _current_task = task
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    print("\nassistant> [Interrupted]")
+                finally:
+                    _current_task = None
                 print("\n")
             except Exception as ex:
                 logger.error(f"Unhandled error: {ex}")
