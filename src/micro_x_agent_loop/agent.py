@@ -243,7 +243,7 @@ class Agent:
 
         if not self._metrics_enabled:
             return
-        self._session_accumulator.add_api_call(usage)
+        self._session_accumulator.add_api_call(usage, call_type=call_type, turn_number=self._turn_number)
         metric = build_api_call_metric(
             usage,
             session_id=self._memory.active_session_id or "",

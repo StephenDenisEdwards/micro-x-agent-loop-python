@@ -130,6 +130,7 @@ class SessionAccumulator:
     tool_call_counts: dict[str, int] = field(default_factory=dict)
     total_duration_ms: float = 0.0
     model_subtotals: dict[str, dict] = field(default_factory=dict)
+    api_call_log: list[dict] = field(default_factory=list)
 
     def reset(self, session_id: str = "") -> None:
         """Reset all counters for a new session."""
@@ -149,6 +150,7 @@ class SessionAccumulator:
         self.tool_call_counts.clear()
         self.total_duration_ms = 0.0
         self.model_subtotals.clear()
+        self.api_call_log.clear()
 
     def _record_model(self, usage: UsageResult) -> None:
         cost = estimate_cost(usage)
@@ -162,7 +164,7 @@ class SessionAccumulator:
         sub["output_tokens"] += usage.output_tokens
         sub["cost_usd"] += cost
 
-    def add_api_call(self, usage: UsageResult) -> None:
+    def add_api_call(self, usage: UsageResult, *, call_type: str = "", turn_number: int = 0) -> None:
         self.total_api_calls += 1
         if not self.model and usage.model:
             self.provider = usage.provider
@@ -171,9 +173,22 @@ class SessionAccumulator:
         self.total_output_tokens += usage.output_tokens
         self.total_cache_creation_tokens += usage.cache_creation_input_tokens
         self.total_cache_read_tokens += usage.cache_read_input_tokens
-        self.total_cost_usd += estimate_cost(usage)
+        cost = estimate_cost(usage)
+        self.total_cost_usd += cost
         self.total_duration_ms += usage.duration_ms
         self._record_model(usage)
+        self.api_call_log.append({
+            "call_number": self.total_api_calls,
+            "turn": turn_number,
+            "call_type": call_type,
+            "model": usage.model or "unknown",
+            "input_tokens": usage.input_tokens,
+            "output_tokens": usage.output_tokens,
+            "cache_read": usage.cache_read_input_tokens,
+            "cache_create": usage.cache_creation_input_tokens,
+            "cost_usd": cost,
+            "duration_ms": usage.duration_ms,
+        })
 
     def add_tool_call(self, tool_name: str, is_error: bool) -> None:
         self.total_tool_calls += 1
@@ -226,4 +241,19 @@ class SessionAccumulator:
             lines.append("Tool breakdown:")
             for name, count in sorted(self.tool_call_counts.items(), key=lambda x: -x[1]):
                 lines.append(f"  {name}: {count}")
+        if self.api_call_log:
+            lines.append("Per-call breakdown:")
+            for c in self.api_call_log:
+                cache_parts = []
+                if c["cache_read"]:
+                    cache_parts.append(f"cr={c['cache_read']:,}")
+                if c["cache_create"]:
+                    cache_parts.append(f"cw={c['cache_create']:,}")
+                cache_str = f" [{', '.join(cache_parts)}]" if cache_parts else ""
+                lines.append(
+                    f"  #{c['call_number']} T{c['turn']} {c['call_type']:<30s} "
+                    f"{c['model']:<28s} "
+                    f"{c['input_tokens']:>7,} in / {c['output_tokens']:>7,} out"
+                    f"{cache_str}  ${c['cost_usd']:.4f}"
+                )
         return "\n".join(lines)
