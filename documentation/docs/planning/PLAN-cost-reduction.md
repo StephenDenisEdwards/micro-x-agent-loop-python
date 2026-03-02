@@ -146,22 +146,33 @@ With `claude-sonnet-4-5-20250929` at $3/$15 per MTok (input/output):
 
 ---
 
-#### 7. Tool Schema Optimisation
+#### 7. Tool Schema Optimisation / Smart MCP Routing
 
-**Impact:** 5-15% reduction in per-turn input cost. Tool schemas are sent every turn as invisible but billable tokens. With 15+ built-in tools plus MCP tools, this is 2,000-5,000+ tokens per turn.
+**Impact:** 5-15% reduction on Anthropic (strong cache discount makes full-set caching cheap). **25-75% reduction in tool schema cost on OpenAI**, where weaker cache discounts (50-75% off vs Anthropic's 90%) mean cached schemas remain a significant expense. Real session data: 61 tool schemas consumed ~5-6K tokens per call, dominating input cost for trivial tasks.
 
-**Mechanism:** (a) Minimize tool description verbosity. (b) Only send schemas for tools relevant to the current task. (c) Group rarely-used tools behind a meta-tool. (d) Cache tool schemas as part of the prompt prefix (see lever #1).
+**Mechanism:** (a) Minimize tool description verbosity. (b) Only send schemas for tools relevant to the current task via semantic routing (vector similarity on tool descriptions) or static tool groups. (c) Group rarely-used tools behind a meta-tool. (d) Cache tool schemas as part of the prompt prefix (see lever #1).
+
+**Routing approaches (from research):**
+- **Static tool groups** — configure groups per task type in config.json; simplest, no dependencies, no false-negative risk within group
+- **Vector DB routing** — embed tool descriptions at startup, query per turn; scales to large tool sets but risks excluding the right tool (false negatives)
+- **Always-include list** — high-frequency tools (filesystem, bash) bypass routing regardless of approach
+- **Provider-aware routing** — more aggressive filtering for OpenAI (top-15), less for Anthropic (top-30 or off entirely)
+
+**Key insight:** The cost-effectiveness of routing is **provider-dependent**. With Anthropic's 90% cache discount, sending all 61 tools cached costs ~$0.001/turn — hard to beat. With OpenAI's 50-75% discount, the same cached schemas cost 2-5x more, making routing worthwhile even at current tool counts (~60).
 
 **Existing research:**
+- [KV Cache and MCP Tool Routing](../research/kv-cache-and-mcp-tool-routing.md) — full cost modelling comparing caching vs routing across providers, KV cache mechanics, false-negative analysis
+- [Prompt Caching Cost Analysis](../operations/prompt-caching-cost-analysis.md) — real session data showing cache behavior
 - `key-insights-and-takeaways.md` §5 — notes "Cache MCP tool discovery results"
 - `DESIGN-tool-system.md` — tool protocol and registry design
 - SWE-agent ACI research — constrained action spaces
 
 **Gaps:**
-- No measurement of total tool schema token count
+- No measurement of total tool schema token count per provider *(partially addressed by routing research)*
 - No analysis of which tools are rarely used
 - No design for dynamic tool selection per task
 - No plan document exists
+- No evaluation of false-negative rate for vector routing at different k values
 
 ---
 
@@ -270,7 +281,7 @@ With `claude-sonnet-4-5-20250929` at $3/$15 per MTok (input/output):
 | 4 | Smarter compaction trigger | **Medium** (15-30% session) | Medium | DESIGN-compaction, ADR-010 | **No** |
 | 5 | Per-turn model routing | **Medium-High** (50-80% simple turns) | High | ADR-010, openclaw-research | **No** |
 | 6 | Sub-agent delegation | **Medium-High** (40-70% sub-tasks) | High | 4 research docs, gateway plan | **Partial** (gateway plan) |
-| 7 | Tool schema optimisation | **Low-Medium** (5-15% input) | Low | key-insights §5, DESIGN-tool-system | **No** |
+| 7 | Tool schema / MCP routing | **Low-Medium** (Anthropic) to **High** (OpenAI) | Low-Medium | [KV cache & routing research](../research/kv-cache-and-mcp-tool-routing.md), key-insights §5 | **No** |
 | 8 | Cost tracking & budgeting | **Enabling** | Medium | DESIGN-account-mgmt-apis | **Yes** ([metrics plan](PLAN-cost-metrics-logging.md)) |
 | 9 | Output token reduction | **Medium** (variable) | Low | system_prompt.py | **No** |
 | 10 | Provider/model arbitrage | **Variable** | Medium | ADR-010, openclaw-research | **No** |
@@ -289,4 +300,4 @@ Enable prompt caching, use Haiku for compaction. Both are low effort with immedi
 Reduce tool result sizes, use real token counts for compaction triggers, tighten output verbosity. Requires per-tool analysis using `tool_execution` metrics from Phase 0.
 
 **Phase 3 — Architecture (Levers 5, 6, 7):**
-Per-turn model routing and sub-agent delegation. Higher effort but unlocks the largest long-term savings. Depends on gateway architecture. Note: compiled mode execution requires tools to return structured JSON instead of human-readable text — see [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).
+Per-turn model routing, sub-agent delegation, and smart MCP tool routing. Higher effort but unlocks the largest long-term savings. Depends on gateway architecture. Tool schema routing (lever 7) is **provider-sensitive**: low priority for Anthropic (90% cache discount makes full-set cheap) but high priority for OpenAI (50-75% discount means cached schemas remain expensive) — see [KV Cache and MCP Tool Routing research](../research/kv-cache-and-mcp-tool-routing.md) for full cost modelling. Start with static tool groups before investing in vector DB routing. Note: compiled mode execution requires tools to return structured JSON instead of human-readable text — see [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).
