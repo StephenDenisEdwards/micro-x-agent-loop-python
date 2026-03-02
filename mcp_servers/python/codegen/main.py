@@ -1,13 +1,15 @@
-"""Codegen MCP Server — generates task app code via a mini agentic loop.
+"""Codegen MCP Server — generates and runs task apps.
 
-Exposes one tool: generate_code(task_name, prompt, model?)
-The agent calls it, the server handles everything:
-  copy template → agentic loop with read_file tool → parse response → write files
+Tools:
+  generate_code(task_name, prompt, model?) — generate a task app via mini agentic loop
+  run_task(task_name) — run a previously generated task app
 """
 
 import os
 import re
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 from anthropic import Anthropic
@@ -344,10 +346,61 @@ def generate_code(task_name: str, prompt: str,
     ]
     if skipped:
         summary_lines.append(f"Skipped: {', '.join(skipped)}")
-    summary_lines.append(f"Run with: python -m tools.{task_name}")
+    summary_lines.append(f"Run with: codegen__run_task(task_name=\"{task_name}\")")
 
     return CallToolResult(
         content=[TextContent(type="text", text="\n".join(summary_lines))],
+        structuredContent=structured,
+        isError=False,
+    )
+
+
+@mcp.tool()
+def run_task(task_name: str) -> CallToolResult:
+    """Run a previously generated task app.
+
+    Args:
+        task_name: Name of the task (e.g. "job_search"). Must exist under tools/<task_name>/.
+    """
+    task_dir = PROJECT_ROOT / "tools" / task_name
+    if not task_dir.exists():
+        return _error_result(f"Task directory not found: tools/{task_name}/", task_name)
+    if not (task_dir / "task.py").exists():
+        return _error_result(f"task.py not found in tools/{task_name}/", task_name)
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", f"tools.{task_name}"],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        return _error_result(f"Task timed out after 300 seconds.", task_name)
+    except Exception as e:
+        return _error_result(f"Failed to run task: {e}", task_name)
+
+    output = result.stdout
+    if result.stderr:
+        output += "\n--- stderr ---\n" + result.stderr
+
+    structured = {
+        "task_name": task_name,
+        "exit_code": result.returncode,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+    }
+
+    if result.returncode != 0:
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Task failed (exit code {result.returncode}):\n{output}")],
+            structuredContent=structured,
+            isError=True,
+        )
+
+    return CallToolResult(
+        content=[TextContent(type="text", text=output)],
         structuredContent=structured,
         isError=False,
     )
