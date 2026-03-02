@@ -229,6 +229,7 @@ The prompt follows a proven pattern for constraining LLM output:
 
 - **Infrastructure file deny (read):** `_execute_read_file` checks the filename against `INFRASTRUCTURE_FILES` before any filesystem access. Returns `ACCESS_DENIED` error, preventing the LLM from wasting turns reading template files.
 - **Infrastructure protection (write):** The server skips any files named `__main__.py`, `mcp_client.py`, `llm.py`, `tools.py`, or `utils.py` even if the model returns them in its output.
+- **Flat directory enforcement:** `parse_files()` rejects any filename containing `/` or `\`. All generated files must be flat in the target directory — subdirectory paths (e.g. `tools/__init__.py`) are skipped to prevent writes to non-existent directories.
 - **File type restriction:** Only `.py` files are written. Non-Python files are skipped.
 - **Directory isolation:** Files are only written into `tools/{task_name}/`. The server cannot write elsewhere.
 - **Template preservation:** The template is copied first, then only task-specific files are overwritten.

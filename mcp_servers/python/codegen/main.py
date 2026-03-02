@@ -221,6 +221,12 @@ def parse_files(response_text: str) -> tuple[dict[str, str], list[str]]:
         if not filename.endswith(".py"):
             skipped.append(filename)
             continue
+        # Reject filenames with path separators — all generated files must be
+        # flat in the target directory. The LLM sometimes generates paths like
+        # "tools/__init__.py" during fix rounds, which would crash the writer.
+        if "/" in filename or "\\" in filename:
+            skipped.append(filename)
+            continue
         files[filename] = content
     return files, skipped
 
