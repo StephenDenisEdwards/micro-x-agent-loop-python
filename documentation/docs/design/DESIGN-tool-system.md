@@ -93,7 +93,7 @@ There is no `tool_registry` — tool availability is determined entirely by whic
 
 ## MCP Servers
 
-All first-party tools are implemented as TypeScript MCP servers in `mcp_servers/ts/`, organised as an npm workspaces monorepo.
+Most first-party tools are implemented as TypeScript MCP servers in `mcp_servers/ts/`, organised as an npm workspaces monorepo. The `codegen` server is a Python FastMCP server in `mcp_servers/python/codegen/`.
 
 ### Server Grouping
 
@@ -106,6 +106,7 @@ All first-party tools are implemented as TypeScript MCP servers in `mcp_servers/
 | `google` | gmail_search, gmail_read, gmail_send, calendar_list_events, calendar_create_event, calendar_get_event, contacts_search, contacts_list, contacts_get, contacts_create, contacts_update, contacts_delete | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
 | `anthropic-admin` | anthropic_usage | `ANTHROPIC_ADMIN_API_KEY` |
 | `interview-assist` | ia_healthcheck, ia_list_recordings, ia_analyze_session, ia_evaluate_session, ia_compare_strategies, ia_tune_threshold, ia_regression_test, ia_create_baseline, ia_transcribe_once, stt_list_devices, stt_start_session, stt_get_updates, stt_get_session, stt_stop_session | `INTERVIEW_ASSIST_REPO` |
+| `codegen` | generate_code | `ANTHROPIC_API_KEY`, `PROJECT_ROOT`, `WORKING_DIR` |
 
 Each tool has its own detailed documentation in the [tools/](tools/) directory.
 
@@ -246,7 +247,7 @@ Connection failures for individual servers are logged but do not prevent the age
 
 ### Third-Party MCP Servers
 
-In addition to the 7 first-party TypeScript servers, the agent connects to external MCP servers:
+In addition to the 8 first-party servers (7 TypeScript + 1 Python), the agent connects to external MCP servers:
 
 **system-info** — shared .NET MCP server from [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers):
 

@@ -496,6 +496,26 @@ Example - Interview Assist MCP server (see [Interview Assist MCP docs](../design
 }
 ```
 
+Example — the codegen server (Python FastMCP, see [DESIGN-codegen-server](../design/DESIGN-codegen-server.md)):
+
+```json
+{
+  "McpServers": {
+    "codegen": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "uv", "--directory", "C:\\path\\to\\micro-x-agent-loop-python\\mcp_servers\\python\\codegen", "run", "main.py"],
+      "env": {
+        "PROJECT_ROOT": "C:\\path\\to\\micro-x-agent-loop-python",
+        "WORKING_DIR": "C:\\path\\to\\resources\\documents"
+      }
+    }
+  }
+}
+```
+
+> **Note:** The codegen server makes Anthropic API calls directly, so `ANTHROPIC_API_KEY` must be set in `.env` or the process environment.
+
 Example with both transports:
 
 ```json

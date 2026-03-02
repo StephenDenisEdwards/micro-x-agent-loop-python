@@ -128,7 +128,7 @@ graph TD
         Pruning["prune_memory"]
     end
 
-    subgraph McpServers["TypeScript MCP Servers"]
+    subgraph McpServers["MCP Servers"]
         direction TB
         FS["filesystem<br/>bash, read_file, write_file,<br/>append_file, save_memory"]
         Web["web<br/>web_fetch, web_search"]
@@ -137,6 +137,7 @@ graph TD
         Google["google<br/>12 tools"]
         Admin["anthropic-admin<br/>anthropic_usage"]
         IA["interview-assist<br/>14 tools"]
+        Codegen["codegen (Python)<br/>generate_code"]
     end
 
     McpMgr --> McpServers
@@ -178,6 +179,7 @@ graph TD
 | `McpManager` | Connects to all configured MCP servers in parallel, discovers tools, manages lifecycle |
 | `McpToolProxy` | Adapter wrapping an MCP tool + session into the `Tool` Protocol; extracts `structuredContent` into `ToolResult.structured` |
 | `mcp_servers/ts/` | TypeScript npm workspaces monorepo containing 7 first-party MCP servers (filesystem, web, linkedin, github, google, anthropic-admin, interview-assist) plus shared utilities |
+| `mcp_servers/python/codegen/` | Python FastMCP server exposing `generate_code` — isolated single-shot code generation via Anthropic API with zero tools (see [DESIGN-codegen-server](../design/DESIGN-codegen-server.md)) |
 | [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) (external) | Shared .NET MCP server exposing `system_info`, `disk_info`, `network_info` via stdio |
 | WhatsApp MCP (external) | External two-component MCP server: Go bridge (WhatsApp Web connection, SQLite, HTTP API) + Python FastMCP server (12 tools for messaging, contacts, chats) |
 

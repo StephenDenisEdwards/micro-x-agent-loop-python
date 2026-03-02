@@ -1,6 +1,6 @@
 {
   "Provider": "openai",
-  "Model": "gpt-4o-mini",
+  "Model": "gpt-4o",
   "MaxTokens": 16384,
   "CompactionStrategy": "summarize",
   "MemoryEnabled": true,
@@ -70,7 +70,8 @@
     "interview-assist__stt_start_session": { "format": "key_value" },
     "interview-assist__stt_get_updates": { "format": "json" },
     "interview-assist__stt_get_session": { "format": "key_value" },
-    "interview-assist__stt_stop_session": { "format": "key_value" }
+    "interview-assist__stt_stop_session": { "format": "key_value" },
+    "codegen__generate_code": { "format": "json" }
   },
   "DefaultFormat": { "format": "json" },
   "McpServers": {
@@ -126,6 +127,15 @@
       "transport": "stdio",
       "command": "python",
       "args": ["-m", "uv", "--directory", "C:\\Users\\steph\\source\\repos\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
+    },
+    "codegen": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "uv", "--directory", "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\python\\codegen", "run", "main.py"],
+      "env": {
+        "PROJECT_ROOT": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python",
+        "WORKING_DIR": "C:\\Users\\steph\\source\\repos\\resources\\documents"
+      }
     }
   }
 }
