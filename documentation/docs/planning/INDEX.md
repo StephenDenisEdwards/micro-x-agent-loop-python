@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-02-27
+Last updated: 2026-03-02
 
 ## Priority Queue
 
@@ -18,6 +18,7 @@ What to work on next, in order. Rationale: cost reduction is the top priority â€
 | **8** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
 | **9** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | |
 | **10** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools; extracted from Memory System Phase 3 |
+| **11** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based tool routing that preserves prompt caching; relates to cost reduction lever #7 |
 
 ---
 
@@ -28,7 +29,7 @@ What to work on next, in order. Rationale: cost reduction is the top priority â€
 | Completed | 11 |
 | In Progress | 0 |
 | Planning | 0 |
-| Planned | 4 |
+| Planned | 5 |
 
 ## All Plans
 
@@ -49,3 +50,4 @@ What to work on next, in order. Rationale: cost reduction is the top priority â€
 | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools via config-declared path params |
 | [Mode Selection â€” LLM Classification](PLAN-mode-selection-llm-classification.md) | Completed | Phase 2 complete. Phase 4 requires tools to return JSON â€” see [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) |
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Server/gateway architecture migration |
+| [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based routing preserving prefix caching. See [DESIGN](../design/DESIGN-cache-preserving-tool-routing.md) |
