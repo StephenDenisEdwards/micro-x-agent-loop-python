@@ -52,18 +52,20 @@ The key insight: **code generation is not a full agent task, but it benefits fro
 │    1. shutil.copytree template → tools/{task_name}│
 │    2. Read tools.py (API surface)                │
 │    3. Mini agentic loop with read_file tool      │
-│       (LLM reads referenced files, 2-3 turns)   │
-│    4. Parse response → {filename: content}       │
+│       (infra files blocked server-side)          │
+│    4. Parse === filename === blocks               │
 │    5. Write .py files to disk                    │
-│    6. Return summary (incl. turn count)          │
+│    6. Validation: run tests, fix failures (≤3x)  │
+│    7. Return summary (incl. validation results)  │
 │                                                  │
-│  run_task(task_name)                              │
+│  run_task(task_name, timeout_seconds?)             │
 │    1. Validate tools/{task_name}/task.py exists   │
 │    2. python -m tools.{task_name} from PROJECT_ROOT│
-│    3. Capture stdout/stderr, 300s timeout        │
+│    3. Capture stdout/stderr, configurable timeout │
 │    4. Return output                              │
 │                                                  │
-│  [Model sees: 1 tool (read_file). Max 10 turns.] │
+│  [1 tool (read_file). Infra files denied.        │
+│   Max 10 turns. Validation: up to 3 test rounds.]│
 └─────────────────────────────────────────────────┘
 ```
 
@@ -98,6 +100,7 @@ The fix: give the LLM a single `read_file` tool so it can read referenced files 
 | Tools available | 1 (`read_file`) | Minimum needed for file access. No write, no execute, no explore. |
 | Max turns | 10 | Hard limit prevents runaway loops. Typical usage: 2-3 turns. |
 | File access scope | WORKING_DIR only | Path traversal protection via `resolve()` + `relative_to()`. |
+| Infrastructure deny | Server-side | `_execute_read_file` rejects any path whose filename is in INFRASTRUCTURE_FILES. Returns ACCESS_DENIED error. |
 | System prompt | Fixed, focused | Code generation role only. No agent instructions. |
 
 ### Typical Flow
@@ -131,8 +134,18 @@ Since the codegen LLM has `read_file`, it fetches any referenced files itself. T
   "files_skipped": [],
   "model": "claude-sonnet-4-6",
   "input_tokens": 5200,
-  "output_tokens": 18000,
-  "turns": 3
+  "output_tokens": 8000,
+  "cache_creation_input_tokens": 4500,
+  "cache_read_input_tokens": 0,
+  "turns": 1,
+  "validation": {
+    "test_rounds": 1,
+    "tests_passed": true,
+    "test_files_generated": ["test_collector.py", "test_scorer.py"],
+    "test_output": "...",
+    "validation_input_tokens": 3000,
+    "validation_output_tokens": 2000
+  }
 }
 ```
 
@@ -158,8 +171,9 @@ Run with: codegen__run_task(task_name="email_summary")
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `task_name` | string | yes | Name of a previously generated task (e.g. `job_search`). Must exist under `tools/<task_name>/`. |
+| `timeout_seconds` | int | no | Maximum runtime in seconds. Default: 600. |
 
-Runs `python -m tools.<task_name>` from PROJECT_ROOT with a 300-second timeout. Captures stdout and stderr.
+Runs `python -m tools.<task_name>` from PROJECT_ROOT with the specified timeout. Captures stdout and stderr. Uses `stdin=DEVNULL` to prevent the child from inheriting the codegen server's MCP stdin pipe.
 
 **Structured result:**
 ```json
@@ -167,7 +181,8 @@ Runs `python -m tools.<task_name>` from PROJECT_ROOT with a 300-second timeout. 
   "task_name": "email_summary",
   "exit_code": 0,
   "stdout": "...",
-  "stderr": ""
+  "stderr": "",
+  "timed_out": false
 }
 ```
 
@@ -177,34 +192,65 @@ Runs `python -m tools.<task_name>` from PROJECT_ROOT with a 300-second timeout. 
 
 The server splits the prompt into system and user messages:
 
-**System prompt** (static per generation):
+**System prompt** (static per generation) — structured for strict discipline:
 ```
-1. Role: "You are a Python code generator."
-2. Context: Template structure, which files are untouchable
-3. API surface: Full contents of tools.py
-4. Task requirements format: What task.py must export
-5. Rules: No LLM calls for scoring, relative imports, etc.
-6. Instruction: Read referenced files before generating
-7. Output format: "Return each file as ### FILE: <name>\n```python\n<code>\n```"
+1. Role — one line: "You are a Python code generator. Output only code files, no prose."
+2. Non-negotiables — binary rules:
+   - No tool calls unless user prompt references an unseen file
+   - Infrastructure is sealed (do not inspect, read, or modify)
+   - No prose output — only the file manifest
+3. Runtime contract — what task.py must export, available imports, tools.py signatures inline
+4. Rules — pure Python for scoring/formatting, .py only, Windows strftime
+5. Generation budget — under 800 lines total, max 10 tests/module, no internal docstrings
+6. Unit tests — unittest.TestCase only, no async/IO tests
+7. Tool rules — explicit gate: only call read_file for files mentioned in user prompt
+8. Output format — compact "=== filename ===" delimiters, no markdown fences, no text between files
 ```
 
 **User message** (per request):
 ```
-1. User requirements: The prompt text passed by the agent
-2. Instruction: Read any referenced files, then generate
+Requirements:
+
+<the prompt text passed by the agent>
 ```
 
-This is roughly 10-15K tokens of input. The model reads any additional files via `read_file`, then returns generated Python files in a parseable format. The server extracts the code blocks and writes them, skipping any infrastructure files the model might mistakenly include.
+The user message is minimal — no tool-use instructions (covered by system prompt). This is roughly 10-15K tokens of input. The model reads any additional files via `read_file`, then returns generated Python files using `=== filename ===` delimiters. The server extracts the code blocks, strips any markdown fences the LLM might add despite instructions, and writes them — skipping any infrastructure files.
+
+### Prompt Discipline Rationale
+
+The prompt follows a proven pattern for constraining LLM output:
+- **Non-negotiables first** — binary, testable rules at the top of the prompt get the strongest attention
+- **No redundancy** — tool-use instructions appear once (system prompt), not repeated in the user message
+- **Numeric caps** — "under 800 lines" and "max 10 tests" are unambiguous; "keep it concise" is not
+- **Compact output format** — `=== filename ===` delimiters are shorter than `### FILE:` + triple-backtick blocks, and the "no markdown fences" instruction discourages the LLM from padding with formatting
+- **Server-side enforcement** — the infrastructure file deny in `_execute_read_file` backs up the prompt instruction with a hard block, so even if the LLM ignores "do not read infrastructure", the server returns ACCESS_DENIED
 
 ## Safety
 
-- **Infrastructure protection:** The server skips any files named `__main__.py`, `mcp_client.py`, `llm.py`, `tools.py`, or `utils.py` even if the model returns them.
+- **Infrastructure file deny (read):** `_execute_read_file` checks the filename against `INFRASTRUCTURE_FILES` before any filesystem access. Returns `ACCESS_DENIED` error, preventing the LLM from wasting turns reading template files.
+- **Infrastructure protection (write):** The server skips any files named `__main__.py`, `mcp_client.py`, `llm.py`, `tools.py`, or `utils.py` even if the model returns them in its output.
 - **File type restriction:** Only `.py` files are written. Non-Python files are skipped.
 - **Directory isolation:** Files are only written into `tools/{task_name}/`. The server cannot write elsewhere.
 - **Template preservation:** The template is copied first, then only task-specific files are overwritten.
 - **Path traversal protection:** `read_file` resolves paths relative to WORKING_DIR and uses `resolve()` + `relative_to()` to prevent `..` escape.
 - **Loop bound:** Hard limit of 10 turns prevents runaway tool-call loops.
-- **Execution timeout:** `run_task` has a 300-second timeout to prevent runaway apps.
+- **Execution timeout:** `run_task` has a configurable timeout (default 600 seconds) to prevent runaway apps.
+
+## Validation Phase
+
+After writing generated files, the server runs a validation phase:
+
+1. Discover all `test_*.py` files in the generated output
+2. Run `unittest discover` on the target directory (via `asyncio.to_thread` to avoid blocking the event loop)
+3. If tests pass, validation is complete
+4. If tests fail, continue the codegen conversation — append the test output and ask the LLM to fix
+5. Repeat up to `MAX_TEST_ROUNDS` (3) times
+
+The fix request uses the same `=== filename ===` output format. The LLM returns only the files that need changes, which are parsed and written over the originals. Validation token usage is tracked separately and included in the structured result.
+
+### Why Continue the Conversation
+
+Rather than starting a fresh LLM call for fixes, the server appends to the existing conversation. This means the LLM has full context: the original requirements, any files it read, the code it generated, and the test failures. This produces better fixes than a cold-start repair prompt.
 
 ## Configuration
 

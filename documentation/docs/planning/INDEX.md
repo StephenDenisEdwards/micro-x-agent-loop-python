@@ -26,7 +26,7 @@ What to work on next, in order. Rationale: cost reduction is the top priority â€
 
 | Status | Count |
 |--------|-------|
-| Completed | 11 |
+| Completed | 12 |
 | In Progress | 0 |
 | Planning | 0 |
 | Planned | 5 |
@@ -51,3 +51,4 @@ What to work on next, in order. Rationale: cost reduction is the top priority â€
 | [Mode Selection â€” LLM Classification](PLAN-mode-selection-llm-classification.md) | Completed | Phase 2 complete. Phase 4 requires tools to return JSON â€” see [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) |
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Server/gateway architecture migration |
 | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based routing preserving prefix caching. See [DESIGN](../design/DESIGN-cache-preserving-tool-routing.md) |
+| [Codegen Prompt Discipline](PLAN-codegen-prompt-discipline.md) | Completed | Tightened codegen prompt, added infra file deny, compact output format |
