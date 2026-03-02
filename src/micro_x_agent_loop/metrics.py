@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 
-from micro_x_agent_loop.usage import PRICING, UsageResult, estimate_cost
+from micro_x_agent_loop.usage import UsageResult, _lookup_pricing, estimate_cost
 
 _metrics_logger = logger.bind(metrics=True)
 
@@ -192,7 +192,7 @@ class SessionAccumulator:
             "--------------------",
             f"Provider/Model:     {self.provider or '—'} / {self.model or '—'}",
         ]
-        prices = PRICING.get(self.model) if self.model else None
+        prices = _lookup_pricing(self.model) if self.model else None
         if prices:
             inp, out, cr, cw = prices
             lines.append(f"Pricing (per MTok):  in=${inp} out=${out} cache_read=${cr} cache_write=${cw}")
@@ -213,7 +213,7 @@ class SessionAccumulator:
         if len(self.model_subtotals) > 1:
             lines.append("Model breakdown:")
             for model, sub in sorted(self.model_subtotals.items(), key=lambda x: -x[1]["cost_usd"]):
-                prices = PRICING.get(model)
+                prices = _lookup_pricing(model)
                 pricing_str = (
                     f" (in=${prices[0]} out=${prices[1]})" if prices else ""
                 )

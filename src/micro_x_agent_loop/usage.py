@@ -44,9 +44,21 @@ PRICING: dict[str, tuple[float, float, float, float]] = {
 }
 
 
+def _lookup_pricing(model: str) -> tuple[float, float, float, float] | None:
+    """Look up pricing by exact match, then prefix match (e.g. 'claude-sonnet-4-6'
+    matches 'claude-sonnet-4-6-20260204')."""
+    prices = PRICING.get(model)
+    if prices is not None:
+        return prices
+    for key, prices in PRICING.items():
+        if key.startswith(model):
+            return prices
+    return None
+
+
 def estimate_cost(usage: UsageResult) -> float:
     """Calculate estimated cost in USD from a UsageResult."""
-    prices = PRICING.get(usage.model)
+    prices = _lookup_pricing(usage.model)
     if prices is None:
         return 0.0
 
