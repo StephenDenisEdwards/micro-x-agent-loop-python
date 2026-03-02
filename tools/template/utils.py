@@ -13,12 +13,26 @@ def get_output_dir(config: dict) -> Path:
     return Path.cwd()
 
 
-def write_file(path: str, content: str, config: dict | None = None) -> Path:
-    """Write UTF-8 file. Relative paths resolve against WorkingDirectory."""
+def _resolve_path(path: str, config: dict | None) -> Path:
+    """Resolve path against WorkingDirectory from config."""
     p = Path(path)
     if not p.is_absolute() and config:
         p = get_output_dir(config) / p
     p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def write_file(path: str, content: str, config: dict | None = None) -> Path:
+    """Write UTF-8 file (overwrites). Relative paths resolve against WorkingDirectory."""
+    p = _resolve_path(path, config)
     with open(p, "w", encoding="utf-8") as f:
+        f.write(content)
+    return p
+
+
+def append_file(path: str, content: str, config: dict | None = None) -> Path:
+    """Append to UTF-8 file. Relative paths resolve against WorkingDirectory."""
+    p = _resolve_path(path, config)
+    with open(p, "a", encoding="utf-8") as f:
         f.write(content)
     return p

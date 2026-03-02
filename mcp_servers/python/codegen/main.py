@@ -148,7 +148,7 @@ A template has been copied to `tools/{task_name}/`. It contains these infrastruc
 - `mcp_client.py` — MCP stdio client
 - `llm.py` — LLM helper
 - `tools.py` — typed MCP wrappers (shown below)
-- `utils.py` — contains `write_file(path, content, config)` for UTF-8 file output
+- `utils.py` — contains `write_file(path, content, config)` (overwrites) and `append_file(path, content, config)` (appends) for UTF-8 file output
 
 ## tools.py (available MCP functions)
 
@@ -164,7 +164,8 @@ Write the Python files needed to implement the user's requirements. You MUST pro
 - Export `SERVERS` — a list of MCP server name strings (e.g. `["google", "linkedin"]`)
 - Export `async def run_task(clients: dict, config: dict) -> None`
 - Use `from .tools import ...` for MCP calls
-- Use `from .utils import write_file` for file output, always pass `config`
+- Use `from .utils import write_file, append_file` for file output, always pass `config`
+- `write_file` overwrites the file. `append_file` appends to it. When writing a file in stages, use `write_file` for the first section and `append_file` for subsequent sections.
 - Use relative imports only (`from .collector import ...`)
 
 ### Rules
