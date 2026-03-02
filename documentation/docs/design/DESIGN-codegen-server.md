@@ -18,12 +18,12 @@ Add a `codegen` MCP server that exposes a single tool: `generate_code`. When cal
 1. Copies the template directory to a new task directory
 2. Reads the template's `tools.py` (the API surface available to generated code)
 3. Reads the user prompt file (the task requirements)
-4. Makes a **single API call** to a capable model (e.g. Claude Sonnet) with **no tools attached**
+4. Runs a **mini agentic loop** with a single `read_file` tool (typically 2-3 turns) so the LLM can read any files referenced by the prompt
 5. Parses the response to extract Python file contents
 6. Writes the files to disk
 7. Returns a summary to the calling agent
 
-The key insight: **code generation is not an agent task.** It's a "context in, code out" transformation. The model doesn't need tools — it needs a focused prompt with the right context. The MCP server provides the isolation boundary.
+The key insight: **code generation is not a full agent task, but it benefits from minimal tool access.** It's primarily a "context in, code out" transformation, but prompts often reference external files (criteria, schemas, examples). Rather than brittle regex-based auto-detection of referenced filenames, we give the LLM a single `read_file` tool so it can fetch what it needs. This is a constrained mini-loop (1 tool, focused system prompt, 10-turn hard limit), not the 59-tool chaos that motivated isolation.
 
 ## Architecture
 
@@ -50,12 +50,13 @@ The key insight: **code generation is not an agent task.** It's a "context in, c
 │    1. shutil.copytree template → tools/{task_name}│
 │    2. Read tools.py (API surface)                │
 │    3. Read prompt_file (requirements)            │
-│    4. Single API call to Sonnet — NO TOOLS       │
+│    4. Mini agentic loop with read_file tool      │
+│       (LLM reads referenced files, 2-3 turns)   │
 │    5. Parse response → {filename: content}       │
 │    6. Write .py files to disk                    │
-│    7. Return summary                             │
+│    7. Return summary (incl. turn count)          │
 │                                                  │
-│  [Model sees: context only. Zero tool schemas.]  │
+│  [Model sees: 1 tool (read_file). Max 10 turns.] │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -63,11 +64,45 @@ The key insight: **code generation is not an agent task.** It's a "context in, c
 
 | Problem | How the server solves it |
 |---------|------------------------|
-| 59 tools distract the model | The generation call has zero tools. Model can only return text. |
-| System prompt conflicts | The server controls the prompt. No "be an agent" instruction. |
-| Context drift over turns | Single turn. All context in one message. |
-| Tool name collisions | No tools at all. `write_file` is only a Python function in the prompt. |
-| Model goes off-script | The model has no ability to go off-script. It can't call tools, explore, or run anything. |
+| 59 tools distract the model | The generation call has one constrained tool (`read_file`). Model can read files but not explore, run, or modify anything. |
+| System prompt conflicts | The server controls the prompt. No "be an agent" instruction. Focused system prompt for code generation only. |
+| Context drift over turns | Typically 2-3 turns. System prompt stays in attention. Hard limit of 10 turns prevents runaway loops. |
+| Tool name collisions | Only `read_file` exists — no overlap with Python functions in the template. |
+| Model goes off-script | The model can only read files or return text. It can't explore the codebase, run commands, or write files directly. |
+| Prompt references external files | The LLM reads them itself via `read_file`, instead of brittle regex auto-detection. |
+
+## Mini Agentic Loop
+
+### Rationale
+
+The original single-shot design (zero tools) required the server to pre-inject all context into the prompt. When prompts reference other files (e.g. `job-search-prompt.txt` references `job-search-criteria.txt`), the server had to use regex-based auto-detection to find and read those files. This was brittle:
+
+- Regex only catches quoted filenames — indirect references are missed
+- The server guesses what the LLM needs instead of letting it decide
+- Adding heuristics makes the server increasingly complex
+
+The fix: give the LLM a single `read_file` tool so it can read referenced files itself. This is the same capability the agent would have in PROMPT mode, but constrained to a mini-loop.
+
+### Constraints
+
+| Constraint | Value | Rationale |
+|-----------|-------|-----------|
+| Tools available | 1 (`read_file`) | Minimum needed for file access. No write, no execute, no explore. |
+| Max turns | 10 | Hard limit prevents runaway loops. Typical usage: 2-3 turns. |
+| File access scope | WORKING_DIR only | Path traversal protection via `resolve()` + `relative_to()`. |
+| System prompt | Fixed, focused | Code generation role only. No agent instructions. |
+
+### Typical Flow
+
+1. **Turn 1:** LLM receives system prompt + user requirements. Sees file references, calls `read_file` for each.
+2. **Turn 2:** LLM receives file contents. May call `read_file` again if files reference other files.
+3. **Turn 3:** LLM has all context, generates code with `end_turn`.
+
+If the prompt has no file references, the loop completes in 1 turn (same as the old single-shot behavior).
+
+### Pre-loaded Context Files
+
+The `context_files` parameter lets the calling agent pre-inject files into the first message. This saves a round-trip when the agent already knows which files are needed. The LLM sees them immediately and can still use `read_file` for anything else it discovers.
 
 ## Tool Interface
 
@@ -77,9 +112,24 @@ The key insight: **code generation is not an agent task.** It's a "context in, c
 |-----------|------|----------|-------------|
 | `task_name` | string | yes | Snake_case name for the task (e.g. `job_search`). Used as the directory name under `tools/`. |
 | `prompt_file` | string | yes | Filename of the user prompt in the working directory (e.g. `job-search-prompt.txt`). |
+| `context_files` | list[string] | no | Additional files (relative to WORKING_DIR) to pre-load into the prompt as context. Saves a round-trip when the calling agent knows which files are needed. |
 | `model` | string | no | Model to use for generation. Default: `claude-sonnet-4-6`. |
 
-**Returns:** Summary text with list of files written and token usage.
+**Returns:** Summary text with list of files written, token usage, and turn count.
+
+**Structured result:**
+```json
+{
+  "task_name": "job_search",
+  "target_dir": "...",
+  "files_written": ["task.py", "collector.py"],
+  "files_skipped": [],
+  "model": "claude-sonnet-4-6",
+  "input_tokens": 5200,
+  "output_tokens": 18000,
+  "turns": 3
+}
+```
 
 **Example call from agent:**
 ```json
@@ -91,30 +141,38 @@ The key insight: **code generation is not an agent task.** It's a "context in, c
 
 **Example response:**
 ```
-Generated 4 files in tools/job_search/:
-  task.py (4813 chars)
-  collector.py (15076 chars)
-  scorer.py (12522 chars)
-  processor.py (20937 chars)
-
-Tokens: 3969 in, 16214 out
+Generated 4 files for tools/job_search/:
+  - collector.py
+  - processor.py
+  - scorer.py
+  - task.py
+Model: claude-sonnet-4-6 | Tokens: 5200 in, 18000 out | Turns: 3
 Run with: python -m tools.job_search
 ```
 
 ## Generation Prompt Structure
 
-The server assembles a single prompt for the generation model:
+The server splits the prompt into system and user messages:
 
+**System prompt** (static per generation):
 ```
 1. Role: "You are a Python code generator."
 2. Context: Template structure, which files are untouchable
 3. API surface: Full contents of tools.py
-4. Task requirements: Full contents of the user prompt file
-5. Output format: "Return each file as ### FILE: <name>\n```python\n<code>\n```"
-6. Constraints: No LLM calls for scoring/formatting, relative imports only, etc.
+4. Task requirements format: What task.py must export
+5. Rules: No LLM calls for scoring, relative imports, etc.
+6. Instruction: Read referenced files before generating
+7. Output format: "Return each file as ### FILE: <name>\n```python\n<code>\n```"
 ```
 
-This is roughly 10-15K tokens of input. The model returns generated Python files in a parseable format. The server extracts the code blocks and writes them, skipping any infrastructure files the model might mistakenly include.
+**User message** (per request):
+```
+1. User requirements: Full contents of the prompt file
+2. Pre-loaded context files (if any)
+3. Instruction: Read any referenced files, then generate
+```
+
+This is roughly 10-15K tokens of input. The model reads any additional files via `read_file`, then returns generated Python files in a parseable format. The server extracts the code blocks and writes them, skipping any infrastructure files the model might mistakenly include.
 
 ## Safety
 
@@ -122,6 +180,8 @@ This is roughly 10-15K tokens of input. The model returns generated Python files
 - **File type restriction:** Only `.py` files are written. Non-Python files are skipped.
 - **Directory isolation:** Files are only written into `tools/{task_name}/`. The server cannot write elsewhere.
 - **Template preservation:** The template is copied first, then only task-specific files are overwritten.
+- **Path traversal protection:** `read_file` resolves paths relative to WORKING_DIR and uses `resolve()` + `relative_to()` to prevent `..` escape.
+- **Loop bound:** Hard limit of 10 turns prevents runaway tool-call loops.
 
 ## Configuration
 
@@ -136,20 +196,18 @@ The server needs:
 
 ## Future: Sub-Agent Alternative
 
-If sub-agents are implemented in the agent loop, code generation could migrate from an MCP server to a sub-agent:
+If sub-agents are implemented in the agent loop, code generation could migrate from an MCP server to a sub-agent. This is now a natural migration path since codegen already uses a mini agentic loop with tool calls:
 
-- The main agent spawns a sub-agent with a tailored system prompt and zero tools
-- The sub-agent receives the assembled context and returns code
+- The main agent spawns a sub-agent with a tailored system prompt and a single `read_file` tool
+- The sub-agent receives the assembled context, reads any referenced files, and returns code
 - The main agent writes the files
 
-The principle is identical — **isolate the generation call from the main agent's context.** The difference is where the isolation boundary sits:
+The principle is identical — **isolate the generation call from the main agent's context.** The codegen server's mini agentic loop is structurally similar to a sub-agent, making migration straightforward.
 
-| Approach | Isolation boundary | Model decisions in generation path |
-|----------|-------------------|-----------------------------------|
-| MCP server | Separate process | Zero — all logic is Python code |
-| Sub-agent | Separate conversation | Some — sub-agent decides what to generate |
-
-The MCP server is safer because the generation path has zero model decision-making. A sub-agent reintroduces model choices (it could ask for clarification, iterate, etc.), which is valuable for complex tasks but risky for simple code generation.
+| Approach | Isolation boundary | Tools in generation path | Model decisions |
+|----------|-------------------|------------------------|----------------|
+| MCP server (current) | Separate process | 1 (`read_file`) | Minimal — read files, then generate |
+| Sub-agent | Separate conversation | 1+ (configurable) | Some — sub-agent decides what to read and generate |
 
 Both approaches could coexist: MCP server for simple "template → code" generation, sub-agents for more complex tasks requiring multi-turn reasoning.
 
