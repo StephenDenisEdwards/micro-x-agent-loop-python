@@ -1,11 +1,10 @@
 """Codegen MCP Server — generates task app code via a mini agentic loop.
 
-Exposes one tool: generate_code(task_name, prompt_file, model?)
+Exposes one tool: generate_code(task_name, prompt, model?)
 The agent calls it, the server handles everything:
-  copy template → read context → agentic loop with read_file tool → parse response → write files
+  copy template → agentic loop with read_file tool → parse response → write files
 """
 
-import json
 import os
 import re
 import shutil
@@ -122,21 +121,6 @@ def _process_tool_calls(response) -> list[dict]:
     return results
 
 
-def _read_context_files(filenames: list[str]) -> str:
-    """Read context files from WORKING_DIR and format them for the prompt."""
-    if not filenames:
-        return ""
-    sections = []
-    for name in filenames:
-        path = WORKING_DIR / name if WORKING_DIR else Path(name)
-        if not path.exists():
-            sections.append(f"### {name}\n\n*(file not found)*")
-            continue
-        content = path.read_text(encoding="utf-8")
-        sections.append(f"### {name}\n\n```\n{content}\n```")
-    return "\n\n## Pre-loaded context files\n\n" + "\n\n".join(sections)
-
-
 def build_system_prompt(task_name: str, tools_py: str) -> str:
     """Build the system prompt with role, template context, and output format rules."""
     return f"""You are a Python code generator. You will produce Python source files for a console app.
@@ -194,17 +178,14 @@ Return each file in this exact format (one block per file):
 Do NOT include `__main__.py`, `mcp_client.py`, `llm.py`, `tools.py`, or `utils.py` in your output."""
 
 
-def build_user_message(user_prompt: str, context_files_text: str = "") -> str:
-    """Build the first user message with requirements and any pre-loaded context files."""
-    parts = ["## User requirements\n", user_prompt]
-    if context_files_text:
-        parts.append(context_files_text)
-    parts.append(
-        "\n\nIf the requirements reference any files you haven't seen yet, "
+def build_user_message(user_prompt: str) -> str:
+    """Build the first user message with requirements."""
+    return (
+        f"## User requirements\n\n{user_prompt}\n\n"
+        "If the requirements reference any files you haven't seen yet, "
         "use the read_file tool to read them before generating code. "
         "Once you have all the context you need, generate the code."
     )
-    return "\n".join(parts)
 
 
 def parse_files(response_text: str) -> tuple[dict[str, str], list[str]]:
@@ -231,16 +212,14 @@ def parse_files(response_text: str) -> tuple[dict[str, str], list[str]]:
 
 
 @mcp.tool()
-def generate_code(task_name: str, prompt_file: str, context_files: list[str] | None = None,
+def generate_code(task_name: str, prompt: str,
                   model: str = DEFAULT_MODEL) -> CallToolResult:
     """Generate a task app from the template using a mini agentic loop with read_file.
 
     Args:
         task_name: Name for the task (e.g. "job_search"). Creates tools/<task_name>/.
-        prompt_file: Path to the user prompt file, relative to WORKING_DIR.
-        context_files: Optional list of additional files (relative to WORKING_DIR) to include
-            in the generation prompt as context. Use this for data files referenced by the prompt
-            (e.g. criteria files, schemas, examples). Pre-loading saves a round-trip.
+        prompt: The full task requirements as text. If the prompt references files
+            (e.g. criteria files, schemas), the codegen LLM will read them automatically.
         model: Claude model to use. Defaults to claude-sonnet-4-6.
     """
     # Validate environment
@@ -249,30 +228,21 @@ def generate_code(task_name: str, prompt_file: str, context_files: list[str] | N
     if not TEMPLATE_DIR.exists():
         return _error_result(f"Template directory missing: {TEMPLATE_DIR}", task_name)
 
-    # Resolve prompt file
-    prompt_path = WORKING_DIR / prompt_file if WORKING_DIR else Path(prompt_file)
-    if not prompt_path.exists():
-        return _error_result(f"Prompt file not found: {prompt_path}", task_name)
-
     # Step 1: Copy template
     try:
         target_dir = copy_template(task_name)
     except Exception as e:
         return _error_result(f"Template copy failed: {e}", task_name)
 
-    # Step 2: Read tools.py and user prompt
+    # Step 2: Read tools.py
     tools_py = (target_dir / "tools.py").read_text(encoding="utf-8")
-    user_prompt = prompt_path.read_text(encoding="utf-8")
 
-    # Step 3: Pre-load any explicit context_files (saves a round-trip)
-    context_files_text = _read_context_files(context_files or [])
-
-    # Step 4: Build system prompt and first user message
+    # Step 3: Build system prompt and first user message
     system_prompt = build_system_prompt(task_name, tools_py)
-    first_message = build_user_message(user_prompt, context_files_text)
+    first_message = build_user_message(prompt)
     messages = [{"role": "user", "content": first_message}]
 
-    # Step 5: Agentic loop (uses streaming to avoid SDK timeout on long generations)
+    # Step 4: Agentic loop (uses streaming to avoid SDK timeout on long generations)
     client = Anthropic()
     total_input_tokens = 0
     total_output_tokens = 0
@@ -330,13 +300,13 @@ def generate_code(task_name: str, prompt_file: str, context_files: list[str] | N
     except Exception as e:
         return _error_result(f"LLM call failed: {e}", task_name)
 
-    # Step 6: Extract text from final response
+    # Step 5: Extract text from final response
     response_text = ""
     for block in response.content:
         if block.type == "text":
             response_text += block.text
 
-    # Step 7: Parse files from response
+    # Step 6: Parse files from response
     files, skipped = parse_files(response_text)
 
     if not files:
@@ -350,7 +320,7 @@ def generate_code(task_name: str, prompt_file: str, context_files: list[str] | N
             task_name,
         )
 
-    # Step 8: Write files
+    # Step 7: Write files
     for filename, content in files.items():
         filepath = target_dir / filename
         filepath.write_text(content, encoding="utf-8")

@@ -102,7 +102,7 @@ If the prompt has no file references, the loop completes in 1 turn (same as the 
 
 ### Pre-loaded Context Files
 
-The `context_files` parameter lets the calling agent pre-inject files into the first message. This saves a round-trip when the agent already knows which files are needed. The LLM sees them immediately and can still use `read_file` for anything else it discovers.
+Since the codegen LLM has `read_file`, it fetches any referenced files itself. The agent just passes the full prompt text — no need to create a prompt file or pre-inject context files.
 
 ## Tool Interface
 
@@ -111,8 +111,7 @@ The `context_files` parameter lets the calling agent pre-inject files into the f
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `task_name` | string | yes | Snake_case name for the task (e.g. `job_search`). Used as the directory name under `tools/`. |
-| `prompt_file` | string | yes | Filename of the user prompt in the working directory (e.g. `job-search-prompt.txt`). |
-| `context_files` | list[string] | no | Additional files (relative to WORKING_DIR) to pre-load into the prompt as context. Saves a round-trip when the calling agent knows which files are needed. |
+| `prompt` | string | yes | The full task requirements as text. If the prompt references files, the codegen LLM reads them automatically via `read_file`. |
 | `model` | string | no | Model to use for generation. Default: `claude-sonnet-4-6`. |
 
 **Returns:** Summary text with list of files written, token usage, and turn count.
@@ -134,8 +133,8 @@ The `context_files` parameter lets the calling agent pre-inject files into the f
 **Example call from agent:**
 ```json
 {
-  "task_name": "job_search",
-  "prompt_file": "job-search-prompt.txt"
+  "task_name": "email_summary",
+  "prompt": "List my past 50 emails and create an email-summary.md file summarising each one with a link to the original."
 }
 ```
 
