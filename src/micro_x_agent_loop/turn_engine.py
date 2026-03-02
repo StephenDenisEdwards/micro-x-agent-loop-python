@@ -9,7 +9,7 @@ from loguru import logger
 
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
 from micro_x_agent_loop.llm_client import Spinner
-from micro_x_agent_loop.usage import estimate_cost
+from micro_x_agent_loop.usage import UsageResult, estimate_cost
 from micro_x_agent_loop.system_prompt import resolve_system_prompt
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
@@ -161,6 +161,7 @@ class TurnEngine:
             try:
                 self._events.on_maybe_track_mutation(tool_name, tool, tool_input)
                 tool_result = await tool.execute(tool_input)
+                self._track_nested_llm_usage(tool_name, tool_result.structured)
                 if tool_result.is_error:
                     raise RuntimeError(tool_result.text)
                 formatted = self._formatter.format(tool_name, tool_result.text, tool_result.structured)
@@ -241,6 +242,23 @@ class TurnEngine:
         except Exception as ex:
             logger.warning(f"Tool result summarization failed for {tool_name}: {ex}")
             return result, False
+
+    def _track_nested_llm_usage(self, tool_name: str, structured: Any) -> None:
+        """Track LLM usage reported by an MCP tool in its structured result."""
+        if not isinstance(structured, dict):
+            return
+        input_tokens = structured.get("input_tokens")
+        output_tokens = structured.get("output_tokens")
+        model = structured.get("model")
+        if input_tokens is None or output_tokens is None or model is None:
+            return
+        usage = UsageResult(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            provider=structured.get("provider", "anthropic"),
+            model=model,
+        )
+        self._events.on_api_call_completed(usage, f"nested:{tool_name}")
 
     def _truncate_tool_result(self, result: str, tool_name: str) -> str:
         if self._max_tool_result_chars <= 0 or len(result) <= self._max_tool_result_chars:

@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from anthropic import Anthropic
@@ -248,6 +249,7 @@ def generate_code(task_name: str, prompt: str,
     client = Anthropic()
     total_input_tokens = 0
     total_output_tokens = 0
+    resolved_model = model  # will be replaced by response.model (full ID with date suffix)
     turns = 0
 
     try:
@@ -264,6 +266,7 @@ def generate_code(task_name: str, prompt: str,
 
             total_input_tokens += response.usage.input_tokens
             total_output_tokens += response.usage.output_tokens
+            resolved_model = response.model
 
             # Append assistant response to conversation
             # Convert content blocks to serializable dicts
@@ -333,7 +336,8 @@ def generate_code(task_name: str, prompt: str,
         "target_dir": str(target_dir),
         "files_written": sorted(files.keys()),
         "files_skipped": skipped,
-        "model": model,
+        "provider": "anthropic",
+        "model": resolved_model,
         "input_tokens": total_input_tokens,
         "output_tokens": total_output_tokens,
         "turns": turns,
@@ -368,33 +372,44 @@ def run_task(task_name: str) -> CallToolResult:
     if not (task_dir / "task.py").exists():
         return _error_result(f"task.py not found in tools/{task_name}/", task_name)
 
+    # Use temp files instead of pipes (capture_output) to avoid hanging on
+    # Windows.  With pipes, grandchild processes (MCP servers started by the
+    # task) inherit the pipe handles; after the task exits, communicate()
+    # blocks on stdout.read() waiting for those orphan processes to close
+    # the handles.  With temp files, communicate() just calls wait().
     try:
-        result = subprocess.run(
-            [sys.executable, "-m", f"tools.{task_name}"],
-            cwd=str(PROJECT_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
+        with tempfile.TemporaryFile() as out_f, \
+             tempfile.TemporaryFile() as err_f:
+            proc = subprocess.run(
+                [sys.executable, "-m", f"tools.{task_name}"],
+                cwd=str(PROJECT_ROOT),
+                stdout=out_f,
+                stderr=err_f,
+                timeout=300,
+            )
+            out_f.seek(0)
+            err_f.seek(0)
+            stdout = out_f.read().decode("utf-8", errors="replace")
+            stderr = err_f.read().decode("utf-8", errors="replace")
     except subprocess.TimeoutExpired:
         return _error_result(f"Task timed out after 300 seconds.", task_name)
     except Exception as e:
         return _error_result(f"Failed to run task: {e}", task_name)
 
-    output = result.stdout
-    if result.stderr:
-        output += "\n--- stderr ---\n" + result.stderr
+    output = stdout
+    if stderr:
+        output += "\n--- stderr ---\n" + stderr
 
     structured = {
         "task_name": task_name,
-        "exit_code": result.returncode,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
+        "exit_code": proc.returncode,
+        "stdout": stdout,
+        "stderr": stderr,
     }
 
-    if result.returncode != 0:
+    if proc.returncode != 0:
         return CallToolResult(
-            content=[TextContent(type="text", text=f"Task failed (exit code {result.returncode}):\n{output}")],
+            content=[TextContent(type="text", text=f"Task failed (exit code {proc.returncode}):\n{output}")],
             structuredContent=structured,
             isError=True,
         )
