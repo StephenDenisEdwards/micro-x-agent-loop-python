@@ -255,6 +255,8 @@ class TurnEngine:
         usage = UsageResult(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            cache_creation_input_tokens=structured.get("cache_creation_input_tokens", 0) or 0,
+            cache_read_input_tokens=structured.get("cache_read_input_tokens", 0) or 0,
             provider=structured.get("provider", "anthropic"),
             model=model,
         )

@@ -249,8 +249,17 @@ def generate_code(task_name: str, prompt: str,
     client = Anthropic()
     total_input_tokens = 0
     total_output_tokens = 0
+    total_cache_creation_tokens = 0
+    total_cache_read_tokens = 0
     resolved_model = model  # will be replaced by response.model (full ID with date suffix)
     turns = 0
+
+    # Enable prompt caching: system prompt and tools are identical across
+    # turns in the agentic loop, so mark them with cache_control breakpoints.
+    cached_system = [
+        {"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}},
+    ]
+    cached_tools = [{**READ_FILE_TOOL, "cache_control": {"type": "ephemeral"}}]
 
     try:
         for turn in range(MAX_TURNS):
@@ -258,14 +267,16 @@ def generate_code(task_name: str, prompt: str,
             with client.messages.stream(
                 model=model,
                 max_tokens=MAX_TOKENS,
-                system=system_prompt,
+                system=cached_system,
                 messages=messages,
-                tools=[READ_FILE_TOOL],
+                tools=cached_tools,
             ) as stream:
                 response = stream.get_final_message()
 
             total_input_tokens += response.usage.input_tokens
             total_output_tokens += response.usage.output_tokens
+            total_cache_creation_tokens += getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+            total_cache_read_tokens += getattr(response.usage, "cache_read_input_tokens", 0) or 0
             resolved_model = response.model
 
             # Append assistant response to conversation
@@ -340,6 +351,8 @@ def generate_code(task_name: str, prompt: str,
         "model": resolved_model,
         "input_tokens": total_input_tokens,
         "output_tokens": total_output_tokens,
+        "cache_creation_input_tokens": total_cache_creation_tokens,
+        "cache_read_input_tokens": total_cache_read_tokens,
         "turns": turns,
     }
 
