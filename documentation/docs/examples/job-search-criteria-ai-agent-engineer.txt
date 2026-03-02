@@ -1,0 +1,42 @@
+STEPHEN EDWARDS - JOB SEARCH CRITERIA (AI/AGENT FOCUS)
+
+PROFILE: Senior Software Architect & AI/LLM Engineer, 25+ years experience. Currently building production agent systems — agentic loops, tool orchestration, multi-provider LLM integration, cost optimisation, MCP server development. Looking to work in AI/LLM engineering roles. Strong .NET/Azure/Python foundation with recent pivot to AI agent architecture. Available for contract roles, London or fully remote UK.
+
+PRIMARY SKILLS (AI/LLM — current focus):
+- LLM Integration: Anthropic Claude API (streaming, tool use, prompt caching, cache_control), OpenAI API (chat completions, function calling), multi-provider abstraction layers
+- Agent Architecture: Agentic loops (plan-execute-observe), turn engines, context window management, conversation compaction/summarisation, token budgeting, model routing
+- Tool Orchestration: Model Context Protocol (MCP) — server development (stdio/HTTP transports), tool discovery, structured content, input/output schemas, tool result formatting
+- Prompt Engineering: System prompt design, prompt caching optimisation (prefix stability), few-shot/zero-shot patterns, cost-aware prompt compression
+- AI/ML: LangChain, TensorFlow, PyTorch, OpenCV, RAG, Vector DBs (FAISS), GPT-4/5, Azure OpenAI, Whisper, real-time transcription, NLP, CNN
+- Cost Engineering: Token economics, prompt caching (Anthropic/OpenAI pricing models), per-turn cost tracking, model selection/routing, context compaction strategies
+- Memory & State: Session management, checkpointing, conversation history pruning, cross-session persistence, event sourcing
+- Voice/Realtime: Speech-to-text integration (Whisper), real-time audio ingress, voice-driven agent interfaces
+
+ENGINEERING FOUNDATION (25 years):
+- Languages: Python (asyncio, dataclasses, Protocol typing), C# (.NET Core/.NET 6-10, ASP.NET Core), TypeScript/Node.js (MCP servers, Zod, npm workspaces), C/C++ (embedded)
+- Azure: IoT Hub, Service Bus, Cosmos DB, Functions, Durable Functions, Container Instances, SignalR, Azure AD, Event Grid, APIM, Azure AI Search
+- Backend: EF Core, SQL Server, MongoDB, Cosmos DB, REST, gRPC, SignalR, WebSockets, MQTT, Azure Service Bus
+- Frontend: Blazor (Server-side), WPF (MVVM), Angular, React
+- Architecture: Clean Architecture, DDD, CQRS, Event Sourcing, Microservices, TDD, SOLID
+- Healthcare: HL7 v2, FHIR R4, DICOM, GDPR, DPIA, medical device software
+- IoT: MQTT, Azure IoT Hub/Edge, ARM Cortex-M, UWB, BLE
+- DevOps: Azure DevOps, Docker, CI/CD, Git
+
+RECENT DOMAINS: Multi-tool agent systems (MCP ecosystem: filesystem, web, GitHub, Google, WhatsApp, LinkedIn integrations), code generation agents (nested LLM calls), cost metrics/observability for LLM workloads, AI-powered medical sales enablement (RAG, real-time transcription), health data exchange (HL7/FHIR), IoT telemetry & remote device management, automated cell line manufacturing (CNN/image processing).
+
+TARGET ROLES (in preference order):
+1. AI/LLM Engineer, AI Agent Engineer, AI Platform Engineer
+2. Solutions Architect (AI/LLM), Staff Engineer (AI Infrastructure)
+3. Senior Python Engineer (AI/ML focus), Developer Experience Engineer (AI tooling)
+4. Senior Software Architect, Technical Lead (with significant AI/LLM component)
+
+MATCH CRITERIA:
+- Tech: Must include 2-3+ of: LLM APIs (Claude/OpenAI/similar), agent frameworks/architecture, Python, tool orchestration (MCP/function calling), prompt engineering, TypeScript
+- Also strong match if: Azure + AI/ML, .NET + AI integration, Healthcare + AI
+- Location: London (hybrid/on-site) or fully remote UK
+- Contract: £550-800+/day, 3-12 months, Outside IR35 preferred, available ASAP
+- Sectors: AI/ML startups, Enterprise AI adoption, Developer tooling, Healthcare AI, FinTech AI, SaaS platforms, RegTech
+
+STRONG INDICATORS: Building agent systems (not just using them), multi-model/multi-provider architectures, tool use/function calling at scale, cost optimisation for LLM workloads, production LLM systems (not just prototypes), MCP or similar tool protocols, streaming/real-time LLM applications, context window management, healthcare domain + AI.
+
+EXCLUDE: Junior/graduate roles, prompt-only roles (no engineering), data science/ML training roles (unless agent-focused), no-code AI platforms only, pure research with no production engineering, legacy-only (.NET Framework, VB6, Classic ASP), non-technical management.
