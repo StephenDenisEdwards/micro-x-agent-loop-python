@@ -16,10 +16,12 @@
     "@micro-x/mcp-shared": "*",
     "google-auth-library": "^9.15.0",
     "googleapis": "^144.0.0",
+    "html-to-text": "^9.0.5",
     "open": "^10.1.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/html-to-text": "^9.0.4",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0"
   }

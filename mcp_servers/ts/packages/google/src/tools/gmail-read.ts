@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x/mcp-shared";
+import { convert } from "html-to-text";
 import { getGmailService } from "../auth/google-auth.js";
 
 function getHeader(headers: Array<{ name?: string; value?: string }> | undefined, name: string): string {
@@ -15,50 +16,30 @@ function getHeader(headers: Array<{ name?: string; value?: string }> | undefined
 
 /**
  * Decode Gmail's base64url-encoded body data.
+ * Tries UTF-8 first; falls back to Latin-1 if the result contains
+ * replacement characters (common with UK emails using Windows-1252).
  */
 function decodeBody(data: string): string {
-  // Gmail uses base64url encoding (no padding, - and _ instead of + and /)
   const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
-  return Buffer.from(base64, "base64").toString("utf-8");
+  const buf = Buffer.from(base64, "base64");
+  const utf8 = buf.toString("utf-8");
+  if (utf8.includes("\uFFFD")) {
+    return buf.toString("latin1");
+  }
+  return utf8;
 }
 
 /**
- * Simple HTML to text conversion.
- * Strips tags, decodes entities, normalizes whitespace.
+ * Convert HTML to plain text using html-to-text library.
+ * Preserves links as "text (url)" format, handles all entities and encodings.
  */
 function htmlToText(html: string): string {
-  let text = html;
-  // Remove script and style blocks
-  text = text.replace(/<script[\s\S]*?<\/script>/gi, "");
-  text = text.replace(/<style[\s\S]*?<\/style>/gi, "");
-  // Convert <br> to newlines
-  text = text.replace(/<br\s*\/?>/gi, "\n");
-  // Convert block elements to newlines
-  text = text.replace(/<\/(p|div|tr|h[1-6]|blockquote|li)>/gi, "\n");
-  text = text.replace(/<(p|div|tr|h[1-6]|blockquote)[\s>]/gi, "\n");
-  // Convert list items
-  text = text.replace(/<li[\s>]/gi, "\n- ");
-  // Preserve link URLs: extract href and text
-  text = text.replace(/<a\s+[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, linkText: string) => {
-    const cleanText = linkText.replace(/<[^>]+>/g, "").trim();
-    if (href && href !== cleanText && !href.startsWith("#")) {
-      return cleanText ? `${cleanText} ${href}` : href;
-    }
-    return cleanText;
+  return convert(html, {
+    wordwrap: false,
+    selectors: [
+      { selector: "img", format: "skip" },
+    ],
   });
-  // Strip remaining tags
-  text = text.replace(/<[^>]+>/g, "");
-  // Decode common HTML entities
-  text = text.replace(/&amp;/g, "&");
-  text = text.replace(/&lt;/g, "<");
-  text = text.replace(/&gt;/g, ">");
-  text = text.replace(/&quot;/g, '"');
-  text = text.replace(/&#39;/g, "'");
-  text = text.replace(/&nbsp;/g, " ");
-  // Normalize whitespace
-  text = text.replace(/[ \t]{3,}/g, "  ");
-  text = text.replace(/\n{3,}/g, "\n\n");
-  return text.trim();
 }
 
 interface GmailPayload {
