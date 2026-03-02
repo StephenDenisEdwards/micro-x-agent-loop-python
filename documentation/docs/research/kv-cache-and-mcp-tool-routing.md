@@ -210,6 +210,42 @@ Mitigations:
 - **Higher k** — retrieve top-30 instead of top-15, reducing false negatives but also reducing savings
 - **Two-phase selection** — LLM first sees tool names only (cheap), selects which it needs, then full schemas are sent
 
+## How Claude Code Handles This
+
+Claude Code uses a pragmatic approach: **lazy-load tools via search when they become a cost problem**.
+
+### MCP Tool Search
+
+By default, Claude Code sends all tool schemas on every API call — same as this project. But when MCP tool definitions exceed **10% of the context window**, it automatically activates **MCP Tool Search**:
+
+1. Tool schemas are **deferred** — not included in the API call
+2. The LLM receives a **tool search tool** instead
+3. The LLM reasons about what tools it needs, searches by name/description, and selected tool schemas are loaded on demand
+4. Only the schemas for tools the LLM actually requests are sent in subsequent calls
+
+This is effectively a **two-phase selection** approach, but using the LLM itself as the router rather than vector similarity or static configuration.
+
+### Configuration
+
+- **Threshold:** `ENABLE_TOOL_SEARCH=auto` (default, triggers at 10% of context window)
+- **Custom threshold:** `ENABLE_TOOL_SEARCH=auto:5` (triggers at 5%)
+- **Disable:** `ENABLE_TOOL_SEARCH=false`
+- **Per-server visibility:** `/mcp` command shows per-server tool schema costs
+- **Output limiting:** `MAX_MCP_OUTPUT_TOKENS` (default 25,000, warns at 10,000)
+
+### Why this works for Claude Code
+
+- **No external dependencies** — no embedding model, no vector DB, no configuration files
+- **Low false-negative risk** — the LLM reasons about which tools it needs, not a similarity algorithm
+- **Adaptive** — only activates when tool schemas are actually a problem
+- **Cache-friendly** — the deferred tool set is stable (just the search tool), so prompt caching still works for the prefix
+
+### Limitations
+
+- **Extra API round-trip** — each tool search costs a small LLM call before the actual work
+- **LLM routing quality** — depends on tool names/descriptions being discoverable; poorly named tools may be missed
+- **Not cost-optimal for OpenAI** — still sends the search tool + conversation every turn; doesn't address the weak cache discount problem
+
 ## Alternative Approaches
 
 ### Static tool groups (no vector DB)
@@ -236,11 +272,17 @@ After the first turn, preferentially include tools the agent has already used in
 
 **Trade-off:** Doesn't help on turn 1. Biases toward tools already used rather than tools needed next.
 
-### Two-phase tool selection
+### Two-phase tool selection (LLM-based, a la Claude Code)
 
-Turn 1 sends only tool names and one-line descriptions (small token footprint). The LLM responds with which tools it wants. Turn 2 sends full schemas for selected tools only.
+The LLM receives tool names and one-line descriptions (or a search tool), selects which it needs, then full schemas are sent for selected tools only. Claude Code's MCP Tool Search is the production example of this approach.
 
-**Trade-off:** Adds an extra API round-trip per turn. The name+description list itself may be small enough that the savings don't justify the latency.
+**Trade-off:** Adds an extra API round-trip per turn. Works best when the context window is the binding constraint (large tool sets). Less effective when the primary concern is per-token cost (OpenAI's weak cache discount).
+
+### Vector DB routing
+
+Embed tool descriptions at startup, query with user message per turn, return top-k most similar tools.
+
+**Trade-off:** Adds dependency (embedding model + vector store). Risk of false negatives from semantic mismatch. But no extra API round-trip — routing happens client-side before the LLM call.
 
 ## Conclusion
 
@@ -250,14 +292,25 @@ The routing decision is **provider-dependent**, not one-size-fits-all:
 
 **OpenAI (50-75% cache discount):** Routing wins at the current scale. Even with perfect cache hits, OpenAI's weak discount means cached tool schemas remain a significant cost. The real-world example (61 tools, 3 calls, trivial work) demonstrated this — most of the cost was tool schema overhead despite caching. Routing from 60 to 15 tools saves $0.06-0.13 per 10-turn session, even in worst-case cache-miss scenarios.
 
+### Approach comparison
+
+| Approach | Extra API call | False negatives | Dependencies | Cache-friendly | Best for |
+|----------|---------------|-----------------|--------------|----------------|----------|
+| **Send all + caching** (current) | No | None | None | Yes | Anthropic, small tool sets |
+| **Static tool groups** | No | None (within group) | None | Yes (stable group) | Predictable task types |
+| **Claude Code Tool Search** | Yes (search turn) | Low (LLM reasons) | None | Yes (search tool is stable prefix) | Large tool sets, context-bound |
+| **Vector DB routing** | No | Medium (embedding quality) | Embedding model + store | Varies (set may change) | OpenAI, cost-bound, 100+ tools |
+| **LRU / recency** | No | Medium (cold start) | None | Partial | Long sessions, repeat tool use |
+
 ### Recommended approach
 
 For a **multi-provider agent** that supports both Anthropic and OpenAI:
 
 1. **Start with static tool groups** — simplest implementation, no new dependencies, works well when task types are predictable. Configure in `config.json`, select per session.
-2. **If groups prove too rigid, add vector similarity routing** — embed tool descriptions at startup, query per turn with user message, return top-k. Use an always-include list for high-frequency tools (filesystem, bash).
-3. **Make routing provider-aware** — more aggressive filtering for OpenAI (top-15), less aggressive for Anthropic (top-30 or off entirely), since the cost/benefit ratio differs dramatically.
-4. **Use higher k values** to minimize false negatives, accepting reduced savings. Correctness matters more than cost optimization.
+2. **Consider Claude Code's Tool Search pattern** — if tool counts grow large (100+), implement a search-based lazy-loading mechanism. No external dependencies, low false-negative risk, cache-friendly. Good fit when context window is the binding constraint.
+3. **If groups prove too rigid, add vector similarity routing** — embed tool descriptions at startup, query per turn with user message, return top-k. Use an always-include list for high-frequency tools (filesystem, bash). Best fit when per-token cost is the binding constraint (OpenAI).
+4. **Make routing provider-aware** — more aggressive filtering for OpenAI (top-15), less aggressive for Anthropic (top-30 or off entirely), since the cost/benefit ratio differs dramatically.
+5. **Use higher k values** to minimize false negatives, accepting reduced savings. Correctness matters more than cost optimization.
 
 ## Related
 
