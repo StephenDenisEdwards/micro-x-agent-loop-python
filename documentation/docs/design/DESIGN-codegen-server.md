@@ -13,7 +13,7 @@ These are structural problems with using an agent loop for code generation. They
 
 ## Solution: Isolate Code Generation
 
-Add a `codegen` MCP server that exposes a single tool: `generate_code`. When called, it:
+Add a `codegen` MCP server that exposes two tools: `generate_code` and `run_task`. When `generate_code` is called, it:
 
 1. Copies the template directory to a new task directory
 2. Reads the template's `tools.py` (the API surface available to generated code)
@@ -34,27 +34,34 @@ The key insight: **code generation is not a full agent task, but it benefits fro
 │  User: "generate a job search app"               │
 │  Model: calls generate_code(                     │
 │           task_name="job_search",                │
-│           prompt_file="job-search-prompt.txt"    │
+│           prompt="Search Gmail for JobServe..."  │
 │         )                                        │
 │  Result: "4 files written to tools/job_search/"  │
-│  Model: "Your job search app is ready."          │
+│  Model: calls run_task(task_name="job_search")   │
+│  Result: "Report saved to todays-jobs-..."       │
+│  Model: "Your job search report is ready."       │
 │                                                  │
-│  [59 tools available — but only 1 is needed]     │
+│  [59 tools available — but only 2 are needed]    │
 └──────────────────────┬──────────────────────────┘
                        │ MCP stdio
                        ▼
 ┌─────────────────────────────────────────────────┐
 │              codegen MCP Server                  │
 │                                                  │
-│  generate_code(task_name, prompt_file)            │
+│  generate_code(task_name, prompt)                 │
 │    1. shutil.copytree template → tools/{task_name}│
 │    2. Read tools.py (API surface)                │
-│    3. Read prompt_file (requirements)            │
-│    4. Mini agentic loop with read_file tool      │
+│    3. Mini agentic loop with read_file tool      │
 │       (LLM reads referenced files, 2-3 turns)   │
-│    5. Parse response → {filename: content}       │
-│    6. Write .py files to disk                    │
-│    7. Return summary (incl. turn count)          │
+│    4. Parse response → {filename: content}       │
+│    5. Write .py files to disk                    │
+│    6. Return summary (incl. turn count)          │
+│                                                  │
+│  run_task(task_name)                              │
+│    1. Validate tools/{task_name}/task.py exists   │
+│    2. python -m tools.{task_name} from PROJECT_ROOT│
+│    3. Capture stdout/stderr, 300s timeout        │
+│    4. Return output                              │
 │                                                  │
 │  [Model sees: 1 tool (read_file). Max 10 turns.] │
 └─────────────────────────────────────────────────┘
@@ -70,6 +77,7 @@ The key insight: **code generation is not a full agent task, but it benefits fro
 | Tool name collisions | Only `read_file` exists — no overlap with Python functions in the template. |
 | Model goes off-script | The model can only read files or return text. It can't explore the codebase, run commands, or write files directly. |
 | Prompt references external files | The LLM reads them itself via `read_file`, instead of brittle regex auto-detection. |
+| Agent doesn't know how to run generated apps | `run_task` handles the correct invocation (`python -m tools.<name>` from PROJECT_ROOT). The agent doesn't need to know the package structure. |
 
 ## Mini Agentic Loop
 
@@ -99,8 +107,6 @@ The fix: give the LLM a single `read_file` tool so it can read referenced files 
 3. **Turn 3:** LLM has all context, generates code with `end_turn`.
 
 If the prompt has no file references, the loop completes in 1 turn (same as the old single-shot behavior).
-
-### Pre-loaded Context Files
 
 Since the codegen LLM has `read_file`, it fetches any referenced files itself. The agent just passes the full prompt text — no need to create a prompt file or pre-inject context files.
 
@@ -140,14 +146,32 @@ Since the codegen LLM has `read_file`, it fetches any referenced files itself. T
 
 **Example response:**
 ```
-Generated 4 files for tools/job_search/:
+Generated 2 files for tools/email_summary/:
   - collector.py
-  - processor.py
-  - scorer.py
   - task.py
-Model: claude-sonnet-4-6 | Tokens: 5200 in, 18000 out | Turns: 3
-Run with: python -m tools.job_search
+Model: claude-sonnet-4-6 | Tokens: 5200 in, 12000 out | Turns: 1
+Run with: codegen__run_task(task_name="email_summary")
 ```
+
+### `run_task`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_name` | string | yes | Name of a previously generated task (e.g. `job_search`). Must exist under `tools/<task_name>/`. |
+
+Runs `python -m tools.<task_name>` from PROJECT_ROOT with a 300-second timeout. Captures stdout and stderr.
+
+**Structured result:**
+```json
+{
+  "task_name": "email_summary",
+  "exit_code": 0,
+  "stdout": "...",
+  "stderr": ""
+}
+```
+
+**Why a dedicated tool instead of `filesystem__bash`:** Generated apps are Python packages with relative imports, MCP server connections, and config loading. They must be run as modules (`python -m tools.<name>`) from PROJECT_ROOT. The outer agent doesn't know this and will try `python task.py`, which fails with import errors. `run_task` encapsulates the correct invocation.
 
 ## Generation Prompt Structure
 
@@ -166,9 +190,8 @@ The server splits the prompt into system and user messages:
 
 **User message** (per request):
 ```
-1. User requirements: Full contents of the prompt file
-2. Pre-loaded context files (if any)
-3. Instruction: Read any referenced files, then generate
+1. User requirements: The prompt text passed by the agent
+2. Instruction: Read any referenced files, then generate
 ```
 
 This is roughly 10-15K tokens of input. The model reads any additional files via `read_file`, then returns generated Python files in a parseable format. The server extracts the code blocks and writes them, skipping any infrastructure files the model might mistakenly include.
@@ -181,6 +204,7 @@ This is roughly 10-15K tokens of input. The model reads any additional files via
 - **Template preservation:** The template is copied first, then only task-specific files are overwritten.
 - **Path traversal protection:** `read_file` resolves paths relative to WORKING_DIR and uses `resolve()` + `relative_to()` to prevent `..` escape.
 - **Loop bound:** Hard limit of 10 turns prevents runaway tool-call loops.
+- **Execution timeout:** `run_task` has a 300-second timeout to prevent runaway apps.
 
 ## Configuration
 
@@ -217,7 +241,7 @@ The agent loop already detects "compiled mode" (batch processing, scoring, struc
 1. User sends a prompt
 2. Agent loop detects compiled mode signals
 3. Instead of looping with tools, calls `generate_code` once
-4. Runs the generated app
+4. Calls `run_task` to execute the generated app
 5. Returns the results
 
 This is a future integration. The MCP server works independently of compiled mode.
