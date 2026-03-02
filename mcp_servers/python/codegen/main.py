@@ -171,6 +171,7 @@ Write the Python files needed to implement the user's requirements. You MUST pro
 - All scoring, ranking, filtering, statistics, and report formatting MUST be pure Python. No LLM calls for these.
 - Only create `.py` files. No README, no docs, no markdown.
 - Use `datetime.now()` for today's date.
+- Code runs on Windows. Do NOT use `%-d`, `%-m`, etc. in `strftime` — these are Unix-only. Use `%d`, `%m` and strip leading zeros in Python if needed (e.g. `strftime("%B %d, %Y").replace(" 0", " ")`).
 - If the user prompt references other files (e.g. criteria files, data files), use the `read_file` tool to read them BEFORE generating code. Do not guess file contents.
 
 ## Output format
