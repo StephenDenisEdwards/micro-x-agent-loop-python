@@ -1,0 +1,34 @@
+Search Gmail with query "from:jobserve newer_than:1d" to find all JobServe emails from the last 24 hours. Read each email's full content. Then search LinkedIn for matching UK contract roles and get full details of promising jobs.
+
+CANDIDATE PROFILE:
+Senior Software Architect/Engineer, 25+ years. Contract only, London or remote UK.
+Core: C#/.NET Core, Azure, Python, AI/ML, Microservices, Blazor, React
+Target roles: Senior Architect, Solution Architect, Technical Lead, Principal/Staff Engineer, AI/ML Engineer, Senior Software Engineer
+Sectors: Healthcare, Finance, Legal, Industrial, Energy, RegTech
+Rate: £500-700+/day, Outside IR35 preferred. 3-12 month contracts.
+
+SKILLS TO MATCH:
+- .NET Core/.NET 6+, C#, ASP.NET Core, Entity Framework Core
+- Azure (Functions, Service Bus, Cosmos DB, IoT Hub, AI Search, DevOps)
+- Python, AI/ML, LangChain, RAG, Vector DBs, OpenAI/GPT, TensorFlow, PyTorch
+- Microservices, Event-Driven, CQRS, DDD, Clean Architecture
+- Docker, CI/CD, Azure DevOps
+- Healthcare: FHIR, HL7, GDPR, medical devices
+- Blazor, React, Angular, WPF
+
+EXCLUDE: Junior/Graduate roles, purely frontend-only (unless Blazor), legacy-only (VB6, Classic ASP), pure management, permanent relocation outside UK or Czech Republic.
+
+HIGH-VALUE KEYWORDS (boost score):
+AI agents, agentic systems, LLM orchestration, tool use, MCP, Claude/Anthropic, prompt engineering, agent frameworks, LangChain/LangGraph, autonomous agents, multi-agent, function calling
+
+SCORING (1-10, exclude below 5):
+- 9-10: 4+ tech match, Senior/Architect, £600+/day, preferred sector, Outside IR35, AI agent/LLM work
+- 7-8: 3+ tech match, Senior, £500+/day, good sector
+- 5-6: 2+ tech match, acceptable rate, worth considering
+
+Output: 'todays-jobs-YYYY-MM-DD.md' (today's date, no suffixes). Write in stages: write_file for first section, append_file for each subsequent section. See 'example-job-report.md' for the report format.
+
+LINKS:
+- JobServe email links expire. Extract the jid parameter and use: [View on JobServe](https://www.jobserve.com/gb/en/JobLanding.aspx?jid=<jid>)
+- LinkedIn: [View on LinkedIn](url)
+- Always use descriptive link text, never raw URLs.
