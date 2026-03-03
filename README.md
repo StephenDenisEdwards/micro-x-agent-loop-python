@@ -14,6 +14,11 @@ This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/Stephe
 - **Configurable logging** — structured logging via loguru to console and/or file
 - **All tools as MCP servers** — every tool is a TypeScript MCP server with structured output; tool availability determined by config
 - **Cross-platform** — works on Windows, macOS, and Linux
+- **Codegen** _(experimental)_ — isolated MCP server generates Python task apps from templates via a mini agentic loop with validation
+- **Compiled mode** _(experimental)_ — cost-aware prompt/compile mode selection routes batch tasks to code generation (4-20x cost reduction)
+- **Tool search** _(experimental)_ — on-demand tool discovery replaces large schema payloads with a single search tool
+- **Session memory** _(experimental)_ — SQLite-backed transcript persistence, file checkpointing, and session resume/fork
+- **Layered cost reduction** _(experimental)_ — prompt caching, tool schema caching, compaction, concise output, and tool search
 
 ## Quick Start
 
@@ -769,6 +774,152 @@ All tools are TypeScript MCP servers — the Python agent loop is a pure MCP orc
 7. The conversation history is maintained across prompts in the same session
 8. When the conversation grows large, compaction summarizes older messages to stay within context limits
 
+## Experimental Features
+
+The agent includes several experimental features for cost reduction, code generation, and intelligent execution. These are opt-in via `config.json`.
+
+### Codegen (Code Generation MCP Server)
+
+An isolated MCP server that generates Python task apps from templates via a mini agentic loop. Instead of using the full 59-tool agent loop (which fails due to tool distraction and context drift), codegen runs a constrained loop with a single `read_file` tool, a focused system prompt, and a 10-turn hard limit.
+
+**How it works:**
+
+1. User says something like `"generate a job search app using the prompt in job-search-prompt-v2.txt"`
+2. The agent calls `generate_code(task_name, prompt)` on the codegen MCP server
+3. The server copies a template directory, builds a system prompt with the template's API surface, and runs a mini agentic loop so the LLM can read any files referenced in the prompt
+4. Generated `.py` files are written to `tools/{task_name}/`
+5. Built-in validation runs unit tests with up to 3 fix rounds
+6. The agent calls `run_task(task_name)` to execute the generated app
+
+**Config:** Add the `codegen` MCP server entry (see `config-base.json` for the full entry):
+
+```json
+{
+  "McpServers": {
+    "codegen": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "uv", "--directory", "mcp_servers/python/codegen", "run", "main.py"],
+      "env": {
+        "PROJECT_ROOT": "/path/to/micro-x-agent-loop-python",
+        "WORKING_DIR": "/path/to/your/documents"
+      }
+    }
+  }
+}
+```
+
+**Example prompts:**
+
+```
+Generate a job search app using the prompt in job-search-prompt-v2.txt
+
+Generate a repo summary app that will create a markdown report listing all repos
+along with a summary composed from the README.md. Then email that markdown file
+to me at user@example.com as an attachment.
+```
+
+See [Codegen Design](documentation/docs/design/DESIGN-codegen-server.md) and [Codegen Prompts Example](documentation/docs/examples/codegen-prompts.txt) for details.
+
+### Compiled Mode (Prompt/Compile Mode Selection)
+
+A cost-aware execution modality that decides whether a user prompt should run in **prompt mode** (conversational, single-turn) or **compiled mode** (structured batch execution with code generation). For batch-processing tasks (e.g. scoring 100 job listings), compiled mode can reduce costs by 4-20x.
+
+Based on the [Cost-Aware Task Compilation](documentation/docs/research-papers/cost-aware-task-compilation-for-llm-agents/research-paper.md) research paper.
+
+**Stage 1 — Structural pattern matching (zero-cost):** Regex-based analysis detects signals in the prompt — batch processing, scoring/ranking, statistics, mandatory fields, structured output, multiple data sources. Signals are classified as STRONG, MODERATE, or SUPPORTIVE. If ≥2 strong signals are found, COMPILED mode is recommended automatically.
+
+**Stage 2 — LLM classification (for ambiguous cases):** When Stage 1 returns AMBIGUOUS, a cheap LLM call (temp=0, ~$0.01) classifies the prompt. Defaults to COMPILED on parse failure (asymmetric cost — the batch penalty is much higher than the compile penalty).
+
+**Config:**
+
+```json
+{
+  "ModeAnalysisEnabled": true,
+  "Stage2ClassificationEnabled": true,
+  "Stage2Model": ""
+}
+```
+
+`Stage2Model` defaults to the main model if empty. See [Mode Selection Plan](documentation/docs/planning/PLAN-mode-selection-llm-classification.md) for implementation details.
+
+### Tool Search (On-Demand Tool Discovery)
+
+When tool schema size exceeds a threshold (default: 40% of the context window), all tool schemas are replaced with a single `tool_search` tool. The LLM searches for tools by keyword on-demand, and matching schemas are loaded for the current turn. This dramatically reduces tokens per API call — from ~12,700 tokens of schema down to ~500 initially.
+
+**Config:**
+
+```json
+{
+  "ToolSearchEnabled": "auto"
+}
+```
+
+Values: `"false"` (off), `"true"` (always on), `"auto"` (activate when schema exceeds threshold), `"auto:N"` (custom threshold percentage). See [Tool Search Plan](documentation/docs/planning/PLAN-tool-search.md).
+
+### Memory System (Session Persistence)
+
+SQLite-backed session continuity with transcript persistence, file checkpointing/rewind, and structured event tracing. Sessions survive process restarts and crashes.
+
+**Key capabilities:**
+- **Session management** — create, resume, continue, fork with parent tracking
+- **Message persistence** — full ordered transcript with token estimates
+- **Tool call recording** — execution records with inputs/results/errors
+- **File checkpointing** — pre-mutation snapshots with per-file rewind via `/rewind`
+- **Retention control** — configurable time-based and count-based pruning
+
+**Commands:**
+
+```
+/session list [limit]        — List sessions
+/session resume <id>         — Resume by ID or title
+/session continue            — Continue current session across restarts
+/session fork                — Branch from current session
+/session new                 — Start new session
+/rewind <checkpoint_id>      — Revert file mutations
+```
+
+**Config:**
+
+```json
+{
+  "MemoryEnabled": true,
+  "MemoryDbPath": ".micro_x/memory.db",
+  "MemoryMaxSessions": 200,
+  "MemoryMaxMessagesPerSession": 5000,
+  "MemoryRetentionDays": 30,
+  "EnableFileCheckpointing": true,
+  "CheckpointWriteToolsOnly": true,
+  "UserMemoryEnabled": true,
+  "UserMemoryDir": ".micro_x/memory"
+}
+```
+
+See [Memory System Design](documentation/docs/design/DESIGN-memory-system.md) for the full design.
+
+### Cost Reduction Layers
+
+A multi-layer approach to reducing API costs ([ADR-012](documentation/docs/architecture/decisions/ADR-012-layered-cost-reduction.md)):
+
+| Layer | Strategy | Status |
+|-------|----------|--------|
+| 1 | Prompt caching (ephemeral) | Implemented |
+| 2 | Tool schema caching | Implemented |
+| 3 | Tool result summarization | Disabled by default ([ADR-013](documentation/docs/architecture/decisions/ADR-013-tool-result-summarization-reliability.md)) |
+| 4 | Compaction smart trigger | Implemented |
+| 5 | Concise output formatting | Implemented |
+| 6 | Tool search (on-demand discovery) | Implemented |
+| 7 | Cheaper models for sub-tasks | Partial (compaction only) |
+
+Tool result summarization is disabled by default because no summarization can reliably preserve "what matters" — that depends on user intent. Available as opt-in for loss-tolerant workloads:
+
+```json
+{
+  "ToolResultSummarizationEnabled": true,
+  "ToolResultSummarizationThreshold": 4000
+}
+```
+
 ## Documentation
 
 Full documentation is available in the [documentation/docs/](documentation/docs/index.md) directory:
@@ -776,6 +927,9 @@ Full documentation is available in the [documentation/docs/](documentation/docs/
 - [Software Architecture Document](documentation/docs/architecture/SAD.md) — system overview, components, data flow
 - [Tool System Design](documentation/docs/design/DESIGN-tool-system.md) — tool interface, MCP servers, ToolResultFormatter
 - [Compaction Design](documentation/docs/design/DESIGN-compaction.md) — conversation compaction algorithm
+- [Codegen Design](documentation/docs/design/DESIGN-codegen-server.md) — code generation MCP server architecture
+- [Memory System Design](documentation/docs/design/DESIGN-memory-system.md) — session persistence, checkpoints, events
+- [Cost-Aware Task Compilation](documentation/docs/research-papers/cost-aware-task-compilation-for-llm-agents/research-paper.md) — research paper on prompt/compile mode
 - [WhatsApp MCP Setup](documentation/docs/design/tools/whatsapp-mcp/README.md) — WhatsApp integration guide, prerequisites, pain points
 - [Configuration Reference](documentation/docs/operations/config.md) — all settings with types and defaults
 - [Architecture Decision Records](documentation/docs/architecture/decisions/README.md) — index of all ADRs
