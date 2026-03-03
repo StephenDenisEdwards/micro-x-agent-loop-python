@@ -180,13 +180,6 @@ The body field is html-to-text converted email HTML:
 - Use datetime.now() for today's date.
 - Windows only: do NOT use %-d, %-m in strftime. Use %d, %m and strip leading zeros in Python if needed.
 
-## Report format (when generating markdown reports)
-Links MUST use descriptive text, never raw URLs:
-- JobServe: [View on JobServe](https://www.jobserve.com/gb/en/JobLanding.aspx?jid=<jid>)
-- LinkedIn: [View on LinkedIn](https://uk.linkedin.com/jobs/view/...)
-Do NOT dump raw email body text into the report. Extract structured fields only.
-If the user prompt references example-job-report.md, read it for the full format template.
-
 ## Generation budget
 - Total generated code: under 800 lines across all files.
 - Unit tests: max 10 tests per module. Test core logic only.
