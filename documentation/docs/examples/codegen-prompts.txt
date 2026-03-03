@@ -1,0 +1,5 @@
+Generate a job search app using the prompt in job-search-prompt-v2.txt
+
+Generate a repo summary app that will create a markdown report listing all the repos along with a summary composed from the README.md. Then email that markdown file to me at stephen.denis.edwards@googlemail.com as an attachment.
+
+Generate a repo listing app that will create a markdown report call my-repos.md listing all the repos in my repo
