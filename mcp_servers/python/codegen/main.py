@@ -164,6 +164,7 @@ tools.py signatures:
 {tools_py}
 
 ## Gmail data format
+gmail_search query for JobServe: use "from:jobserve" (not a full email address — the sender varies).
 gmail_read returns {{messageId, from, to, date, subject, body}}.
 The body field is html-to-text converted email HTML:
 - Links appear as: text [url]  (e.g. "APPLY NOW [https://example.com/apply]")
