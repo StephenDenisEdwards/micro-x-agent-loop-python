@@ -161,6 +161,9 @@ Target directory: tools/{task_name}/
 task.py MUST export:
 - SERVERS: list[str] — MCP server names (e.g. ["google", "linkedin"])
 - async def run_task(clients: dict, config: dict) -> None
+  config is internal infrastructure (working directory, log paths, etc.) — do NOT
+  read task-specific parameters from it. Everything the task needs is in the user
+  prompt or discoverable via the available tools.
 
 Available imports:
 - from .tools import ... (signatures below)
