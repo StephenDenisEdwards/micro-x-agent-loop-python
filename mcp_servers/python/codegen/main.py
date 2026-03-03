@@ -69,26 +69,25 @@ def _error_result(message: str, task_name: str = "") -> CallToolResult:
     )
 
 
-def copy_template(task_name: str) -> Path:
-    """Copy tools/template/ to tools/<task_name>/, preserving any existing generated files.
+def copy_template(task_name: str) -> tuple[Path, str]:
+    """Copy tools/template/ to tools/<task_name>/. If it already exists, append _2, _3, etc.
 
-    Infrastructure files are always overwritten from the template.
-    Previously generated files (task.py, collector.py, etc.) are left untouched.
+    Returns (target_dir, actual_task_name).
     """
-    target = PROJECT_ROOT / "tools" / task_name
-    if target.exists():
-        # Only overwrite infrastructure files, leave generated code intact
-        for f in INFRASTRUCTURE_FILES:
-            src = TEMPLATE_DIR / f
-            if src.exists():
-                shutil.copy2(src, target / f)
-    else:
-        shutil.copytree(TEMPLATE_DIR, target)
+    base = PROJECT_ROOT / "tools" / task_name
+    target = base
+    actual_name = task_name
+    suffix = 1
+    while target.exists():
+        suffix += 1
+        actual_name = f"{task_name}_{suffix}"
+        target = PROJECT_ROOT / "tools" / actual_name
+    shutil.copytree(TEMPLATE_DIR, target)
     # Verify key files exist
     for f in INFRASTRUCTURE_FILES:
         if not (target / f).exists():
             raise FileNotFoundError(f"{f} missing after template copy")
-    return target
+    return target, actual_name
 
 
 def _execute_read_file(path: str) -> str:
@@ -410,10 +409,11 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
     # Step 1: Copy template
     await ctx.info("Copying template...")
     try:
-        target_dir = copy_template(task_name)
+        target_dir, task_name = copy_template(task_name)
     except Exception as e:
         await ctx.error(f"Template copy failed: {e}")
         return _error_result(f"Template copy failed: {e}", task_name)
+    await ctx.info(f"Target: tools/{task_name}/")
 
     # Step 2: Read tools.py
     tools_py = (target_dir / "tools.py").read_text(encoding="utf-8")
