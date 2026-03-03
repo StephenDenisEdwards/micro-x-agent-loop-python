@@ -40,10 +40,22 @@ export function registerCreatePR(server: McpServer, logger: Logger, octokit: Oct
         const draft = pr.draft ? " (draft)" : "";
         const text = `PR created: #${pr.number} — ${pr.title}${draft}\nBranch: ${pr.head.ref} -> ${pr.base.ref}\n${pr.html_url}`;
 
+        const structured = {
+          number: pr.number,
+          title: pr.title,
+          draft: pr.draft ?? false,
+          head: pr.head.ref,
+          base: pr.base.ref,
+          url: pr.html_url,
+        };
+
         const durationMs = Date.now() - startTime;
         logger.info({ tool: "create_pr", request_id: requestId, duration_ms: durationMs, outcome: "success" }, "tool_call_end");
 
-        return { content: [{ type: "text" as const, text }] };
+        return {
+          structuredContent: structured,
+          content: [{ type: "text" as const, text }],
+        };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error({ tool: "create_pr", request_id: requestId, duration_ms: Date.now() - startTime, outcome: "error" }, "tool_call_end");

@@ -1,0 +1,28 @@
+STEPHEN EDWARDS - JOB SEARCH CRITERIA
+
+PROFILE: Senior Software Architect & Engineer, 25+ years. Available for contract roles, London or fully remote UK.
+
+CORE SKILLS:
+- Languages: C# (.NET Core/.NET 6-10, ASP.NET Core), Python (AI/ML), TypeScript/JavaScript (Angular, React), C/C++ (embedded)
+- Azure: IoT Hub, Service Bus, Cosmos DB, Functions, Durable Functions, Container Instances, Batch, SignalR, Azure AD, Event Grid, APIM, Azure AI Search, Azure OpenAI
+- AI/ML: LangChain, TensorFlow, PyTorch, OpenCV, RAG, Vector DBs (FAISS), GPT-4/5, Whisper, real-time transcription, NLP
+- Frontend: Blazor (Server-side), WPF (MVVM), MAUI, Angular, React
+- Backend: EF Core, SQL Server, MongoDB, Cosmos DB, REST, gRPC, SignalR, WebSockets, MQTT, Azure Service Bus
+- IoT: MQTT, Azure IoT Hub/Edge, ARM Cortex-M, UWB, BLE
+- Architecture: Clean Architecture, DDD, CQRS, Event Sourcing, Microservices, TDD, SOLID, TOGAF, SAFe
+- Healthcare: HL7 v2, FHIR R4, DICOM, GDPR, DPIA, medical device software
+- DevOps: Azure DevOps, Docker, CI/CD, Git
+
+RECENT DOMAINS: AI-powered medical sales enablement, health data exchange (HL7/FHIR), IoT telemetry & remote device management, automated cell line manufacturing (CNN/image processing), legal tech, contact tracing wearables, GE Healthcare diagnostics, CTRM risk management.
+
+TARGET ROLES: Senior Software Architect, Senior Software Engineer, Solution Architect, Technical Lead, Principal/Staff Engineer, AI/ML Engineer (with engineering background).
+
+MATCH CRITERIA:
+- Tech: Must include 2-3+ of: .NET Core/C#, Azure, Microservices, AI/ML, Blazor, Python, Docker, Azure DevOps
+- Location: London (hybrid/on-site) or fully remote UK
+- Contract: £500-700+/day, 3-12 months, Outside IR35 preferred, available ASAP
+- Sectors: Healthcare/MedTech, Finance/FinTech, Legal Tech, Industrial/Manufacturing, Energy, Enterprise SaaS, RegTech
+
+STRONG INDICATORS: Architecture/design leadership, AI/ML integration, cloud-native, healthcare domain, TDD/Clean Architecture/DDD, regulatory/compliance (GDPR, medical devices, FHIR).
+
+EXCLUDE: Junior/graduate roles, purely frontend-only (unless Blazor), legacy-only (VB6, Classic ASP), relocation outside UK/Europe, non-technical management.

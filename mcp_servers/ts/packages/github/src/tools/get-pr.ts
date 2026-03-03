@@ -64,10 +64,34 @@ export function registerGetPR(server: McpServer, logger: Logger, octokit: Octoki
         ];
         if (body) { lines.push(""); lines.push(body); }
 
+        const structured = {
+          number: pr.number,
+          title: pr.title,
+          state: pr.state,
+          draft: pr.draft ?? false,
+          mergeable,
+          author: pr.user?.login ?? "unknown",
+          head: pr.head.ref,
+          base: pr.base.ref,
+          created: pr.created_at.slice(0, 10),
+          updated: pr.updated_at.slice(0, 10),
+          approved_reviews: approved,
+          changes_requested: changesRequested,
+          ci_status: ciStatus,
+          additions: pr.additions,
+          deletions: pr.deletions,
+          changed_files: pr.changed_files,
+          url: pr.html_url,
+          body,
+        };
+
         const durationMs = Date.now() - startTime;
         logger.info({ tool: "get_pr", request_id: requestId, duration_ms: durationMs, outcome: "success" }, "tool_call_end");
 
-        return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+        return {
+          structuredContent: structured,
+          content: [{ type: "text" as const, text: lines.join("\n") }],
+        };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error({ tool: "get_pr", request_id: requestId, duration_ms: Date.now() - startTime, outcome: "error" }, "tool_call_end");

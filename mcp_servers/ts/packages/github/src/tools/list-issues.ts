@@ -13,7 +13,7 @@ export function registerListIssues(server: McpServer, logger: Logger, octokit: O
         state: z.enum(["open", "closed", "all"]).default("open").describe("Filter by state (default: open)").optional(),
         labels: z.string().describe("Comma-separated label names to filter by").optional(),
         query: z.string().describe("Search query (GitHub search syntax)").optional(),
-        maxResults: z.number().int().min(1).max(30).default(10).describe("Max results (default 10, max 30)").optional(),
+        maxResults: z.number().int().min(1).max(100).default(10).describe("Max results (default 10, max 100)").optional(),
       },
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -46,7 +46,11 @@ export function registerListIssues(server: McpServer, logger: Logger, octokit: O
 
           const items = resp.data.items;
           const header = `Issues (${state}): ${items.length} of ${resp.data.total_count} result(s)`;
-          return { content: [{ type: "text" as const, text: formatIssues(header, items) }] };
+          const structured = structureIssues(items);
+          return {
+            structuredContent: { issues: structured },
+            content: [{ type: "text" as const, text: formatIssues(header, items) }],
+          };
         }
 
         // Direct repo listing
@@ -63,10 +67,15 @@ export function registerListIssues(server: McpServer, logger: Logger, octokit: O
         const issues = resp.data.filter((i) => !i.pull_request);
         const header = `Issues (${state}) for ${input.repo}: ${issues.length} result(s)`;
 
+        const structured = structureIssues(issues as unknown as Array<Record<string, unknown>>);
+
         const durationMs = Date.now() - startTime;
         logger.info({ tool: "list_issues", request_id: requestId, duration_ms: durationMs, outcome: "success" }, "tool_call_end");
 
-        return { content: [{ type: "text" as const, text: formatIssues(header, issues) }] };
+        return {
+          structuredContent: { issues: structured },
+          content: [{ type: "text" as const, text: formatIssues(header, issues) }],
+        };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error({ tool: "list_issues", request_id: requestId, duration_ms: Date.now() - startTime, outcome: "error" }, "tool_call_end");
@@ -74,6 +83,19 @@ export function registerListIssues(server: McpServer, logger: Logger, octokit: O
       }
     },
   );
+}
+
+function structureIssues(issues: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return issues.map((issue) => ({
+    number: issue.number as number,
+    title: (issue.title as string) ?? "",
+    author: ((issue.user as Record<string, unknown>)?.login as string) ?? "unknown",
+    state: (issue.state as string) ?? "",
+    created: ((issue.created_at as string) ?? "").slice(0, 10),
+    comments: (issue.comments as number) ?? 0,
+    labels: ((issue.labels as Array<Record<string, unknown>>)?.map((l) => l.name).filter(Boolean)) ?? [],
+    url: (issue.html_url as string) ?? "",
+  }));
 }
 
 function formatIssues(header: string, issues: Array<Record<string, unknown>>): string {

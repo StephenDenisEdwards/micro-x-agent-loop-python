@@ -38,14 +38,21 @@ export function registerGetFile(server: McpServer, logger: Logger, octokit: Octo
         const refStr = input.ref ? ` (ref: ${input.ref})` : "";
 
         let text: string;
+        let structured: Record<string, unknown>;
         if (Array.isArray(data)) {
           // Directory listing
+          const entries = data.map((item) => ({
+            name: item.name,
+            type: item.type,
+            size: item.size ?? 0,
+          }));
           const lines = [`Directory: ${input.repo}/${filePath}${refStr} -- ${data.length} entries`, ""];
           for (const item of data) {
             if (item.type === "dir") lines.push(`  ${item.name}/`);
             else lines.push(`  ${item.name}  (${humanSize(item.size ?? 0)})`);
           }
           text = lines.join("\n");
+          structured = { type: "directory", repo: input.repo, path: filePath, entries };
         } else if ("content" in data && data.type === "file") {
           // File content
           const content = Buffer.from(data.content ?? "", "base64").toString("utf-8");
@@ -55,14 +62,16 @@ export function registerGetFile(server: McpServer, logger: Logger, octokit: Octo
             ? content.slice(0, MAX_CONTENT_CHARS) + `\n\n... truncated (${humanSize(size)} total)`
             : content;
           text = `File: ${input.repo}/${filePath}${refStr} (${humanSize(size)})\n\n${displayContent}`;
+          structured = { type: "file", repo: input.repo, path: filePath, content: displayContent, size };
         } else {
           text = `File: ${input.repo}/${filePath}${refStr} -- binary or undecodable content`;
+          structured = { type: "binary", repo: input.repo, path: filePath };
         }
 
         const durationMs = Date.now() - startTime;
         logger.info({ tool: "get_file", request_id: requestId, duration_ms: durationMs, outcome: "success" }, "tool_call_end");
 
-        return { content: [{ type: "text" as const, text }] };
+        return { structuredContent: structured, content: [{ type: "text" as const, text }] };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error({ tool: "get_file", request_id: requestId, duration_ms: Date.now() - startTime, outcome: "error" }, "tool_call_end");

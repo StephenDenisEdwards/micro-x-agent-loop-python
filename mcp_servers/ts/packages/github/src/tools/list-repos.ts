@@ -21,7 +21,7 @@ export function registerListRepos(server: McpServer, logger: Logger, octokit: Oc
           .default("updated")
           .describe("Sort field (default: updated)")
           .optional(),
-        maxResults: z.number().int().min(1).max(30).default(10).describe("Max results (default 10, max 30)").optional(),
+        maxResults: z.number().int().min(1).max(100).default(10).describe("Max results (default 10, max 100)").optional(),
       },
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -63,19 +63,23 @@ export function registerListRepos(server: McpServer, logger: Logger, octokit: Oc
           return { content: [{ type: "text" as const, text: `${header}\n\nNo repositories found.` }] };
         }
 
-        const lines = [header, ""];
-        repos.forEach((repo, i) => {
-          const name = (repo.full_name as string) ?? "?";
-          let desc = (repo.description as string) ?? "";
-          if (desc.length > 100) desc = desc.slice(0, 100) + "...";
-          const visibility = repo.private ? "private" : "public";
-          const language = (repo.language as string) ?? "";
-          const stars = (repo.stargazers_count as number) ?? 0;
-          const updated = ((repo.updated_at as string) ?? "").slice(0, 10);
+        const structured = repos.map((repo) => ({
+          name: (repo.name as string) ?? "",
+          full_name: (repo.full_name as string) ?? "",
+          description: (repo.description as string) ?? "",
+          url: (repo.html_url as string) ?? "",
+          language: (repo.language as string) ?? "",
+          stars: (repo.stargazers_count as number) ?? 0,
+          forks: (repo.forks_count as number) ?? 0,
+          visibility: repo.private ? "private" : "public",
+          updated: ((repo.updated_at as string) ?? "").slice(0, 10),
+        }));
 
-          lines.push(`${i + 1}. ${name} [${visibility}]`);
-          if (desc) lines.push(`   ${desc}`);
-          const detail = [language, `stars: ${stars}`, `updated: ${updated}`].filter(Boolean).join(" | ");
+        const lines = [header, ""];
+        structured.forEach((r, i) => {
+          lines.push(`${i + 1}. ${r.full_name} [${r.visibility}]`);
+          if (r.description) lines.push(`   ${r.description.length > 100 ? r.description.slice(0, 100) + "..." : r.description}`);
+          const detail = [r.language, `stars: ${r.stars}`, `updated: ${r.updated}`].filter(Boolean).join(" | ");
           lines.push(`   ${detail}`);
           lines.push("");
         });
@@ -83,7 +87,10 @@ export function registerListRepos(server: McpServer, logger: Logger, octokit: Oc
         const durationMs = Date.now() - startTime;
         logger.info({ tool: "list_repos", request_id: requestId, duration_ms: durationMs, outcome: "success" }, "tool_call_end");
 
-        return { content: [{ type: "text" as const, text: lines.join("\n").trimEnd() }] };
+        return {
+          structuredContent: { repos: structured },
+          content: [{ type: "text" as const, text: lines.join("\n").trimEnd() }],
+        };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error({ tool: "list_repos", request_id: requestId, duration_ms: Date.now() - startTime, outcome: "error" }, "tool_call_end");

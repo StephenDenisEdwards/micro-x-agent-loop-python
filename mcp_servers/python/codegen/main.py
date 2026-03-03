@@ -167,8 +167,10 @@ task.py MUST export:
 
 Available imports:
 - from .tools import ... (signatures below)
-- from .utils import write_file, append_file (both take path, content, config)
-  - write_file overwrites. append_file appends. When writing in stages, write_file first, append_file after.
+- from .utils import write_file, append_file (both async)
+  - await write_file(path, content, config) — overwrites, returns Path
+  - await append_file(path, content, config) — appends, returns Path
+  - When writing in stages, write_file first, append_file after.
 - Optional modules: collector.py, scorer.py, processor.py — use relative imports (from .collector import ...)
 
 tools.py signatures:
@@ -239,7 +241,7 @@ def parse_files(response_text: str) -> tuple[dict[str, str], list[str]]:
     skipped: list[str] = []
     pattern = r"===\s*(\S+)\s*===\s*\n(.*?)(?====\s*\S+\s*===|\Z)"
     for match in re.finditer(pattern, response_text, re.DOTALL):
-        filename = match.group(1)
+        filename = match.group(1).strip("\"'`")
         content = match.group(2).strip("\n")
         # Strip markdown fences if the LLM wraps code despite instructions
         content = re.sub(r"^```python\n?", "", content)

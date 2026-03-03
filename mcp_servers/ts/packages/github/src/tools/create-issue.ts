@@ -37,10 +37,20 @@ export function registerCreateIssue(server: McpServer, logger: Logger, octokit: 
         const issue = resp.data;
         const text = `Issue created: #${issue.number} — ${issue.title}\n${issue.html_url}`;
 
+        const structured = {
+          number: issue.number,
+          title: issue.title,
+          url: issue.html_url,
+          labels: (issue.labels as Array<Record<string, unknown>>)?.map((l) => l.name).filter(Boolean) ?? [],
+        };
+
         const durationMs = Date.now() - startTime;
         logger.info({ tool: "create_issue", request_id: requestId, duration_ms: durationMs, outcome: "success" }, "tool_call_end");
 
-        return { content: [{ type: "text" as const, text }] };
+        return {
+          structuredContent: structured,
+          content: [{ type: "text" as const, text }],
+        };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error({ tool: "create_issue", request_id: requestId, duration_ms: Date.now() - startTime, outcome: "error" }, "tool_call_end");

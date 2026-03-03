@@ -104,6 +104,14 @@ class McpClient:
         if not self._session:
             raise RuntimeError(f"MCP client '{self.name}' not connected")
         result = await self._session.call_tool(name, arguments or {})
+        # Check for tool errors before returning data
+        if result.isError:
+            parts = []
+            for block in result.content:
+                if hasattr(block, "text"):
+                    parts.append(block.text)
+            error_text = "\n".join(parts) if parts else "Unknown tool error"
+            raise RuntimeError(f"MCP tool '{name}' on '{self.name}' failed: {error_text}")
         # Prefer structuredContent (JSON) over text content
         if result.structuredContent is not None:
             return result.structuredContent

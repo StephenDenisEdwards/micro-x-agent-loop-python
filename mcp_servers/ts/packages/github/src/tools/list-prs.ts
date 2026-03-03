@@ -13,7 +13,7 @@ export function registerListPRs(server: McpServer, logger: Logger, octokit: Octo
         repo: z.string().describe("Repository in owner/repo format. If omitted, lists your PRs across all repos.").optional(),
         state: z.enum(["open", "closed", "all"]).default("open").describe("Filter by state (default: open)").optional(),
         author: z.string().describe("Filter by author username").optional(),
-        maxResults: z.number().int().min(1).max(30).default(10).describe("Max results (default 10, max 30)").optional(),
+        maxResults: z.number().int().min(1).max(100).default(10).describe("Max results (default 10, max 100)").optional(),
       },
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -50,23 +50,30 @@ export function registerListPRs(server: McpServer, logger: Logger, octokit: Octo
           header = `PRs (${state}): ${prs.length} of ${resp.data.total_count} result(s)`;
         }
 
+        const structured = prs.map((pr) => ({
+          number: pr.number as number,
+          title: (pr.title as string) ?? "",
+          author: ((pr.user as Record<string, unknown>)?.login as string) ?? "unknown",
+          state: (pr.state as string) ?? state,
+          updated: ((pr.updated_at as string) ?? "").slice(0, 10),
+          url: (pr.html_url as string) ?? "",
+        }));
+
         const lines = [header, ""];
-        prs.forEach((pr, i) => {
-          const number = pr.number as number;
-          const title = pr.title as string;
-          const author = (pr.user as Record<string, unknown>)?.login ?? "unknown";
-          const updated = (pr.updated_at as string)?.slice(0, 10) ?? "";
-          const url = (pr.html_url as string) ?? "";
-          lines.push(`${i + 1}. #${number} — ${title}`);
-          lines.push(`   Author: ${author} | Updated: ${updated}`);
-          if (url) lines.push(`   ${url}`);
+        structured.forEach((r, i) => {
+          lines.push(`${i + 1}. #${r.number} — ${r.title}`);
+          lines.push(`   Author: ${r.author} | Updated: ${r.updated}`);
+          if (r.url) lines.push(`   ${r.url}`);
           lines.push("");
         });
 
         const durationMs = Date.now() - startTime;
         logger.info({ tool: "list_prs", request_id: requestId, duration_ms: durationMs, outcome: "success" }, "tool_call_end");
 
-        return { content: [{ type: "text" as const, text: lines.join("\n").trimEnd() || "No pull requests found." }] };
+        return {
+          structuredContent: { prs: structured },
+          content: [{ type: "text" as const, text: lines.join("\n").trimEnd() || "No pull requests found." }],
+        };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error({ tool: "list_prs", request_id: requestId, duration_ms: Date.now() - startTime, outcome: "error", error_message: message }, "tool_call_end");
