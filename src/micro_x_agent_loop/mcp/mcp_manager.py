@@ -5,11 +5,20 @@ from typing import Any
 from loguru import logger
 from mcp import ClientSession, StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
+from mcp.types import LoggingMessageNotificationParams
 
 from micro_x_agent_loop.mcp.mcp_tool_proxy import McpToolProxy
 from micro_x_agent_loop.tool import Tool
 
 _SHUTDOWN_TIMEOUT = 5.0
+
+
+async def _mcp_logging_callback(params: LoggingMessageNotificationParams) -> None:
+    """Forward MCP server log notifications to the console via loguru."""
+    level = str(params.level).upper()
+    source = f"mcp.{params.logger}" if params.logger else "mcp"
+    msg = str(params.data) if params.data is not None else ""
+    getattr(logger.opt(depth=1), level.lower(), logger.info)(f"[{source}] {msg}")
 
 
 def _build_proxies(server_name: str, tools_result: Any, session: ClientSession) -> list[Tool]:
@@ -61,7 +70,10 @@ class _ServerConnection:
             args=config.get("args", []),
             env=merged_env,
         )) as (read_stream, write_stream):
-            async with ClientSession(read_stream, write_stream) as session:
+            async with ClientSession(
+                read_stream, write_stream,
+                logging_callback=_mcp_logging_callback,
+            ) as session:
                 await session.initialize()
                 self.session = session
                 tools_result = await session.list_tools()
@@ -71,7 +83,10 @@ class _ServerConnection:
 
     async def _run_http(self, config: dict[str, Any]) -> None:
         async with streamable_http_client(config["url"]) as (read_stream, write_stream, _):
-            async with ClientSession(read_stream, write_stream) as session:
+            async with ClientSession(
+                read_stream, write_stream,
+                logging_callback=_mcp_logging_callback,
+            ) as session:
                 await session.initialize()
                 self.session = session
                 tools_result = await session.list_tools()

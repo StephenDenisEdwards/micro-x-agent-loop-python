@@ -16,7 +16,10 @@ if exist "%BRIDGE_DIR%\whatsapp-bridge.exe" (
     echo WhatsApp bridge started.
 )
 
-.venv\Scripts\python -m micro_x_agent_loop %*
+REM Run the agent. MCP child-process cleanup may send Ctrl+C to the console
+REM group on exit, which causes the "Terminate batch job (Y/N)?" prompt.
+REM Using cmd /C isolates the signal so it doesn't interrupt this script.
+cmd /C .venv\Scripts\python -m micro_x_agent_loop %*
 
 REM Clean up bridge on exit
 if "%BRIDGE_STARTED%"=="1" (
