@@ -28,7 +28,7 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 16384
 MAX_TURNS = 10
 MAX_TEST_ROUNDS = 3
-INFRASTRUCTURE_FILES = {"__main__.py", "mcp_client.py", "llm.py", "tools.py", "utils.py"}
+INFRASTRUCTURE_FILES = {"__main__.py", "mcp_client.py", "llm.py", "tools.py", "utils.py", "test_base.py"}
 
 READ_FILE_TOOL = {
     "name": "read_file",
@@ -185,9 +185,15 @@ The body field is html-to-text converted email HTML:
 
 ## Unit tests
 For every module with pure-logic functions, produce a test_<module>.py file:
-- unittest.TestCase only (no pytest, no third-party packages)
-- Do NOT test async functions, MCP calls, or anything requiring network/IO
-- Import from tools.{task_name}.<module>
+- Extend TaskTestCase from test_base.py (sealed infrastructure):
+  from tools.{task_name}.test_base import TaskTestCase
+- Import source modules using the FULL package path:
+  from tools.{task_name}.collector import _parse_jobserve_email, _extract_rate_str
+- Do NOT use sys.path manipulation, bare imports (import collector), or module stubs.
+  The test runner provides full package context automatically.
+- Do NOT test async functions, MCP calls, or anything requiring network/IO.
+- TaskTestCase provides: make_jobserve_job(**overrides), make_linkedin_job(**overrides),
+  make_email(subject, body, **overrides) — use these for test fixtures.
 - Each test file MUST end with: if __name__ == "__main__": unittest.main()
 
 ## Tool rules
@@ -260,7 +266,8 @@ def _run_tests_sync(target_dir: Path) -> tuple[bool, str]:
              tempfile.TemporaryFile() as err_f:
             proc = subprocess.run(
                 [sys.executable, "-m", "unittest", "discover",
-                 "-s", str(target_dir), "-p", "test_*.py", "-v"],
+                 "-s", str(target_dir), "-t", str(PROJECT_ROOT),
+                 "-p", "test_*.py", "-v"],
                 cwd=str(PROJECT_ROOT),
                 env=env,
                 stdin=subprocess.DEVNULL,
