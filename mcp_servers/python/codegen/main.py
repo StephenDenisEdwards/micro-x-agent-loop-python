@@ -70,11 +70,20 @@ def _error_result(message: str, task_name: str = "") -> CallToolResult:
 
 
 def copy_template(task_name: str) -> Path:
-    """Copy tools/template/ to tools/<task_name>/ using shutil (cross-platform)."""
+    """Copy tools/template/ to tools/<task_name>/, preserving any existing generated files.
+
+    Infrastructure files are always overwritten from the template.
+    Previously generated files (task.py, collector.py, etc.) are left untouched.
+    """
     target = PROJECT_ROOT / "tools" / task_name
     if target.exists():
-        shutil.rmtree(target)
-    shutil.copytree(TEMPLATE_DIR, target)
+        # Only overwrite infrastructure files, leave generated code intact
+        for f in INFRASTRUCTURE_FILES:
+            src = TEMPLATE_DIR / f
+            if src.exists():
+                shutil.copy2(src, target / f)
+    else:
+        shutil.copytree(TEMPLATE_DIR, target)
     # Verify key files exist
     for f in INFRASTRUCTURE_FILES:
         if not (target / f).exists():
