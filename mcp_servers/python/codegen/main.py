@@ -171,6 +171,8 @@ The body field is html-to-text converted email HTML:
 - Do NOT parse email bodies by looking for "FieldName: value" patterns. These rarely exist in HTML emails.
 - Parse by position: split on blank lines to get ordered blocks (title, location, rate, duration, etc.).
 - Footer/boilerplate typically appears after "Apply [url]" or similar markers.
+- JobServe email links expire. Extract the jid parameter from the URL and construct a stable link:
+  https://www.jobserve.com/gb/en/JobLanding.aspx?jid=<jid>
 
 ## Rules
 - All scoring, ranking, filtering, statistics, and report formatting MUST be pure Python. No LLM calls for these.
