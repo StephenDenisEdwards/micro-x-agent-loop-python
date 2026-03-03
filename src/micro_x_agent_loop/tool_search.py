@@ -7,21 +7,15 @@ from typing import Any
 import tiktoken
 from loguru import logger
 
+from micro_x_agent_loop.constants import (
+    TOOL_SEARCH_CONTEXT_WINDOWS,
+    TOOL_SEARCH_DEFAULT_CONTEXT_WINDOW,
+    TOOL_SEARCH_DEFAULT_THRESHOLD_PERCENT,
+    TOOL_SEARCH_MAX_LOAD,
+)
 from micro_x_agent_loop.tool import Tool
 
 _encoding = tiktoken.get_encoding("cl100k_base")
-
-# Context window sizes by model family (tokens).
-_CONTEXT_WINDOWS: dict[str, int] = {
-    "claude-opus-4": 200_000,
-    "claude-sonnet-4": 200_000,
-    "claude-haiku-4": 200_000,
-    "claude-haiku-3": 200_000,
-    "gpt-4o": 128_000,
-    "gpt-4.1": 1_000_000,
-    "o3": 200_000,
-    "o4": 200_000,
-}
 
 TOOL_SEARCH_SCHEMA: dict[str, Any] = {
     "name": "tool_search",
@@ -58,17 +52,17 @@ def estimate_tool_schema_tokens(converted_tools: list[dict]) -> int:
 
 
 def _get_context_window(model: str) -> int:
-    for prefix, window in _CONTEXT_WINDOWS.items():
+    for prefix, window in TOOL_SEARCH_CONTEXT_WINDOWS.items():
         if model.startswith(prefix):
             return window
-    return 200_000
+    return TOOL_SEARCH_DEFAULT_CONTEXT_WINDOW
 
 
 def should_activate_tool_search(
     setting: str,
     converted_tools: list[dict],
     model: str,
-    threshold_percent: int = 40,
+    threshold_percent: int = TOOL_SEARCH_DEFAULT_THRESHOLD_PERCENT,
 ) -> bool:
     """Determine whether tool search should be active for this session."""
     if setting == "false":
@@ -106,7 +100,7 @@ class ToolSearchManager:
     - ``handle_tool_search()`` processes a tool_search call and returns results.
     """
 
-    _MAX_LOAD = 20
+    _MAX_LOAD = TOOL_SEARCH_MAX_LOAD
 
     def __init__(
         self,

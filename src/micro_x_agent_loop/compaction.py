@@ -5,6 +5,15 @@ from typing import Any, Protocol, runtime_checkable
 import tiktoken
 from loguru import logger
 
+from micro_x_agent_loop.constants import (
+    COMPACTION_PREVIEW_HEAD,
+    COMPACTION_PREVIEW_TAIL,
+    COMPACTION_PREVIEW_TOTAL,
+    COMPACTION_SUMMARIZE_HALF_CAP,
+    COMPACTION_SUMMARIZE_INPUT_CAP,
+    DEFAULT_COMPACTION_THRESHOLD_TOKENS,
+    DEFAULT_PROTECTED_TAIL_MESSAGES,
+)
 from micro_x_agent_loop.usage import UsageResult
 
 _encoding = tiktoken.get_encoding("cl100k_base")
@@ -25,8 +34,8 @@ class SummarizeCompactionStrategy:
         self,
         provider: Any,
         model: str,
-        threshold_tokens: int = 80_000,
-        protected_tail_messages: int = 6,
+        threshold_tokens: int = DEFAULT_COMPACTION_THRESHOLD_TOKENS,
+        protected_tail_messages: int = DEFAULT_PROTECTED_TAIL_MESSAGES,
         on_compaction_completed: Callable[[UsageResult, int, int, int], None] | None = None,
         smart_trigger_enabled: bool = False,
     ):
@@ -163,9 +172,9 @@ def _format_for_summarization(messages: list[dict]) -> str:
 
 
 def _preview_text(text: str) -> str:
-    if len(text) <= 700:
+    if len(text) <= COMPACTION_PREVIEW_TOTAL:
         return text
-    return text[:500] + "\n[...truncated...]\n" + text[-200:]
+    return text[:COMPACTION_PREVIEW_HEAD] + "\n[...truncated...]\n" + text[-COMPACTION_PREVIEW_TAIL:]
 
 
 _SUMMARIZE_PROMPT = """\
@@ -196,8 +205,8 @@ async def _summarize(
     formatted = _format_for_summarization(messages)
 
     # Cap summarization input
-    if len(formatted) > 100_000:
-        half = 50_000
+    if len(formatted) > COMPACTION_SUMMARIZE_INPUT_CAP:
+        half = COMPACTION_SUMMARIZE_HALF_CAP
         formatted = (
             formatted[:half]
             + "\n\n[...middle of conversation omitted for brevity...]\n\n"

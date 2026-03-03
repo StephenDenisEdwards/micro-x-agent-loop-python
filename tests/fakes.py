@@ -204,3 +204,129 @@ class FakeEventEmitter:
 
     def emit(self, *args: Any, **kwargs: Any) -> None:
         self.events.append((args, kwargs))
+
+
+# ---------------------------------------------------------------------------
+# Session / checkpoint manager fakes
+# ---------------------------------------------------------------------------
+
+
+class SessionManagerFake:
+    """In-memory session manager for command-level tests."""
+
+    def __init__(self) -> None:
+        self._sessions: dict[str, dict] = {
+            "s1": {
+                "id": "s1",
+                "title": "Session One",
+                "parent_session_id": None,
+                "created_at": "2026-02-19T00:00:00+00:00",
+                "updated_at": "2026-02-19T00:00:00+00:00",
+                "status": "active",
+            }
+        }
+        self._messages: dict[str, list[dict]] = {"s1": []}
+
+    def load_messages(self, session_id: str) -> list[dict]:
+        return list(self._messages.get(session_id, []))
+
+    def get_session(self, session_id: str) -> dict | None:
+        return self._sessions.get(session_id)
+
+    def list_sessions(self, limit: int = 20) -> list[dict]:
+        return list(self._sessions.values())[:limit]
+
+    def create_session(self, title: str | None = None, **_: Any) -> str:
+        sid = "s-new"
+        self._sessions[sid] = {
+            "id": sid,
+            "title": title or "Session New",
+            "parent_session_id": None,
+            "created_at": "2026-02-19T01:00:00+00:00",
+            "updated_at": "2026-02-19T01:00:00+00:00",
+            "status": "active",
+        }
+        self._messages[sid] = []
+        return sid
+
+    def set_session_title(self, session_id: str, title: str) -> None:
+        self._sessions[session_id]["title"] = title
+
+    def resolve_session_identifier(self, identifier: str) -> dict | None:
+        identifier = identifier.strip()
+        if identifier == "ambiguous":
+            raise ValueError("ambiguous")
+        if identifier in self._sessions:
+            return self._sessions[identifier]
+        for session in self._sessions.values():
+            if session["title"].casefold() == identifier.casefold():
+                return session
+        return None
+
+    def build_session_summary(self, session_id: str) -> dict:
+        return {
+            "session_id": session_id,
+            "title": self._sessions[session_id]["title"],
+            "created_at": "2026-02-19T00:00:00+00:00",
+            "updated_at": "2026-02-19T00:10:00+00:00",
+            "message_count": 2,
+            "user_message_count": 1,
+            "assistant_message_count": 1,
+            "checkpoint_count": 1,
+            "last_user_preview": "hello",
+            "last_assistant_preview": "world",
+        }
+
+    def fork_session(self, source_session_id: str) -> str:
+        sid = "s-fork"
+        self._sessions[sid] = {
+            "id": sid,
+            "title": "Fork Session",
+            "parent_session_id": source_session_id,
+            "created_at": "2026-02-19T02:00:00+00:00",
+            "updated_at": "2026-02-19T02:00:00+00:00",
+            "status": "active",
+        }
+        self._messages[sid] = []
+        return sid
+
+    def append_message(self, session_id: str, role: str, content: str | list[dict]) -> tuple[str, int]:
+        msgs = self._messages.setdefault(session_id, [])
+        msgs.append({"role": role, "content": content})
+        return f"m{len(msgs)}", len(msgs)
+
+    def record_tool_call(self, *args: Any, **kwargs: Any) -> str:
+        return "tc1"
+
+
+class CheckpointManagerFake:
+    """In-memory checkpoint manager for command-level tests."""
+
+    enabled = True
+    write_tools_only = True
+
+    def __init__(self) -> None:
+        self.created: list[str] = []
+        self.rewinds: list[str] = []
+
+    def create_checkpoint(self, session_id: str, user_message_id: str, scope: dict | None = None) -> str:
+        cid = "cp1"
+        self.created.append(cid)
+        return cid
+
+    def maybe_track_tool_input(self, checkpoint_id: str, tool_input: dict) -> list[str]:
+        return []
+
+    def list_checkpoints(self, session_id: str, limit: int = 20) -> list[dict]:
+        return [
+            {
+                "id": "cp1",
+                "created_at": "2026-02-19T00:05:00+00:00",
+                "tools": ["write_file"],
+                "user_preview": "update file",
+            }
+        ]
+
+    def rewind_files(self, checkpoint_id: str) -> tuple[str, list[dict[str, str]]]:
+        self.rewinds.append(checkpoint_id)
+        return "s1", [{"path": "x.txt", "status": "restored", "detail": ""}]

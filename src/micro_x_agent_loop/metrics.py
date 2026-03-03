@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 
+from micro_x_agent_loop.constants import CHARS_TO_TOKENS_DIVISOR
 from micro_x_agent_loop.usage import UsageResult, _lookup_pricing, estimate_cost
 
 _metrics_logger = logger.bind(metrics=True)
@@ -60,7 +61,7 @@ def build_tool_execution_metric(
         "turn_number": turn_number,
         "tool_name": tool_name,
         "result_chars": result_chars,
-        "result_estimated_tokens": result_chars // 4,
+        "result_estimated_tokens": result_chars // CHARS_TO_TOKENS_DIVISOR,
         "duration_ms": duration_ms,
         "is_error": is_error,
         "was_summarized": was_summarized,

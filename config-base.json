@@ -1,0 +1,135 @@
+{
+  "CompactionStrategy": "summarize",
+  "MemoryEnabled": true,
+  "MemoryDbPath": ".micro_x/memory.db",
+  "EnableFileCheckpointing": true,
+  "CheckpointWriteToolsOnly": true,
+  "MemoryMaxSessions": 200,
+  "MemoryMaxMessagesPerSession": 5000,
+  "MemoryRetentionDays": 30,
+  "UserMemoryEnabled": true,
+  "UserMemoryDir": "${MICRO_X_HOME}\\.micro_x\\memory",
+  "WorkingDirectory": "${MICRO_X_WORKING_DIR}",
+  "LogLevel": "INFO",
+  "ToolResultSummarizationEnabled": false,
+  "ToolResultSummarizationModel": "",
+  "ToolResultSummarizationThreshold": 4000,
+  "ConciseOutputEnabled": true,
+  "LogConsumers": [
+    { "type": "console" },
+    { "type": "file", "path": "${MICRO_X_LOG_DIR}\\agent.log" },
+    { "type": "api_payload", "path": "${MICRO_X_LOG_DIR}\\api_payloads.jsonl" }
+  ],
+  "ToolFormatting": {
+    "filesystem__bash": { "format": "text", "field": "stdout" },
+    "filesystem__read_file": { "format": "text", "field": "content" },
+    "filesystem__write_file": { "format": "key_value" },
+    "filesystem__append_file": { "format": "key_value" },
+    "filesystem__save_memory": { "format": "key_value" },
+    "web__web_fetch": { "format": "text", "field": "content" },
+    "web__web_search": { "format": "table", "max_rows": 20 },
+    "linkedin__linkedin_jobs": { "format": "table", "max_rows": 20 },
+    "linkedin__linkedin_job_detail": { "format": "json" },
+    "github__list_prs": { "format": "table", "max_rows": 20 },
+    "github__get_pr": { "format": "json" },
+    "github__create_pr": { "format": "json" },
+    "github__list_issues": { "format": "table", "max_rows": 20 },
+    "github__create_issue": { "format": "json" },
+    "github__get_file": { "format": "text", "field": "content" },
+    "github__search_code": { "format": "table", "max_rows": 20 },
+    "github__list_repos": { "format": "table", "max_rows": 20 },
+    "google__gmail_search": { "format": "table", "max_rows": 15 },
+    "google__gmail_read": { "format": "json" },
+    "google__gmail_send": { "format": "key_value" },
+    "google__calendar_list_events": { "format": "table", "max_rows": 20 },
+    "google__calendar_create_event": { "format": "json" },
+    "google__calendar_get_event": { "format": "json" },
+    "google__contacts_search": { "format": "table", "max_rows": 20 },
+    "google__contacts_list": { "format": "table", "max_rows": 20 },
+    "google__contacts_get": { "format": "json" },
+    "google__contacts_create": { "format": "json" },
+    "google__contacts_update": { "format": "json" },
+    "google__contacts_delete": { "format": "key_value" },
+    "anthropic-admin__anthropic_usage": { "format": "key_value" },
+    "interview-assist__ia_healthcheck": { "format": "key_value" },
+    "interview-assist__ia_list_recordings": { "format": "table", "max_rows": 30 },
+    "interview-assist__ia_analyze_session": { "format": "json" },
+    "interview-assist__ia_evaluate_session": { "format": "json" },
+    "interview-assist__ia_compare_strategies": { "format": "json" },
+    "interview-assist__ia_tune_threshold": { "format": "json" },
+    "interview-assist__ia_regression_test": { "format": "json" },
+    "interview-assist__ia_create_baseline": { "format": "key_value" },
+    "interview-assist__ia_transcribe_once": { "format": "json" },
+    "interview-assist__stt_list_devices": { "format": "table", "max_rows": 20 },
+    "interview-assist__stt_start_session": { "format": "key_value" },
+    "interview-assist__stt_get_updates": { "format": "json" },
+    "interview-assist__stt_get_session": { "format": "key_value" },
+    "interview-assist__stt_stop_session": { "format": "key_value" },
+    "codegen__generate_code": { "format": "json" }
+  },
+  "DefaultFormat": { "format": "json" },
+  "McpServers": {
+    "filesystem": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["${MICRO_X_HOME}\\mcp_servers\\ts\\packages\\filesystem\\dist\\index.js"],
+      "env": {
+        "FILESYSTEM_WORKING_DIR": "${MICRO_X_WORKING_DIR}",
+        "USER_MEMORY_DIR": "${MICRO_X_HOME}\\.micro_x\\memory",
+        "USER_MEMORY_MAX_LINES": "200"
+      }
+    },
+    "web": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["${MICRO_X_HOME}\\mcp_servers\\ts\\packages\\web\\dist\\index.js"]
+    },
+    "linkedin": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["${MICRO_X_HOME}\\mcp_servers\\ts\\packages\\linkedin\\dist\\index.js"]
+    },
+    "github": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["${MICRO_X_HOME}\\mcp_servers\\ts\\packages\\github\\dist\\index.js"]
+    },
+    "google": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["${MICRO_X_HOME}\\mcp_servers\\ts\\packages\\google\\dist\\index.js"]
+    },
+    "anthropic-admin": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["${MICRO_X_HOME}\\mcp_servers\\ts\\packages\\anthropic-admin\\dist\\index.js"]
+    },
+    "interview-assist": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["${MICRO_X_HOME}\\mcp_servers\\ts\\packages\\interview-assist\\dist\\index.js"],
+      "env": {
+        "INTERVIEW_ASSIST_REPO": "${INTERVIEW_ASSIST_REPO}"
+      }
+    },
+    "system-info": {
+      "transport": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--no-build", "--project", "${MCP_SERVERS_DOTNET}\\system-info\\src"]
+    },
+    "whatsapp": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "uv", "--directory", "${WHATSAPP_MCP_DIR}", "run", "main.py"]
+    },
+    "codegen": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "uv", "--directory", "${MICRO_X_HOME}\\mcp_servers\\python\\codegen", "run", "main.py"],
+      "env": {
+        "PROJECT_ROOT": "${MICRO_X_HOME}",
+        "WORKING_DIR": "${MICRO_X_WORKING_DIR}"
+      }
+    }
+  }
+}

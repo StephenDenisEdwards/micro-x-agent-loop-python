@@ -20,6 +20,13 @@ class ToolResultFormatter:
         self._tool_formatting = tool_formatting or {}
         self._default_format = default_format or {"format": "json"}
 
+    def get_tool_format(self, tool_name: str) -> dict | None:
+        return self._tool_formatting.get(tool_name)
+
+    @property
+    def default_format(self) -> dict:
+        return self._default_format
+
     def format(
         self,
         tool_name: str,
