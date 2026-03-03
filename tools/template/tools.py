@@ -24,17 +24,75 @@ async def gmail_search(clients: Clients, query: str, max_results: int = 10) -> l
     result = await _get(clients, "google").call_tool("gmail_search", {
         "query": query, "maxResults": max_results,
     })
+    if isinstance(result, dict):
+        return result.get("messages", [])
     if isinstance(result, str):
-        return []
-    return result.get("messages", [])
+        return _parse_gmail_search_text(result)
+    return []
 
 
 async def gmail_read(clients: Clients, message_id: str) -> dict | None:
-    """Read full email. Returns {messageId, from, to, date, subject, body} or None."""
+    """Read full email. Returns {messageId, from, to, date, subject, body} or None.
+
+    The body field is html-to-text converted HTML. Links appear as 'text [url]'.
+    Content is positional (visual blocks separated by blank lines), not labeled
+    key-value pairs.
+    """
     result = await _get(clients, "google").call_tool("gmail_read", {"messageId": message_id})
-    if isinstance(result, str):
-        return None
-    return result
+    if isinstance(result, dict):
+        return result
+    if isinstance(result, str) and result.strip():
+        return _parse_gmail_read_text(message_id, result)
+    return None
+
+
+def _parse_gmail_search_text(text: str) -> list[dict]:
+    """Parse gmail_search text format: 'ID: ...\n  Date: ...\n  From: ...' blocks."""
+    if not text.strip() or "No emails found" in text:
+        return []
+    messages: list[dict] = []
+    current: dict[str, str] = {}
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if line.startswith("ID: "):
+            if current:
+                messages.append(current)
+            current = {"id": line[4:].strip()}
+        elif stripped.startswith("Date: ") and current:
+            current["date"] = stripped[6:]
+        elif stripped.startswith("From: ") and current:
+            current["from"] = stripped[6:]
+        elif stripped.startswith("Subject: ") and current:
+            current["subject"] = stripped[9:]
+        elif stripped.startswith("Snippet: ") and current:
+            current["snippet"] = stripped[9:]
+    if current:
+        messages.append(current)
+    return messages
+
+
+def _parse_gmail_read_text(message_id: str, text: str) -> dict:
+    """Parse gmail_read text format: 'From: ...\nTo: ...\nDate: ...\nSubject: ...\n\n<body>'."""
+    headers: dict[str, str] = {}
+    lines = text.split("\n")
+    body_start = 0
+    for i, line in enumerate(lines):
+        if line.strip() == "":
+            body_start = i + 1
+            break
+        for key in ("From", "To", "Date", "Subject"):
+            if line.startswith(f"{key}: "):
+                headers[key.lower()] = line[len(key) + 2:]
+                break
+    body = "\n".join(lines[body_start:]).strip()
+    return {
+        "messageId": message_id,
+        "from": headers.get("from", ""),
+        "to": headers.get("to", ""),
+        "date": headers.get("date", ""),
+        "subject": headers.get("subject", ""),
+        "body": body,
+    }
 
 
 async def gmail_send(clients: Clients, to: str, subject: str, body: str) -> str:

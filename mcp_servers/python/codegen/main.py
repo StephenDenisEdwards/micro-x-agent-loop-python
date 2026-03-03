@@ -163,6 +163,15 @@ Available imports:
 tools.py signatures:
 {tools_py}
 
+## Gmail data format
+gmail_read returns {{messageId, from, to, date, subject, body}}.
+The body field is html-to-text converted email HTML:
+- Links appear as: text [url]  (e.g. "APPLY NOW [https://example.com/apply]")
+- Content is POSITIONAL — visual blocks separated by blank lines — NOT labeled key-value pairs.
+- Do NOT parse email bodies by looking for "FieldName: value" patterns. These rarely exist in HTML emails.
+- Parse by position: split on blank lines to get ordered blocks (title, location, rate, duration, etc.).
+- Footer/boilerplate typically appears after "Apply [url]" or similar markers.
+
 ## Rules
 - All scoring, ranking, filtering, statistics, and report formatting MUST be pure Python. No LLM calls for these.
 - Only create .py files.
