@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x/mcp-shared";
-import { ValidationError, UpstreamError } from "@micro-x/mcp-shared";
+import { ValidationError, UpstreamError, resilientFetch } from "@micro-x/mcp-shared";
 
 const BRAVE_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search";
 const TIMEOUT_MS = 30_000;
@@ -66,26 +66,12 @@ export function registerWebSearch(server: McpServer, logger: Logger, apiKey: str
         url.searchParams.set("q", query);
         url.searchParams.set("count", String(count));
 
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-        let response: Response;
-        try {
-          response = await fetch(url.toString(), {
-            headers: {
-              "X-Subscription-Token": apiKey,
-              "Accept": "application/json",
-            },
-            signal: controller.signal,
-          });
-        } catch (err: unknown) {
-          if (err instanceof Error && err.name === "AbortError") {
-            throw new UpstreamError("Search request timed out");
-          }
-          throw new UpstreamError(err instanceof Error ? err.message : String(err));
-        } finally {
-          clearTimeout(timeout);
-        }
+        const response = await resilientFetch(url.toString(), {
+          headers: {
+            "X-Subscription-Token": apiKey,
+            "Accept": "application/json",
+          },
+        }, { timeoutMs: TIMEOUT_MS, retries: 3 });
 
         if (response.status >= 400) {
           throw new UpstreamError(`HTTP ${response.status} from Brave Search API`, response.status);

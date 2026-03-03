@@ -2,7 +2,7 @@ import { z } from "zod";
 import * as cheerio from "cheerio";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x/mcp-shared";
-import { UpstreamError } from "@micro-x/mcp-shared";
+import { UpstreamError, resilientFetch } from "@micro-x/mcp-shared";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
@@ -46,9 +46,11 @@ export function registerLinkedInJobDetail(server: McpServer, logger: Logger): vo
       logger.info({ tool: "linkedin_job_detail", request_id: requestId, url: input.url }, "tool_call_start");
 
       try {
-        const response = await fetch(input.url, { headers: HEADERS });
+        const response = await resilientFetch(input.url, { headers: HEADERS }, {
+          timeoutMs: 15_000, retries: 3,
+        });
 
-        if (response.status !== 200) {
+        if (response.status >= 400) {
           throw new UpstreamError(`HTTP ${response.status} fetching job page`, response.status);
         }
 

@@ -1,13 +1,12 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x/mcp-shared";
-import { ValidationError, UpstreamError } from "@micro-x/mcp-shared";
+import { ValidationError, UpstreamError, resilientFetch } from "@micro-x/mcp-shared";
 import { htmlToText } from "../html-to-text.js";
 
 const DEFAULT_MAX_CHARS = 50_000;
 const MAX_RESPONSE_BYTES = 2_000_000; // 2 MB
 const TIMEOUT_MS = 30_000;
-const MAX_REDIRECTS = 5;
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
@@ -74,25 +73,11 @@ export function registerWebFetch(server: McpServer, logger: Logger): void {
           throw new ValidationError("URL must use http or https scheme");
         }
 
-        // Fetch with redirect following
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-        let response: Response;
-        try {
-          response = await fetch(input.url, {
-            headers: HEADERS,
-            signal: controller.signal,
-            redirect: "follow",
-          });
-        } catch (err: unknown) {
-          if (err instanceof Error && err.name === "AbortError") {
-            throw new UpstreamError(`Request timed out after ${TIMEOUT_MS / 1000} seconds`);
-          }
-          throw new UpstreamError(err instanceof Error ? err.message : String(err));
-        } finally {
-          clearTimeout(timeout);
-        }
+        // Fetch with redirect following, timeout, and retry on transient errors
+        const response = await resilientFetch(input.url, {
+          headers: HEADERS,
+          redirect: "follow",
+        }, { timeoutMs: TIMEOUT_MS, retries: 3 });
 
         if (response.status >= 400) {
           throw new UpstreamError(`HTTP ${response.status} fetching ${input.url}`, response.status);

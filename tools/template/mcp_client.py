@@ -19,13 +19,22 @@ Usage:
 """
 
 import asyncio
+import logging
 import os
 from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 _SHUTDOWN_TIMEOUT = 5.0
+
+_logger = logging.getLogger(__name__)
+
+# Transport-level errors that indicate the MCP stdio pipe or server process
+# died/stalled. These are worth retrying. Application-level errors (RuntimeError
+# from isError=true) are NOT retried — the server successfully told us "this failed".
+_TRANSPORT_ERRORS = (ConnectionError, BrokenPipeError, OSError, asyncio.TimeoutError)
 
 
 class McpClient:
@@ -87,6 +96,13 @@ class McpClient:
         result = await self._session.list_tools()
         return [(t.name, t.description or "") for t in result.tools]
 
+    @retry(
+        retry=retry_if_exception_type(_TRANSPORT_ERRORS),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        before_sleep=before_sleep_log(_logger, logging.WARNING),
+        reraise=True,
+    )
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
         """Call a tool and return its result.
 

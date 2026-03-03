@@ -18,11 +18,14 @@ export class ValidationError extends Error {
 export class UpstreamError extends Error {
   public readonly code = "UPSTREAM_ERROR" as const;
   public readonly statusCode?: number;
+  /** Hint for retry logic: how long to wait before retrying (ms). */
+  public readonly retryAfterMs?: number;
 
-  constructor(message: string, statusCode?: number) {
+  constructor(message: string, statusCode?: number, retryAfterMs?: number) {
     super(message);
     this.name = "UpstreamError";
     this.statusCode = statusCode;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 

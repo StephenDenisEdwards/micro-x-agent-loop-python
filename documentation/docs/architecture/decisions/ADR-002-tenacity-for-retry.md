@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted — extended by [ADR-016](ADR-016-retry-resilience-for-mcp-servers-and-transport.md) (retry for MCP servers and transport)
 
 ## Context
 

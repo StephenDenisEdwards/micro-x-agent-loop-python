@@ -18,3 +18,6 @@ export type { ServerOptions } from "./server-factory.js";
 
 export { createToolHandler } from "./tool-helpers.js";
 export type { ToolResponse, ToolHandlerResult } from "./tool-helpers.js";
+
+export { isTransientStatusCode, isTransientError, resilientFetch } from "./retry.js";
+export type { ResilientFetchOptions } from "./retry.js";

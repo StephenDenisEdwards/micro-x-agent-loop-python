@@ -2,7 +2,7 @@ import { z } from "zod";
 import * as cheerio from "cheerio";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x/mcp-shared";
-import { UpstreamError } from "@micro-x/mcp-shared";
+import { UpstreamError, resilientFetch } from "@micro-x/mcp-shared";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
@@ -88,11 +88,11 @@ export function registerLinkedInJobs(server: McpServer, logger: Logger): void {
         if (dateFilter) url += `&f_TPR=${dateFilter}`;
         url += `&start=0&count=${limit}${sortParam}`;
 
-        const response = await fetch(url, {
+        const response = await resilientFetch(url, {
           headers: { "User-Agent": USER_AGENT },
-        });
+        }, { timeoutMs: 15_000, retries: 3 });
 
-        if (response.status !== 200) {
+        if (response.status >= 400) {
           throw new UpstreamError(`HTTP ${response.status} from LinkedIn`, response.status);
         }
 
