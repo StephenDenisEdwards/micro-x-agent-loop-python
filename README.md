@@ -2,7 +2,7 @@
 
 A minimal AI agent loop built with Python and the Anthropic Claude API. The agent runs in a REPL, takes natural-language prompts, and autonomously calls tools to get things done. Responses stream in real time as Claude generates them.
 
-This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/StephenDenisEdwards/micro-x-agent-loop-dotnet). Both projects share the same architecture, tools, and configuration format.
+This is the primary implementation of the Micro-X Agent. An earlier .NET prototype exists at [micro-x-agent-loop-dotnet](https://github.com/StephenDenisEdwards/micro-x-agent-loop-dotnet) but is no longer actively developed.
 
 ## Features
 
@@ -16,6 +16,7 @@ This is the Python port of [micro-x-agent-loop-dotnet](https://github.com/Stephe
 - **Cross-platform** — works on Windows, macOS, and Linux
 - **Codegen** _(experimental)_ — isolated MCP server generates Python task apps from templates via a mini agentic loop with validation
 - **Compiled mode** _(experimental)_ — cost-aware prompt/compile mode selection routes batch tasks to code generation (4-20x cost reduction)
+- **Ask user** — LLM can pause mid-execution to ask clarifying questions with structured choices
 - **Tool search** _(experimental)_ — on-demand tool discovery replaces large schema payloads with a single search tool
 - **Session memory** _(experimental)_ — SQLite-backed transcript persistence, file checkpointing, and session resume/fork
 - **Layered cost reduction** _(experimental)_ — prompt caching, tool schema caching, compaction, concise output, and tool search
@@ -761,7 +762,7 @@ mcp_servers/ts/            -- TypeScript MCP servers (npm workspaces monorepo)
     interview-assist/      -- 14 tools (ia_* + stt_*)
 ```
 
-All tools are TypeScript MCP servers — the Python agent loop is a pure MCP orchestrator. The system-info MCP server lives in the separate [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repository, shared with the .NET agent.
+All tools are TypeScript MCP servers — the Python agent loop is a pure MCP orchestrator. The system-info MCP server lives in the separate [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repository.
 
 ### How the agent loop works
 
@@ -842,6 +843,28 @@ Based on the [Cost-Aware Task Compilation](documentation/docs/research-papers/co
 ```
 
 `Stage2Model` defaults to the main model if empty. See [Mode Selection Plan](documentation/docs/planning/PLAN-mode-selection-llm-classification.md) for implementation details.
+
+### Ask User (Human-in-the-Loop Questioning)
+
+The LLM can call an `ask_user` pseudo-tool to pause and ask the user a clarifying question, present choices, or request approval. The user's answer is returned as a normal tool result, and the LLM continues. This is always-on — no configuration needed.
+
+The LLM uses `ask_user` when the request is ambiguous, there are multiple valid approaches, a destructive action needs approval, or required information is missing. It does not use it for routine confirmations or questions answerable from context.
+
+When the LLM calls `ask_user` with options, you see an interactive prompt:
+
+```
+assistant> Which database should we use?
+
+  1. PostgreSQL — Battle-tested relational database
+  2. SQLite — Lightweight, file-based, no server needed
+  3. MongoDB — Document store for flexible schemas
+
+Select an option (1-3) or type your own answer:
+```
+
+Select with arrow keys or type a number. Choose "Other" to type a free-form answer instead. On non-interactive terminals, falls back to plain text input.
+
+See [Human-in-the-Loop Research](documentation/docs/research/human-in-the-loop-user-questioning.md), [Ask User Plan](documentation/docs/planning/PLAN-ask-user.md), and [ADR-017](documentation/docs/architecture/decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md).
 
 ### Tool Search (On-Demand Tool Discovery)
 
@@ -936,7 +959,7 @@ Full documentation is available in the [documentation/docs/](documentation/docs/
 
 ## See Also
 
-- [micro-x-agent-loop-dotnet](https://github.com/StephenDenisEdwards/micro-x-agent-loop-dotnet) — the original C#/.NET 8 implementation with full architecture documentation, ADRs, and design docs
+- [micro-x-agent-loop-dotnet](https://github.com/StephenDenisEdwards/micro-x-agent-loop-dotnet) — earlier .NET prototype (no longer actively developed)
 
 ## License
 
