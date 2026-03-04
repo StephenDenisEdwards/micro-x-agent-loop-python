@@ -36,6 +36,9 @@
     "web__web_search": { "format": "table", "max_rows": 20 },
     "linkedin__linkedin_jobs": { "format": "table", "max_rows": 20 },
     "linkedin__linkedin_job_detail": { "format": "json" },
+    "linkedin__linkedin_draft_post": { "format": "json" },
+    "linkedin__linkedin_draft_article": { "format": "json" },
+    "linkedin__linkedin_publish_draft": { "format": "json" },
     "github__list_prs": { "format": "table", "max_rows": 20 },
     "github__get_pr": { "format": "json" },
     "github__create_pr": { "format": "json" },
@@ -93,7 +96,11 @@
     "linkedin": {
       "transport": "stdio",
       "command": "node",
-      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\linkedin\\dist\\index.js"]
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\linkedin\\dist\\index.js"],
+      "env": {
+        "LINKEDIN_CLIENT_ID": "${LINKEDIN_CLIENT_ID}",
+        "LINKEDIN_CLIENT_SECRET": "${LINKEDIN_CLIENT_SECRET}"
+      }
     },
     "github": {
       "transport": "stdio",
