@@ -732,27 +732,184 @@ When the conversation exceeds 50 messages, the oldest messages are removed. Enab
 
 ## Architecture
 
+### Component Overview
+
+```mermaid
+graph TD
+    Main["__main__.py<br/>Entry Point"] --> Bootstrap["bootstrap.py<br/>Runtime Factory"]
+    Bootstrap --> Agent["Agent<br/>Orchestrator"]
+    Bootstrap --> Config["app_config.py<br/>config.json + .env"]
+    Bootstrap --> McpMgr["McpManager<br/>MCP Connections"]
+    Bootstrap --> Memory["memory/<br/>SQLite Persistence"]
+
+    Agent --> TurnEngine["TurnEngine<br/>LLM Turn Loop"]
+    Agent --> CmdRouter["CommandRouter<br/>Local Commands"]
+    Agent --> VoiceRT["VoiceRuntime<br/>STT Integration"]
+    Agent --> Formatter["ToolResultFormatter<br/>Structured → Text"]
+    Agent --> AskUser["AskUserHandler<br/>Human-in-the-Loop"]
+    Agent --> ToolSearch["ToolSearchManager<br/>On-Demand Discovery"]
+    Agent --> ModeSelect["ModeSelector<br/>Prompt vs Compiled"]
+
+    TurnEngine --> Provider["LLMProvider<br/>Protocol"]
+    TurnEngine --> McpTools["MCP Tool Proxies"]
+    TurnEngine --> Events["TurnEvents<br/>Lifecycle Callbacks"]
+
+    Agent --> Memory
+
+    Provider --> AnthropicProv["AnthropicProvider"]
+    Provider --> OpenAIProv["OpenAIProvider"]
+
+    McpMgr --> McpSDK["mcp SDK"]
+    McpMgr --> McpTools
+
+    subgraph Memory["memory/ (SQLite)"]
+        direction TB
+        Store["MemoryStore"]
+        SessionMgr["SessionManager"]
+        CheckpointMgr["CheckpointManager"]
+        Facade["MemoryFacade"]
+    end
+
+    subgraph McpServers["MCP Servers"]
+        direction TB
+        FS["filesystem<br/>bash, read_file, write_file,<br/>append_file, save_memory"]
+        Web["web<br/>web_fetch, web_search"]
+        LI["linkedin<br/>linkedin_jobs, linkedin_job_detail"]
+        GH["github<br/>8 tools"]
+        Google["google<br/>12 tools"]
+        Admin["anthropic-admin<br/>anthropic_usage"]
+        IA["interview-assist<br/>14 tools"]
+        Codegen["codegen (Python)<br/>generate_code"]
+    end
+
+    McpMgr --> McpServers
+
+    subgraph McpTools["MCP Tool Proxies"]
+        direction TB
+        McpProxy1["McpToolProxy<br/>(per discovered tool)"]
+    end
+```
+
+### Agent Loop Sequence
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant M as __main__
+    participant A as Agent
+    participant TE as TurnEngine
+    participant P as LLMProvider
+    participant API as LLM API
+    participant T as Tools
+    participant Mem as Memory (SQLite)
+
+    M->>A: initialize_session()
+    A->>Mem: load_messages(session_id)
+    Mem-->>A: Persisted messages
+
+    U->>M: Input prompt
+    M->>A: run(prompt)
+    A->>TE: run(messages, user_message)
+    TE->>Mem: append_message(user)
+    TE->>P: stream_chat(messages)
+    P->>API: Provider-specific streaming call
+    API-->>P: Text deltas (SSE)
+    P-->>U: Print text in real time
+    API-->>P: tool_use / tool_calls
+    P-->>TE: (message, tool_use_blocks, stop_reason)
+    TE->>Mem: append_message(assistant)
+
+    Note over TE: Classify blocks: search / ask_user / regular
+
+    alt tool_search blocks
+        TE->>TE: ToolSearchManager.handle_tool_search(query)
+        Note over TE: Load matching tool schemas inline
+    end
+
+    alt ask_user blocks
+        TE->>U: AskUserHandler.handle() — display question + options
+        U-->>TE: User selects option or types answer
+        Note over TE: Return {"answer": "..."} as tool_result
+    end
+
+    alt No regular tools (pseudo-tools only)
+        TE->>Mem: append inline_results
+        Note over TE: Continue to next LLM call
+    end
+
+    alt Regular tool blocks
+        TE->>Mem: create_checkpoint(turn)
+        loop For each tool (parallel via asyncio.gather)
+            TE->>Mem: snapshot file (pre-mutation)
+            TE->>T: execute(input)
+            T-->>TE: result (truncated if > limit)
+            TE->>Mem: record_tool_call()
+        end
+        Note over TE: Merge inline_results + tool_results in original order
+    end
+
+    TE->>P: stream_chat(messages + tool results)
+    P->>API: Provider-specific streaming call
+    API-->>P: Final text response
+    P-->>U: Print text in real time
+    TE-->>A: Return
+```
+
+### Source Layout
+
 ```
 src/micro_x_agent_loop/
-  __main__.py              -- Entry point: loads config, connects MCP servers, starts REPL
-  agent.py                 -- Agent loop: streaming, parallel tool dispatch, history management
+  __main__.py              -- Entry point: loads config, displays logo, starts REPL
+  agent.py                 -- Agent orchestrator: conversation state, commands, turn delegation
   agent_config.py          -- Configuration dataclass
+  app_config.py            -- Config file parsing (config.json → AppConfig)
   bootstrap.py             -- Runtime factory: wires MCP, memory, provider into AppRuntime
+  constants.py             -- Centralised magic numbers and defaults
+  turn_engine.py           -- LLM turn loop: three-way block classification, parallel tool dispatch
+  turn_events.py           -- TurnEvents Protocol + BaseTurnEvents (lifecycle callbacks)
+  ask_user.py              -- AskUserHandler: human-in-the-loop pseudo-tool (questionary UI)
+  tool_search.py           -- ToolSearchManager: on-demand tool discovery pseudo-tool
+  mode_selector.py         -- Mode selection: structural pattern matching + LLM classification
   tool.py                  -- Tool Protocol + ToolResult dataclass
   tool_result_formatter.py -- Structured → text formatting (json, table, text, key_value)
-  turn_engine.py           -- LLM turn loop with parallel tool dispatch
-  llm_client.py            -- Shared utilities (Spinner, retry callback)
+  system_prompt.py         -- System prompt text with conditional directives
   compaction.py            -- Conversation compaction strategies (none, summarize)
-  system_prompt.py         -- System prompt text
+  llm_client.py            -- Shared utilities (Spinner, retry callback)
+  provider.py              -- LLMProvider Protocol definition
+  metrics.py               -- Structured metrics emission (cost tracking, API call analysis)
+  usage.py                 -- UsageResult dataclass and pricing lookup
+  api_payload_store.py     -- In-memory ring buffer for API request/response payloads
+  analyze_costs.py         -- CLI for analysing metrics.jsonl files
+  logging_config.py        -- LogConsumer Protocol + console/file implementations
+  voice_runtime.py         -- Voice mode: continuous STT via MCP sessions
+  voice_ingress.py         -- VoiceIngress Protocol + PollingVoiceIngress
+  providers/
+    anthropic_provider.py  -- Anthropic SDK implementation of LLMProvider
+    openai_provider.py     -- OpenAI SDK implementation of LLMProvider
+    common.py              -- Shared provider utilities
+  commands/
+    router.py              -- CommandRouter: /help, /session, /checkpoint, /voice
+    command_handler.py     -- CommandHandler base class
+    voice_command.py       -- /voice command handler
+  services/
+    session_controller.py  -- Session list/summary formatting service
+    checkpoint_service.py  -- Checkpoint list/rewind formatting service
   mcp/
     mcp_manager.py         -- MCP server connection lifecycle (parallel startup)
     mcp_tool_proxy.py      -- Adapter: MCP tool → Tool Protocol + ToolResult
   memory/
-    store.py, session_manager.py, checkpoints.py, ...
+    store.py               -- SQLite connection, schema bootstrap, transactions
+    session_manager.py     -- Session CRUD, message persistence, fork
+    checkpoints.py         -- File snapshotting, rewind
+    events.py              -- Synchronous event emission
+    event_sink.py          -- Async batched event emission
+    facade.py              -- MemoryFacade Protocol (Active + Null implementations)
+    pruning.py             -- Time/count-based retention enforcement
+    models.py              -- SessionRecord, MessageRecord dataclasses
 
 mcp_servers/ts/            -- TypeScript MCP servers (npm workspaces monorepo)
   packages/
-    shared/                -- @micro-x/mcp-shared (validation, logging, errors)
+    shared/                -- @micro-x/mcp-shared (validation, logging, errors, retry)
     filesystem/            -- bash, read_file, write_file, append_file, save_memory
     web/                   -- web_fetch, web_search
     linkedin/              -- linkedin_jobs, linkedin_job_detail
@@ -769,11 +926,13 @@ All tools are TypeScript MCP servers — the Python agent loop is a pure MCP orc
 1. You type a prompt at the `you>` prompt
 2. The prompt is sent to Claude via the Anthropic streaming API
 3. Claude's response streams word-by-word to your terminal
-4. If Claude decides to use tools, the tool calls are executed **in parallel** via `asyncio.gather`
-5. Tool results are sent back to Claude, which continues generating a response
-6. Steps 3-5 repeat until Claude responds with text only (no tool calls)
-7. The conversation history is maintained across prompts in the same session
-8. When the conversation grows large, compaction summarizes older messages to stay within context limits
+4. If Claude returns tool calls, TurnEngine classifies each block as **tool_search**, **ask_user**, or **regular**
+5. Pseudo-tool blocks (search/ask_user) are handled inline — no MCP execution needed
+6. Regular tool calls are executed **in parallel** via `asyncio.gather`
+7. All results (inline + regular) are merged in original order and sent back to Claude
+8. Steps 3-7 repeat until Claude responds with text only (no tool calls)
+9. The conversation history is maintained across prompts in the same session
+10. When the conversation grows large, compaction summarizes older messages to stay within context limits
 
 ## Experimental Features
 

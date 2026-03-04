@@ -1,8 +1,8 @@
 # Software Architecture Document
 
 **Project:** micro-x-agent-loop-python
-**Version:** 2.0
-**Last Updated:** 2026-02-28
+**Version:** 3.0
+**Last Updated:** 2026-03-04
 
 ## 1. Introduction and Goals
 
@@ -14,6 +14,8 @@ micro-x-agent-loop-python is a minimal AI agent loop built with Python and a plu
 - Support file operations, shell commands, web search, job searching, email, GitHub, and messaging
 - Stream responses in real time for better user experience
 - Persist session state and execution history for continuity across restarts
+- Enable human-in-the-loop questioning so the LLM can ask clarifying questions mid-execution
+- Support cost-aware execution via mode selection (prompt vs compiled) and layered cost reduction
 - Keep the codebase small and easy to understand
 
 ### Stakeholders
@@ -79,13 +81,35 @@ The agent sits between the user and external services. The user provides natural
 | Agent loop | Iterative: send message, check for tool_use, execute tools, repeat |
 | Multi-provider | `LLMProvider` Protocol with Anthropic-format canonical messages; translation at API boundary |
 | Streaming | Provider-specific streaming (Anthropic SSE / OpenAI SSE) prints text deltas in real time |
-| Resilience | tenacity decorator with exponential backoff for rate limits (per-provider) |
+| Resilience | tenacity decorator with exponential backoff for rate limits (per-provider); `resilientFetch` in TypeScript MCP servers for HTTP retry ([ADR-016](decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md)) |
 | Secrets | `.env` file loaded by python-dotenv; never committed to git |
 | App config | `config.json` for non-secret settings |
-| Tool extensibility | `Tool` Protocol class; all tools are TypeScript MCP servers discovered at startup |
+| Tool extensibility | `Tool` Protocol class; all tools are TypeScript MCP servers discovered at startup ([ADR-015](decisions/ADR-015-all-tools-as-typescript-mcp-servers.md)) |
 | Session persistence | Opt-in SQLite-backed memory for sessions, messages, tool calls, checkpoints, and events |
 | File safety | Checkpoint/rewind for mutating tools (`write_file`, `append_file`) |
-| Shared MCP server | [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo — .NET MCP server providing system information tools (shared with .NET agent) |
+| Human-in-the-loop | `ask_user` pseudo-tool for LLM-initiated clarifying questions ([ADR-017](decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md)) |
+| Cost reduction | Layered approach: prompt caching, tool schema caching, compaction, concise output, tool search ([ADR-012](decisions/ADR-012-layered-cost-reduction.md)) |
+| Mode selection | Structural pattern matching + optional LLM classification to route prompts to compiled or prompt mode |
+| Shared MCP server | [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo — .NET MCP server providing system information tools |
+
+### Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| [anthropic](https://pypi.org/project/anthropic/) | >=0.42.0 | Anthropic Claude API (official SDK) |
+| [openai](https://pypi.org/project/openai/) | >=1.0.0 | OpenAI API (official SDK) |
+| [tenacity](https://pypi.org/project/tenacity/) | >=9.0.0 | Retry with exponential backoff |
+| [python-dotenv](https://pypi.org/project/python-dotenv/) | >=1.0.0 | Load `.env` files |
+| [mcp](https://pypi.org/project/mcp/) | >=1.0.0 | Model Context Protocol client |
+| [loguru](https://pypi.org/project/loguru/) | >=0.7.0 | Structured logging |
+| [tiktoken](https://pypi.org/project/tiktoken/) | >=0.7.0 | Token counting for tool search threshold |
+| [questionary](https://pypi.org/project/questionary/) | >=2.0.0 | Interactive terminal prompts for ask_user |
+| [httpx](https://pypi.org/project/httpx/) | >=0.27.0 | Async HTTP client |
+| [google-api-python-client](https://pypi.org/project/google-api-python-client/) | >=2.150.0 | Google APIs (Gmail, Calendar, Contacts) |
+| [google-auth-oauthlib](https://pypi.org/project/google-auth-oauthlib/) | >=1.2.0 | Google OAuth2 authentication |
+| [python-docx](https://pypi.org/project/python-docx/) | >=1.1.0 | DOCX file reading |
+| [beautifulsoup4](https://pypi.org/project/beautifulsoup4/) | >=4.12.0 | HTML parsing |
+| [lxml](https://pypi.org/project/lxml/) | >=5.0.0 | XML/HTML parser backend |
 
 ## 5. Building Block View
 
@@ -103,9 +127,14 @@ graph TD
     Agent --> CmdRouter["CommandRouter<br/>Local Commands"]
     Agent --> VoiceRT["VoiceRuntime<br/>STT Integration"]
     Agent --> Formatter["ToolResultFormatter<br/>Structured → Text"]
+    Agent --> AskUser["AskUserHandler<br/>Human-in-the-Loop"]
+    Agent --> ToolSearch["ToolSearchManager<br/>On-Demand Discovery"]
+    Agent --> ModeSelect["ModeSelector<br/>Prompt vs Compiled"]
 
     TurnEngine --> Provider["LLMProvider<br/>Protocol"]
     TurnEngine --> McpTools["MCP Tool Proxies"]
+    TurnEngine --> Events["TurnEvents<br/>Lifecycle Callbacks"]
+    TurnEngine --> Constants["constants.py<br/>Shared Defaults"]
 
     Agent --> Memory
 
@@ -125,6 +154,8 @@ graph TD
         SessionMgr["SessionManager"]
         CheckpointMgr["CheckpointManager"]
         EventEmitter["EventEmitter"]
+        EventSink["EventSink"]
+        Facade["MemoryFacade"]
         Pruning["prune_memory"]
     end
 
@@ -152,35 +183,49 @@ graph TD
 
 | Module | Responsibility |
 |--------|---------------|
-| `__main__` | Entry point; loads config, delegates to bootstrap, runs REPL |
+| `__main__` | Entry point; loads config, displays startup logo, delegates to bootstrap, runs REPL |
 | `bootstrap` | Factory that wires all runtime components (MCP tools, providers, memory) into an `AppRuntime` |
 | `app_config` | Parses `config.json` into `AppConfig` dataclass; resolves runtime environment variables into `RuntimeEnv` |
 | `Agent` | Top-level orchestrator: holds conversation state, routes commands, delegates turns to `TurnEngine` |
 | `AgentConfig` | Dataclass holding all agent configuration (model, tools, memory components, compaction) |
-| `TurnEngine` | Executes a single LLM turn: streams response, dispatches tools in parallel, handles retries |
+| `TurnEngine` | Executes a single LLM turn: streams response, classifies tool blocks (search/ask_user/regular), dispatches tools in parallel, handles retries |
+| `TurnEvents` | Protocol defining lifecycle callbacks: `on_append_message`, `on_api_call_completed`, `on_tool_executed`, `on_ensure_checkpoint_for_turn`, etc. `BaseTurnEvents` provides no-op defaults. |
+| `AskUserHandler` | Pseudo-tool handler for human-in-the-loop questioning. Presents structured choices via `questionary` with "Other" free-text escape; falls back to plain `input()` for non-interactive terminals. |
+| `ToolSearchManager` | On-demand tool discovery pseudo-tool. Replaces large schema payloads with a single search tool when schema size exceeds a threshold. Uses `tiktoken` for token counting. |
+| `ModeSelector` | Stage 1 structural pattern matching + Stage 2 LLM classification for routing prompts to compiled vs prompt mode. Pure computation, no async. |
 | `ToolResultFormatter` | Formats `ToolResult.structured` into LLM-friendly text using per-tool config (json, table, text, key_value strategies) |
 | `CommandRouter` | Routes `/help`, `/session`, `/checkpoint`, `/voice` commands to handlers |
 | `SessionController` | Formatting service for session list entries, summaries, and short IDs |
 | `CheckpointService` | Formatting service for checkpoint list entries and rewind outcome reports |
 | `VoiceRuntime` | Manages continuous voice input via MCP STT sessions (start/stop/poll) |
+| `VoiceIngress` | Protocol for streaming STT events; `PollingVoiceIngress` polls MCP for updates |
 | `LLMProvider` | Protocol defining `stream_chat`, `create_message`, `convert_tools` |
 | `AnthropicProvider` | Anthropic SDK implementation of `LLMProvider` |
 | `OpenAIProvider` | OpenAI SDK implementation of `LLMProvider` (translates message format at API boundary) |
 | `llm_client` | Shared utilities: `Spinner` (terminal feedback), `_on_retry` (tenacity callback) |
+| `constants` | Centralised magic numbers and defaults (token limits, compaction thresholds, tool search config). All modules import from here. |
+| `metrics` | Structured metrics emission via loguru for cost tracking, API call analysis, and tool execution timing |
+| `usage` | `UsageResult` dataclass (input/output tokens, cache hits, duration) and pricing lookup for cost estimation |
+| `api_payload_store` | In-memory ring buffer for API request/response payloads (debugging) |
+| `analyze_costs` | CLI module for analysing `metrics.jsonl` files: per-session breakdown, comparisons, CSV export |
+| `logging_config` | `LogConsumer` Protocol with `ConsoleLogConsumer` and `FileLogConsumer` implementations for loguru setup |
 | `Tool` | Protocol class: `name`, `description`, `input_schema`, `is_mutating`, `predict_touched_paths`, `execute` |
 | `ToolResult` | Dataclass: `text`, `structured` (dict or None), `is_error` — returned by `Tool.execute()` |
+| `system_prompt` | System prompt text with conditional directives for tool search and ask_user |
+| `compaction` | Conversation compaction strategies: `NoOpCompaction` and `SummarizeCompaction` (LLM-based) |
 | `memory/store` | SQLite connection, schema bootstrap (6 tables), transaction context manager |
 | `memory/session_manager` | Session CRUD, message persistence with monotonic sequencing, fork, tool call recording |
 | `memory/checkpoints` | File snapshotting before mutations, rewind with per-file outcome reporting |
 | `memory/events` | Synchronous event emission to DB |
 | `memory/event_sink` | Async batched event emission (queue + periodic flush) |
+| `memory/facade` | `MemoryFacade` Protocol with `ActiveMemoryFacade` (real) and `NullMemoryFacade` (no-op) — callers never need null-check guards |
 | `memory/pruning` | Time-based and count-based retention enforcement |
 | `memory/models` | Frozen dataclasses for `SessionRecord` and `MessageRecord` |
 | `McpManager` | Connects to all configured MCP servers in parallel, discovers tools, manages lifecycle |
 | `McpToolProxy` | Adapter wrapping an MCP tool + session into the `Tool` Protocol; extracts `structuredContent` into `ToolResult.structured` |
 | `mcp_servers/ts/` | TypeScript npm workspaces monorepo containing 7 first-party MCP servers (filesystem, web, linkedin, github, google, anthropic-admin, interview-assist) plus shared utilities |
 | `mcp_servers/python/codegen/` | Python FastMCP server exposing `generate_code` — isolated single-shot code generation via Anthropic API with zero tools (see [DESIGN-codegen-server](../design/DESIGN-codegen-server.md)) |
-| [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) (external) | Shared .NET MCP server exposing `system_info`, `disk_info`, `network_info` via stdio |
+| [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) (external) | .NET MCP server exposing `system_info`, `disk_info`, `network_info` via stdio |
 | WhatsApp MCP (external) | External two-component MCP server: Go bridge (WhatsApp Web connection, SQLite, HTTP API) + Python FastMCP server (12 tools for messaging, contacts, chats) |
 
 ## 6. Runtime View
@@ -214,13 +259,33 @@ sequenceDiagram
     P-->>TE: (message, tool_use_blocks, stop_reason)
     TE->>Mem: append_message(assistant)
 
-    TE->>Mem: create_checkpoint(turn)
+    Note over TE: Classify blocks: search / ask_user / regular
 
-    loop For each tool (parallel via asyncio.gather)
-        TE->>Mem: snapshot file (pre-mutation)
-        TE->>T: execute(input)
-        T-->>TE: result (truncated if > limit)
-        TE->>Mem: record_tool_call()
+    alt tool_search blocks
+        TE->>TE: ToolSearchManager.handle_tool_search(query)
+        Note over TE: Load matching tool schemas inline
+    end
+
+    alt ask_user blocks
+        TE->>U: AskUserHandler.handle() — display question + options
+        U-->>TE: User selects option or types answer
+        Note over TE: Return {"answer": "..."} as tool_result
+    end
+
+    alt No regular tools (pseudo-tools only)
+        TE->>Mem: append inline_results
+        Note over TE: Continue to next LLM call
+    end
+
+    alt Regular tool blocks
+        TE->>Mem: create_checkpoint(turn)
+        loop For each tool (parallel via asyncio.gather)
+            TE->>Mem: snapshot file (pre-mutation)
+            TE->>T: execute(input)
+            T-->>TE: result (truncated if > limit)
+            TE->>Mem: record_tool_call()
+        end
+        Note over TE: Merge inline_results + tool_results in original order
     end
 
     TE->>P: stream_chat(messages + tool results)
@@ -249,6 +314,8 @@ A warning is also printed to stderr.
 - Tool execution errors are caught and returned as error text to Claude (not raised)
 - Unknown tool names return an error result
 - API rate limits are retried automatically via tenacity
+- HTTP errors in TypeScript MCP servers are retried via `resilientFetch` / Octokit plugins ([ADR-016](decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md))
+- MCP transport errors (stdio pipe breaks) are retried via tenacity in `McpClient.call_tool()`
 - Checkpoint tracking failures are non-blocking (logged + event emitted, tool still executes)
 - Unrecoverable errors propagate to the REPL catch block
 
@@ -280,7 +347,7 @@ See [Memory System Design](../design/DESIGN-memory-system.md) and [ADR-009](deci
 | Secrets | `.env` | LLM provider API key (Anthropic or OpenAI) |
 | MCP server env | `config.json` `McpServers.*.env` | Per-server credentials (Google, Brave, GitHub, etc.) |
 | App settings | `config.json` | Model, tokens, temperature, limits, paths, memory, MCP servers |
-| Defaults | Code | Fallback values when config is missing |
+| Defaults | Code (`constants.py`) | Fallback values when config is missing |
 
 See [Configuration Reference](../operations/config.md) for the full settings table.
 
@@ -301,7 +368,12 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-009](decisions/ADR-009-sqlite-memory-sessions-and-file-checkpoints.md) | SQLite memory for sessions, events, and file checkpoints | Accepted |
 | [ADR-010](decisions/ADR-010-multi-provider-llm-support.md) | Multi-provider LLM support (provider abstraction) | Accepted |
 | [ADR-011](decisions/ADR-011-continuous-voice-mode-via-stt-mcp-sessions.md) | Continuous voice mode via STT MCP sessions | Accepted |
+| [ADR-012](decisions/ADR-012-layered-cost-reduction.md) | Layered cost reduction architecture | Accepted |
+| [ADR-013](decisions/ADR-013-tool-result-summarization-reliability.md) | Tool result summarization is fundamentally unreliable | Accepted |
+| [ADR-014](decisions/ADR-014-mcp-unstructured-data-constraint.md) | Tool results are unstructured text — design choice affecting compiled mode | Open |
 | [ADR-015](decisions/ADR-015-all-tools-as-typescript-mcp-servers.md) | All tools as TypeScript MCP servers | Accepted |
+| [ADR-016](decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md) | Retry/resilience for MCP servers and transport | Accepted |
+| [ADR-017](decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md) | Ask user pseudo-tool for human-in-the-loop questioning | Accepted |
 
 ## 9. Risks and Technical Debt
 
@@ -327,3 +399,5 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | Checkpoint | A snapshot of file state before mutating tools execute within a user turn |
 | Rewind | Restoring files to their state at a given checkpoint |
 | MCP | Model Context Protocol; standard for connecting LLM agents to external tool servers |
+| Pseudo-tool | A tool handled inline by the agent (not via MCP execution) — e.g. `tool_search`, `ask_user` |
+| Compiled mode | Cost-aware execution mode that generates code for batch-processing tasks instead of running them conversationally |

@@ -61,6 +61,7 @@ async def main() -> None:
         "       ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝"
         f"{_RESET}\n"
         f"{_BLUE}                        AI{_RESET}\n"
+        f"{_RESET}              By Stephen Edwards{_RESET}\n"
     )
 
     print(f"micro-x-agent-loop [{app.provider_name}:{app.model}] (type 'exit' to quit, '/help' for commands)")
