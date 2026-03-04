@@ -38,3 +38,6 @@ What becomes easier or more difficult to do because of this change?
 | [ADR-012](ADR-012-layered-cost-reduction.md) | Layered cost reduction architecture | Accepted |
 | [ADR-013](ADR-013-tool-result-summarization-reliability.md) | Tool result summarization is fundamentally unreliable | Accepted |
 | [ADR-014](ADR-014-mcp-unstructured-data-constraint.md) | Tool results are unstructured text — design choice affecting compiled mode | Open |
+| [ADR-015](ADR-015-all-tools-as-typescript-mcp-servers.md) | All tools as TypeScript MCP servers | Accepted |
+| [ADR-016](ADR-016-retry-resilience-for-mcp-servers-and-transport.md) | Retry/resilience for MCP servers and transport | Accepted |
+| [ADR-017](ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md) | Ask user pseudo-tool for human-in-the-loop questioning | Accepted |

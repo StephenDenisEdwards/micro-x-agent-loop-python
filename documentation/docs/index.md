@@ -30,9 +30,14 @@ Central navigation hub for all project documentation.
 - [Example Prompts](examples/README.md) - Prompt packs and workflow examples
 - [Agent Prompt Examples](examples/agent-prompt-examples.md) - Ready-to-use prompts across core agent workflows
 
+## Research
+
+- [Human-in-the-Loop User Questioning](research/human-in-the-loop-user-questioning.md) - Survey of ask-user patterns across agent systems
+
 ## Planning
 
 - [Continuous Voice Agent Plan](planning/PLAN-continuous-voice-agent.md) - Session-based STT MCP and `/voice` orchestration plan
+- [Ask User Plan](planning/PLAN-ask-user.md) - `ask_user` pseudo-tool for LLM-initiated user questioning (completed)
 
 ## Document Map
 

@@ -280,6 +280,21 @@ See [WhatsApp MCP](tools/whatsapp-mcp/README.md) for the full setup guide.
 
 See [Configuration Reference](../operations/config.md#mcpservers) for the full config format.
 
+## Pseudo-Tools
+
+Pseudo-tools are tool schemas sent to the LLM that are **not** backed by MCP servers. They are handled inline in `turn_engine.py` — no MCP execution, no spinner, no checkpoint, no event callbacks. Results are returned directly as `tool_result` messages.
+
+| Pseudo-Tool | Module | Purpose | Activation |
+|-------------|--------|---------|------------|
+| `tool_search` | `tool_search.py` | On-demand tool discovery — LLM searches for tools by keyword, matching schemas are loaded for the current turn | Opt-in via `ToolSearchEnabled` config |
+| `ask_user` | `ask_user.py` | Human-in-the-loop questioning — LLM pauses to ask the user a clarifying question with optional structured choices | Always-on |
+
+Both pseudo-tools follow the same pattern in `turn_engine.py`: blocks are classified in a three-way split (search / ask_user / regular), pseudo-tool results are collected into `inline_results`, and if no regular tools are present, the loop continues immediately without creating a checkpoint.
+
+When pseudo-tools and regular tools appear in the same LLM response, pseudo-tool results are handled first, then regular tools execute in parallel, and all results are merged in the original block order before being appended to the conversation.
+
+See [Ask User Plan](../planning/PLAN-ask-user.md) and [Tool Search Plan](../planning/PLAN-tool-search.md) for implementation details.
+
 ## Adding a New Tool
 
 New tools are added as TypeScript MCP servers — no Python code changes are needed.

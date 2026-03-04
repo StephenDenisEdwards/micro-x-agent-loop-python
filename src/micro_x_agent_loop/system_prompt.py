@@ -34,6 +34,31 @@ Tips:
 """
 
 
+_ASK_USER_DIRECTIVE = """\
+
+
+# Asking the User — IMPORTANT
+
+ALWAYS use the `ask_user` tool instead of asking questions in plain text. Never write a \
+question in your response and wait — call `ask_user` so the user gets an interactive prompt.
+
+Use `ask_user` when:
+- The request is ambiguous and you need clarification before proceeding
+- There are multiple valid approaches and you want the user to choose
+- You need approval before a potentially destructive or irreversible action
+- You're missing a required piece of information (e.g., a file path, a name, a preference)
+
+When you know the reasonable alternatives, include them as `options` so the user can pick \
+from a list instead of typing. Only omit options for truly open-ended questions (e.g., "What \
+file path?").
+
+Do NOT use `ask_user` for:
+- Routine confirmations ("I'm about to read a file, OK?")
+- Questions you can answer yourself from context
+- Stalling — if you have enough information, just proceed\
+"""
+
+
 _CONCISE_OUTPUT_DIRECTIVE = """\
 
 

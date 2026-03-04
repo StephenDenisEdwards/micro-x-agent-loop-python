@@ -12,10 +12,14 @@ The agent loop is the core runtime cycle of the application. It manages the conv
 4. Message list is sent to the configured provider via streaming API
 5. Text deltas are printed to stdout as they arrive
 6. If the provider requests tool use:
-   a. All tool calls execute **in parallel** via `asyncio.gather`
-   b. Results are truncated if over the character limit
-   c. Tool results are added to conversation history
-   d. Loop back to step 3
+   a. Blocks are classified: pseudo-tools (`tool_search`, `ask_user`) vs regular tools
+   b. Pseudo-tool blocks are handled inline (no MCP execution, no spinner)
+   c. If only pseudo-tools: results are appended, loop back to step 3
+   d. Regular tool calls execute **in parallel** via `asyncio.gather`
+   e. Results are truncated if over the character limit
+   f. If mixed: pseudo-tool and regular results are merged in original block order
+   g. Tool results are added to conversation history
+   h. Loop back to step 3
 7. If the provider returns a final text response, control returns to the REPL
 
 ## Components
@@ -116,6 +120,7 @@ This ensures Claude knows the output was truncated and can request a more target
 
 | Error | Handling |
 |-------|----------|
+| Pseudo-tool call (`tool_search`, `ask_user`) | Handled inline, result returned without MCP execution |
 | Unknown tool name | Error result returned to Claude |
 | Tool raises exception | Error message returned to Claude |
 | API rate limit (429) | tenacity retries with exponential backoff |

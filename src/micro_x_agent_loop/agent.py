@@ -35,6 +35,7 @@ from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
+from micro_x_agent_loop.ask_user import AskUserHandler
 from micro_x_agent_loop.tool_search import ToolSearchManager, should_activate_tool_search
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult
@@ -78,6 +79,14 @@ class Agent:
                 f"Tool search active: {len(config.tools)} tools deferred, "
                 "LLM will discover tools via tool_search"
             )
+
+        # Ask-user (human-in-the-loop questioning)
+        self._ask_user_handler = AskUserHandler(
+            line_prefix=self._LINE_PREFIX,
+            user_prompt=self._USER_PROMPT,
+        )
+        from micro_x_agent_loop.system_prompt import _ASK_USER_DIRECTIVE
+        self._system_prompt += _ASK_USER_DIRECTIVE
 
         self._max_tool_result_chars = config.max_tool_result_chars
         self._max_conversation_messages = config.max_conversation_messages
@@ -165,6 +174,7 @@ class Agent:
             formatter=self._tool_result_formatter,
             api_payload_store=self._api_payload_store,
             tool_search_manager=self._tool_search_manager,
+            ask_user_handler=self._ask_user_handler,
         )
 
         self._command_handler = CommandHandler(

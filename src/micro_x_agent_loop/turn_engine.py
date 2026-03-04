@@ -8,6 +8,7 @@ from typing import Any
 from loguru import logger
 
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
+from micro_x_agent_loop.ask_user import AskUserHandler
 from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
 from micro_x_agent_loop.system_prompt import resolve_system_prompt
@@ -39,6 +40,7 @@ class TurnEngine:
         formatter: ToolResultFormatter | None = None,
         api_payload_store: ApiPayloadStore | None = None,
         tool_search_manager: ToolSearchManager | None = None,
+        ask_user_handler: AskUserHandler | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -58,6 +60,7 @@ class TurnEngine:
         self._formatter = formatter or ToolResultFormatter()
         self._api_payload_store = api_payload_store
         self._tool_search_manager = tool_search_manager
+        self._ask_user_handler = ask_user_handler
 
     async def run(
         self,
@@ -82,8 +85,10 @@ class TurnEngine:
             api_tools = (
                 self._tool_search_manager.get_tools_for_api_call()
                 if self._tool_search_manager is not None
-                else self._converted_tools
+                else list(self._converted_tools)
             )
+            if self._ask_user_handler is not None:
+                api_tools.append(self._ask_user_handler.get_schema())
 
             message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
                 self._model,
@@ -130,33 +135,44 @@ class TurnEngine:
             if not tool_use_blocks:
                 return current_user_message_id, last_assistant_message_id
 
-            # Separate tool_search calls from regular tool calls
+            # Classify blocks: search / ask_user / regular
             search_blocks: list[dict] = []
+            ask_user_blocks: list[dict] = []
             regular_blocks: list[dict] = []
-            if self._tool_search_manager is not None:
-                for block in tool_use_blocks:
-                    if ToolSearchManager.is_tool_search_call(block["name"]):
-                        search_blocks.append(block)
-                    else:
-                        regular_blocks.append(block)
-            else:
-                regular_blocks = tool_use_blocks
+            for block in tool_use_blocks:
+                name = block["name"]
+                if self._tool_search_manager is not None and ToolSearchManager.is_tool_search_call(name):
+                    search_blocks.append(block)
+                elif self._ask_user_handler is not None and AskUserHandler.is_ask_user_call(name):
+                    ask_user_blocks.append(block)
+                else:
+                    regular_blocks.append(block)
 
             # Handle tool_search calls inline (no MCP execution needed)
-            search_results: list[dict] = []
+            inline_results: list[dict] = []
             for block in search_blocks:
                 query = block["input"].get("query", "")
                 result_text = self._tool_search_manager.handle_tool_search(query)
-                search_results.append({
+                inline_results.append({
                     "type": "tool_result",
                     "tool_use_id": block["id"],
                     "content": result_text,
                 })
                 logger.info(f"tool_search query={query!r} loaded={self._tool_search_manager.loaded_tool_count}")
 
-            # If only search calls (no regular tools), append results and continue
-            if search_blocks and not regular_blocks:
-                self._events.on_append_message("user", search_results)
+            # Handle ask_user calls inline (prompt the user in the terminal)
+            for block in ask_user_blocks:
+                result_text = await self._ask_user_handler.handle(block["input"])
+                inline_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block["id"],
+                    "content": result_text,
+                })
+                logger.info(f"ask_user question={block['input'].get('question', '')!r}")
+
+            # If only pseudo-tool calls (no regular tools), append results and continue
+            if not regular_blocks:
+                self._events.on_append_message("user", inline_results)
                 print()
                 continue
 
@@ -173,9 +189,9 @@ class TurnEngine:
                 spinner.stop()
 
             # Combine results in original order
-            if search_results:
+            if inline_results:
                 all_results = self._merge_tool_results(
-                    tool_use_blocks, search_results, regular_results,
+                    tool_use_blocks, inline_results, regular_results,
                 )
             else:
                 all_results = regular_results
@@ -187,12 +203,12 @@ class TurnEngine:
     @staticmethod
     def _merge_tool_results(
         original_blocks: list[dict],
-        search_results: list[dict],
+        inline_results: list[dict],
         regular_results: list[dict],
     ) -> list[dict]:
-        """Merge search and regular tool results in the order of the original blocks."""
+        """Merge inline (search/ask_user) and regular tool results in original block order."""
         by_id: dict[str, dict] = {}
-        for r in search_results:
+        for r in inline_results:
             by_id[r["tool_use_id"]] = r
         for r in regular_results:
             by_id[r["tool_use_id"]] = r

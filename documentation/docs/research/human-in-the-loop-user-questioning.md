@@ -1,7 +1,7 @@
 # Human-in-the-Loop: LLM-Initiated User Questioning in Agent Loops
 
 **Date:** 2026-03-04
-**Status:** Research Complete
+**Status:** Implemented — see [PLAN-ask-user.md](../planning/PLAN-ask-user.md)
 **Purpose:** Investigate how agent systems allow the LLM to pose questions to the user mid-execution, and document design options for micro-x-agent-loop-python.
 
 ---
