@@ -72,7 +72,9 @@ async def main() -> None:
             mcp_names.setdefault(server, []).append(tool_name or t.name)
         print("MCP servers:")
         for server, tool_names in mcp_names.items():
-            print(f"  - {server}: {', '.join(tool_names)}")
+            print(f"  {server}:")
+            for name in tool_names:
+                print(f"    - {name}")
     if app.working_directory:
         print(f"Working directory: {app.working_directory}")
     if app.compaction_strategy_name != "none":

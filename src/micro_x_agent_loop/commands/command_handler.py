@@ -74,6 +74,7 @@ class CommandHandler:
         print(f"{p}- /voice devices")
         print(f"{p}- /voice events [limit]")
         print(f"{p}- /voice stop")
+        print(f"{p}- /tools mcp")
         print(f"{p}- /tool")
         print(f"{p}- /tool <name>")
         print(f"{p}- /tool <name> schema")
@@ -183,6 +184,31 @@ class CommandHandler:
                 return
 
         print(f"{self._p}Usage: /memory | /memory list | /memory edit | /memory reset")
+
+    # -- /tools --
+
+    async def handle_tools(self, command: str) -> None:
+        parts = command.split()
+        if len(parts) == 2 and parts[1] == "mcp":
+            self._print_mcp_tools()
+            return
+        print(f"{self._p}Usage: /tools mcp")
+
+    def _print_mcp_tools(self) -> None:
+        groups: dict[str, list[str]] = {}
+        for name in self._tool_map:
+            if "__" not in name:
+                continue
+            server, short = name.split("__", 1)
+            groups.setdefault(server, []).append(short)
+        if not groups:
+            print(f"{self._p}No MCP tools loaded.")
+            return
+        print(f"{self._p}MCP servers:")
+        for server in sorted(groups):
+            print(f"{self._p}  {server}:")
+            for short in sorted(groups[server]):
+                print(f"{self._p}    - {short}")
 
     # -- /tool --
 
