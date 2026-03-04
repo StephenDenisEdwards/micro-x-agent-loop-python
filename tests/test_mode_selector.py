@@ -2,7 +2,7 @@ import asyncio
 import io
 import unittest
 from contextlib import redirect_stdout
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_config import AgentConfig
@@ -368,9 +368,10 @@ class Stage2FormatTests(unittest.TestCase):
 
 
 class Stage2AgentIntegrationTests(unittest.TestCase):
-    """End-to-end: Agent._run_inner triggers (or skips) Stage 2 based on Stage 1 result."""
+    """End-to-end: Agent._run_inner triggers (or skips) Stage 2 and prompts the user."""
 
-    def _make_agent(self, *, stage2_response: str = "COMPILED\nBatch task.") -> Agent:
+    def _make_agent(self, *, stage2_response: str = "COMPILED\nBatch task.",
+                    stage2_enabled: bool = True) -> Agent:
         """Create an Agent with a fake provider that returns a canned Stage 2 response."""
         fake_provider = FakeStreamProvider()
         # Queue one response for the main turn (after mode analysis)
@@ -389,22 +390,22 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
                 api_key="test",
                 tools=[FakeTool()],
                 mode_analysis_enabled=True,
-                stage2_classification_enabled=True,
+                stage2_classification_enabled=stage2_enabled,
                 stage2_model="test-model",
             ))
 
-    def test_prompt_mode_no_stage2(self) -> None:
-        """'What's the weather in London?' → PROMPT at Stage 1, no Stage 2 call."""
+    def test_prompt_mode_no_user_prompt(self) -> None:
+        """'What's the weather in London?' → PROMPT, no interactive prompt shown."""
         agent = self._make_agent()
         buf = io.StringIO()
         with redirect_stdout(buf):
             asyncio.run(agent.run("What's the weather in London?"))
         out = buf.getvalue()
         self.assertIn("PROMPT", out)
-        self.assertNotIn("Stage 2", out)
+        self.assertNotIn("Which execution mode", out)
 
-    def test_compiled_mode_no_stage2(self) -> None:
-        """Full job search prompt → COMPILED at Stage 1, no Stage 2 call."""
+    def test_compiled_prompts_user(self) -> None:
+        """Full job-search prompt → COMPILED signals → user is prompted to choose."""
         prompt = (
             "Search my Gmail for all JobServe emails received in the last 24 hours. "
             "Read the full content of each email. Then search LinkedIn for similar UK "
@@ -413,40 +414,65 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
             "Include Summary Statistics: Total Jobs Found, Average Score."
         )
         agent = self._make_agent()
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent.run(prompt))
+        mock_choice = AsyncMock(return_value=RecommendedMode.COMPILED)
+        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                asyncio.run(agent.run(prompt))
         out = buf.getvalue()
-        self.assertIn("Recommendation: COMPILED", out)
-        self.assertNotIn("Stage 2", out)
+        self.assertIn("Proceeding in COMPILED mode", out)
+        mock_choice.assert_called_once()
 
-    def test_ambiguous_triggers_stage2_compiled(self) -> None:
-        """'List the last 50 emails...' → AMBIGUOUS at Stage 1, Stage 2 → COMPILED."""
+    def test_compiled_user_overrides_to_prompt(self) -> None:
+        """User can override a COMPILED recommendation to PROMPT mode."""
+        prompt = (
+            "Score each job and calculate the total count across all listings"
+        )
+        agent = self._make_agent()
+        mock_choice = AsyncMock(return_value=RecommendedMode.PROMPT)
+        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                asyncio.run(agent.run(prompt))
+        out = buf.getvalue()
+        self.assertIn("Proceeding in PROMPT mode", out)
+
+    def test_ambiguous_prompts_user_with_stage2(self) -> None:
+        """AMBIGUOUS → Stage 2 runs, then user is prompted with the recommendation."""
         agent = self._make_agent(stage2_response="COMPILED\nBatch task with 50 items.")
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent.run(
-                "List the last 50 emails from JobServe with the subject "
-                "and then a summary of the content for each."
-            ))
+        mock_choice = AsyncMock(return_value=RecommendedMode.COMPILED)
+        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                asyncio.run(agent.run(
+                    "List the last 50 emails from JobServe with the subject "
+                    "and then a summary of the content for each."
+                ))
         out = buf.getvalue()
-        self.assertIn("Recommendation: AMBIGUOUS", out)
-        self.assertIn("Stage 2 override: COMPILED", out)
-        self.assertIn("Batch task with 50 items.", out)
+        self.assertIn("Proceeding in COMPILED mode", out)
+        # Stage2Result should have been passed to the prompt
+        args = mock_choice.call_args
+        stage2_arg = args[0][1]  # second positional arg
+        self.assertIsNotNone(stage2_arg)
+        self.assertEqual(RecommendedMode.COMPILED, stage2_arg.recommended_mode)
 
-    def test_ambiguous_triggers_stage2_prompt(self) -> None:
-        """'Score this document for readability' → AMBIGUOUS, Stage 2 → PROMPT."""
-        agent = self._make_agent(stage2_response="PROMPT\nSingle item, no batch structure.")
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent.run("Score this document for readability"))
+    def test_ambiguous_stage2_prompt_recommendation(self) -> None:
+        """AMBIGUOUS → Stage 2 says PROMPT → user still gets prompted."""
+        agent = self._make_agent(stage2_response="PROMPT\nSingle item, no batch.")
+        mock_choice = AsyncMock(return_value=RecommendedMode.PROMPT)
+        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                asyncio.run(agent.run("Score this document for readability"))
         out = buf.getvalue()
-        self.assertIn("Recommendation: AMBIGUOUS", out)
-        self.assertIn("Stage 2 override: PROMPT", out)
-        self.assertIn("Single item, no batch structure.", out)
+        self.assertIn("Proceeding in PROMPT mode", out)
+        args = mock_choice.call_args
+        stage2_arg = args[0][1]
+        self.assertIsNotNone(stage2_arg)
+        self.assertEqual(RecommendedMode.PROMPT, stage2_arg.recommended_mode)
 
-    def test_stage2_disabled_skips_classification(self) -> None:
-        """When stage2_classification_enabled=False, AMBIGUOUS stays without Stage 2."""
+    def test_stage2_disabled_still_prompts_user(self) -> None:
+        """With Stage 2 disabled, ambiguous prompts still ask the user."""
         fake_provider = FakeStreamProvider()
         fake_provider.queue(text="Hello!", stop_reason="end_turn")
         with patch("micro_x_agent_loop.agent.create_provider", return_value=fake_provider):
@@ -456,15 +482,20 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
                 mode_analysis_enabled=True,
                 stage2_classification_enabled=False,
             ))
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent.run("Score this document for readability"))
+        mock_choice = AsyncMock(return_value=RecommendedMode.COMPILED)
+        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                asyncio.run(agent.run("Score this document for readability"))
         out = buf.getvalue()
-        self.assertIn("AMBIGUOUS", out)
-        self.assertNotIn("Stage 2", out)
+        self.assertIn("Proceeding in COMPILED mode", out)
+        # No Stage 2 result should be passed
+        args = mock_choice.call_args
+        stage2_arg = args[0][1]
+        self.assertIsNone(stage2_arg)
 
-    def test_stage2_failure_does_not_abort_turn(self) -> None:
-        """If Stage 2 LLM call fails, the turn continues normally."""
+    def test_stage2_failure_still_prompts_user(self) -> None:
+        """If Stage 2 LLM call fails, the user is still prompted and turn proceeds."""
         fake_provider = FakeStreamProvider()
         fake_provider.queue(text="Hello!", stop_reason="end_turn")
 
@@ -481,13 +512,18 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
                 stage2_classification_enabled=True,
                 stage2_model="test-model",
             ))
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent.run("Score this document for readability"))
+        mock_choice = AsyncMock(return_value=RecommendedMode.COMPILED)
+        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                asyncio.run(agent.run("Score this document for readability"))
         out = buf.getvalue()
-        self.assertIn("AMBIGUOUS", out)
-        self.assertIn("Stage 2 classification failed", out)
-        # Turn should still proceed — stream_chat was called (turn_number incremented)
+        self.assertIn("Proceeding in COMPILED mode", out)
+        # Stage 2 failed, so None should be passed
+        args = mock_choice.call_args
+        stage2_arg = args[0][1]
+        self.assertIsNone(stage2_arg)
+        # Turn should still proceed
         self.assertEqual(1, agent._turn_number)
 
 
