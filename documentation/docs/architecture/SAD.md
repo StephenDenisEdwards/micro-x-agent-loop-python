@@ -6,7 +6,7 @@
 
 ## 1. Introduction and Goals
 
-micro-x-agent-loop-python is a minimal AI agent loop built with Python and a pluggable LLM backend (Anthropic Claude or OpenAI GPT). It provides a REPL interface where users type natural-language prompts (or use voice mode) and the agent autonomously calls tools to accomplish tasks.
+Micro-X Agent is a general-purpose, cost-aware AI agent built with Python and a pluggable LLM backend (Anthropic Claude or OpenAI GPT). It provides a REPL interface where users type natural-language prompts (or use voice mode) and the agent autonomously orchestrates tools via the Model Context Protocol (MCP) to accomplish tasks.
 
 ### Key Goals
 
