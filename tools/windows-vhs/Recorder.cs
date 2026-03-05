@@ -54,20 +54,27 @@ class Recorder
 
         Console.WriteLine("Recording...");
 
-        // Execute commands
+        // Execute commands, stopping early if the child process exits
         foreach (var cmd in _commands)
         {
+            if (process.HasExited)
+            {
+                Console.Error.WriteLine("Child process exited — stopping recording.");
+                break;
+            }
+
             switch (cmd)
             {
                 case TypeCommand tc:
                     await TypeText(hwnd, tc.Text);
                     break;
                 case EnterCommand:
-                    Win32.PostKeyPress(hwnd, Win32.VK_RETURN);
+                    Win32.PostChar(hwnd, '\r');
                     await Task.Delay(100);
                     break;
                 case SleepCommand sc:
-                    await Task.Delay(sc.Duration);
+                    // Sleep in small increments so we can detect child exit promptly
+                    await SleepOrUntilExit(process, sc.Duration);
                     break;
                 case BackspaceCommand bc:
                     for (int i = 0; i < bc.Count; i++)
@@ -78,7 +85,7 @@ class Recorder
                     break;
                 case KeyCommand kc:
                     SendNamedKey(hwnd, kc.Key);
-                    await Task.Delay(50);
+                    await Task.Delay(100);
                     break;
                 case CtrlCommand cc:
                     Win32.PostCtrlKey(hwnd, cc.Key);
@@ -115,6 +122,22 @@ class Recorder
 
         // Kill terminal
         try { process.Kill(); } catch { }
+    }
+
+    static async Task SleepOrUntilExit(Process process, TimeSpan duration)
+    {
+        const int checkIntervalMs = 500;
+        var remaining = duration;
+        while (remaining > TimeSpan.Zero)
+        {
+            if (process.HasExited)
+                return;
+            var delay = remaining < TimeSpan.FromMilliseconds(checkIntervalMs)
+                ? remaining
+                : TimeSpan.FromMilliseconds(checkIntervalMs);
+            await Task.Delay(delay);
+            remaining -= delay;
+        }
     }
 
     async Task TypeText(IntPtr hwnd, string text)

@@ -107,13 +107,29 @@ static class Win32
         PostMessage(hWnd, WM_CHAR, (IntPtr)c, IntPtr.Zero);
     }
 
+    [DllImport("user32.dll")]
+    public static extern uint MapVirtualKey(uint uCode, uint uMapType);
+
     /// <summary>
-    /// Sends a virtual key press via WM_KEYDOWN + WM_KEYUP messages.
+    /// Sends a virtual key press via WM_KEYDOWN + WM_KEYUP messages with
+    /// properly encoded lParam (scan code, repeat count, transition flags).
+    /// Without correct lParam, conhost creates malformed console input records.
     /// </summary>
     public static void PostKeyPress(IntPtr hWnd, ushort vk)
     {
-        PostMessage(hWnd, WM_KEYDOWN, (IntPtr)vk, IntPtr.Zero);
-        PostMessage(hWnd, WM_KEYUP, (IntPtr)vk, IntPtr.Zero);
+        uint scanCode = MapVirtualKey(vk, 0); // MAPVK_VK_TO_VSC
+        bool extended = vk is VK_UP or VK_DOWN or VK_LEFT or VK_RIGHT;
+
+        uint downLParam = 1u                        // repeat count = 1
+            | (scanCode << 16)                      // scan code
+            | (extended ? (1u << 24) : 0u);         // extended key flag
+
+        uint upLParam = downLParam
+            | (1u << 30)                            // previous key state = down
+            | (1u << 31);                           // transition state = releasing
+
+        PostMessage(hWnd, WM_KEYDOWN, (IntPtr)vk, (IntPtr)downLParam);
+        PostMessage(hWnd, WM_KEYUP, (IntPtr)vk, (IntPtr)upLParam);
     }
 
     /// <summary>
