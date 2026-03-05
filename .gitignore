@@ -17,9 +17,13 @@ store/
 node_modules/
 .vscode/
 
-# Agent-generated task apps (only tools/template/ is tracked)
+# Agent-generated task apps (only tools/template/ and tools/windows-vhs/ are tracked)
 tools/*/
 !tools/template/
+!tools/windows-vhs/
+
+# Generated demo recordings
+*.gif
 
 # Logs
 *.log
