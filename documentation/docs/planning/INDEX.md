@@ -1,10 +1,10 @@
 # Planning Index
 
-Last updated: 2026-03-02
+Last updated: 2026-03-05
 
 ## Priority Queue
 
-What to work on next, in order. Rationale: cost reduction is the top priority — every session costs money, so reducing cost has compounding ROI. Metrics come first because you can't validate savings without measurement.
+What to work on next, in order. Rationale: promotional publishing channels are the current priority — the agent needs multi-channel reach to drive adoption. Dev.to and Reddit come first due to simple auth and high-value audience overlap. Infrastructure and architectural work follows once the promotional pipeline is live.
 
 | Priority | Plan | Status | Why this order |
 |----------|------|--------|----------------|
@@ -13,12 +13,18 @@ What to work on next, in order. Rationale: cost reduction is the top priority �
 | **3** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 2 (Tool result reduction, smarter compaction, output reduction) | **Completed** | Next-highest ROI, requires per-tool data from metrics |
 | **4** | [Memory System](PLAN-claude-style-memory.md) — Phase 3 remainder | **Completed** | Event callback API + stress tests done; MCP mutation tracking extracted to own plan |
 | **5** | [Cross-Session User Memory](PLAN-cross-session-user-memory.md) | **Completed** | All phases done: read path, save_memory tool, /memory commands |
-| **6** | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Large architectural migration; prerequisite for cost reduction Phase 3 |
-| **7** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, sub-agents, schema optimisation) | Planning | Architectural changes, higher effort, depends on gateway plan |
-| **8** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
-| **9** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | |
-| **10** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools; extracted from Memory System Phase 3 |
-| **11** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based tool routing that preserves prompt caching; relates to cost reduction lever #7 |
+| **6** | [LinkedIn Publishing MCP](PLAN-linkedin-publishing-mcp.md) | **Completed** | First promotional channel — highest-priority audience (senior engineers, CTOs) |
+| **7** | [Dev.to Publishing MCP](PLAN-devto-publishing-mcp.md) | Draft | Simplest auth (API key, no OAuth). Long-form technical content drives deep engagement and is indexable by search engines |
+| **8** | [Reddit MCP](PLAN-reddit-mcp.md) | Draft | Target audience lives in r/ClaudeAI, r/LocalLLaMA, r/mcp. Script-app OAuth is simple. High discoverability via Google |
+| **9** | [X/Twitter MCP](PLAN-x-twitter-mcp.md) | Draft | Good reach but hostile API (PKCE auth, unstable, write-only free tier). Less bang-for-buck than dev.to/Reddit for technical audience |
+| **10** | [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | Draft | Community building — low value until the project has active users. Extends existing GitHub MCP server |
+| **11** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Frictionless onboarding becomes critical once promotional channels drive traffic to the repo |
+| **12** | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Large architectural migration; prerequisite for cost reduction Phase 3. No user-visible benefit short-term |
+| **13** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, sub-agents, schema optimisation) | Planning | Architectural changes, higher effort, depends on gateway plan |
+| **14** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
+| **15** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | Nice-to-have, not promotional |
+| **16** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools; internal plumbing |
+| **17** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based tool routing that preserves prompt caching; do when cost data justifies it |
 
 ---
 
@@ -26,8 +32,8 @@ What to work on next, in order. Rationale: cost reduction is the top priority �
 
 | Status | Count |
 |--------|-------|
-| Completed | 12 |
-| In Progress | 0 |
+| Completed | 13 |
+| Draft | 4 |
 | Planning | 0 |
 | Planned | 5 |
 
@@ -52,3 +58,9 @@ What to work on next, in order. Rationale: cost reduction is the top priority �
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Server/gateway architecture migration |
 | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based routing preserving prefix caching. See [DESIGN](../design/DESIGN-cache-preserving-tool-routing.md) |
 | [Codegen Prompt Discipline](PLAN-codegen-prompt-discipline.md) | Completed | Tightened codegen prompt, added infra file deny, compact output format |
+| [LinkedIn Publishing MCP](PLAN-linkedin-publishing-mcp.md) | Completed | Draft-post, draft-article, publish-draft tools |
+| [Dev.to Publishing MCP](PLAN-devto-publishing-mcp.md) | Draft | Long-form blog publishing via Forem API |
+| [Reddit MCP](PLAN-reddit-mcp.md) | Draft | Reddit publishing via OAuth2 script app |
+| [X/Twitter MCP](PLAN-x-twitter-mcp.md) | Draft | Tweet/thread publishing via X API v2 |
+| [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | Draft | Discussions management in GitHub MCP server |
+| [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Interactive setup wizard for non-expert users |
