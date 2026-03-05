@@ -2,6 +2,7 @@
   "Provider": "anthropic",
   "Model": "claude-sonnet-4-5-20250929",
   "MaxTokens": 32768,
+  "Temperature": 0.7,
   "CompactionStrategy": "summarize",
   "MemoryEnabled": true,
   "MemoryDbPath": ".micro_x/memory.db",

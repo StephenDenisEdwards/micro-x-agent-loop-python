@@ -196,7 +196,7 @@ def parse_app_config(config: dict) -> AppConfig:
         provider_name=config.get("Provider", "anthropic").strip().lower(),
         model=config.get("Model", "claude-sonnet-4-5-20250929"),
         max_tokens=int(config.get("MaxTokens", DEFAULT_MAX_TOKENS)),
-        temperature=float(config.get("Temperature", 1.0)),
+        temperature=float(config.get("Temperature", 0.7)),
         max_tool_result_chars=int(config.get("MaxToolResultChars", DEFAULT_MAX_TOOL_RESULT_CHARS)),
         max_conversation_messages=int(config.get("MaxConversationMessages", DEFAULT_MAX_CONVERSATION_MESSAGES)),
         compaction_strategy_name=config.get("CompactionStrategy", "none").lower(),

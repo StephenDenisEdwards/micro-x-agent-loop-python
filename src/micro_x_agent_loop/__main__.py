@@ -23,25 +23,7 @@ def _parse_config_arg() -> str | None:
 async def main() -> None:
     load_dotenv()
 
-    cli_config = _parse_config_arg()
-    raw_config, config_source = load_json_config(config_path=cli_config)
-    print(f"Config: {config_source}")
-    app = parse_app_config(raw_config)
-    env = resolve_runtime_env(app.provider_name)
-    if not env.provider_api_key:
-        logger.error(f"{env.provider_env_var} environment variable is required.")
-        sys.exit(1)
-
-    try:
-        runtime = await bootstrap_runtime(app, env)
-    except ValueError as ex:
-        logger.error(str(ex))
-        sys.exit(1)
-
-    agent = runtime.agent
-    await agent.initialize_session()
-
-    # -- Startup logo --
+    # -- Startup logo (display first) --
     _YELLOW = "\033[33m"
     _BLUE = "\033[34m"
     _RESET = "\033[0m"
@@ -64,17 +46,35 @@ async def main() -> None:
         f"{_RESET}              By Stephen Edwards{_RESET}\n"
     )
 
+    cli_config = _parse_config_arg()
+    raw_config, config_source = load_json_config(config_path=cli_config)
+    print(f"Config: {config_source}")
+    app = parse_app_config(raw_config)
+    env = resolve_runtime_env(app.provider_name)
+    if not env.provider_api_key:
+        logger.error(f"{env.provider_env_var} environment variable is required.")
+        sys.exit(1)
+
+    try:
+        runtime = await bootstrap_runtime(app, env)
+    except ValueError as ex:
+        logger.error(str(ex))
+        sys.exit(1)
+
+    agent = runtime.agent
+    await agent.initialize_session()
+
     print(f"micro-x-agent-loop [{app.provider_name}:{app.model}] (type 'exit' to quit, '/help' for commands)")
     if runtime.mcp_tools:
         mcp_names: dict[str, list[str]] = {}
         for t in runtime.mcp_tools:
             server, _, tool_name = t.name.partition("__")
             mcp_names.setdefault(server, []).append(tool_name or t.name)
-        print("MCP servers:")
+        logger.info("MCP servers:")
         for server, tool_names in mcp_names.items():
-            print(f"  {server}:")
+            logger.info(f"  {server}:")
             for name in tool_names:
-                print(f"    - {name}")
+                logger.info(f"    - {name}")
     if app.working_directory:
         print(f"Working directory: {app.working_directory}")
     if app.compaction_strategy_name != "none":

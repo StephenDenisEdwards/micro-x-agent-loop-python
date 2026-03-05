@@ -69,7 +69,7 @@ The required API key depends on the configured `Provider`. Service-specific cred
 | `Provider` | string | `"anthropic"` | LLM provider: `"anthropic"` or `"openai"` |
 | `Model` | string | `"claude-sonnet-4-5-20250929"` | Model ID to use (provider-specific) |
 | `MaxTokens` | int | `8192` | Maximum tokens per API response |
-| `Temperature` | float | `1.0` | Sampling temperature (0.0 = deterministic, 1.0 = creative) |
+| `Temperature` | float | `0.7` | Sampling temperature — tuned for agentic tool-use reliability (see [Temperature](#temperature)) |
 | `MaxToolResultChars` | int | `40000` | Maximum characters per tool result before truncation |
 | `MaxConversationMessages` | int | `50` | Maximum messages in conversation history before trimming |
 | `CompactionStrategy` | string | `"none"` | Compaction strategy: `"none"` or `"summarize"` |
@@ -110,7 +110,7 @@ The required API key depends on the configured `Provider`. Service-specific cred
   "Provider": "anthropic",
   "Model": "claude-sonnet-4-5-20250929",
   "MaxTokens": 8192,
-  "Temperature": 1.0,
+  "Temperature": 0.7,
   "MaxToolResultChars": 40000,
   "MaxConversationMessages": 50,
   "CompactionStrategy": "summarize",
@@ -186,10 +186,16 @@ Controls the maximum length of Claude's response. Higher values allow longer res
 
 ### Temperature
 
-Controls randomness in Claude's responses:
-- `0.0` — most deterministic, best for factual/precise tasks
-- `1.0` — default, good general-purpose balance
-- Values above 1.0 increase randomness
+Controls randomness in the model's responses. The default is `0.7`, tuned for agentic tool-use reliability.
+
+| Value | Behaviour |
+|-------|-----------|
+| `0.0` | Most deterministic — nearly identical output for the same input |
+| `0.5–0.7` | Recommended for agentic/tool-heavy workloads — reduces randomness in tool calls and structured output while retaining enough variation for natural language |
+| `1.0` | Provider API default — good general-purpose balance for conversational use |
+| `>1.0` | Increases randomness (OpenAI supports up to 2.0; Anthropic caps at 1.0) |
+
+**Why `0.7`?** The provider API default is `1.0`, but this is an agent loop, not a chatbot. The primary workload is tool-heavy — file operations, MCP calls, code generation — where deterministic, reliable tool calls matter more than creative variation. `0.7` retains enough variation for natural conversational responses while reducing noise in structured output. Set to `1.0` if you prefer the provider default for more conversational use cases.
 
 ### MaxToolResultChars
 

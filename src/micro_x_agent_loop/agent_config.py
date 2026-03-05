@@ -17,7 +17,7 @@ from micro_x_agent_loop.tool import Tool
 class AgentConfig:
     model: str = "claude-sonnet-4-5-20250929"
     max_tokens: int = DEFAULT_MAX_TOKENS
-    temperature: float = 1.0
+    temperature: float = 0.7
     api_key: str = ""
     provider: str = "anthropic"
     tools: list[Tool] = field(default_factory=list)

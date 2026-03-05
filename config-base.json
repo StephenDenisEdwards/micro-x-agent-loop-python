@@ -1,4 +1,5 @@
 {
+  "Temperature": 0.7,
   "CompactionStrategy": "summarize",
   "MemoryEnabled": true,
   "MemoryDbPath": ".micro_x/memory.db",
