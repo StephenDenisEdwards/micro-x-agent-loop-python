@@ -7,6 +7,7 @@ from mcp import ClientSession, StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
 from mcp.types import LoggingMessageNotificationParams
 
+from micro_x_agent_loop.llm_client import print_through_spinner
 from micro_x_agent_loop.mcp.mcp_tool_proxy import McpToolProxy
 from micro_x_agent_loop.tool import Tool
 
@@ -14,10 +15,21 @@ _SHUTDOWN_TIMEOUT = 5.0
 
 
 async def _mcp_logging_callback(params: LoggingMessageNotificationParams) -> None:
-    """Forward MCP server log notifications to the console via loguru."""
+    """Forward MCP server log notifications to the terminal and loguru.
+
+    MCP servers use ctx.info()/ctx.warning()/ctx.error() for user-facing
+    progress messages (e.g. codegen status).  These must always be visible
+    on the terminal regardless of the logging configuration.
+    """
     level = str(params.level).upper()
     source = f"mcp.{params.logger}" if params.logger else "mcp"
     msg = str(params.data) if params.data is not None else ""
+
+    # Always print to terminal so progress is visible without console logging.
+    # Uses print_through_spinner to avoid colliding with any active spinner.
+    print_through_spinner(f"[{source}] {msg}")
+
+    # Also forward to loguru for file/structured logging
     getattr(logger.opt(depth=1), level.lower(), logger.info)(f"[{source}] {msg}")
 
 

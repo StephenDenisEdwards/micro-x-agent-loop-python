@@ -10,7 +10,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
@@ -24,6 +23,8 @@ load_dotenv()
 PROJECT_ROOT = Path(os.environ.get("PROJECT_ROOT", ""))
 WORKING_DIR = Path(os.environ.get("WORKING_DIR", ""))
 TEMPLATE_DIR = PROJECT_ROOT / "tools" / "template"
+# The project's .venv Python — guaranteed to have all dependencies installed.
+VENV_PYTHON = str(PROJECT_ROOT / ".venv" / "Scripts" / "python.exe")
 DEFAULT_MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 16384
 MAX_TURNS = 10
@@ -281,7 +282,7 @@ def _run_tests_sync(target_dir: Path) -> tuple[bool, str]:
         with tempfile.TemporaryFile() as out_f, \
              tempfile.TemporaryFile() as err_f:
             proc = subprocess.run(
-                [sys.executable, "-m", "unittest", "discover",
+                [VENV_PYTHON, "-m", "unittest", "discover",
                  "-s", str(target_dir), "-t", str(PROJECT_ROOT),
                  "-p", "test_*.py", "-v"],
                 cwd=str(PROJECT_ROOT),
@@ -630,7 +631,7 @@ async def run_task(ctx: Context, task_name: str,
              tempfile.TemporaryFile() as err_f:
             try:
                 proc = subprocess.run(
-                    [sys.executable, "-m", f"tools.{task_name}"],
+                    [VENV_PYTHON, "-m", f"tools.{task_name}"],
                     cwd=str(PROJECT_ROOT),
                     stdin=subprocess.DEVNULL,
                     stdout=out_f,
