@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import sys
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from loguru import logger
 
@@ -12,12 +14,41 @@ class LogConsumer(Protocol):
 
 
 class ConsoleLogConsumer:
+    _instance: ClassVar[ConsoleLogConsumer | None] = None
+
+    def __init__(self) -> None:
+        self._handler_id: int | None = None
+        self._level: str = "INFO"
+        self._format = "<level>{level:<8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+        ConsoleLogConsumer._instance = self
+
     def register(self, level: str) -> None:
-        logger.add(
+        self._level = level
+        self._handler_id = logger.add(
             sys.stderr,
             level=level,
-            format="<level>{level:<8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+            format=self._format,
         )
+
+    def set_level(self, level: str) -> None:
+        if self._handler_id is not None:
+            logger.remove(self._handler_id)
+            self._handler_id = None
+        self._level = level
+        if level != "OFF":
+            self._handler_id = logger.add(
+                sys.stderr,
+                level=level,
+                format=self._format,
+            )
+
+    @property
+    def level(self) -> str:
+        return self._level
+
+    @classmethod
+    def get_instance(cls) -> ConsoleLogConsumer | None:
+        return cls._instance
 
     def describe(self, level: str) -> str:
         return f"console (stderr, {level})"

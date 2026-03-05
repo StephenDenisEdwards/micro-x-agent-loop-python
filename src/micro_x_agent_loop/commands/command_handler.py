@@ -79,6 +79,7 @@ class CommandHandler:
         print(f"{p}- /tool <name>")
         print(f"{p}- /tool <name> schema")
         print(f"{p}- /tool <name> config")
+        print(f"{p}- /console-log-level [TRACE|DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL|OFF]")
         print(f"{p}- /debug show-api-payload [N]")
         if self._user_memory_enabled:
             print(f"{p}- /memory")
@@ -100,6 +101,30 @@ class CommandHandler:
                 f"{p}Memory commands are available when MemoryEnabled=true "
                 "(see operations/config.md)."
             )
+
+    # -- /console-log-level --
+
+    async def handle_console_log_level(self, command: str) -> None:
+        from micro_x_agent_loop.logging_config import ConsoleLogConsumer
+
+        consumer = ConsoleLogConsumer.get_instance()
+        if consumer is None:
+            print(f"{self._p}No console log consumer is active.")
+            return
+
+        parts = command.split()
+        if len(parts) == 1:
+            print(f"{self._p}Console log level: {consumer.level}")
+            return
+
+        valid_levels = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL", "OFF")
+        new_level = parts[1].upper()
+        if new_level not in valid_levels:
+            print(f"{self._p}Invalid level: {parts[1]}. Valid: {', '.join(valid_levels)}")
+            return
+
+        consumer.set_level(new_level)
+        print(f"{self._p}Console log level set to {new_level}")
 
     # -- /cost --
 

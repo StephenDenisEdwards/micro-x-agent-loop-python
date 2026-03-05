@@ -16,6 +16,7 @@ class CommandRouter:
         on_memory: Callable[[str], Awaitable[None]],
         on_tools: Callable[[str], Awaitable[None]],
         on_tool: Callable[[str], Awaitable[None]],
+        on_console_log_level: Callable[[str], Awaitable[None]],
         on_debug: Callable[[str], Awaitable[None]],
         on_unknown: Callable[[str], None],
     ) -> None:
@@ -28,6 +29,7 @@ class CommandRouter:
         self._on_memory = on_memory
         self._on_tools = on_tools
         self._on_tool = on_tool
+        self._on_console_log_level = on_console_log_level
         self._on_debug = on_debug
         self._on_unknown = on_unknown
 
@@ -62,6 +64,9 @@ class CommandRouter:
             return True
         if trimmed.startswith("/tool"):
             await self._on_tool(trimmed)
+            return True
+        if trimmed.startswith("/console-log-level"):
+            await self._on_console_log_level(trimmed)
             return True
         if trimmed.startswith("/debug"):
             await self._on_debug(trimmed)
