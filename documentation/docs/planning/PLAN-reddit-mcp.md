@@ -1,6 +1,6 @@
 # Plan: Reddit MCP Server
 
-**Status: Draft**
+**Status: Blocked** — Reddit requires developer registration that is currently inaccessible
 
 ## Context
 

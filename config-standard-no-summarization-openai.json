@@ -78,6 +78,12 @@
     "interview-assist__stt_get_session": { "format": "key_value" },
     "interview-assist__stt_stop_session": { "format": "key_value" },
     "codegen__generate_code": { "format": "json" },
+    "devto__devto_create_article": { "format": "json" },
+    "devto__devto_publish_article": { "format": "json" },
+    "devto__devto_update_article": { "format": "json" },
+    "devto__devto_list_my_articles": { "format": "table", "max_rows": 20 },
+    "devto__devto_get_article": { "format": "json" },
+    "devto__devto_get_article_comments": { "format": "json" },
     "discord__discord_login": { "format": "key_value" },
     "discord__discord_send": { "format": "json" },
     "discord__discord_read_messages": { "format": "json" },
@@ -171,6 +177,14 @@
       "args": ["C:\\Users\\steph\\AppData\\Roaming\\npm\\node_modules\\mcp-discord\\build\\index.js"],
       "env": {
         "DISCORD_TOKEN": "${DISCORD_TOKEN}"
+      }
+    },
+    "devto": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\devto\\dist\\index.js"],
+      "env": {
+        "DEV_TO_API_KEY": "${DEV_TO_API_KEY}"
       }
     }
   }
