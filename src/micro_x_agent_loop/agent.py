@@ -8,6 +8,7 @@ from loguru import logger
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
 from micro_x_agent_loop.commands.command_handler import CommandHandler
+from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.commands.router import CommandRouter
 from micro_x_agent_loop.compaction import SummarizeCompactionStrategy
 from micro_x_agent_loop.constants import MAX_TOKENS_RETRIES
@@ -177,6 +178,9 @@ class Agent:
             ask_user_handler=self._ask_user_handler,
         )
 
+        commands_dir = Path(self._working_directory or ".") / ".commands"
+        self._prompt_command_store = PromptCommandStore(commands_dir)
+
         self._command_handler = CommandHandler(
             line_prefix=self._LINE_PREFIX,
             session_accumulator=self._session_accumulator,
@@ -190,11 +194,13 @@ class Agent:
             checkpoint_service=self._checkpoint_service,
             user_memory_enabled=self._user_memory_enabled,
             user_memory_dir=self._user_memory_dir,
+            prompt_command_store=self._prompt_command_store,
             on_session_reset=self._on_session_reset,
         )
 
         self._command_router = CommandRouter(
             on_help=self._command_handler.on_help,
+            on_command=self._command_handler.handle_command,
             on_rewind=self._command_handler.handle_rewind,
             on_checkpoint=self._command_handler.handle_checkpoint,
             on_session=self._command_handler.handle_session,
@@ -239,8 +245,11 @@ class Agent:
                 print(f"{self._LINE_PREFIX}Error reading file: {ex}")
                 return
 
-        if await self._handle_local_command(user_message):
+        command_result = await self._handle_local_command(user_message)
+        if command_result is True:
             return
+        if isinstance(command_result, str):
+            user_message = command_result
 
         if self._mode_analysis_enabled:
             analysis = analyze_prompt(user_message)
@@ -478,7 +487,7 @@ class Agent:
             message_id=message_id,
         )
 
-    async def _handle_local_command(self, user_message: str) -> bool:
+    async def _handle_local_command(self, user_message: str) -> bool | str:
         return await self._command_router.try_handle(user_message)
 
     def _on_session_reset(self, session_id: str, new_messages: list[dict]) -> None:

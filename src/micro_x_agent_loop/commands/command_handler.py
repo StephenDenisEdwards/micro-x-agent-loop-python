@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
+from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.commands.voice_command import parse_voice_command, parse_voice_start_options
 from micro_x_agent_loop.memory.facade import ActiveMemoryFacade, NullMemoryFacade
 from micro_x_agent_loop.metrics import SessionAccumulator
@@ -35,9 +36,11 @@ class CommandHandler:
         checkpoint_service: CheckpointService,
         user_memory_enabled: bool,
         user_memory_dir: str,
+        prompt_command_store: PromptCommandStore,
         on_session_reset: Callable[[str, list[dict]], None],
     ) -> None:
         self._p = line_prefix
+        self._prompt_command_store = prompt_command_store
         self._session_accumulator = session_accumulator
         self._memory = memory
         self._memory_enabled = memory_enabled
@@ -64,6 +67,8 @@ class CommandHandler:
         print(f"{p}Available commands:")
         print(f"{p}- /help")
         print(f"{p}- /prompt <filename>")
+        print(f"{p}- /command")
+        print(f"{p}- /command <name> [arguments]")
         print(f"{p}- /cost")
         print(
             f"{p}- /voice start [microphone|loopback] "
@@ -101,6 +106,36 @@ class CommandHandler:
                 f"{p}Memory commands are available when MemoryEnabled=true "
                 "(see operations/config.md)."
             )
+
+    # -- /command --
+
+    async def handle_command(self, command: str) -> str | None:
+        """Handle /command. Returns prompt text to execute, or None if handled locally."""
+        parts = command.split(None, 2)
+        if len(parts) == 1:
+            self._print_command_list()
+            return None
+
+        name = parts[1]
+        prompt = self._prompt_command_store.load_command(name)
+        if prompt is None:
+            print(f"{self._p}Unknown command: {name}")
+            self._print_command_list()
+            return None
+
+        arguments = parts[2] if len(parts) > 2 else ""
+        prompt = prompt.replace("$ARGUMENTS", arguments)
+        return prompt
+
+    def _print_command_list(self) -> None:
+        commands = self._prompt_command_store.list_commands()
+        if not commands:
+            print(f"{self._p}No commands found. Add .md files to the .commands/ directory.")
+            return
+        max_name = max(len(name) for name, _ in commands)
+        print(f"{self._p}Available commands:")
+        for name, description in commands:
+            print(f"{self._p}  {name:<{max_name}}  {description}")
 
     # -- /console-log-level --
 

@@ -16,6 +16,7 @@ class CommandRouter:
         on_memory: Callable[[str], Awaitable[None]],
         on_tools: Callable[[str], Awaitable[None]],
         on_tool: Callable[[str], Awaitable[None]],
+        on_command: Callable[[str], Awaitable[str | None]],
         on_console_log_level: Callable[[str], Awaitable[None]],
         on_debug: Callable[[str], Awaitable[None]],
         on_unknown: Callable[[str], None],
@@ -29,11 +30,19 @@ class CommandRouter:
         self._on_memory = on_memory
         self._on_tools = on_tools
         self._on_tool = on_tool
+        self._on_command = on_command
         self._on_console_log_level = on_console_log_level
         self._on_debug = on_debug
         self._on_unknown = on_unknown
 
-    async def try_handle(self, user_message: str) -> bool:
+    async def try_handle(self, user_message: str) -> bool | str:
+        """Try to handle a slash command.
+
+        Returns:
+            False — not a command, continue normal processing.
+            True  — command handled locally, nothing more to do.
+            str   — a prompt to execute as the user message.
+        """
         trimmed = user_message.strip()
         if not trimmed.startswith("/"):
             return False
@@ -41,6 +50,9 @@ class CommandRouter:
         if trimmed == "/help":
             await self._on_help()
             return True
+        if trimmed.startswith("/command"):
+            prompt = await self._on_command(trimmed)
+            return prompt if prompt is not None else True
         if trimmed.startswith("/cost"):
             await self._on_cost(trimmed)
             return True

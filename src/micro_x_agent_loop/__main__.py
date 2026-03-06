@@ -1,6 +1,6 @@
 import asyncio
-import signal
 import sys
+import threading
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -8,7 +8,106 @@ from loguru import logger
 from micro_x_agent_loop.app_config import load_json_config, parse_app_config, resolve_runtime_env
 from micro_x_agent_loop.bootstrap import bootstrap_runtime
 
-_current_task: asyncio.Task | None = None
+
+class _EscWatcher:
+    """Watches for ESC keypress in a background thread to cancel an asyncio task.
+
+    Uses Windows Console API (ReadConsoleInput) to read keyboard events directly,
+    avoiding conflicts with Python's input() which uses a separate read path.
+    """
+
+    def __init__(self) -> None:
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._task: asyncio.Task | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._available = False
+        try:
+            import ctypes
+            self._kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            self._available = True
+        except (ImportError, AttributeError, OSError):
+            pass
+
+    def start(self, task: asyncio.Task, loop: asyncio.AbstractEventLoop) -> None:
+        if not self._available:
+            return
+        self._task = task
+        self._loop = loop
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+            self._thread = None
+        self._task = None
+        self._loop = None
+
+    def shutdown(self) -> None:
+        self.stop()
+
+    def _poll(self) -> None:
+        import ctypes
+        import ctypes.wintypes as wt
+
+        STD_INPUT_HANDLE = -10
+        KEY_EVENT = 0x0001
+        VK_ESCAPE = 0x1B
+
+        class KEY_EVENT_RECORD(ctypes.Structure):
+            _fields_ = [
+                ("bKeyDown", wt.BOOL),
+                ("wRepeatCount", wt.WORD),
+                ("wVirtualKeyCode", wt.WORD),
+                ("wVirtualScanCode", wt.WORD),
+                ("uChar", wt.WCHAR),
+                ("dwControlKeyState", wt.DWORD),
+            ]
+
+        class INPUT_RECORD(ctypes.Structure):
+            _fields_ = [
+                ("EventType", wt.WORD),
+                ("_padding", wt.WORD),
+                ("Event", KEY_EVENT_RECORD),
+            ]
+
+        kernel32 = self._kernel32
+        h_stdin = kernel32.GetStdHandle(STD_INPUT_HANDLE)
+
+        rec = INPUT_RECORD()
+        read_count = wt.DWORD(0)
+
+        while not self._stop_event.is_set():
+            # WaitForSingleObject with 100ms timeout so we can check _stop_event
+            result = kernel32.WaitForSingleObject(h_stdin, 100)
+            if result != 0:  # WAIT_OBJECT_0
+                continue
+
+            # Peek first to avoid blocking
+            avail = wt.DWORD(0)
+            kernel32.GetNumberOfConsoleInputEvents(h_stdin, ctypes.byref(avail))
+            if avail.value == 0:
+                continue
+
+            success = kernel32.ReadConsoleInputW(
+                h_stdin, ctypes.byref(rec), 1, ctypes.byref(read_count)
+            )
+            if not success or read_count.value == 0:
+                continue
+
+            if (
+                rec.EventType == KEY_EVENT
+                and rec.Event.bKeyDown
+                and rec.Event.wVirtualKeyCode == VK_ESCAPE
+            ):
+                task = self._task
+                loop = self._loop
+                if task is not None and loop is not None and not task.done():
+                    loop.call_soon_threadsafe(task.cancel)
+                return
 
 
 def _parse_config_arg() -> str | None:
@@ -93,17 +192,8 @@ async def main() -> None:
         print(f"Logging: {', '.join(runtime.log_descriptions)}")
     print()
 
-    # --- Ctrl+C signal handler ---
-    global _current_task
-    _default_sigint = signal.getsignal(signal.SIGINT)
-
-    def _sigint_handler(signum, frame):
-        if _current_task is not None and not _current_task.done():
-            _current_task.cancel()
-        else:
-            _default_sigint(signum, frame)
-
-    signal.signal(signal.SIGINT, _sigint_handler)
+    # --- ESC key listener for task interruption ---
+    _esc_watcher = _EscWatcher()
 
     try:
         while True:
@@ -121,17 +211,19 @@ async def main() -> None:
             try:
                 print()
                 task = asyncio.create_task(agent.run(trimmed))
-                _current_task = task
+                loop = asyncio.get_running_loop()
+                _esc_watcher.start(task, loop)
                 try:
                     await task
                 except asyncio.CancelledError:
                     print("\nassistant> [Interrupted]")
                 finally:
-                    _current_task = None
+                    _esc_watcher.stop()
                 print("\n")
             except Exception as ex:
                 logger.error(f"Unhandled error: {ex}")
     finally:
+        _esc_watcher.shutdown()
         await agent.shutdown()
         if runtime.mcp_manager:
             await runtime.mcp_manager.close()

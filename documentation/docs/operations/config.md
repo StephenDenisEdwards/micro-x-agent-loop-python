@@ -350,6 +350,8 @@ Runtime commands (always available, not gated by `MemoryEnabled`):
 - `/tool <name> config` — show ToolFormatting config for the tool
 - `/debug show-api-payload [N]` — inspect the Nth most recent API request/response (0 = latest)
 - `/prompt <filename>` — read a file and use its contents as the user message
+- `/command` — list available prompt commands from `.commands/` directory
+- `/command <name> [arguments]` — run a prompt command (see [Prompt Commands](#prompt-commands))
 
 Runtime commands when `UserMemoryEnabled=true`:
 
@@ -548,3 +550,49 @@ Example with both transports:
 MCP tool names appear prefixed as `{server_name}__{tool_name}` in the Tools list at startup. If a server fails to connect, a warning is logged but the agent starts normally with the remaining tools.
 
 See [ADR-005](../architecture/decisions/ADR-005-mcp-for-external-tools.md) for the architectural decision and [Tool System Design](../design/DESIGN-tool-system.md#mcp-tools-dynamic) for implementation details.
+
+### Prompt Commands
+
+Prompt commands are reusable prompt templates stored as Markdown files in a `.commands/` directory inside `WorkingDirectory`. They provide a discoverable, repeatable way to run common agent tasks.
+
+The commands are contextual to the workspace — different working directories can have different commands.
+
+#### Directory
+
+```
+.commands/
+├── review.md
+├── explain.md
+└── ...
+```
+
+Each `.md` file is a command. The filename (without extension) becomes the command name.
+
+#### File format
+
+- **First line** — short description, shown in the `/command` listing
+- **Rest of file** — the prompt sent to the agent
+- **`$ARGUMENTS`** — placeholder replaced with any arguments passed after the command name
+
+Example `.commands/explain.md`:
+
+```
+Explain how the following file or component works.
+Give a concise overview of its purpose, key classes/functions, and how it fits
+into the broader architecture. Keep the explanation short and practical.
+
+File or component: $ARGUMENTS
+```
+
+#### Usage
+
+```
+you> /command
+assistant> Available commands:
+             explain  Explain how the following file or component works.
+             review   Review the current git diff for bugs and style issues.
+
+you> /command explain src/micro_x_agent_loop/agent.py
+```
+
+When `/command explain src/micro_x_agent_loop/agent.py` is entered, the agent loads `explain.md`, replaces `$ARGUMENTS` with `src/micro_x_agent_loop/agent.py`, and executes the resulting text as the user prompt.
