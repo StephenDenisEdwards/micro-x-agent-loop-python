@@ -39,6 +39,7 @@ Central navigation hub for all project documentation.
 - [Extending the Agent Loop](guides/extending-the-agent-loop.md) - Event callbacks, slash commands, compaction strategies
 - [Debugging Tool Failures](guides/debugging-tool-failures.md) - Diagnosis patterns for tool execution problems
 - [Session Memory Schema](guides/session-memory-schema.md) - SQLite schema reference and query examples
+- [Documentation Guide](guides/documentation-guide.md) - Where docs go, naming conventions, templates, indexes
 
 ## Examples
 
