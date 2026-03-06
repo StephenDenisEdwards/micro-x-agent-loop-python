@@ -75,7 +75,29 @@
     "interview-assist__stt_get_updates": { "format": "json" },
     "interview-assist__stt_get_session": { "format": "key_value" },
     "interview-assist__stt_stop_session": { "format": "key_value" },
-    "codegen__generate_code": { "format": "json" }
+    "codegen__generate_code": { "format": "json" },
+    "discord__discord_login": { "format": "key_value" },
+    "discord__discord_send": { "format": "json" },
+    "discord__discord_read_messages": { "format": "json" },
+    "discord__discord_get_server_info": { "format": "json" },
+    "discord__discord_get_forum_channels": { "format": "json" },
+    "discord__discord_create_forum_post": { "format": "json" },
+    "discord__discord_get_forum_post": { "format": "json" },
+    "discord__discord_reply_to_forum": { "format": "json" },
+    "discord__discord_create_text_channel": { "format": "json" },
+    "discord__discord_delete_channel": { "format": "key_value" },
+    "discord__discord_add_reaction": { "format": "key_value" },
+    "discord__discord_add_multiple_reactions": { "format": "key_value" },
+    "discord__discord_remove_reaction": { "format": "key_value" },
+    "discord__discord_delete_message": { "format": "key_value" },
+    "discord__discord_delete_forum_post": { "format": "key_value" },
+    "discord__discord_create_webhook": { "format": "json" },
+    "discord__discord_send_webhook_message": { "format": "json" },
+    "discord__discord_edit_webhook": { "format": "json" },
+    "discord__discord_delete_webhook": { "format": "key_value" },
+    "discord__discord_create_category": { "format": "json" },
+    "discord__discord_edit_category": { "format": "json" },
+    "discord__discord_delete_category": { "format": "key_value" }
   },
   "DefaultFormat": { "format": "json" },
   "McpServers": {
@@ -143,6 +165,14 @@
       "env": {
         "PROJECT_ROOT": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python",
         "WORKING_DIR": "C:\\Users\\steph\\source\\repos\\resources\\documents"
+      }
+    },
+    "discord": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["C:\\Users\\steph\\AppData\\Roaming\\npm\\node_modules\\mcp-discord\\build\\index.js"],
+      "env": {
+        "DISCORD_TOKEN": "${DISCORD_TOKEN}"
       }
     }
   }

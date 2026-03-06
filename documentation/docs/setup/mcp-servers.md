@@ -1,6 +1,6 @@
 # MCP Server Setup Guide
 
-This guide covers how to set up each MCP server that ships with Micro-X. All servers live in `mcp_servers/ts/packages/` and run as stdio-based MCP servers managed by the agent.
+This guide covers how to set up each MCP server used by Micro-X. Most servers live in `mcp_servers/ts/packages/` and run as stdio-based MCP servers managed by the agent. Some are external packages installed via npm.
 
 ## Quick Reference
 
@@ -11,6 +11,8 @@ This guide covers how to set up each MCP server that ships with Micro-X. All ser
 | [github](#github) | Personal Access Token | `GITHUB_TOKEN` | Easy |
 | [google](#google) | OAuth 2.0 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Medium |
 | [linkedin](#linkedin) | OAuth 2.0 (publishing only) | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | Medium |
+| [x-twitter](#x-twitter) | OAuth 2.0 (PKCE) | `X_CLIENT_ID`, `X_CLIENT_SECRET` | Medium |
+| [discord](#discord) | Bot Token | `DISCORD_TOKEN` | Easy |
 | [anthropic-admin](#anthropic-admin) | API key | `ANTHROPIC_ADMIN_API_KEY` | Easy |
 | [interview-assist](#interview-assist) | None | — | Hard (external dependencies) |
 
@@ -325,6 +327,238 @@ See also: [`mcp_servers/ts/packages/linkedin/README.md`](../../../mcp_servers/ts
 
 ---
 
+## x-twitter
+
+X (Twitter) tweet and thread publishing, analytics, and media upload.
+
+The X server uses the same **draft-then-publish** pattern as the LinkedIn server. All posting goes through a two-step process: draft locally for review, then publish with explicit approval. See the [LinkedIn section](#how-publishing-works) for a detailed explanation of this pattern and why it exists.
+
+**Auth:** OAuth 2.0 Authorization Code with PKCE
+
+**Tools:**
+
+| Tool | Description | Needs Auth |
+|------|-------------|------------|
+| `x_draft_tweet` | Create a draft tweet for review (local only) | Yes (for auth check) |
+| `x_draft_thread` | Create a draft thread for review (local only) | Yes (for auth check) |
+| `x_publish_draft` | Publish a previously drafted tweet or thread | Yes |
+| `x_delete_tweet` | Delete a tweet by ID | Yes |
+| `x_get_tweet` | Get tweet details and public metrics | Yes |
+| `x_get_my_tweets` | Get your recent tweets with metrics | Yes |
+| `x_upload_media` | Upload an image for use in tweets | Yes |
+
+**Environment Variables:**
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `X_CLIENT_ID` | Yes | OAuth 2.0 Client ID from the X Developer Portal |
+| `X_CLIENT_SECRET` | Yes | OAuth 2.0 Client Secret (keep this secret) |
+
+### Setup
+
+#### Step 1: Apply for X Developer Access
+
+Go to https://developer.x.com and apply for developer access. Describe a promotional publishing use case.
+
+#### Step 2: Create a Project and App
+
+1. In the Developer Portal, create a **Project**
+2. Create an **App** within the project
+3. In the app settings, enable **OAuth 2.0**
+4. Set the client type to **Confidential** (server-side)
+5. Set the callback/redirect URI to `http://127.0.0.1:3000/callback` (the server uses a dynamic port, but X requires at least one URI registered)
+
+#### Step 3: Get your credentials
+
+Copy the **Client ID** and **Client Secret** from the app's "Keys and tokens" page.
+
+Add them to your `.env` file:
+
+```
+X_CLIENT_ID=your_client_id
+X_CLIENT_SECRET=your_client_secret
+```
+
+#### Step 4: First-time authorization
+
+On the first use of any tool, the server automatically:
+
+1. Generates a PKCE code verifier and challenge
+2. Opens your browser to X's authorization page
+3. You log in and click "Authorize app"
+4. X redirects back to a local server with an authorization code
+5. The server exchanges the code for access and refresh tokens
+6. Tokens are saved to `.x-tokens/token.json`
+
+### Token lifetime
+
+X access tokens expire after **2 hours**. Unlike LinkedIn's 60-day tokens, this is much shorter. However, X provides **refresh tokens** (when you request the `offline.access` scope, which this server does). The server automatically refreshes expired tokens without opening a browser. You should only need to re-authorize via the browser if the refresh token itself is revoked.
+
+X uses **rotating refresh tokens** — each refresh returns a new refresh token. The server persists the latest refresh token to disk automatically.
+
+### Free tier limitations
+
+The X free tier is effectively **write-only**:
+
+| Resource | Free Tier Limit |
+|----------|----------------|
+| Posts | 500/month |
+| Reads | ~100/month |
+| Media uploads (INIT) | 34/24 hours |
+
+Read tools (`x_get_tweet`, `x_get_my_tweets`) will return a clear error message when the read quota is exhausted. Thread posting is expensive — each tweet in a thread counts as one post against the monthly quota.
+
+The server handles rate limit responses (HTTP 429) and surfaces clear messages about quota exhaustion.
+
+### Character counting
+
+X uses weighted character counting. The server validates tweet length using the `twitter-text` npm package:
+
+- Standard text: 1 character each
+- Emojis: 2 characters each
+- URLs (any length): always 23 characters (t.co wrapping)
+- Max tweet length: 280 weighted characters
+
+Draft tools validate character counts and return the weighted length in the preview.
+
+### Verify it works
+
+**1. Check tools are registered**
+
+```
+Show me what X/Twitter tools are available
+```
+
+If no tools appear, check that `X_CLIENT_ID` and `X_CLIENT_SECRET` are set in your `.env`.
+
+**2. Test drafting**
+
+```
+Draft a tweet that says "Testing my agent integration"
+```
+
+On first use, a browser window opens for authorization. After approval, you should see a preview with the tweet text, character count, and a `draft_id`.
+
+**3. Test publishing (optional — this will actually post)**
+
+```
+Yes, publish it
+```
+
+The agent calls `x_publish_draft` and returns the tweet URL.
+
+### Limitations
+
+- **Free tier is write-only in practice** — ~100 reads/month is negligible. Use read tools sparingly or upgrade to pay-per-use.
+- **Thread posting burns quota fast** — a 10-tweet thread uses 10 of 500 free-tier monthly posts.
+- **Quote tweets and media are mutually exclusive** — cannot combine in a single tweet.
+- **No polls, DMs, or streaming** — out of scope for promotional publishing.
+
+---
+
+## discord
+
+Discord server interaction: send/read messages, channel management, forums, reactions, and webhooks.
+
+This is an **external package** ([mcp-discord](https://github.com/barryyip0625/mcp-discord)) installed via npm, not a custom server in `mcp_servers/ts/packages/`.
+
+**Auth:** Discord Bot Token
+
+**Environment Variables:**
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DISCORD_TOKEN` | Yes | Discord bot token |
+
+**Installation:**
+
+```bash
+npm install -g mcp-discord
+```
+
+**Setup:**
+
+#### Step 1: Create a Discord Application
+
+1. Go to https://discord.com/developers/applications
+2. Click **New Application** — name it (e.g. "Micro-X Agent")
+
+#### Step 2: Create the Bot and get the token
+
+1. Go to the **Bot** tab in the left sidebar
+2. Click **Reset Token** → confirm → copy the token
+3. Add to `.env`:
+   ```
+   DISCORD_TOKEN=your_bot_token_here
+   ```
+
+#### Step 3: Enable Privileged Gateway Intents
+
+On the same **Bot** page, scroll down to **Privileged Gateway Intents** and enable:
+
+| Intent | Required | Why |
+|--------|----------|-----|
+| **Message Content Intent** | Yes | Required to read message text (not just metadata) |
+| **Server Members Intent** | No | Enables member lookups |
+| **Presence Intent** | No | Enables online/offline status |
+
+#### Step 4: Invite the bot to your server
+
+1. Go to **OAuth2 → URL Generator**
+2. Select scope: `bot`
+3. Select bot permissions:
+   - Read Messages/View Channels
+   - Send Messages
+   - Read Message History
+   - Manage Channels
+   - Manage Webhooks
+   - Add Reactions
+4. Copy the generated URL and open it in your browser
+5. Select your Discord server and authorize
+
+### Available tools
+
+| Tool | Description |
+|------|-------------|
+| `discord_login` | Log in to Discord (auto-login if `DISCORD_TOKEN` is set) |
+| `discord_send` | Send a message to a text channel |
+| `discord_read_messages` | Read messages from a text channel (up to 100) |
+| `discord_get_server_info` | Get server details including channels and member count |
+| `discord_create_text_channel` | Create a new text channel |
+| `discord_delete_channel` | Delete a channel |
+| `discord_get_forum_channels` | List forum channels in a server |
+| `discord_create_forum_post` | Create a post in a forum channel |
+| `discord_get_forum_post` | Read a forum post and its replies |
+| `discord_reply_to_forum` | Reply to a forum post |
+| `discord_delete_forum_post` | Delete a forum post |
+| `discord_add_reaction` | Add a reaction to a message |
+| `discord_add_multiple_reactions` | Add multiple reactions at once |
+| `discord_remove_reaction` | Remove a reaction |
+| `discord_delete_message` | Delete a message |
+| `discord_create_webhook` | Create a webhook for a channel |
+| `discord_send_webhook_message` | Send a message via webhook |
+| `discord_edit_webhook` | Edit a webhook |
+| `discord_delete_webhook` | Delete a webhook |
+| `discord_create_category` | Create a channel category |
+| `discord_edit_category` | Edit a category |
+| `discord_delete_category` | Delete a category |
+
+### Verify it works
+
+```
+Show me what Discord servers the bot is connected to
+```
+
+The agent should call `discord_get_server_info` and return your server's name, channels, and member count.
+
+### Limitations
+
+- **No draft-then-publish pattern** — unlike LinkedIn and X/Twitter, messages are sent directly. The agent should use `ask_user` before sending messages to shared channels.
+- **Bot permissions are server-specific** — the bot only has access to servers it's been invited to, with the permissions granted during invite.
+- **Message Content Intent required** — without it, the bot can see message metadata but not the actual text content.
+
+---
+
 ## anthropic-admin
 
 Anthropic API administration (workspace and API key management).
@@ -403,6 +637,7 @@ Agent config files use `${VAR}` syntax to reference environment variables. Varia
 Several servers conditionally register tools based on whether credentials are present:
 - **web** — `web_search` only appears if `BRAVE_API_KEY` is set
 - **linkedin** — publishing tools only appear if `LINKEDIN_CLIENT_ID` is set
+- **x-twitter** — all tools require `X_CLIENT_ID` and `X_CLIENT_SECRET` (no read-only fallback)
 - **filesystem** — `save_memory` only appears if `USER_MEMORY_DIR` is set
 
 If a tool you expect is missing, check that the required environment variable is set.
