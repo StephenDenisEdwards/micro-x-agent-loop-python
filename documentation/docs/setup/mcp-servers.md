@@ -68,7 +68,7 @@ If `BRAVE_API_KEY` is not set, the server starts without the search tool (fetch 
 
 ## github
 
-GitHub repository operations: PRs, issues, file access, code search.
+GitHub repository operations: PRs, issues, discussions, file access, code search.
 
 **Auth:** Personal Access Token
 
@@ -78,18 +78,58 @@ GitHub repository operations: PRs, issues, file access, code search.
 |----------|----------|-------------|
 | `GITHUB_TOKEN` | Yes | GitHub Personal Access Token |
 
+**Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `list_prs` | List pull requests |
+| `get_pr` | Get PR detail (diff, reviews, CI status) |
+| `create_pr` | Create a pull request |
+| `list_issues` | List/search issues |
+| `create_issue` | Create an issue |
+| `get_file` | Get file contents from a repo |
+| `search_code` | Search code across repos |
+| `list_repos` | List repositories |
+| `get_discussion_categories` | List discussion categories for a repo |
+| `create_discussion` | Create a discussion |
+| `list_discussions` | List/filter discussions |
+| `get_discussion` | Get discussion with comments |
+| `comment_on_discussion` | Comment or reply on a discussion |
+
 **Setup:**
 
 1. Go to https://github.com/settings/tokens
-2. Click **Generate new token (classic)** or use fine-grained tokens
-3. Select scopes: `repo`, `read:org` (adjust based on what you need)
-4. Copy the token
-5. Add to `.env`:
+2. Create a token using one of the two options below
+3. Copy the token
+4. Add to `.env`:
    ```
    GITHUB_TOKEN=ghp_your_token_here
    ```
 
-The server will not start without this variable.
+**Option A: Classic PAT** (simpler)
+
+Click **Generate new token (classic)** and select these scopes:
+
+| Scope | Covers |
+|-------|--------|
+| `repo` | PRs, issues, discussions, file access, code search |
+| `read:org` | Organization membership (optional) |
+
+**Option B: Fine-grained PAT** (more secure)
+
+Click **Generate new token** (fine-grained), select your repository, then set these permissions:
+
+| Permission | Level | Used by |
+|------------|-------|---------|
+| **Discussions** | Read and write | create/list/get/comment discussions |
+| **Issues** | Read and write | create_issue, list_issues |
+| **Pull requests** | Read and write | create_pr, list_prs, get_pr |
+| **Contents** | Read | get_file, search_code |
+| **Metadata** | Read | list_repos (granted automatically) |
+
+**Note:** Discussions must be enabled on the target repository (Settings > Features > Discussions) for the discussion tools to work.
+
+The server will not start without `GITHUB_TOKEN`.
 
 ---
 

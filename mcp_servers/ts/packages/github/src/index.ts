@@ -10,6 +10,12 @@ import { registerCreateIssue } from "./tools/create-issue.js";
 import { registerGetFile } from "./tools/get-file.js";
 import { registerSearchCode } from "./tools/search-code.js";
 import { registerListRepos } from "./tools/list-repos.js";
+import { registerGetDiscussionCategories } from "./tools/get-discussion-categories.js";
+import { registerCreateDiscussion } from "./tools/create-discussion.js";
+import { registerListDiscussions } from "./tools/list-discussions.js";
+import { registerGetDiscussion } from "./tools/get-discussion.js";
+import { registerCommentOnDiscussion } from "./tools/comment-on-discussion.js";
+import { getGraphQLClient } from "./graphql/client.js";
 
 const logger = createLogger("mcp-github");
 
@@ -21,6 +27,7 @@ if (!githubToken) {
 }
 
 const octokit = getClient(githubToken);
+const gql = getGraphQLClient(githubToken);
 
 const server = createServer({
   name: "github",
@@ -36,6 +43,11 @@ registerCreateIssue(server, logger, octokit);
 registerGetFile(server, logger, octokit);
 registerSearchCode(server, logger, octokit);
 registerListRepos(server, logger, octokit);
+registerGetDiscussionCategories(server, logger, gql);
+registerCreateDiscussion(server, logger, gql);
+registerListDiscussions(server, logger, gql);
+registerGetDiscussion(server, logger, gql);
+registerCommentOnDiscussion(server, logger, gql);
 
 startStdioServer(server, logger).catch((err: unknown) => {
   logger.fatal({ err }, "Failed to start github server");

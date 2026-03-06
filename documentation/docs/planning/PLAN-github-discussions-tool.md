@@ -1,6 +1,6 @@
 # Plan: GitHub Discussions Tools (Extension to GitHub MCP Server)
 
-**Status: Draft**
+**Status: Completed**
 
 ## Context
 

@@ -17,7 +17,7 @@ What to work on next, in order. Rationale: promotional publishing channels are t
 | **7** | [Dev.to Publishing MCP](PLAN-devto-publishing-mcp.md) | Draft | Simplest auth (API key, no OAuth). Long-form technical content drives deep engagement and is indexable by search engines |
 | **8** | [Reddit MCP](PLAN-reddit-mcp.md) | Draft | Target audience lives in r/ClaudeAI, r/LocalLLaMA, r/mcp. Script-app OAuth is simple. High discoverability via Google |
 | **9** | [X/Twitter MCP](PLAN-x-twitter-mcp.md) | **Completed** | Good reach but hostile API (PKCE auth, unstable, write-only free tier). Less bang-for-buck than dev.to/Reddit for technical audience |
-| **10** | [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | Draft | Community building — low value until the project has active users. Extends existing GitHub MCP server |
+| **10** | [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | **Completed** | Community building — low value until the project has active users. Extends existing GitHub MCP server |
 | **11** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Frictionless onboarding becomes critical once promotional channels drive traffic to the repo |
 | **12** | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Planned | Large architectural migration; prerequisite for cost reduction Phase 3. No user-visible benefit short-term |
 | **13** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, sub-agents, schema optimisation) | Planning | Architectural changes, higher effort, depends on gateway plan |
@@ -32,8 +32,8 @@ What to work on next, in order. Rationale: promotional publishing channels are t
 
 | Status | Count |
 |--------|-------|
-| Completed | 14 |
-| Draft | 3 |
+| Completed | 15 |
+| Draft | 2 |
 | Planning | 0 |
 | Planned | 5 |
 
@@ -62,5 +62,5 @@ What to work on next, in order. Rationale: promotional publishing channels are t
 | [Dev.to Publishing MCP](PLAN-devto-publishing-mcp.md) | Draft | Long-form blog publishing via Forem API |
 | [Reddit MCP](PLAN-reddit-mcp.md) | Draft | Reddit publishing via OAuth2 script app |
 | [X/Twitter MCP](PLAN-x-twitter-mcp.md) | Completed | Tweet/thread publishing via X API v2. Completed 2026-03-06 |
-| [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | Draft | Discussions management in GitHub MCP server |
+| [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | Completed | 5 tools: create, list, get, comment, categories. Completed 2026-03-06 |
 | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Interactive setup wizard for non-expert users |
