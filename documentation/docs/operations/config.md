@@ -102,6 +102,10 @@ The required API key depends on the configured `Provider`. Service-specific cred
 | `UserMemoryEnabled` | bool | `false` | Enables persistent user memory (MEMORY.md files) |
 | `UserMemoryDir` | string | _(none)_ | Directory for user memory files (requires `UserMemoryEnabled=true`) |
 | `McpServers` | object | _(none)_ | MCP server configurations (see [below](#mcpservers)) |
+| `BrokerDatabase` | string | `".micro_x/broker.db"` | SQLite path for broker job and run persistence |
+| `BrokerPollIntervalSeconds` | int | `5` | How often the broker checks for due jobs (seconds) |
+| `BrokerMaxConcurrentRuns` | int | `2` | Maximum agent runs the broker will execute simultaneously |
+| `BrokerRecoveryPolicy` | string | `"skip"` | What to do with missed jobs after broker restart: `"skip"` or `"run_once_on_recovery"` |
 
 ### Example
 

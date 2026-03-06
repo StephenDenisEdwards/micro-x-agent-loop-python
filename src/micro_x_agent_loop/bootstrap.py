@@ -33,7 +33,7 @@ def _load_user_memory(memory_dir: Path, max_lines: int) -> str:
     return "\n".join(lines[:max_lines])
 
 
-async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
+async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv, *, autonomous: bool = False) -> AppRuntime:
     log_descriptions = setup_logging(level=app.log_level, consumers=app.log_consumers)
 
     mcp_manager: McpManager | None = None
@@ -118,7 +118,9 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv) -> AppRuntime:
                 user_memory_enabled=app.user_memory_enabled,
                 concise_output_enabled=app.concise_output_enabled,
                 working_directory=app.working_directory,
+                autonomous=autonomous,
             ),
+            autonomous=autonomous,
             max_tool_result_chars=app.max_tool_result_chars,
             max_conversation_messages=app.max_conversation_messages,
             compaction_strategy=compaction_strategy,

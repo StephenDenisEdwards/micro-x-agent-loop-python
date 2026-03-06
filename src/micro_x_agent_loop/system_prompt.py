@@ -59,6 +59,24 @@ Do NOT use `ask_user` for:
 """
 
 
+_AUTONOMOUS_DIRECTIVE = """\
+
+
+# Autonomous Mode — IMPORTANT
+
+You are running autonomously as a scheduled or triggered job. There is no human present to answer \
+questions. You MUST NOT attempt to ask the user for input — the `ask_user` tool is not available.
+
+If the task is ambiguous:
+- Use your best judgement and proceed
+- Document any assumptions you made in your response
+
+If you cannot proceed without information you don't have:
+- Clearly explain what information is missing and why you cannot continue
+- Do NOT hang or wait for input — produce your response and finish\
+"""
+
+
 _CONCISE_OUTPUT_DIRECTIVE = """\
 
 
@@ -75,6 +93,7 @@ def get_system_prompt(
     concise_output_enabled: bool = False,
     tool_search_active: bool = False,
     working_directory: str | None = None,
+    autonomous: bool = False,
 ) -> str:
     is_windows = sys.platform == "win32"
     if is_windows:
@@ -117,6 +136,8 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
         prompt += _TOOL_SEARCH_DIRECTIVE
     if concise_output_enabled:
         prompt += _CONCISE_OUTPUT_DIRECTIVE
+    if autonomous:
+        prompt += _AUTONOMOUS_DIRECTIVE
     return prompt
 
 

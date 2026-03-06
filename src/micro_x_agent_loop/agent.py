@@ -7,6 +7,7 @@ from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
+from micro_x_agent_loop.ask_user import AskUserHandler
 from micro_x_agent_loop.commands.command_handler import CommandHandler
 from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.commands.router import CommandRouter
@@ -28,7 +29,6 @@ from micro_x_agent_loop.mode_selector import (
     analyze_prompt,
     build_stage2_prompt,
     format_analysis,
-    format_stage2_result,
     parse_stage2_response,
 )
 from micro_x_agent_loop.provider import create_provider
@@ -36,7 +36,6 @@ from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
-from micro_x_agent_loop.ask_user import AskUserHandler
 from micro_x_agent_loop.tool_search import ToolSearchManager, should_activate_tool_search
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult
@@ -81,13 +80,17 @@ class Agent:
                 "LLM will discover tools via tool_search"
             )
 
-        # Ask-user (human-in-the-loop questioning)
-        self._ask_user_handler = AskUserHandler(
-            line_prefix=self._LINE_PREFIX,
-            user_prompt=self._USER_PROMPT,
-        )
-        from micro_x_agent_loop.system_prompt import _ASK_USER_DIRECTIVE
-        self._system_prompt += _ASK_USER_DIRECTIVE
+        # Ask-user (human-in-the-loop questioning) — disabled in autonomous mode
+        self._autonomous = config.autonomous
+        if config.autonomous:
+            self._ask_user_handler = None
+        else:
+            self._ask_user_handler = AskUserHandler(
+                line_prefix=self._LINE_PREFIX,
+                user_prompt=self._USER_PROMPT,
+            )
+            from micro_x_agent_loop.system_prompt import _ASK_USER_DIRECTIVE
+            self._system_prompt += _ASK_USER_DIRECTIVE
 
         self._max_tool_result_chars = config.max_tool_result_chars
         self._max_conversation_messages = config.max_conversation_messages
@@ -251,7 +254,7 @@ class Agent:
         if isinstance(command_result, str):
             user_message = command_result
 
-        if self._mode_analysis_enabled:
+        if self._mode_analysis_enabled and not self._autonomous:
             analysis = analyze_prompt(user_message)
             stage2: Stage2Result | None = None
 

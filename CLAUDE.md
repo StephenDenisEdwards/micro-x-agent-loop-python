@@ -15,10 +15,22 @@
 ## Key Commands
 
 ```bash
-# Run the agent
+# Run the agent (interactive REPL)
 ./run.sh                          # macOS/Linux
 run.bat                           # Windows
 python -m micro_x_agent_loop      # Direct
+
+# One-shot autonomous execution
+python -m micro_x_agent_loop --run "prompt text" [--session <id>] [--config path]
+
+# Trigger broker (scheduled/cron jobs)
+python -m micro_x_agent_loop --broker start    # Start daemon
+python -m micro_x_agent_loop --broker stop     # Stop daemon
+python -m micro_x_agent_loop --broker status   # Show status
+python -m micro_x_agent_loop --job add <name> <cron_expr> <prompt> [--tz TZ]
+python -m micro_x_agent_loop --job list
+python -m micro_x_agent_loop --job run-now <id>
+python -m micro_x_agent_loop --job runs [id]
 
 # Tests
 python -m pytest tests/ -v
@@ -40,13 +52,18 @@ __main__.py → app_config → bootstrap_runtime → Agent → REPL loop
                                    Provider        Tool dispatch
                                  (Anthropic/       (MCP servers)
                                    OpenAI)
+
+Trigger Broker (always-on daemon):
+  broker/service.py → scheduler.py → runner.py (subprocess: --run)
+                          ↓
+                    broker/store.py (SQLite: broker_jobs, broker_runs)
 ```
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
-| `__main__.py` | Entry point, REPL, CLI args, startup |
+| `__main__.py` | Entry point, REPL, CLI args (`--run`, `--broker`, `--job`), startup |
 | `agent.py` | Orchestrator: message history, mode analysis, memory, metrics |
 | `turn_engine.py` | Single turn: LLM call → tool execution → response |
 | `mode_selector.py` | Stage 1 pattern matching + Stage 2 LLM classification |
@@ -66,6 +83,7 @@ __main__.py → app_config → bootstrap_runtime → Agent → REPL loop
 | `mcp/` | MCP server lifecycle, tool proxying |
 | `commands/` | Slash command routing (/session, /voice, /cost, etc.) |
 | `services/` | Session controller, checkpoint service |
+| `broker/` | Trigger broker: cron scheduler, job store, subprocess runner, daemon service, CLI |
 
 ## Conventions
 
@@ -113,6 +131,7 @@ When a user submits a prompt:
 - Opt-in via `MemoryEnabled=true`
 - SQLite at `.micro_x/memory.db`
 - 6 tables: sessions, messages, tool_calls, checkpoints, checkpoint_files, events
+- Broker DB at `.micro_x/broker.db` — 2 tables: broker_jobs, broker_runs
 - Checkpoint rewind restores files to pre-mutation state
 - Pruning: time-based, per-session message cap, global session cap
 

@@ -170,9 +170,64 @@ Pruning runs once at startup and enforces three retention policies:
 
 CASCADE deletes handle child rows automatically.
 
+## Broker Database (`.micro_x/broker.db`)
+
+The trigger broker uses a separate SQLite database for job definitions and run history. This is independent of the memory system and does not require `MemoryEnabled=true`.
+
+### broker_jobs
+
+Scheduled job definitions.
+
+```sql
+CREATE TABLE broker_jobs (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    trigger_type    TEXT NOT NULL DEFAULT 'cron',
+    cron_expr       TEXT,
+    timezone        TEXT,
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    prompt_template TEXT NOT NULL,
+    session_id      TEXT,
+    config_profile  TEXT,
+    response_channel TEXT NOT NULL DEFAULT 'log',
+    response_target TEXT,
+    overlap_policy  TEXT NOT NULL DEFAULT 'skip_if_running',
+    timeout_seconds INTEGER,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    last_run_at     TEXT,
+    next_run_at     TEXT
+);
+
+CREATE INDEX idx_broker_jobs_enabled_next ON broker_jobs(enabled, next_run_at);
+```
+
+### broker_runs
+
+Run history and status tracking.
+
+```sql
+CREATE TABLE broker_runs (
+    id              TEXT PRIMARY KEY,
+    job_id          TEXT,               -- FK to broker_jobs (NULL for ad-hoc)
+    trigger_source  TEXT NOT NULL,      -- cron, manual, whatsapp, http, etc.
+    prompt          TEXT NOT NULL,
+    session_id      TEXT,
+    status          TEXT NOT NULL DEFAULT 'queued',  -- queued|running|completed|failed|cancelled|skipped
+    started_at      TEXT,
+    completed_at    TEXT,
+    result_summary  TEXT,
+    error_text      TEXT
+);
+
+CREATE INDEX idx_broker_runs_job_id ON broker_runs(job_id, started_at);
+CREATE INDEX idx_broker_runs_status ON broker_runs(status, started_at);
+```
+
 ## Related
 
 - [Memory System Design](../design/DESIGN-memory-system.md) — Full design document
 - [ADR-009: SQLite Memory + File Checkpoints](../architecture/decisions/ADR-009-sqlite-memory-sessions-and-file-checkpoints.md)
 - [Sessions and Rewind](../operations/sessions.md) — User-facing operations
 - [Configuration Reference](../operations/config.md) — Memory config fields
+- [Trigger Broker Plan](../planning/PLAN-trigger-broker.md) — Architecture and design decisions

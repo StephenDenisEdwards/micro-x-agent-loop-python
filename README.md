@@ -61,6 +61,17 @@ SQLite-backed persistence that survives process restarts and crashes. Full conve
 /rewind <checkpoint_id>    — Revert file mutations
 ```
 
+### Trigger Broker (Scheduled & Triggered Runs)
+
+An always-on lightweight daemon that dispatches agent runs on a schedule or in response to external triggers. Jobs are defined with cron expressions and run autonomously — no human at the keyboard required.
+
+```bash
+python -m micro_x_agent_loop --job add "daily-summary" "0 9 * * *" "Summarise today's news" --tz Europe/London
+python -m micro_x_agent_loop --broker start
+```
+
+The broker spawns each run as an isolated subprocess using `--run`, with autonomous mode enabled (no `ask_user`, no interactive prompts). Overlap policies prevent duplicate runs, and all results are tracked in SQLite.
+
 ### Voice Mode
 
 Continuous speech-to-text input via Deepgram STT. Speak your prompts instead of typing — the agent processes `utterance_final` events and responds as normal. Configurable endpointing, device selection, and tuning profiles for balanced, fast, or conservative finalization.

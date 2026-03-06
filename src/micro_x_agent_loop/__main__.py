@@ -111,13 +111,43 @@ class _EscWatcher:
                 return
 
 
-def _parse_config_arg() -> str | None:
-    """Extract ``--config <path>`` from sys.argv (simple, no argparse)."""
-    try:
-        idx = sys.argv.index("--config")
-        return sys.argv[idx + 1]
-    except (ValueError, IndexError):
-        return None
+def _parse_cli_args() -> dict:
+    """Parse CLI arguments (simple, no argparse).
+
+    Supported flags:
+        --config <path>         Config file path
+        --run <prompt>          One-shot execution (autonomous mode)
+        --session <id>          Session ID for --run
+        --broker <subcommand>   Broker daemon management (start/stop/status)
+        --job <subcommand> ...  Job management (add/list/remove/enable/disable/run-now/runs)
+    """
+    args: dict = {
+        "config": None, "run": None, "session": None,
+        "broker": None, "job": None,
+    }
+    argv = sys.argv[1:]
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--config" and i + 1 < len(argv):
+            args["config"] = argv[i + 1]
+            i += 2
+        elif argv[i] == "--run" and i + 1 < len(argv):
+            args["run"] = argv[i + 1]
+            i += 2
+        elif argv[i] == "--session" and i + 1 < len(argv):
+            args["session"] = argv[i + 1]
+            i += 2
+        elif argv[i] == "--broker":
+            # Collect remaining args as broker subcommand
+            args["broker"] = argv[i + 1:]
+            break
+        elif argv[i] == "--job":
+            # Collect remaining args as job subcommand
+            args["job"] = argv[i + 1:]
+            break
+        else:
+            i += 1
+    return args
 
 
 class _McpNotificationFilter(logging.Filter):
@@ -136,43 +166,95 @@ class _McpNotificationFilter(logging.Filter):
         return True
 
 
+async def _shutdown_runtime(runtime) -> None:
+    """Clean up all runtime resources."""
+    await runtime.agent.shutdown()
+    if runtime.mcp_manager:
+        await runtime.mcp_manager.close()
+    if runtime.event_sink:
+        await runtime.event_sink.close()
+    if runtime.memory_store:
+        runtime.memory_store.close()
+
+
+async def _run_oneshot(app, env, prompt: str, session_id: str | None) -> None:
+    """Execute a single prompt in autonomous mode and exit."""
+    if session_id:
+        app.resume_session_id = session_id
+
+    try:
+        runtime = await bootstrap_runtime(app, env, autonomous=True)
+    except ValueError as ex:
+        logger.error(str(ex))
+        sys.exit(1)
+
+    agent = runtime.agent
+    await agent.initialize_session()
+
+    try:
+        await agent.run(prompt)
+    except Exception as ex:
+        logger.error(f"One-shot run failed: {ex}")
+        sys.exit(1)
+    finally:
+        await _shutdown_runtime(runtime)
+
+
 async def main() -> None:
     load_dotenv()
 
     # Suppress MCP SDK notification validation noise from non-standard servers.
     logging.getLogger().addFilter(_McpNotificationFilter())
 
-    # -- Startup logo (display first) --
-    _YELLOW = "\033[33m"
-    _BLUE = "\033[34m"
-    _RESET = "\033[0m"
-    print(
-        f"{_YELLOW}"
-        "  ███╗   ███╗██╗ ██████╗██████╗  ██████╗     ██╗  ██╗\n"
-        "  ████╗ ████║██║██╔════╝██╔══██╗██╔═══██╗    ╚██╗██╔╝\n"
-        "  ██╔████╔██║██║██║     ██████╔╝██║   ██║█████╗╚███╔╝\n"
-        "  ██║╚██╔╝██║██║██║     ██╔══██╗██║   ██║╚════╝██╔██╗\n"
-        "  ██║ ╚═╝ ██║██║╚██████╗██║  ██║╚██████╔╝    ██╔╝ ██╗\n"
-        "  ╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝    ╚═╝  ╚═╝\n"
-        "        █████╗  ██████╗ ███████╗███╗   ██╗████████╗\n"
-        "       ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝\n"
-        "       ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║\n"
-        "       ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║\n"
-        "       ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║\n"
-        "       ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝"
-        f"{_RESET}\n"
-        f"{_BLUE}                        AI{_RESET}\n"
-        f"{_RESET}              By Stephen Edwards{_RESET}\n"
-    )
+    cli_args = _parse_cli_args()
 
-    cli_config = _parse_config_arg()
-    raw_config, config_source = load_json_config(config_path=cli_config)
-    print(f"Config: {config_source}")
+    # -- Startup logo (display first, skip in one-shot mode) --
+    if not cli_args["run"]:
+        _YELLOW = "\033[33m"
+        _BLUE = "\033[34m"
+        _RESET = "\033[0m"
+        print(
+            f"{_YELLOW}"
+            "  ███╗   ███╗██╗ ██████╗██████╗  ██████╗     ██╗  ██╗\n"
+            "  ████╗ ████║██║██╔════╝██╔══██╗██╔═══██╗    ╚██╗██╔╝\n"
+            "  ██╔████╔██║██║██║     ██████╔╝██║   ██║█████╗╚███╔╝\n"
+            "  ██║╚██╔╝██║██║██║     ██╔══██╗██║   ██║╚════╝██╔██╗\n"
+            "  ██║ ╚═╝ ██║██║╚██████╗██║  ██║╚██████╔╝    ██╔╝ ██╗\n"
+            "  ╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝    ╚═╝  ╚═╝\n"
+            "        █████╗  ██████╗ ███████╗███╗   ██╗████████╗\n"
+            "       ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝\n"
+            "       ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║\n"
+            "       ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║\n"
+            "       ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║\n"
+            "       ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝"
+            f"{_RESET}\n"
+            f"{_BLUE}                        AI{_RESET}\n"
+            f"{_RESET}              By Stephen Edwards{_RESET}\n"
+        )
+
+    raw_config, config_source = load_json_config(config_path=cli_args["config"])
+
+    # -- Broker/job commands: don't need full agent bootstrap --
+    if cli_args["broker"] is not None or cli_args["job"] is not None:
+        from micro_x_agent_loop.broker.cli import handle_broker_command, handle_job_command
+        if cli_args["broker"] is not None:
+            await handle_broker_command(cli_args["broker"], config=raw_config)
+        else:
+            await handle_job_command(cli_args["job"], config=raw_config)
+        return
+
     app = parse_app_config(raw_config)
     env = resolve_runtime_env(app.provider_name)
     if not env.provider_api_key:
         logger.error(f"{env.provider_env_var} environment variable is required.")
         sys.exit(1)
+
+    # -- One-shot mode: run prompt and exit --
+    if cli_args["run"]:
+        await _run_oneshot(app, env, cli_args["run"], cli_args["session"])
+        return
+
+    print(f"Config: {config_source}")
 
     try:
         runtime = await bootstrap_runtime(app, env)
@@ -244,13 +326,7 @@ async def main() -> None:
                 logger.error(f"Unhandled error: {ex}")
     finally:
         _esc_watcher.shutdown()
-        await agent.shutdown()
-        if runtime.mcp_manager:
-            await runtime.mcp_manager.close()
-        if runtime.event_sink:
-            await runtime.event_sink.close()
-        if runtime.memory_store:
-            runtime.memory_store.close()
+        await _shutdown_runtime(runtime)
 
 
 def _install_transport_cleanup_hook() -> None:
