@@ -1,6 +1,14 @@
 # Plan: Reddit MCP Server
 
-**Status: Blocked** — Reddit requires developer registration that is currently inaccessible
+**Status: Blocked** (2026-03-06)
+
+## Blocking Issue
+
+Reddit's developer onboarding is broken. Creating a "script" app at `reddit.com/prefs/apps` requires reading the Responsible Builder Policy first, but that page provides no mechanism to acknowledge or proceed. The developer registration flow at `developers.reddit.com` redirects to **Devvit** (Reddit's subreddit app platform), which is an entirely different product — it creates Devvit projects, not OAuth API apps.
+
+There is no working path from "new Reddit account" to "script app with client_id/client_secret" as of March 2026. The server code was fully built, compiled, and tested but had to be discarded because credentials cannot be obtained.
+
+**Revisit when:** Reddit fixes their developer registration flow, or an alternative path to script app creation is discovered.
 
 ## Context
 
