@@ -1,0 +1,8 @@
+{
+  "Base": "config-base.json",
+  "Provider": "openai",
+  "Model": "gpt-4o",
+  "MaxTokens": 16384,
+  "PromptCachingEnabled": false,
+  "CompactionModel": "gpt-4o-mini"
+}

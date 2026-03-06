@@ -1,0 +1,5 @@
+{
+  "Base": "config-base.json",
+  "ToolResultSummarizationEnabled": true,
+  "ToolResultSummarizationModel": "claude-haiku-4-5-20251001"
+}
