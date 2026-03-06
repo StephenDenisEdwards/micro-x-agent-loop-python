@@ -34,7 +34,8 @@ Convert all 29 built-in tools to 7 TypeScript MCP servers, grouped by credential
 |---|---|---|
 | `filesystem` | bash, read_file, write_file, append_file, save_memory | FILESYSTEM_WORKING_DIR |
 | `web` | web_fetch, web_search | BRAVE_API_KEY |
-| `linkedin` | linkedin_jobs, linkedin_job_detail | (none) |
+| `linkedin` | linkedin_jobs, linkedin_job_detail, linkedin_draft_post, linkedin_draft_article, linkedin_publish_draft | LINKEDIN_CLIENT_ID/SECRET |
+| `x-twitter` | x_draft_tweet, x_draft_thread, x_publish_draft, x_delete_tweet, x_get_tweet, x_get_my_tweets, x_upload_media | X_CLIENT_ID/SECRET |
 | `github` | list_prs, get_pr, create_pr, list_issues, create_issue, get_file, search_code, list_repos | GITHUB_TOKEN |
 | `google` | gmail (3), calendar (3), contacts (6) | GOOGLE_CLIENT_ID/SECRET |
 | `anthropic-admin` | usage | ANTHROPIC_ADMIN_API_KEY |

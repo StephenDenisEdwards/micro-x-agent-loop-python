@@ -506,15 +506,30 @@ On the same **Bot** page, scroll down to **Privileged Gateway Intents** and enab
 
 1. Go to **OAuth2 → URL Generator**
 2. Select scope: `bot`
-3. Select bot permissions:
-   - Read Messages/View Channels
-   - Send Messages
-   - Read Message History
-   - Manage Channels
-   - Manage Webhooks
-   - Add Reactions
+3. Select bot permissions from the categories below:
+
+**General Permissions:**
+
+| Permission | Why |
+|------------|-----|
+| Manage Channels | Create/delete text channels and categories |
+| Manage Webhooks | Create, edit, and delete webhooks |
+
+**Text Permissions:**
+
+| Permission | Why |
+|------------|-----|
+| Send Messages in Threads | Reply to forum posts (forums use threads internally) |
+| Read Message History | `discord_read_messages` — read past messages in channels |
+| Add Reactions | `discord_add_reaction` / `discord_add_multiple_reactions` |
+| Embed Links | Allow bot messages to include link previews |
+
+> **Note:** "Send Messages" and "Read Messages/View Channels" are included by default with the `bot` scope. If they appear as separate checkboxes, enable them too.
+
 4. Copy the generated URL and open it in your browser
 5. Select your Discord server and authorize
+
+> **Re-inviting:** If the bot is already in your server but with wrong permissions, just generate a new URL with the correct permissions and open it. It will update the bot's permissions without creating a duplicate.
 
 ### Available tools
 
@@ -543,16 +558,62 @@ On the same **Bot** page, scroll down to **Privileged Gateway Intents** and enab
 | `discord_edit_category` | Edit a category |
 | `discord_delete_category` | Delete a category |
 
+### Server and channel IDs
+
+All mcp-discord tools require **IDs**, not names. There is no "list all servers" tool — you must provide the guild (server) ID to get started.
+
+**How to find your server ID:**
+
+1. In Discord, go to **User Settings** (gear icon ⚙️, bottom left next to your username)
+2. Navigate to **App Settings → Advanced**
+3. Toggle **Developer Mode** to ON
+4. Close settings
+5. **Right-click the server icon** (the circle in the far left sidebar) → **Copy Server ID**
+
+**How to find channel IDs:**
+
+Once you have the server ID, call `discord_get_server_info` — it returns all channel IDs. After that, the agent can refer to channels by name within the conversation because it has the IDs in context.
+
+**Tip — save your server ID to agent memory:**
+
+On first use, tell the agent:
+
+```
+Remember my Discord server ID is <your-server-id>
+```
+
+This saves it to user memory so the agent knows it in future sessions without asking.
+
 ### Verify it works
 
+Run these commands in order in the agent:
+
+**1. Check the bot is connected and discover your server:**
+
 ```
-Show me what Discord servers the bot is connected to
+Get server info for <your-server-id>
 ```
 
-The agent should call `discord_get_server_info` and return your server's name, channels, and member count.
+The agent should return your server's name, channels, and member count.
+
+**2. Create a test channel:**
+
+```
+Create a text channel called "agent-test" on server <your-server-id>
+```
+
+**3. Send a test message:**
+
+```
+Send "Hello from Micro-X Agent!" to the agent-test channel
+```
+
+After the first `get_server_info` call, you can refer to channels by name — the agent has the IDs in context.
 
 ### Limitations
 
+- **IDs required** — all tools need guild/channel/message IDs, not names. Use `discord_get_server_info` to discover IDs, and save your server ID to agent memory for convenience.
+- **No "list servers" tool** — the bot cannot list which servers it's in. You must provide the server ID to get started.
 - **No draft-then-publish pattern** — unlike LinkedIn and X/Twitter, messages are sent directly. The agent should use `ask_user` before sending messages to shared channels.
 - **Bot permissions are server-specific** — the bot only has access to servers it's been invited to, with the permissions granted during invite.
 - **Message Content Intent required** — without it, the bot can see message metadata but not the actual text content.

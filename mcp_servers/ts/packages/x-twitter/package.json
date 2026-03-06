@@ -1,0 +1,26 @@
+{
+  "name": "@micro-x/mcp-x-twitter",
+  "version": "0.1.0",
+  "description": "X (Twitter) MCP server — tweet/thread drafting, publishing, and analytics",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-x-twitter": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@micro-x/mcp-shared": "*",
+    "open": "^10.1.0",
+    "twitter-text": "^3.1.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/twitter-text": "^3.1.10",
+    "typescript": "^5.7.0"
+  }
+}

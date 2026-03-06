@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import sys
 import threading
 
@@ -119,8 +120,27 @@ def _parse_config_arg() -> str | None:
         return None
 
 
+class _McpNotificationFilter(logging.Filter):
+    """Suppress noisy MCP SDK notification validation warnings.
+
+    Some third-party MCP servers (e.g. mcp-discord) send non-standard
+    notification methods like ``method='log'`` instead of the spec-compliant
+    ``notifications/message``.  The Python MCP SDK logs a wall of Pydantic
+    validation errors for each one.  These are harmless — the server still
+    works — but they clutter startup output badly.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno == logging.WARNING and "Failed to validate notification" in str(record.msg):
+            return False
+        return True
+
+
 async def main() -> None:
     load_dotenv()
+
+    # Suppress MCP SDK notification validation noise from non-standard servers.
+    logging.getLogger().addFilter(_McpNotificationFilter())
 
     # -- Startup logo (display first) --
     _YELLOW = "\033[33m"
