@@ -358,37 +358,58 @@ The X server uses the same **draft-then-publish** pattern as the LinkedIn server
 
 #### Step 1: Apply for X Developer Access
 
-Go to https://developer.x.com and apply for developer access. Describe a promotional publishing use case.
+1. Go to https://developer.x.com
+2. Sign in with your X (Twitter) account
+3. You'll be asked to accept the developer agreement and describe your use case. Example description: *"Publishing technical content about open-source projects via an automated agent"*
+4. Wait for approval — for the free tier, this is usually instant
 
 #### Step 2: Create a Project and App
 
-1. In the Developer Portal, create a **Project**
-2. Create an **App** within the project
-3. In the app settings, enable **OAuth 2.0**
-4. Set the client type to **Confidential** (server-side)
-5. Set the callback/redirect URI to `http://127.0.0.1:3000/callback` (the server uses a dynamic port, but X requires at least one URI registered)
+1. In the Developer Portal dashboard, click **Create Project**
+2. Name it (e.g. "Micro-X Agent")
+3. Select use case: **Making a bot** or **Building tools for myself**
+4. Create an **App** within the project
 
-#### Step 3: Get your credentials
+#### Step 3: Configure OAuth 2.0
 
-Copy the **Client ID** and **Client Secret** from the app's "Keys and tokens" page.
+In your App's **Settings** tab, find **User authentication settings** and click **Set up**:
 
-Add them to your `.env` file:
+| Setting | Value |
+|---------|-------|
+| **App permissions** | Read and write |
+| **Type of App** | Web App, Automated App or Bot (this makes it a confidential client) |
+| **Callback URI** | `http://127.0.0.1:3000/callback` |
+| **Website URL** | Any valid URL (e.g. your GitHub repo URL) |
 
-```
-X_CLIENT_ID=your_client_id
-X_CLIENT_SECRET=your_client_secret
-```
+Click **Save**. The "confidential client" type is important — it means your app has a client secret, which the server uses for secure token exchange via Basic auth.
 
-#### Step 4: First-time authorization
+> **Why `http://127.0.0.1:3000/callback`?** X requires at least one redirect URI registered in the portal. The MCP server actually uses a dynamic port (it picks a free port at runtime), but X validates the domain — `127.0.0.1` matches any localhost port. The callback URI in the portal is a security allowlist, not an exact match requirement for the port.
 
-On the first use of any tool, the server automatically:
+#### Step 4: Get your credentials
 
-1. Generates a PKCE code verifier and challenge
+1. Go to the **Keys and tokens** tab in your App
+2. Under **OAuth 2.0 Client ID and Client Secret**, copy both values
+3. Add them to your `.env` file:
+   ```
+   X_CLIENT_ID=paste_client_id_here
+   X_CLIENT_SECRET=paste_client_secret_here
+   ```
+
+Keep the Client Secret safe — it authenticates your app to X's token endpoint.
+
+#### Step 5: First-time authorization
+
+No further manual setup is needed. On the first use of any tool, the server automatically:
+
+1. Generates a PKCE code verifier and SHA-256 challenge
 2. Opens your browser to X's authorization page
-3. You log in and click "Authorize app"
+3. You log in and click **Authorize app**
 4. X redirects back to a local server with an authorization code
-5. The server exchanges the code for access and refresh tokens
-6. Tokens are saved to `.x-tokens/token.json`
+5. The server exchanges the code for access and refresh tokens (using Basic auth with your client credentials)
+6. Fetches your user ID and @handle via `GET /2/users/me`
+7. Tokens are saved to `.x-tokens/token.json`
+
+You don't need to configure anything else — the server handles the full OAuth flow.
 
 ### Token lifetime
 
