@@ -60,9 +60,12 @@ __main__.py → app_config → bootstrap_runtime → Agent → REPL loop
 | `tool.py` | Tool protocol (name, description, execute, is_mutating) |
 | `ask_user.py` | Human-in-the-loop questioning via questionary |
 | `tool_search.py` | On-demand tool discovery for large tool sets |
+| `system_prompt.py` | LLM system prompt and directives (`_ASK_USER_DIRECTIVE`, etc.) |
+| `metrics.py` | Metric builders, `SessionAccumulator`, cost tracking |
 | `memory/` | SQLite session persistence, checkpoints, events, pruning |
 | `mcp/` | MCP server lifecycle, tool proxying |
 | `commands/` | Slash command routing (/session, /voice, /cost, etc.) |
+| `services/` | Session controller, checkpoint service |
 
 ## Conventions
 
@@ -76,6 +79,12 @@ Use prefix style: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`
 - **MyPy** for type checking
 - Type hints on all public functions
 - `from __future__ import annotations` in every module
+
+### Testing
+
+- Tests in `tests/` using `unittest` (run via `pytest`)
+- Test fakes in `tests/fakes.py`: `FakeStreamProvider`, `FakeTool` for mocking the LLM and tools
+- Name test files `test_<module>.py`
 
 ### Tools
 
