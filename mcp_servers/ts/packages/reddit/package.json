@@ -1,0 +1,21 @@
+{
+  "name": "@micro-x/mcp-reddit",
+  "version": "0.1.0",
+  "description": "Reddit MCP server — post drafting, publishing, and community management",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": { "mcp-reddit": "dist/index.js" },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@micro-x/mcp-shared": "*",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
