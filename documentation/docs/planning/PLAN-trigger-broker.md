@@ -2,14 +2,14 @@
 
 ## Status
 
-**Phase 2a In Progress** (2026-03-07) — Replaces [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) at priority #11.
+**Phase 2a+ In Progress** (2026-03-07) — Replaces [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) at priority #11.
 
 - Phase 1 (cron + autonomous mode): **Complete** (2026-03-06)
 - Phase 1 hardening (architecture review fixes): **Complete** (2026-03-07)
 - Phase 2a (webhook ingress + response routing + HTTP adapter): **Complete** (2026-03-07)
 - Phase 2a+ (WhatsApp + Telegram adapters): **In Progress**
-- Phase 2b (async human-in-the-loop): Planned
-- Phase 3 (operational hardening): Planned
+- Phase 2b (async human-in-the-loop): **Complete** (2026-03-07)
+- Phase 3 (operational hardening): **Complete** (2026-03-07)
 
 ## Goal
 
@@ -274,18 +274,25 @@ Architecture review identified and fixed:
 - `WhatsAppAdapter` (polling via existing MCP server with trigger filter, egress via MCP)
 - `TelegramAdapter` (Bot API long-polling with trigger filter, egress via Bot API)
 
-### Phase 2b: Async Human-in-the-Loop (Planned)
+### Phase 2b: Async Human-in-the-Loop — Complete (2026-03-07)
 
-- Subprocess-to-broker communication protocol (agent POSTs question to broker HTTP endpoint)
-- Broker routes question to trigger channel via adapter
-- Broker waits for reply with timeout
-- Agent polls broker for answer
+- `BrokerAskUserHandler` — posts questions to broker HTTP API, polls for answers
+- Broker question endpoints: `POST /api/runs/{run_id}/questions`, `GET .../questions/{qid}`, `POST .../questions/{qid}/answer`
+- `send_question` on `ChannelAdapter` protocol — routes questions to originating channel
+- `broker_questions` table with auto-timeout on expired pending questions
+- Per-job `hitl_enabled` and `hitl_timeout_seconds` configuration
+- Agent detects `MICRO_X_BROKER_URL`/`MICRO_X_RUN_ID` env vars and switches to HITL mode
+- HITL system prompt directive (use `ask_user` sparingly, expect async delays)
+- CLI: `--job add` accepts `--hitl` and `--hitl-timeout` flags
 
-### Phase 3: Operational Hardening (Planned)
+### Phase 3: Operational Hardening — Complete (2026-03-07)
 
-- Retry policy with backoff for failed runs
-- Missed-run recovery policy after broker downtime (`skip` or `run_once_on_recovery`)
-- Basic auth for management endpoints (loopback-only by default)
+- Retry policy: per-job `max_retries` + `retry_delay_seconds` with exponential backoff
+- Failed runs auto-schedule queued retry with `scheduled_at` and incremented `attempt_number`
+- Scheduler picks up due retries alongside cron jobs
+- Missed-run recovery on broker start: `skip` (advance schedule) or `run_once` (dispatch on next poll)
+- Bearer token auth middleware on management endpoints (`BrokerApiSecret` config)
+- CLI: `--job add` accepts `--max-retries` and `--retry-delay` flags
 
 Note: some Phase 3 items were addressed early:
 - Run timeout and cancellation — done in Phase 1 hardening (default 1-hour timeout)
@@ -303,6 +310,7 @@ Note: some Phase 3 items were addressed early:
   "BrokerMaxConcurrentRuns": 2,
   "BrokerRecoveryPolicy": "skip",
   "BrokerDatabase": ".micro_x/broker.db",
+  "BrokerApiSecret": "${BROKER_API_SECRET}",
   "BrokerChannels": {
     "whatsapp": {
       "enabled": true,

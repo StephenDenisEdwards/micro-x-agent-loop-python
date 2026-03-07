@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (extended 2026-03-07 with Phase 2a decisions)
+Accepted (extended 2026-03-07 with Phase 2a, 2b, and 3 decisions)
 
 ## Context
 
@@ -80,6 +80,54 @@ This ensures no result is silently lost, even if the egress channel is temporari
 ### RunDispatcher as Shared Component
 
 Run dispatch was extracted from the scheduler into a standalone `RunDispatcher` used by both cron scheduling and webhook triggers. This avoids duplicating concurrency management, subprocess spawning, and response routing logic.
+
+## Phase 2b Extension: Async Human-in-the-Loop (2026-03-07)
+
+Phase 2b added the ability for broker-dispatched agent runs to ask the human questions asynchronously via the originating channel.
+
+### HTTP-based Subprocess IPC
+
+The agent subprocess communicates with the broker via HTTP rather than pipes, shared memory, or message queues:
+
+- **Environment variables** (`MICRO_X_BROKER_URL`, `MICRO_X_RUN_ID`, `MICRO_X_HITL_TIMEOUT`) configure the subprocess
+- Agent detects these vars and replaces `AskUserHandler` with `BrokerAskUserHandler`
+- `BrokerAskUserHandler` POSTs questions to `POST /api/runs/{run_id}/questions` and polls `GET .../questions/{qid}` for answers
+- Answers arrive via `POST .../questions/{qid}/answer` from external clients or channel adapters
+
+HTTP was chosen over alternatives (Unix sockets, pipes) because the broker already has an HTTP server and the subprocess needs no additional dependencies.
+
+### Question Timeout as Pre-computed Deadline
+
+Questions store a `timeout_at` ISO timestamp rather than a duration. This allows timeout checks to be simple string comparisons without computing `asked_at + timeout_seconds` on every poll. The `get_question` method auto-transitions expired pending questions to `timed_out` status.
+
+### HITL System Prompt
+
+A distinct HITL directive (different from both interactive and fully autonomous) tells the agent it *can* ask questions but should be sparing — each question introduces async delay.
+
+## Phase 3 Extension: Operational Hardening (2026-03-07)
+
+### Retry with Exponential Backoff
+
+Failed runs can automatically retry with exponential backoff:
+
+- Per-job `max_retries` and `retry_delay_seconds` configuration
+- On failure, the dispatcher creates a new `queued` run with `attempt_number + 1` and `scheduled_at = now + delay * 2^(attempt-1)`
+- The scheduler picks up due retries alongside cron jobs, transitioning them from `queued` to `running`
+
+This was implemented in the dispatcher (not the scheduler) because the retry decision depends on the run result, which the dispatcher already has.
+
+### Missed-Run Recovery
+
+On broker start, the scheduler scans enabled jobs with `next_run_at` in the past:
+
+- **`skip`** (default) — advance schedule to next future occurrence
+- **`run_once`** — leave `next_run_at` in the past so the next poll cycle dispatches it, then advances
+
+The `run_once` policy reuses the existing poll-and-dispatch flow rather than introducing separate recovery dispatch logic.
+
+### Management Endpoint Auth
+
+When `BrokerApiSecret` is configured, a FastAPI middleware enforces bearer token auth on all endpoints except `/api/health`. Health checks remain unauthenticated for monitoring tool compatibility.
 
 ## Consequences
 
