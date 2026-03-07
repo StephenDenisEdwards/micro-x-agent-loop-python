@@ -52,9 +52,15 @@ python -m micro_x_agent_loop --job add <name> <cron_expr> <prompt> [options]
 
 | Option | Purpose |
 |--------|---------|
-| `--tz <timezone>` | IANA timezone for cron evaluation (e.g. `Europe/London`). Defaults to local timezone |
+| `--tz <timezone>` | IANA timezone for cron evaluation (e.g. `Europe/London`). Defaults to UTC |
 | `--config <path>` | Config file override for this job's agent runs |
 | `--session <id>` | Resume a specific session for each run (maintains conversation continuity) |
+| `--response-channel <ch>` | Channel for response routing (`http`, `log`, etc.) |
+| `--response-target <target>` | Channel-specific target (callback URL, phone number) |
+| `--hitl` | Enable async human-in-the-loop (agent can ask questions) |
+| `--hitl-timeout <secs>` | How long to wait for a human answer (default: 300) |
+| `--max-retries <N>` | Max retry attempts on failure (default: 0) |
+| `--retry-delay <secs>` | Base delay between retries in seconds (default: 60, exponential backoff) |
 
 Cron expressions use standard 5-field format: `minute hour day-of-month month day-of-week`
 
@@ -115,6 +121,76 @@ Shows recent runs with status indicators:
 
 If `id-prefix` is provided, shows runs for that job only. Otherwise shows all runs.
 
+## HTTP Webhook Triggers
+
+When `BrokerWebhookEnabled` is set to `true`, the broker runs a FastAPI server that accepts external triggers.
+
+### Triggering a run via HTTP
+
+```bash
+curl -X POST http://127.0.0.1:8321/api/trigger/http \
+  -H "Authorization: Bearer YOUR_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Summarise today'\''s news", "callback_url": "https://example.com/webhook"}'
+```
+
+### Checking run status
+
+```bash
+curl http://127.0.0.1:8321/api/runs/<run_id>
+```
+
+### Health check
+
+```bash
+curl http://127.0.0.1:8321/api/health
+```
+
+Returns job count, active runs, and available channels.
+
+## Human-in-the-Loop (HITL)
+
+Jobs can be configured to allow the agent to ask questions asynchronously via the originating channel.
+
+### Enabling HITL
+
+```bash
+python -m micro_x_agent_loop --job add "research-task" "0 10 * * *" "Research X and write a report" \
+  --hitl --hitl-timeout 600 --response-channel http --response-target https://example.com/webhook
+```
+
+When the agent calls `ask_user`, the question is:
+1. Posted to the broker's HTTP API
+2. Routed to the response channel (e.g., WhatsApp, HTTP callback)
+3. The agent polls for an answer (every 3 seconds)
+4. If no answer within the timeout, the agent receives a "no response" message and decides how to proceed
+
+### Answering a question
+
+External systems can answer via the API:
+
+```bash
+curl -X POST http://127.0.0.1:8321/api/runs/<run_id>/questions/<question_id>/answer \
+  -H "Content-Type: application/json" \
+  -d '{"answer": "Use option B"}'
+```
+
+### Requirements
+
+- The webhook server must be enabled (`BrokerWebhookEnabled: true`)
+- The job needs a response channel configured for question routing
+
+## Retry Policy
+
+Jobs can automatically retry on failure with exponential backoff.
+
+```bash
+python -m micro_x_agent_loop --job add "flaky-task" "0 */6 * * *" "Check API status" \
+  --max-retries 3 --retry-delay 60
+```
+
+This retries up to 3 times with delays of 60s, 120s, 240s (exponential backoff). Retries are scheduled as queued runs and picked up by the scheduler.
+
 ## One-Shot Autonomous Mode
 
 The broker dispatches jobs using the `--run` flag, which can also be used directly:
@@ -141,26 +217,44 @@ Broker settings in `config.json`:
 ```json
 {
   "BrokerEnabled": true,
+  "BrokerWebhookEnabled": true,
+  "BrokerHost": "127.0.0.1",
+  "BrokerPort": 8321,
   "BrokerPollIntervalSeconds": 5,
   "BrokerMaxConcurrentRuns": 2,
-  "BrokerDatabase": ".micro_x/broker.db"
+  "BrokerRecoveryPolicy": "skip",
+  "BrokerDatabase": ".micro_x/broker.db",
+  "BrokerApiSecret": "${BROKER_API_SECRET}",
+  "BrokerChannels": {
+    "http": {
+      "enabled": true,
+      "auth_secret": "${BROKER_HTTP_SECRET}"
+    }
+  }
 }
 ```
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
 | `BrokerEnabled` | `true` | Master switch for broker functionality |
+| `BrokerWebhookEnabled` | `false` | Enable the FastAPI webhook server |
+| `BrokerHost` | `127.0.0.1` | Webhook server bind address |
+| `BrokerPort` | `8321` | Webhook server port |
 | `BrokerPollIntervalSeconds` | `5` | How often the scheduler checks for due jobs |
 | `BrokerMaxConcurrentRuns` | `2` | Maximum simultaneous agent subprocesses |
+| `BrokerRecoveryPolicy` | `skip` | Missed-run recovery: `skip` or `run_once` |
 | `BrokerDatabase` | `.micro_x/broker.db` | Path to the broker SQLite database |
+| `BrokerApiSecret` | (none) | Bearer token for management endpoint auth |
+| `BrokerChannels` | `{}` | Per-channel adapter configuration |
 
 ## Database
 
 The broker uses a separate SQLite database (not the agent's `memory.db`). Default location: `.micro_x/broker.db`
 
-Two tables:
-- **`broker_jobs`** — job definitions, schedules, and configuration
-- **`broker_runs`** — execution history and results
+Three tables:
+- **`broker_jobs`** — job definitions, schedules, HITL/retry configuration
+- **`broker_runs`** — execution history, response tracking, retry state
+- **`broker_questions`** — HITL questions and answers (linked to runs)
 
 The database is created automatically on first use.
 

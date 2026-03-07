@@ -27,7 +27,7 @@ python -m micro_x_agent_loop --run "prompt text" [--session <id>] [--config path
 python -m micro_x_agent_loop --broker start    # Start daemon
 python -m micro_x_agent_loop --broker stop     # Stop daemon
 python -m micro_x_agent_loop --broker status   # Show status
-python -m micro_x_agent_loop --job add <name> <cron_expr> <prompt> [--tz TZ]
+python -m micro_x_agent_loop --job add <name> <cron_expr> <prompt> [--tz TZ] [--hitl] [--max-retries N]
 python -m micro_x_agent_loop --job list
 python -m micro_x_agent_loop --job run-now <id>
 python -m micro_x_agent_loop --job runs [id]
@@ -54,9 +54,10 @@ __main__.py → app_config → bootstrap_runtime → Agent → REPL loop
                                    OpenAI)
 
 Trigger Broker (always-on daemon):
-  broker/service.py → scheduler.py → runner.py (subprocess: --run)
-                          ↓
-                    broker/store.py (SQLite: broker_jobs, broker_runs)
+  broker/service.py → scheduler.py ──→ dispatcher.py → runner.py (subprocess: --run)
+                    → webhook_server.py ↗        ↓
+                                        response_router.py → channels.py (adapters)
+                    broker/store.py (SQLite: broker_jobs, broker_runs, broker_questions)
 ```
 
 ### Key Files
@@ -83,7 +84,7 @@ Trigger Broker (always-on daemon):
 | `mcp/` | MCP server lifecycle, tool proxying |
 | `commands/` | Slash command routing (/session, /voice, /cost, etc.) |
 | `services/` | Session controller, checkpoint service |
-| `broker/` | Trigger broker: cron scheduler, job store, subprocess runner, daemon service, CLI |
+| `broker/` | Trigger broker: cron scheduler, webhook server, HITL, retries, channel adapters, CLI |
 
 ## Conventions
 
@@ -131,7 +132,7 @@ When a user submits a prompt:
 - Opt-in via `MemoryEnabled=true`
 - SQLite at `.micro_x/memory.db`
 - 6 tables: sessions, messages, tool_calls, checkpoints, checkpoint_files, events
-- Broker DB at `.micro_x/broker.db` — 2 tables: broker_jobs, broker_runs
+- Broker DB at `.micro_x/broker.db` — 3 tables: broker_jobs, broker_runs, broker_questions
 - Checkpoint rewind restores files to pre-mutation state
 - Pruning: time-based, per-session message cap, global session cap
 
@@ -146,7 +147,7 @@ When a user submits a prompt:
 ## Documentation
 
 Full docs in `documentation/docs/`:
-- `architecture/` — SAD v3.0 + 17 ADRs
+- `architecture/` — SAD v3.0 + 18 ADRs
 - `design/` — 10 core design docs + 20 per-tool docs
 - `operations/` — setup, config, sessions, troubleshooting
 - `guides/` — developer how-tos (adding MCP servers, extending the loop)

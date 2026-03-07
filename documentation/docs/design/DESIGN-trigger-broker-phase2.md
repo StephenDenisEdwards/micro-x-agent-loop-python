@@ -488,11 +488,59 @@ The adapter pattern is the bridge: a future `WebClientAdapter` or `RemoteCLIAdap
 12. Implement `WhatsAppAdapter` (polling mode via existing MCP, egress via MCP)
 13. Implement `TelegramAdapter` (polling via Bot API, egress via Bot API)
 
-### Phase 2b: Async Human-in-the-Loop (deferred)
-- Subprocess-to-broker communication protocol (agent POSTs question to broker HTTP endpoint)
-- Broker routes question to trigger channel via adapter
-- Broker waits for reply with timeout
-- Agent polls broker for answer
+### Phase 2b: Async Human-in-the-Loop — Complete (2026-03-07)
+
+Subprocess-to-broker communication via HTTP for async questioning.
+
+**Components:**
+
+- **`BrokerAskUserHandler`** (`broker/broker_ask_user.py`) — replaces `AskUserHandler` in subprocess runs. POSTs questions to `POST /api/runs/{run_id}/questions`, polls `GET .../questions/{qid}` for answers.
+- **`broker_questions` table** — tracks question_text, options, answer, status (pending/answered/timed_out), timeout_at. Auto-timeouts via pre-computed deadline.
+- **New endpoints:**
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/runs/{run_id}/questions` | Agent subprocess posts a question |
+| GET | `/api/runs/{run_id}/questions/{qid}` | Agent polls for answer |
+| POST | `/api/runs/{run_id}/questions/{qid}/answer` | External client/channel posts answer |
+| GET | `/api/runs/{run_id}/questions` | List pending questions for a run |
+
+- **`send_question`** on `ChannelAdapter` protocol — routes questions to the originating channel
+- **Environment variables** passed to subprocess: `MICRO_X_BROKER_URL`, `MICRO_X_RUN_ID`, `MICRO_X_HITL_TIMEOUT`
+- **HITL system prompt** — distinct from autonomous; tells agent it can ask but should be sparing
+- **Per-job config:** `hitl_enabled` (bool), `hitl_timeout_seconds` (default 300)
+- **CLI:** `--hitl` and `--hitl-timeout` flags on `--job add`
+
+**Flow:**
+
+```
+Agent subprocess calls ask_user
+  → BrokerAskUserHandler.handle()
+    → POST /api/runs/{run_id}/questions (question + options)
+    → Broker stores question, routes to channel via send_question
+    → Handler polls GET .../questions/{qid} every 3 seconds
+    → Answer arrives (via POST .../answer from channel/client)
+    → Handler returns answer to agent
+    → (or times out → agent gets "no response" message)
+```
+
+### Phase 3: Operational Hardening — Complete (2026-03-07)
+
+**Retry policy:**
+- Per-job `max_retries` (default 0) and `retry_delay_seconds` (default 60)
+- On failure, dispatcher creates a new `queued` run with `attempt_number + 1` and `scheduled_at = now + delay × 2^(attempt-1)`
+- Scheduler picks up due retries alongside cron jobs
+- CLI: `--max-retries` and `--retry-delay` flags on `--job add`
+
+**Missed-run recovery:**
+- On broker start, scheduler scans enabled jobs with `next_run_at` in the past
+- Policy `skip` (default): advance schedule to next future occurrence
+- Policy `run_once`: leave `next_run_at` in the past — next poll dispatches it
+- Config: `BrokerRecoveryPolicy`
+
+**Management endpoint auth:**
+- When `BrokerApiSecret` is configured, FastAPI middleware enforces `Authorization: Bearer <secret>` on all endpoints except `/api/health`
+- Loopback-only binding remains the primary security measure
 
 ## Dependencies to Add
 
