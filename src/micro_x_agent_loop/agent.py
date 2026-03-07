@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
+from micro_x_agent_loop.ask_user import AskUserHandler
 from micro_x_agent_loop.commands.command_handler import CommandHandler
 from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.commands.router import CommandRouter
@@ -28,7 +30,6 @@ from micro_x_agent_loop.mode_selector import (
     analyze_prompt,
     build_stage2_prompt,
     format_analysis,
-    format_stage2_result,
     parse_stage2_response,
 )
 from micro_x_agent_loop.provider import create_provider
@@ -36,7 +37,6 @@ from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
-from micro_x_agent_loop.ask_user import AskUserHandler
 from micro_x_agent_loop.tool_search import ToolSearchManager, should_activate_tool_search
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult
@@ -82,12 +82,30 @@ class Agent:
             )
 
         # Ask-user (human-in-the-loop questioning)
-        self._ask_user_handler = AskUserHandler(
-            line_prefix=self._LINE_PREFIX,
-            user_prompt=self._USER_PROMPT,
-        )
-        from micro_x_agent_loop.system_prompt import _ASK_USER_DIRECTIVE
-        self._system_prompt += _ASK_USER_DIRECTIVE
+        # - Interactive mode: terminal-based AskUserHandler
+        # - Autonomous + HITL: broker-based BrokerAskUserHandler (posts questions via HTTP)
+        # - Autonomous without HITL: disabled (ask_user tool removed)
+        self._autonomous = config.autonomous
+        if config.autonomous:
+            broker_url = os.environ.get("MICRO_X_BROKER_URL")
+            run_id = os.environ.get("MICRO_X_RUN_ID")
+            if broker_url and run_id:
+                from micro_x_agent_loop.broker.broker_ask_user import BrokerAskUserHandler
+
+                hitl_timeout = int(os.environ.get("MICRO_X_HITL_TIMEOUT", "300"))
+                self._ask_user_handler = BrokerAskUserHandler(
+                    broker_url=broker_url, run_id=run_id, timeout=hitl_timeout,
+                )
+                logger.info(f"HITL mode: questions routed to broker at {broker_url}")
+            else:
+                self._ask_user_handler = None
+        else:
+            self._ask_user_handler = AskUserHandler(
+                line_prefix=self._LINE_PREFIX,
+                user_prompt=self._USER_PROMPT,
+            )
+            from micro_x_agent_loop.system_prompt import _ASK_USER_DIRECTIVE
+            self._system_prompt += _ASK_USER_DIRECTIVE
 
         self._max_tool_result_chars = config.max_tool_result_chars
         self._max_conversation_messages = config.max_conversation_messages
@@ -127,11 +145,14 @@ class Agent:
         if self._metrics_enabled and isinstance(self._compaction_strategy, SummarizeCompactionStrategy):
             self._compaction_strategy._on_compaction_completed = self._on_compaction_completed
 
-        self._voice_runtime = VoiceRuntime(
-            line_prefix=self._LINE_PREFIX,
-            tool_map=self._tool_map,
-            on_utterance=self._process_voice_utterance,
-        )
+        if config.autonomous:
+            self._voice_runtime = None
+        else:
+            self._voice_runtime = VoiceRuntime(
+                line_prefix=self._LINE_PREFIX,
+                tool_map=self._tool_map,
+                on_utterance=self._process_voice_utterance,
+            )
 
         self._session_controller = SessionController(line_prefix=self._LINE_PREFIX)
         self._checkpoint_service = CheckpointService(line_prefix=self._LINE_PREFIX)
@@ -251,7 +272,7 @@ class Agent:
         if isinstance(command_result, str):
             user_message = command_result
 
-        if self._mode_analysis_enabled:
+        if self._mode_analysis_enabled and not self._autonomous:
             analysis = analyze_prompt(user_message)
             stage2: Stage2Result | None = None
 
@@ -516,7 +537,8 @@ class Agent:
     async def shutdown(self) -> None:
         if self._metrics_enabled:
             emit_metric(build_session_summary_metric(self._session_accumulator))
-        await self._voice_runtime.shutdown()
+        if self._voice_runtime:
+            await self._voice_runtime.shutdown()
 
     @property
     def active_session_id(self) -> str | None:

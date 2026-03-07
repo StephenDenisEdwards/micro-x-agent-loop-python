@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from micro_x_agent_loop.tool import ToolResult
 from micro_x_agent_loop.usage import UsageResult
 
 # ---------------------------------------------------------------------------
@@ -99,11 +100,11 @@ class FakeTool:
     def predict_touched_paths(self, tool_input: dict[str, Any]) -> list[str]:
         return self._touched_paths
 
-    async def execute(self, tool_input: dict[str, Any]) -> str:
+    async def execute(self, tool_input: dict[str, Any]) -> ToolResult:
         self.execute_calls += 1
         if self._execute_side_effect is not None:
             raise self._execute_side_effect
-        return self._execute_result
+        return ToolResult(text=self._execute_result)
 
 
 class FakeMcpTool(FakeTool):

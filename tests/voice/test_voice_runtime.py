@@ -3,6 +3,7 @@ import json
 import unittest
 from typing import Any
 
+from micro_x_agent_loop.tool import ToolResult
 from micro_x_agent_loop.voice_runtime import VoiceRuntime
 
 
@@ -22,8 +23,8 @@ class _JsonTool:
     def input_schema(self) -> dict[str, Any]:
         return {"type": "object"}
 
-    async def execute(self, tool_input: dict[str, Any]) -> str:
-        return json.dumps(self._payload)
+    async def execute(self, tool_input: dict[str, Any]) -> ToolResult:
+        return ToolResult(text=json.dumps(self._payload))
 
 
 class _FakeIngress:

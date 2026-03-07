@@ -104,6 +104,7 @@ The agent sits between the user and external services. The user provides natural
 | [loguru](https://pypi.org/project/loguru/) | >=0.7.0 | Structured logging |
 | [tiktoken](https://pypi.org/project/tiktoken/) | >=0.7.0 | Token counting for tool search threshold |
 | [questionary](https://pypi.org/project/questionary/) | >=2.0.0 | Interactive terminal prompts for ask_user |
+| [croniter](https://pypi.org/project/croniter/) | >=1.3.0 | Cron expression parsing for trigger broker |
 | [httpx](https://pypi.org/project/httpx/) | >=0.27.0 | Async HTTP client |
 | [google-api-python-client](https://pypi.org/project/google-api-python-client/) | >=2.150.0 | Google APIs (Gmail, Calendar, Contacts) |
 | [google-auth-oauthlib](https://pypi.org/project/google-auth-oauthlib/) | >=1.2.0 | Google OAuth2 authentication |
@@ -118,10 +119,16 @@ The agent sits between the user and external services. The user provides natural
 ```mermaid
 graph TD
     Main["__main__.py<br/>Entry Point"] --> Bootstrap["bootstrap.py<br/>Runtime Factory"]
+    Main --> Broker["broker/<br/>Trigger Broker"]
     Bootstrap --> Agent["Agent<br/>Orchestrator"]
     Bootstrap --> Config["app_config.py<br/>config.json + .env"]
     Bootstrap --> McpMgr["McpManager<br/>MCP Connections"]
     Bootstrap --> Memory["memory/<br/>SQLite Persistence"]
+
+    Broker --> BrokerStore["BrokerStore<br/>Jobs + Runs DB"]
+    Broker --> Scheduler["Scheduler<br/>Cron Polling"]
+    Scheduler --> Runner["Runner<br/>Subprocess Dispatch"]
+    Runner --> Main
 
     Agent --> TurnEngine["TurnEngine<br/>LLM Turn Loop"]
     Agent --> CmdRouter["CommandRouter<br/>Local Commands"]
@@ -197,6 +204,11 @@ graph TD
 | `ToolResultFormatter` | Formats `ToolResult.structured` into LLM-friendly text using per-tool config (json, table, text, key_value strategies) |
 | `CommandRouter` | Routes `/help`, `/session`, `/checkpoint`, `/voice` commands to handlers |
 | `SessionController` | Formatting service for session list entries, summaries, and short IDs |
+| `broker/service` | Always-on daemon lifecycle: PID file, signal handling, graceful shutdown |
+| `broker/scheduler` | Cron polling loop: checks due jobs, enforces overlap policy, dispatches runs via subprocess |
+| `broker/store` | SQLite persistence for broker jobs and run history (`broker_jobs`, `broker_runs` tables) |
+| `broker/runner` | Subprocess dispatcher: spawns `--run` agent processes in autonomous mode |
+| `broker/cli` | CLI commands for `--broker` and `--job` management |
 | `CheckpointService` | Formatting service for checkpoint list entries and rewind outcome reports |
 | `VoiceRuntime` | Manages continuous voice input via MCP STT sessions (start/stop/poll) |
 | `VoiceIngress` | Protocol for streaming STT events; `PollingVoiceIngress` polls MCP for updates |
@@ -375,6 +387,7 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-015](decisions/ADR-015-all-tools-as-typescript-mcp-servers.md) | All tools as TypeScript MCP servers | Accepted |
 | [ADR-016](decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md) | Retry/resilience for MCP servers and transport | Accepted |
 | [ADR-017](decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md) | Ask user pseudo-tool for human-in-the-loop questioning | Accepted |
+| [ADR-018](decisions/ADR-018-trigger-broker-subprocess-dispatch.md) | Trigger broker with subprocess dispatch | Accepted |
 
 ## 9. Risks and Technical Debt
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-**Planned** — Prioritised ahead of Cost Reduction Phase 3.
+**Superseded** by [Trigger Broker](PLAN-trigger-broker.md). Retained as reference for full gateway capabilities. See the trigger broker plan for the decision rationale.
 
 ## Goal
 

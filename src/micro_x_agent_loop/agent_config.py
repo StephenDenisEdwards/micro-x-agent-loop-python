@@ -46,3 +46,5 @@ class AgentConfig:
     # Tool result formatting
     tool_formatting: dict = field(default_factory=dict)
     default_format: dict = field(default_factory=lambda: {"format": "json"})
+    # Autonomous mode (broker/cron runs — no human interaction)
+    autonomous: bool = False

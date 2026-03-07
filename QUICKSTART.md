@@ -139,6 +139,21 @@ Type a natural-language prompt and press Enter. The agent will stream its respon
 
 All tools are provided by MCP servers. If a server fails to connect, a warning is logged but the agent starts normally with the remaining servers.
 
+### One-shot and scheduled runs
+
+You can also run the agent non-interactively for automation:
+
+```bash
+# Execute a single prompt and exit (autonomous mode — no human interaction)
+python -m micro_x_agent_loop --run "Summarise today's news"
+
+# Schedule recurring jobs via the trigger broker
+python -m micro_x_agent_loop --job add "daily-news" "0 9 * * *" "Summarise today's news"
+python -m micro_x_agent_loop --broker start
+```
+
+See `--job list`, `--job run-now <id>`, `--broker status` for management. Full details in the [Trigger Broker plan](documentation/docs/planning/PLAN-trigger-broker.md).
+
 ## 3. MCP server setup (optional)
 
 ### System-info server (.NET)
