@@ -7,8 +7,8 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
-from micro_x_agent_loop.agent_channel import BufferedChannel, TerminalChannel
-from micro_x_agent_loop.ask_user import ASK_USER_SCHEMA, AskUserHandler, _OTHER_SENTINEL
+from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA, BufferedChannel
+from micro_x_agent_loop.ask_user import AskUserHandler, _OTHER_SENTINEL
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult
 from tests.fakes import FakeStreamProvider, FakeTool

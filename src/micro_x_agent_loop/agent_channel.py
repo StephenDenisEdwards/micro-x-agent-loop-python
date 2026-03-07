@@ -17,6 +17,53 @@ from questionary import Choice, Style
 
 
 # ---------------------------------------------------------------------------
+# ASK_USER_SCHEMA — tool definition for human-in-the-loop questioning
+# ---------------------------------------------------------------------------
+
+ASK_USER_SCHEMA: dict[str, Any] = {
+    "name": "ask_user",
+    "description": (
+        "Ask the user a clarifying question. Use this when you need more information, "
+        "want to present choices, or need approval before proceeding. "
+        "The user's answer is returned as a tool result so you can continue."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "The question to ask the user.",
+            },
+            "options": {
+                "type": "array",
+                "description": (
+                    "Optional list of choices to present. Each option has a label "
+                    "and description. The user can pick one or type a free-form answer."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "label": {
+                            "type": "string",
+                            "description": "Short label for this option.",
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Explanation of what this option means.",
+                        },
+                    },
+                    "required": ["label", "description"],
+                },
+                "minItems": 2,
+                "maxItems": 4,
+            },
+        },
+        "required": ["question"],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Protocol
 # ---------------------------------------------------------------------------
 

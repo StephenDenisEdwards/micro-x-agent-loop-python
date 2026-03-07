@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
-from micro_x_agent_loop.ask_user import ASK_USER_SCHEMA
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
 
 if TYPE_CHECKING:
