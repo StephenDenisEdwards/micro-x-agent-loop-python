@@ -12,6 +12,7 @@ from loguru import logger
 
 from micro_x_agent_loop.broker.channels import build_adapters
 from micro_x_agent_loop.broker.dispatcher import RunDispatcher
+from micro_x_agent_loop.broker.polling import PollingIngress
 from micro_x_agent_loop.broker.response_router import ResponseRouter
 from micro_x_agent_loop.broker.scheduler import Scheduler
 from micro_x_agent_loop.broker.store import BrokerStore
@@ -50,6 +51,7 @@ class BrokerService:
         self._store: BrokerStore | None = None
         self._scheduler: Scheduler | None = None
         self._dispatcher: RunDispatcher | None = None
+        self._polling_ingresses: list[PollingIngress] = []
 
     async def start(self) -> None:
         """Start the broker service in the foreground."""
@@ -83,7 +85,7 @@ class BrokerService:
             sig = getattr(signal, sig_name, None)
             if sig is not None:
                 try:
-                    loop.add_signal_handler(sig, self._scheduler.stop)
+                    loop.add_signal_handler(sig, self._handle_shutdown)
                 except NotImplementedError:
                     pass
 
@@ -110,6 +112,21 @@ class BrokerService:
                 tasks.append(asyncio.create_task(webhook_server.start(), name="webhook-server"))
                 logger.info(f"Webhook server enabled on {self._webhook_host}:{self._webhook_port}")
 
+            # Start polling ingress tasks for adapters that support polling
+            for name, adapter in adapters.items():
+                if adapter.supports_polling:
+                    poll_interval = self._channels_config.get(name, {}).get("poll_interval", 10)
+                    ingress = PollingIngress(
+                        adapter,
+                        self._dispatcher,
+                        self._store,
+                        poll_interval=poll_interval,
+                    )
+                    self._polling_ingresses.append(ingress)
+                    tasks.append(asyncio.create_task(
+                        ingress.start(), name=f"polling-{name}",
+                    ))
+
             # Wait for the scheduler to finish (it runs until stop() is called)
             await tasks[0]
 
@@ -125,6 +142,13 @@ class BrokerService:
             await self._dispatcher.wait_for_all()
         finally:
             self._cleanup()
+
+    def _handle_shutdown(self) -> None:
+        """Signal all components to stop gracefully."""
+        if self._scheduler:
+            self._scheduler.stop()
+        for ingress in self._polling_ingresses:
+            ingress.stop()
 
     def _try_acquire_pid(self) -> bool:
         """Atomically create PID file. Returns True if acquired, False if already running."""

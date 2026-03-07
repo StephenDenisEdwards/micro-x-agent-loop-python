@@ -204,6 +204,27 @@ class WebhookServer:
             q = self._store.get_pending_question(run_id)
             return {"pending_question": q}
 
+        @app.get("/api/trigger/{channel}")
+        async def trigger_verify(channel: str, request: Request) -> Response:
+            """Handle webhook verification challenges (e.g., WhatsApp/Meta hub.verify_token)."""
+            mode = request.query_params.get("hub.mode")
+            verify_token = request.query_params.get("hub.verify_token")
+            challenge = request.query_params.get("hub.challenge", "")
+
+            if mode != "subscribe":
+                return Response(status_code=404, content='{"error": "Not found"}', media_type="application/json")
+
+            adapter = self._adapters.get(channel)
+            if adapter is None:
+                return Response(status_code=404, content='{"error": "Unknown channel"}', media_type="application/json")
+
+            expected_token = getattr(adapter, "verify_token", None)
+            if expected_token and verify_token == expected_token:
+                logger.info(f"Webhook verification successful for {channel}")
+                return Response(content=challenge, media_type="text/plain")
+
+            return Response(status_code=403, content='{"error": "Verification failed"}', media_type="application/json")
+
         @app.post("/api/trigger/{channel}")
         async def trigger(channel: str, request: Request) -> dict[str, Any] | Response:
             adapter = self._adapters.get(channel)
