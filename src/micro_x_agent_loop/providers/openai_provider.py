@@ -1,14 +1,19 @@
+from __future__ import annotations
+
 import json
 import time
+from typing import TYPE_CHECKING
 
 import openai
 from loguru import logger
 from tenacity import retry
 
-from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.providers.common import default_retry_kwargs
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.usage import UsageResult
+
+if TYPE_CHECKING:
+    from micro_x_agent_loop.agent_channel import AgentChannel
 
 # Map OpenAI finish reasons to Anthropic-style stop reasons.
 _STOP_REASON_MAP = {
@@ -141,19 +146,15 @@ class OpenAIProvider:
         messages: list[dict],
         tools: list[dict],
         *,
-        line_prefix: str = "",
+        channel: AgentChannel | None = None,
     ) -> tuple[dict, list[dict], str, UsageResult]:
-        """Stream a chat response from OpenAI, printing text deltas in real time.
+        """Stream a chat response from OpenAI, emitting text deltas via AgentChannel.
 
         Returns (message_dict, tool_use_blocks, stop_reason, usage) in internal
         (Anthropic-style) format.
         """
         oai_messages = _to_openai_messages(system_prompt, messages)
         oai_tools = _to_openai_tools(tools)
-
-        spinner = Spinner(prefix=line_prefix)
-        spinner.start()
-        first_output = False
 
         t_start = time.monotonic()
         t_first_token: float | None = None
@@ -209,11 +210,10 @@ class OpenAIProvider:
 
                 # Text content
                 if delta.content:
-                    if not first_output:
-                        spinner.stop()
-                        first_output = True
+                    if t_first_token is None:
                         t_first_token = time.monotonic()
-                    print(delta.content, end="", flush=True)
+                    if channel is not None:
+                        channel.emit_text_delta(delta.content)
                     text_content += delta.content
 
                 # Tool calls (arrive incrementally by index)
@@ -235,11 +235,7 @@ class OpenAIProvider:
                             if tc_delta.function.arguments:
                                 acc["arguments_parts"].append(tc_delta.function.arguments)
 
-            if not first_output:
-                spinner.stop()
-
         except BaseException:
-            spinner.stop()
             raise
 
         t_end = time.monotonic()

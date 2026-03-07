@@ -1,13 +1,18 @@
+from __future__ import annotations
+
 import time
+from typing import TYPE_CHECKING
 
 import anthropic
 from loguru import logger
 from tenacity import retry
 
-from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.providers.common import default_retry_kwargs
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.usage import UsageResult
+
+if TYPE_CHECKING:
+    from micro_x_agent_loop.agent_channel import AgentChannel
 
 
 class AnthropicProvider:
@@ -39,17 +44,13 @@ class AnthropicProvider:
         messages: list[dict],
         tools: list[dict],
         *,
-        line_prefix: str = "",
+        channel: AgentChannel | None = None,
     ) -> tuple[dict, list[dict], str, UsageResult]:
-        """Stream a chat response, printing text deltas to stdout in real time.
+        """Stream a chat response, emitting text deltas via the AgentChannel.
 
         Returns (message dict, tool_use blocks, stop_reason, usage).
         """
         tool_use_blocks: list[dict] = []
-
-        spinner = Spinner(prefix=line_prefix)
-        spinner.start()
-        first_output = False
 
         t_start = time.monotonic()
         t_first_token: float | None = None
@@ -89,18 +90,13 @@ class AnthropicProvider:
                 async for event in stream:
                     if event.type == "content_block_delta":
                         if event.delta.type == "text_delta":
-                            if not first_output:
-                                spinner.stop()
-                                first_output = True
+                            if t_first_token is None:
                                 t_first_token = time.monotonic()
-                            print(event.delta.text, end="", flush=True)
-
-                if not first_output:
-                    spinner.stop()
+                            if channel is not None:
+                                channel.emit_text_delta(event.delta.text)
 
                 response = await stream.get_final_message()
         except BaseException:
-            spinner.stop()
             raise
 
         t_end = time.monotonic()

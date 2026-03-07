@@ -3,14 +3,16 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
-from micro_x_agent_loop.ask_user import AskUserHandler
-from micro_x_agent_loop.llm_client import Spinner
+from micro_x_agent_loop.ask_user import ASK_USER_SCHEMA
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
+
+if TYPE_CHECKING:
+    from micro_x_agent_loop.agent_channel import AgentChannel
 from micro_x_agent_loop.system_prompt import resolve_system_prompt
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
@@ -29,10 +31,10 @@ class TurnEngine:
         system_prompt: str,
         converted_tools: list[dict],
         tool_map: dict[str, Tool],
-        line_prefix: str,
         max_tool_result_chars: int,
         max_tokens_retries: int,
         events: TurnEvents,
+        channel: AgentChannel | None = None,
         summarization_provider: Any | None = None,
         summarization_model: str = "",
         summarization_enabled: bool = False,
@@ -40,7 +42,6 @@ class TurnEngine:
         formatter: ToolResultFormatter | None = None,
         api_payload_store: ApiPayloadStore | None = None,
         tool_search_manager: ToolSearchManager | None = None,
-        ask_user_handler: AskUserHandler | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -49,10 +50,10 @@ class TurnEngine:
         self._system_prompt_template = system_prompt
         self._converted_tools = converted_tools
         self._tool_map = tool_map
-        self._line_prefix = line_prefix
         self._max_tool_result_chars = max_tool_result_chars
         self._max_tokens_retries = max_tokens_retries
         self._events = events
+        self._channel = channel
         self._summarization_provider = summarization_provider
         self._summarization_model = summarization_model
         self._summarization_enabled = summarization_enabled
@@ -60,7 +61,6 @@ class TurnEngine:
         self._formatter = formatter or ToolResultFormatter()
         self._api_payload_store = api_payload_store
         self._tool_search_manager = tool_search_manager
-        self._ask_user_handler = ask_user_handler
 
     async def run(
         self,
@@ -87,8 +87,8 @@ class TurnEngine:
                 if self._tool_search_manager is not None
                 else list(self._converted_tools)
             )
-            if self._ask_user_handler is not None:
-                api_tools.append(self._ask_user_handler.get_schema())
+            if self._channel is not None:
+                api_tools.append(ASK_USER_SCHEMA)
 
             message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
                 self._model,
@@ -97,7 +97,7 @@ class TurnEngine:
                 system_prompt,
                 messages,
                 api_tools,
-                line_prefix=self._line_prefix,
+                channel=self._channel,
             )
 
             self._events.on_api_call_completed(usage, "main")
@@ -113,11 +113,12 @@ class TurnEngine:
             if stop_reason == "max_tokens" and not tool_use_blocks:
                 max_tokens_attempts += 1
                 if max_tokens_attempts >= self._max_tokens_retries:
-                    print(
-                        f"\n{self._line_prefix}[Stopped: response exceeded max_tokens "
-                        f"({self._max_tokens}) {self._max_tokens_retries} times in a row. "
-                        f"Try increasing MaxTokens in config.json or simplifying the request.]",
-                    )
+                    if self._channel is not None:
+                        self._channel.emit_error(
+                            f"Stopped: response exceeded max_tokens "
+                            f"({self._max_tokens}) {self._max_tokens_retries} times in a row. "
+                            f"Try increasing MaxTokens in config.json or simplifying the request."
+                        )
                     return current_user_message_id, last_assistant_message_id
                 self._events.on_append_message(
                     "user",
@@ -127,7 +128,6 @@ class TurnEngine:
                         "break it into smaller sections or shorten the content."
                     ),
                 )
-                print()
                 continue
 
             max_tokens_attempts = 0
@@ -143,7 +143,7 @@ class TurnEngine:
                 name = block["name"]
                 if self._tool_search_manager is not None and ToolSearchManager.is_tool_search_call(name):
                     search_blocks.append(block)
-                elif self._ask_user_handler is not None and AskUserHandler.is_ask_user_call(name):
+                elif self._channel is not None and name == "ask_user":
                     ask_user_blocks.append(block)
                 else:
                     regular_blocks.append(block)
@@ -160,33 +160,37 @@ class TurnEngine:
                 })
                 logger.info(f"tool_search query={query!r} loaded={self._tool_search_manager.loaded_tool_count}")
 
-            # Handle ask_user calls inline (prompt the user in the terminal)
+            # Handle ask_user calls inline (route through the channel)
             for block in ask_user_blocks:
-                result_text = await self._ask_user_handler.handle(block["input"])
+                question = block["input"].get("question", "")
+                options = block["input"].get("options")
+                answer = await self._channel.ask_user(question, options)
+                result_text = json.dumps({"answer": answer})
                 inline_results.append({
                     "type": "tool_result",
                     "tool_use_id": block["id"],
                     "content": result_text,
                 })
-                logger.info(f"ask_user question={block['input'].get('question', '')!r}")
+                logger.info(f"ask_user question={question!r}")
 
             # If only pseudo-tool calls (no regular tools), append results and continue
             if not regular_blocks:
                 self._events.on_append_message("user", inline_results)
-                print()
                 continue
 
             # Execute regular tool calls
-            display_names = ", ".join(b["name"] for b in regular_blocks)
-            spinner = Spinner(prefix=self._line_prefix, label=f" Running {display_names}...")
-            spinner.start()
+            if self._channel is not None:
+                for b in regular_blocks:
+                    self._channel.emit_tool_started(b["id"], b["name"])
             try:
                 self._events.on_ensure_checkpoint_for_turn(regular_blocks)
                 regular_results = await self.execute_tools(
                     regular_blocks, last_assistant_message_id=last_assistant_message_id
                 )
             finally:
-                spinner.stop()
+                if self._channel is not None:
+                    for b in regular_blocks:
+                        self._channel.emit_tool_completed(b["id"], b["name"], False)
 
             # Combine results in original order
             if inline_results:
@@ -198,7 +202,6 @@ class TurnEngine:
 
             self._events.on_append_message("user", all_results)
             await self._events.on_maybe_compact()
-            print()
 
     @staticmethod
     def _merge_tool_results(

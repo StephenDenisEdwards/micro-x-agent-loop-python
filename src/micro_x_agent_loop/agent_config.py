@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from micro_x_agent_loop.compaction import CompactionStrategy, NoneCompactionStrategy
 from micro_x_agent_loop.constants import (
@@ -48,3 +51,5 @@ class AgentConfig:
     default_format: dict = field(default_factory=lambda: {"format": "json"})
     # Autonomous mode (broker/cron runs — no human interaction)
     autonomous: bool = False
+    # AgentChannel for bidirectional client communication
+    channel: Any = None  # AgentChannel | None (Any to avoid circular import)

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from micro_x_agent_loop.agent import Agent
+from micro_x_agent_loop.agent_channel import BrokerChannel, BufferedChannel, TerminalChannel
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.app_config import AppConfig, RuntimeEnv
 from micro_x_agent_loop.compaction import NoneCompactionStrategy, SummarizeCompactionStrategy
@@ -112,6 +113,18 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv, *, autonomous: bool
 
     hitl_enabled = autonomous and bool(os.environ.get("MICRO_X_BROKER_URL"))
 
+    # Create the appropriate AgentChannel based on context
+    if autonomous:
+        broker_url = os.environ.get("MICRO_X_BROKER_URL")
+        run_id = os.environ.get("MICRO_X_RUN_ID")
+        if broker_url and run_id:
+            hitl_timeout = int(os.environ.get("MICRO_X_HITL_TIMEOUT", "300"))
+            channel = BrokerChannel(broker_url=broker_url, run_id=run_id, timeout=hitl_timeout)
+        else:
+            channel = BufferedChannel()
+    else:
+        channel = TerminalChannel()
+
     agent = Agent(
         AgentConfig(
             model=app.model,
@@ -151,6 +164,7 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv, *, autonomous: bool
             working_directory=app.working_directory,
             tool_formatting=app.tool_formatting,
             default_format=app.default_format,
+            channel=channel,
         )
     )
 

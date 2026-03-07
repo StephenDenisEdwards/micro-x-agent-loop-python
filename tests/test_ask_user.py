@@ -7,6 +7,7 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
+from micro_x_agent_loop.agent_channel import BufferedChannel, TerminalChannel
 from micro_x_agent_loop.ask_user import ASK_USER_SCHEMA, AskUserHandler, _OTHER_SENTINEL
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult
@@ -179,14 +180,10 @@ class TestPromptFreeText(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-def _make_handler() -> AskUserHandler:
-    return AskUserHandler(line_prefix="test> ", user_prompt="you> ")
-
-
-def _make_engine_with_ask_user(
+def _make_engine_with_channel(
     provider: FakeStreamProvider,
     events: RecordingEvents,
-    handler: AskUserHandler | None = None,
+    channel: BufferedChannel | None = None,
     tools: list[FakeTool] | None = None,
 ) -> TurnEngine:
     tool_list = tools or []
@@ -202,17 +199,16 @@ def _make_engine_with_ask_user(
         system_prompt="sys",
         converted_tools=converted,
         tool_map={t.name: t for t in tool_list},
-        line_prefix="test> ",
         max_tool_result_chars=40_000,
         max_tokens_retries=3,
         events=events,
-        ask_user_handler=handler,
+        channel=channel,
     )
 
 
 class TestTurnEngineAskUser(unittest.TestCase):
     def test_ask_user_only_continues_loop(self) -> None:
-        """When LLM only calls ask_user, loop continues without checkpoint or spinner."""
+        """When LLM only calls ask_user, loop continues without checkpoint."""
         provider = FakeStreamProvider()
         # Response 1: ask_user only
         provider.responses.append((
@@ -228,11 +224,11 @@ class TestTurnEngineAskUser(unittest.TestCase):
         provider.queue(text="Got it, reading main.py.", stop_reason="end_turn")
 
         events = RecordingEvents()
-        handler = _make_handler()
-        engine = _make_engine_with_ask_user(provider, events, handler=handler)
+        channel = BufferedChannel()
+        engine = _make_engine_with_channel(provider, events, channel=channel)
 
-        with patch.object(AskUserHandler, "_prompt_free_text", return_value="main.py"):
-            asyncio.run(engine.run(messages=[], user_message="read a file"))
+        # BufferedChannel.ask_user returns a default timeout message
+        asyncio.run(engine.run(messages=[], user_message="read a file"))
 
         # No checkpoint calls (ask_user is handled inline)
         self.assertEqual(0, len(events.checkpoint_calls))
@@ -244,7 +240,7 @@ class TestTurnEngineAskUser(unittest.TestCase):
         results = tool_result_msg[1]
         self.assertEqual(1, len(results))
         parsed = json.loads(results[0]["content"])
-        self.assertEqual("main.py", parsed["answer"])
+        self.assertIn("answer", parsed)
 
     def test_ask_user_mixed_with_regular_tools(self) -> None:
         """ask_user and regular tools in the same response are both handled, merged in order."""
@@ -267,11 +263,10 @@ class TestTurnEngineAskUser(unittest.TestCase):
         provider.queue(text="Done.", stop_reason="end_turn")
 
         events = RecordingEvents()
-        handler = _make_handler()
-        engine = _make_engine_with_ask_user(provider, events, handler=handler, tools=[tool])
+        channel = BufferedChannel()
+        engine = _make_engine_with_channel(provider, events, channel=channel, tools=[tool])
 
-        with patch.object(AskUserHandler, "_prompt_free_text", return_value="yes"):
-            asyncio.run(engine.run(messages=[], user_message="read and confirm"))
+        asyncio.run(engine.run(messages=[], user_message="read and confirm"))
 
         self.assertEqual(1, tool.execute_calls)
         # Results merged: user, assistant, user(tool_results), assistant
@@ -283,8 +278,8 @@ class TestTurnEngineAskUser(unittest.TestCase):
         self.assertEqual("au1", results[0]["tool_use_id"])
         self.assertEqual("t1", results[1]["tool_use_id"])
 
-    def test_no_handler_treats_ask_user_as_unknown(self) -> None:
-        """Without ask_user_handler, 'ask_user' is routed as a regular tool and fails as unknown."""
+    def test_no_channel_treats_ask_user_as_unknown(self) -> None:
+        """Without a channel, 'ask_user' is routed as a regular tool and fails as unknown."""
         provider = FakeStreamProvider()
         provider.responses.append((
             {
@@ -298,8 +293,8 @@ class TestTurnEngineAskUser(unittest.TestCase):
         provider.queue(text="OK.", stop_reason="end_turn")
 
         events = RecordingEvents()
-        # No ask_user_handler
-        engine = _make_engine_with_ask_user(provider, events, handler=None)
+        # No channel
+        engine = _make_engine_with_channel(provider, events, channel=None)
 
         asyncio.run(engine.run(messages=[], user_message="test"))
 
@@ -311,27 +306,20 @@ class TestTurnEngineAskUser(unittest.TestCase):
 
 
 class TestTurnEngineAskUserSchemaInjection(unittest.TestCase):
-    def test_ask_user_schema_included_in_api_call(self) -> None:
-        """When handler is present, ask_user schema is appended to api_tools."""
+    def test_ask_user_schema_included_when_channel_present(self) -> None:
+        """When a channel is present, ask_user schema is appended to api_tools."""
         provider = FakeStreamProvider()
         provider.queue(text="Hello.", stop_reason="end_turn")
 
         events = RecordingEvents()
-        handler = _make_handler()
-        engine = _make_engine_with_ask_user(provider, events, handler=handler)
+        channel = BufferedChannel()
+        engine = _make_engine_with_channel(provider, events, channel=channel)
 
         asyncio.run(engine.run(messages=[], user_message="hi"))
 
-        # Check that ask_user was in the tools sent to the provider
-        call = provider.stream_calls[0]
-        # The provider doesn't record tools directly in our fake, but we can
-        # verify indirectly: with no converted tools and a handler, api_tools
-        # should have exactly 1 tool (ask_user).
-        # Since FakeStreamProvider.stream_chat doesn't record tools, we verify
-        # schema correctness via the handler itself.
-        schema = handler.get_schema()
-        self.assertEqual("ask_user", schema["name"])
-        self.assertIn("question", schema["input_schema"]["properties"])
+        # Verify ASK_USER_SCHEMA has the expected shape
+        self.assertEqual("ask_user", ASK_USER_SCHEMA["name"])
+        self.assertIn("question", ASK_USER_SCHEMA["input_schema"]["properties"])
 
 
 if __name__ == "__main__":

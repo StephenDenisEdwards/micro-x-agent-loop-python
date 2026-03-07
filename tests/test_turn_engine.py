@@ -95,7 +95,6 @@ def _make_engine(
         system_prompt="sys",
         converted_tools=[],
         tool_map={t.name: t for t in tool_list},
-        line_prefix="test> ",
         max_tool_result_chars=max_tool_result_chars,
         max_tokens_retries=max_tokens_retries,
         events=events,

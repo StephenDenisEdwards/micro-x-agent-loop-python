@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 
 from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
-from micro_x_agent_loop.ask_user import AskUserHandler
 from micro_x_agent_loop.commands.command_handler import CommandHandler
 from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.commands.router import CommandRouter
@@ -82,30 +80,12 @@ class Agent:
                 "LLM will discover tools via tool_search"
             )
 
-        # Ask-user (human-in-the-loop questioning)
-        # - Interactive mode: terminal-based AskUserHandler
-        # - Autonomous + HITL: broker-based BrokerAskUserHandler (posts questions via HTTP)
-        # - Autonomous without HITL: disabled (ask_user tool removed)
         self._autonomous = config.autonomous
+        self._channel = config.channel
         self._line_prefix = self._LINE_PREFIX_AUTONOMOUS if config.autonomous else self._LINE_PREFIX
-        if config.autonomous:
-            broker_url = os.environ.get("MICRO_X_BROKER_URL")
-            run_id = os.environ.get("MICRO_X_RUN_ID")
-            if broker_url and run_id:
-                from micro_x_agent_loop.broker.broker_ask_user import BrokerAskUserHandler
 
-                hitl_timeout = int(os.environ.get("MICRO_X_HITL_TIMEOUT", "300"))
-                self._ask_user_handler = BrokerAskUserHandler(
-                    broker_url=broker_url, run_id=run_id, timeout=hitl_timeout,
-                )
-                logger.info(f"HITL mode: questions routed to broker at {broker_url}")
-            else:
-                self._ask_user_handler = None
-        else:
-            self._ask_user_handler = AskUserHandler(
-                line_prefix=self._line_prefix,
-                user_prompt=self._USER_PROMPT,
-            )
+        # Enable ask_user directive when a channel is available
+        if self._channel is not None:
             from micro_x_agent_loop.system_prompt import _ASK_USER_DIRECTIVE
             self._system_prompt += _ASK_USER_DIRECTIVE
 
@@ -187,10 +167,10 @@ class Agent:
             system_prompt=self._system_prompt,
             converted_tools=self._converted_tools,
             tool_map=self._tool_map,
-            line_prefix=self._line_prefix,
             max_tool_result_chars=self._max_tool_result_chars,
             max_tokens_retries=self._MAX_TOKENS_RETRIES,
             events=self,
+            channel=self._channel,
             summarization_provider=summarization_provider,
             summarization_model=summarization_model,
             summarization_enabled=config.tool_result_summarization_enabled,
@@ -198,7 +178,6 @@ class Agent:
             formatter=self._tool_result_formatter,
             api_payload_store=self._api_payload_store,
             tool_search_manager=self._tool_search_manager,
-            ask_user_handler=self._ask_user_handler,
         )
 
         commands_dir = Path(self._working_directory or ".") / ".commands"
