@@ -2,12 +2,12 @@
 
 ## Status
 
-**Phase 2a+ In Progress** (2026-03-07) — Replaces [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) at priority #11.
+**All Phases Complete** (2026-03-07) — Replaces [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) at priority #11.
 
 - Phase 1 (cron + autonomous mode): **Complete** (2026-03-06)
 - Phase 1 hardening (architecture review fixes): **Complete** (2026-03-07)
 - Phase 2a (webhook ingress + response routing + HTTP adapter): **Complete** (2026-03-07)
-- Phase 2a+ (WhatsApp + Telegram adapters): **In Progress**
+- Phase 2a+ (WhatsApp + Telegram adapters): **Complete** (2026-03-07)
 - Phase 2b (async human-in-the-loop): **Complete** (2026-03-07)
 - Phase 3 (operational hardening): **Complete** (2026-03-07)
 
@@ -268,11 +268,14 @@ Architecture review identified and fixed:
 - Schema migration for existing databases
 - CLI: `--job add` accepts `--response-channel` and `--response-target`
 
-### Phase 2a+: Messaging Channel Adapters — In Progress
+### Phase 2a+: Messaging Channel Adapters — Complete (2026-03-07)
 
-- `PollingIngress` loop for channels using polling mode
-- `WhatsAppAdapter` (polling via existing MCP server with trigger filter, egress via MCP)
-- `TelegramAdapter` (Bot API long-polling with trigger filter, egress via Bot API)
+- `PollingIngress` loop with error backoff for channels using polling mode
+- `TelegramAdapter` — Bot API polling (`getUpdates`) + webhook + `sendMessage` egress
+- `WhatsAppAdapter` — Cloud API webhook ingress + message sending egress (HMAC verification)
+- Webhook verification GET handler for Meta/WhatsApp `hub.verify_token` challenge
+- `build_adapters()` constructs adapters from config with empty filter warnings
+- Graceful shutdown stops polling ingresses alongside scheduler
 
 ### Phase 2b: Async Human-in-the-Loop — Complete (2026-03-07)
 
