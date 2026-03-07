@@ -387,6 +387,7 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-015](decisions/ADR-015-all-tools-as-typescript-mcp-servers.md) | All tools as TypeScript MCP servers | Accepted |
 | [ADR-016](decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md) | Retry/resilience for MCP servers and transport | Accepted |
 | [ADR-017](decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md) | Ask user pseudo-tool for human-in-the-loop questioning | Accepted |
+| [ADR-018](decisions/ADR-018-trigger-broker-subprocess-dispatch.md) | Trigger broker with subprocess dispatch | Accepted |
 
 ## 9. Risks and Technical Debt
 

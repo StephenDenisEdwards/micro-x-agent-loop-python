@@ -31,7 +31,7 @@ class CommandHandler:
         tool_map: dict[str, Tool],
         tool_result_formatter: ToolResultFormatter,
         api_payload_store: ApiPayloadStore,
-        voice_runtime: VoiceRuntime,
+        voice_runtime: VoiceRuntime | None,
         session_controller: SessionController,
         checkpoint_service: CheckpointService,
         user_memory_enabled: bool,

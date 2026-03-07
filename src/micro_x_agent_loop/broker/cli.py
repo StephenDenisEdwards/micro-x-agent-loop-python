@@ -24,14 +24,26 @@ async def handle_broker_command(args: list[str], config: dict | None = None) -> 
     db_path = broker_config.get("BrokerDatabase", _DEFAULT_DB_PATH)
     poll_interval = int(broker_config.get("BrokerPollIntervalSeconds", 5))
     max_concurrent = int(broker_config.get("BrokerMaxConcurrentRuns", 2))
+    webhook_enabled = bool(broker_config.get("BrokerWebhookEnabled", False))
+    webhook_host = str(broker_config.get("BrokerHost", "127.0.0.1"))
+    webhook_port = int(broker_config.get("BrokerPort", 8321))
+    channels_config = broker_config.get("BrokerChannels", {})
 
     if sub == "start":
         service = BrokerService(
             db_path=db_path,
             poll_interval=poll_interval,
             max_concurrent_runs=max_concurrent,
+            webhook_enabled=webhook_enabled,
+            webhook_host=webhook_host,
+            webhook_port=webhook_port,
+            channels_config=channels_config,
         )
-        await service.start()
+        try:
+            await service.start()
+        except RuntimeError as ex:
+            print(f"Error: {ex}")
+            return
 
     elif sub == "stop":
         if BrokerService.stop_broker():
@@ -91,9 +103,13 @@ async def handle_job_command(args: list[str], config: dict | None = None) -> Non
 
 
 def _job_add(store: BrokerStore, args: list[str]) -> None:
-    """Add a new scheduled job: --job add <name> <cron_expr> <prompt> [--tz TZ] [--config path] [--session id]"""
+    """Add a new scheduled job."""
     if len(args) < 3:
-        print("Usage: --job add <name> <cron_expr> <prompt> [--tz TZ] [--config path] [--session id]")
+        print(
+            "Usage: --job add <name> <cron_expr> <prompt> "
+            "[--tz TZ] [--config path] [--session id] "
+            "[--response-channel channel] [--response-target target]"
+        )
         return
 
     name = args[0]
@@ -104,6 +120,8 @@ def _job_add(store: BrokerStore, args: list[str]) -> None:
     tz = "UTC"
     config_profile = None
     session_id = None
+    response_channel = "log"
+    response_target = None
     i = 3
     while i < len(args):
         if args[i] == "--tz" and i + 1 < len(args):
@@ -115,6 +133,12 @@ def _job_add(store: BrokerStore, args: list[str]) -> None:
         elif args[i] == "--session" and i + 1 < len(args):
             session_id = args[i + 1]
             i += 2
+        elif args[i] == "--response-channel" and i + 1 < len(args):
+            response_channel = args[i + 1]
+            i += 2
+        elif args[i] == "--response-target" and i + 1 < len(args):
+            response_target = args[i + 1]
+            i += 2
         else:
             i += 1
 
@@ -124,7 +148,7 @@ def _job_add(store: BrokerStore, args: list[str]) -> None:
             print(f"Invalid cron expression: {cron_expr}")
             return
     except ImportError:
-        pass  # Validate later when scheduling
+        pass
 
     job = store.create_job(
         name=name,
@@ -134,9 +158,20 @@ def _job_add(store: BrokerStore, args: list[str]) -> None:
         config_profile=config_profile,
         session_id=session_id,
     )
+
+    # Set response routing if specified
+    if response_channel != "log" or response_target:
+        store.update_job(
+            job["id"],
+            response_channel=response_channel,
+            **({"response_target": response_target} if response_target else {}),
+        )
+
     print(f"Created job: {job['name']} (id={job['id'][:8]})")
     print(f"  Cron: {cron_expr} ({tz})")
     print(f"  Prompt: {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
+    if response_channel != "log":
+        print(f"  Response: {response_channel} -> {response_target or '(sender)'}")
 
 
 def _job_list(store: BrokerStore) -> None:
@@ -152,6 +187,9 @@ def _job_list(store: BrokerStore) -> None:
         print(f"           Cron: {job['cron_expr']} ({job.get('timezone', 'UTC')})")
         prompt_preview = job["prompt_template"][:60]
         print(f"           Prompt: {prompt_preview}{'...' if len(job['prompt_template']) > 60 else ''}")
+        resp_ch = job.get("response_channel", "log")
+        if resp_ch != "log":
+            print(f"           Response: {resp_ch} -> {job.get('response_target', '(sender)')}")
         if job.get("next_run_at"):
             print(f"           Next: {job['next_run_at']}")
         if job.get("last_run_at"):
@@ -275,7 +313,12 @@ def _job_runs(store: BrokerStore, args: list[str]) -> None:
             "queued": ".",
         }.get(run["status"], "?")
         started = run.get("started_at", "?")[:19]
-        print(f"  [{status_icon}] {run['id'][:8]}  {run['status']:10}  {started}  {run['trigger_source']}")
+        resp = ""
+        if run.get("response_sent"):
+            resp = f" [sent:{run.get('response_channel', '')}]"
+        elif run.get("response_error"):
+            resp = " [resp-err]"
+        print(f"  [{status_icon}] {run['id'][:8]}  {run['status']:10}  {started}  {run['trigger_source']}{resp}")
         if run.get("error_text"):
             print(f"      Error: {run['error_text'][:100]}")
         if run.get("result_summary"):
@@ -293,6 +336,7 @@ def _print_broker_help() -> None:
 def _print_job_help() -> None:
     print("Job commands:")
     print("  --job add <name> <cron> <prompt> [--tz TZ] [--config path] [--session id]")
+    print("                                   [--response-channel ch] [--response-target target]")
     print("  --job list        List all jobs")
     print("  --job remove <id> Remove a job")
     print("  --job enable <id> Enable a job")

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from croniter import croniter
 from loguru import logger
 
-from micro_x_agent_loop.broker.runner import run_agent
-from micro_x_agent_loop.broker.store import BrokerStore
+if TYPE_CHECKING:
+    from micro_x_agent_loop.broker.dispatcher import RunDispatcher
+    from micro_x_agent_loop.broker.store import BrokerStore
 
 
 def compute_next_run(cron_expr: str, tz_name: str = "UTC") -> str:
@@ -26,55 +28,55 @@ def compute_next_run(cron_expr: str, tz_name: str = "UTC") -> str:
     return next_local.astimezone(UTC).isoformat()
 
 
+_MAX_CONSECUTIVE_ERRORS = 10
+_MAX_BACKOFF_SECONDS = 60
+
+
 class Scheduler:
-    """Polls the job store and dispatches due jobs as agent subprocess runs."""
+    """Polls the job store and dispatches due jobs via the shared RunDispatcher."""
 
     def __init__(
         self,
         store: BrokerStore,
+        dispatcher: RunDispatcher,
         *,
         poll_interval: int = 5,
-        max_concurrent_runs: int = 2,
     ) -> None:
         self._store = store
+        self._dispatcher = dispatcher
         self._poll_interval = poll_interval
-        self._max_concurrent_runs = max_concurrent_runs
-        self._running_tasks: dict[str, asyncio.Task] = {}
         self._stop_event = asyncio.Event()
 
     async def start(self) -> None:
         """Run the scheduler loop until stop() is called."""
-        logger.info(
-            f"Scheduler started (poll={self._poll_interval}s, "
-            f"max_concurrent={self._max_concurrent_runs})"
-        )
+        logger.info(f"Scheduler started (poll={self._poll_interval}s)")
 
-        # Initialise next_run_at for any jobs that don't have one
         self._initialise_schedules()
+
+        consecutive_errors = 0
 
         while not self._stop_event.is_set():
             try:
                 await self._poll_and_dispatch()
+                consecutive_errors = 0
             except Exception as ex:
-                logger.error(f"Scheduler poll error: {ex}")
+                consecutive_errors += 1
+                logger.error(f"Scheduler poll error ({consecutive_errors}/{_MAX_CONSECUTIVE_ERRORS}): {ex}")
+                if consecutive_errors >= _MAX_CONSECUTIVE_ERRORS:
+                    logger.critical(
+                        f"Scheduler hit {_MAX_CONSECUTIVE_ERRORS} consecutive errors, shutting down"
+                    )
+                    self._stop_event.set()
+                    break
 
-            # Clean up completed tasks
-            done_keys = [k for k, t in self._running_tasks.items() if t.done()]
-            for k in done_keys:
-                del self._running_tasks[k]
-
+            wait_seconds = min(
+                self._poll_interval * (2 ** consecutive_errors) if consecutive_errors else self._poll_interval,
+                _MAX_BACKOFF_SECONDS,
+            )
             try:
-                await asyncio.wait_for(
-                    self._stop_event.wait(),
-                    timeout=self._poll_interval,
-                )
+                await asyncio.wait_for(self._stop_event.wait(), timeout=wait_seconds)
             except TimeoutError:
                 pass
-
-        # Wait for in-flight runs to finish
-        if self._running_tasks:
-            logger.info(f"Waiting for {len(self._running_tasks)} in-flight run(s)...")
-            await asyncio.gather(*self._running_tasks.values(), return_exceptions=True)
 
         logger.info("Scheduler stopped")
 
@@ -101,60 +103,44 @@ class Scheduler:
             if not next_run or next_run > now:
                 continue
 
-            # Check concurrency limit
-            if len(self._running_tasks) >= self._max_concurrent_runs:
-                logger.debug("Max concurrent runs reached, skipping dispatch")
+            if self._dispatcher.at_capacity:
+                logger.debug("Max concurrent runs reached, deferring remaining jobs")
                 break
 
-            # Check overlap policy
+            # Overlap policy — atomic check-and-create for skip_if_running
             if job["overlap_policy"] == "skip_if_running":
-                if self._store.has_running_run(job["id"]):
-                    logger.info(f"Skipping job {job['name']!r} — already running (overlap_policy=skip_if_running)")
-                    # Still advance the schedule
+                run_id = self._store.create_run_if_no_overlap(
+                    job_id=job["id"],
+                    trigger_source="cron",
+                    prompt=job["prompt_template"],
+                    session_id=job.get("session_id"),
+                )
+                if run_id is None:
+                    logger.info(f"Skipping job {job['name']!r} — already running")
                     self._advance_schedule(job)
                     continue
+            else:
+                run_id = self._store.create_run(
+                    job_id=job["id"],
+                    trigger_source="cron",
+                    prompt=job["prompt_template"],
+                    session_id=job.get("session_id"),
+                )
 
-            # Dispatch the run
-            self._dispatch_job(job)
+            self._store.update_job(job["id"], last_run_at=datetime.now(UTC).isoformat())
+            self._advance_schedule(job)
 
-    def _dispatch_job(self, job: dict) -> None:
-        """Create a run record and spawn a subprocess task."""
-        run_id = self._store.create_run(
-            job_id=job["id"],
-            trigger_source="cron",
-            prompt=job["prompt_template"],
-            session_id=job.get("session_id"),
-        )
-        self._store.update_job(job["id"], last_run_at=datetime.now(UTC).isoformat())
-        self._advance_schedule(job)
+            logger.info(f"Dispatching job {job['name']!r} (run_id={run_id[:8]})")
 
-        logger.info(f"Dispatching job {job['name']!r} (run_id={run_id[:8]})")
-
-        task = asyncio.create_task(
-            self._execute_run(run_id, job),
-            name=f"broker-run-{run_id[:8]}",
-        )
-        self._running_tasks[run_id] = task
-
-    async def _execute_run(self, run_id: str, job: dict) -> None:
-        """Execute a single run and update its status."""
-        try:
-            result = await run_agent(
+            self._dispatcher.dispatch(
+                run_id=run_id,
                 prompt=job["prompt_template"],
-                config=job.get("config_profile"),
+                config_profile=job.get("config_profile"),
                 session_id=job.get("session_id"),
                 timeout_seconds=job.get("timeout_seconds"),
+                response_channel=job.get("response_channel", "log"),
+                response_target=job.get("response_target"),
             )
-            if result.ok:
-                self._store.complete_run(run_id, result_summary=result.summary)
-                logger.info(f"Run {run_id[:8]} completed successfully")
-            else:
-                error = result.stderr or f"Exit code {result.exit_code}"
-                self._store.fail_run(run_id, error_text=error)
-                logger.warning(f"Run {run_id[:8]} failed: {error[:200]}")
-        except Exception as ex:
-            self._store.fail_run(run_id, error_text=str(ex))
-            logger.error(f"Run {run_id[:8]} exception: {ex}")
 
     def _advance_schedule(self, job: dict) -> None:
         """Compute and store the next run time for a job."""

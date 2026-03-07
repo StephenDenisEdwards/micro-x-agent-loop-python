@@ -22,6 +22,8 @@ class BrokerStore:
         self._conn = sqlite3.connect(str(path))
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA foreign_keys=ON")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._create_tables()
 
     def _create_tables(self) -> None:
@@ -48,7 +50,7 @@ class BrokerStore:
 
             CREATE TABLE IF NOT EXISTS broker_runs (
                 id TEXT PRIMARY KEY,
-                job_id TEXT,
+                job_id TEXT REFERENCES broker_jobs(id) ON DELETE CASCADE,
                 trigger_source TEXT NOT NULL,
                 prompt TEXT NOT NULL,
                 session_id TEXT,
@@ -56,7 +58,11 @@ class BrokerStore:
                 started_at TEXT,
                 completed_at TEXT,
                 result_summary TEXT,
-                error_text TEXT
+                error_text TEXT,
+                response_channel TEXT,
+                response_target TEXT,
+                response_sent INTEGER NOT NULL DEFAULT 0,
+                response_error TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_broker_jobs_enabled_next
@@ -66,6 +72,19 @@ class BrokerStore:
             CREATE INDEX IF NOT EXISTS idx_broker_runs_status
                 ON broker_runs(status, started_at);
         """)
+
+        # Migration: add response columns for existing databases created before Phase 2
+        for col, col_type, default in [
+            ("response_channel", "TEXT", None),
+            ("response_target", "TEXT", None),
+            ("response_sent", "INTEGER NOT NULL", "0"),
+            ("response_error", "TEXT", None),
+        ]:
+            try:
+                default_clause = f" DEFAULT {default}" if default else ""
+                self._conn.execute(f"ALTER TABLE broker_runs ADD COLUMN {col} {col_type}{default_clause}")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
 
     # -- Job CRUD --
 
@@ -118,6 +137,7 @@ class BrokerStore:
         allowed = {
             "name", "cron_expr", "timezone", "enabled", "prompt_template",
             "session_id", "config_profile", "overlap_policy", "timeout_seconds",
+            "response_channel", "response_target",
             "last_run_at", "next_run_at",
         }
         updates = {k: v for k, v in fields.items() if k in allowed}
@@ -188,7 +208,42 @@ class BrokerStore:
             "SELECT COUNT(*) FROM broker_runs WHERE job_id = ? AND status = 'running'",
             (job_id,),
         ).fetchone()
-        return row[0] > 0
+        return (row[0] if row else 0) > 0
+
+    def create_run_if_no_overlap(
+        self,
+        *,
+        job_id: str,
+        trigger_source: str,
+        prompt: str,
+        session_id: str | None = None,
+    ) -> str | None:
+        """Atomically check for running runs and create a new one if none exist.
+
+        Returns the run_id if created, or None if a run is already active (overlap).
+        """
+        run_id = str(uuid.uuid4())
+        now = _now_iso()
+        try:
+            self._conn.execute("BEGIN IMMEDIATE")
+            row = self._conn.execute(
+                "SELECT COUNT(*) FROM broker_runs WHERE job_id = ? AND status = 'running'",
+                (job_id,),
+            ).fetchone()
+            if (row[0] if row else 0) > 0:
+                self._conn.execute("ROLLBACK")
+                return None
+            self._conn.execute(
+                """INSERT INTO broker_runs
+                   (id, job_id, trigger_source, prompt, session_id, status, started_at)
+                   VALUES (?, ?, ?, ?, ?, 'running', ?)""",
+                (run_id, job_id, trigger_source, prompt, session_id, now),
+            )
+            self._conn.execute("COMMIT")
+            return run_id
+        except Exception:
+            self._conn.execute("ROLLBACK")
+            raise
 
     def list_runs(self, job_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         if job_id:
@@ -202,6 +257,40 @@ class BrokerStore:
                 (limit,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def set_run_response_info(
+        self,
+        run_id: str,
+        *,
+        response_channel: str,
+        response_target: str | None,
+    ) -> None:
+        """Set the response routing info for a run."""
+        self._conn.execute(
+            "UPDATE broker_runs SET response_channel = ?, response_target = ? WHERE id = ?",
+            (response_channel, response_target, run_id),
+        )
+        self._conn.commit()
+
+    def mark_response_sent(self, run_id: str) -> None:
+        self._conn.execute(
+            "UPDATE broker_runs SET response_sent = 1 WHERE id = ?",
+            (run_id,),
+        )
+        self._conn.commit()
+
+    def mark_response_failed(self, run_id: str, *, error: str) -> None:
+        self._conn.execute(
+            "UPDATE broker_runs SET response_error = ? WHERE id = ?",
+            (error, run_id),
+        )
+        self._conn.commit()
+
+    def get_run(self, run_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM broker_runs WHERE id = ?", (run_id,)
+        ).fetchone()
+        return dict(row) if row else None
 
     def close(self) -> None:
         self._conn.close()

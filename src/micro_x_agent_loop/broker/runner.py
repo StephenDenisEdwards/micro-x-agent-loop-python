@@ -8,6 +8,9 @@ from dataclasses import dataclass
 
 from loguru import logger
 
+_DEFAULT_TIMEOUT_SECONDS = 3600  # 1 hour
+_MAX_OUTPUT_BYTES = 10 * 1024 * 1024  # 10 MB
+
 
 @dataclass
 class RunResult:
@@ -28,6 +31,14 @@ class RunResult:
         return "\n".join(lines[-5:]) if lines else "(no output)"
 
 
+def _truncate_output(data: bytes, label: str) -> str:
+    """Decode output bytes, truncating if over the size limit."""
+    if len(data) > _MAX_OUTPUT_BYTES:
+        logger.warning(f"Agent {label} truncated: {len(data):,} bytes > {_MAX_OUTPUT_BYTES:,} limit")
+        data = data[:_MAX_OUTPUT_BYTES]
+    return data.decode("utf-8", errors="replace")
+
+
 async def run_agent(
     *,
     prompt: str,
@@ -41,18 +52,23 @@ async def run_agent(
         prompt: The prompt to execute.
         config: Optional config file path.
         session_id: Optional session ID to resume.
-        timeout_seconds: Optional run timeout.
+        timeout_seconds: Optional run timeout (defaults to 1 hour).
 
     Returns:
         RunResult with exit code, stdout, and stderr.
     """
+    effective_timeout = timeout_seconds if timeout_seconds is not None else _DEFAULT_TIMEOUT_SECONDS
+
     cmd = [sys.executable, "-m", "micro_x_agent_loop", "--run", prompt]
     if config:
         cmd.extend(["--config", config])
     if session_id:
         cmd.extend(["--session", session_id])
 
-    logger.info(f"Dispatching agent run: prompt={prompt[:80]!r}")
+    logger.info(
+        f"Dispatching agent run: prompt={prompt[:80]!r}, "
+        f"config={config!r}, session={session_id!r}, timeout={effective_timeout}s"
+    )
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -62,21 +78,21 @@ async def run_agent(
         )
         stdout_bytes, stderr_bytes = await asyncio.wait_for(
             process.communicate(),
-            timeout=timeout_seconds,
+            timeout=effective_timeout,
         )
         return RunResult(
             exit_code=process.returncode or 0,
-            stdout=stdout_bytes.decode("utf-8", errors="replace"),
-            stderr=stderr_bytes.decode("utf-8", errors="replace"),
+            stdout=_truncate_output(stdout_bytes, "stdout"),
+            stderr=_truncate_output(stderr_bytes, "stderr"),
         )
     except TimeoutError:
-        logger.warning(f"Agent run timed out after {timeout_seconds}s, killing process")
+        logger.warning(f"Agent run timed out after {effective_timeout}s, killing process")
         process.kill()
         await process.wait()
         return RunResult(
             exit_code=-1,
             stdout="",
-            stderr=f"Run timed out after {timeout_seconds} seconds",
+            stderr=f"Run timed out after {effective_timeout} seconds",
         )
     except Exception as ex:
         logger.error(f"Failed to spawn agent subprocess: {ex}")

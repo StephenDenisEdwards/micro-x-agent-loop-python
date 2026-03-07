@@ -5,11 +5,14 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
-import sys
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
+from micro_x_agent_loop.broker.channels import build_adapters
+from micro_x_agent_loop.broker.dispatcher import RunDispatcher
+from micro_x_agent_loop.broker.response_router import ResponseRouter
 from micro_x_agent_loop.broker.scheduler import Scheduler
 from micro_x_agent_loop.broker.store import BrokerStore
 
@@ -18,7 +21,7 @@ _DEFAULT_PID_PATH = ".micro_x/broker.pid"
 
 
 class BrokerService:
-    """Always-on broker that runs the scheduler and manages its lifecycle."""
+    """Always-on broker that runs the scheduler, webhook server, and manages lifecycle."""
 
     def __init__(
         self,
@@ -27,27 +30,43 @@ class BrokerService:
         pid_path: str = _DEFAULT_PID_PATH,
         poll_interval: int = 5,
         max_concurrent_runs: int = 2,
+        webhook_enabled: bool = False,
+        webhook_host: str = "127.0.0.1",
+        webhook_port: int = 8321,
+        channels_config: dict[str, Any] | None = None,
     ) -> None:
         self._db_path = db_path
         self._pid_path = pid_path
         self._poll_interval = poll_interval
         self._max_concurrent_runs = max_concurrent_runs
+        self._webhook_enabled = webhook_enabled
+        self._webhook_host = webhook_host
+        self._webhook_port = webhook_port
+        self._channels_config = channels_config or {}
         self._store: BrokerStore | None = None
         self._scheduler: Scheduler | None = None
+        self._dispatcher: RunDispatcher | None = None
 
     async def start(self) -> None:
         """Start the broker service in the foreground."""
-        if self._is_already_running():
-            logger.error("Broker is already running (PID file exists)")
-            sys.exit(1)
-
-        self._write_pid()
+        if not self._try_acquire_pid():
+            raise RuntimeError("Broker is already running (PID file exists)")
 
         self._store = BrokerStore(self._db_path)
+
+        # Build channel adapters and shared components
+        adapters = build_adapters(self._channels_config)
+        response_router = ResponseRouter(adapters)
+        self._dispatcher = RunDispatcher(
+            self._store,
+            response_router,
+            max_concurrent_runs=self._max_concurrent_runs,
+        )
+
         self._scheduler = Scheduler(
             self._store,
+            self._dispatcher,
             poll_interval=self._poll_interval,
-            max_concurrent_runs=self._max_concurrent_runs,
         )
 
         # Register signal handlers for graceful shutdown
@@ -58,39 +77,73 @@ class BrokerService:
                 try:
                     loop.add_signal_handler(sig, self._scheduler.stop)
                 except NotImplementedError:
-                    # Windows doesn't support add_signal_handler for all signals
                     pass
 
         logger.info(f"Broker service starting (db={self._db_path}, pid={os.getpid()})")
 
         try:
-            await self._scheduler.start()
+            tasks: list[asyncio.Task] = []
+
+            # Start the cron scheduler
+            tasks.append(asyncio.create_task(self._scheduler.start(), name="scheduler"))
+
+            # Start the webhook server if enabled
+            if self._webhook_enabled:
+                from micro_x_agent_loop.broker.webhook_server import WebhookServer
+
+                webhook_server = WebhookServer(
+                    self._store,
+                    self._dispatcher,
+                    adapters,
+                    host=self._webhook_host,
+                    port=self._webhook_port,
+                )
+                tasks.append(asyncio.create_task(webhook_server.start(), name="webhook-server"))
+                logger.info(f"Webhook server enabled on {self._webhook_host}:{self._webhook_port}")
+
+            # Wait for the scheduler to finish (it runs until stop() is called)
+            await tasks[0]
+
+            # Cancel remaining tasks (webhook server)
+            for task in tasks[1:]:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            # Wait for in-flight agent runs
+            await self._dispatcher.wait_for_all()
         finally:
             self._cleanup()
 
-    def _write_pid(self) -> None:
+    def _try_acquire_pid(self) -> bool:
+        """Atomically create PID file. Returns True if acquired, False if already running."""
         path = Path(self._pid_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(str(os.getpid()))
+
+        if path.exists():
+            try:
+                pid = int(path.read_text().strip())
+                os.kill(pid, 0)
+                return False
+            except (ValueError, ProcessLookupError, OSError):
+                logger.warning(f"Removing stale PID file (pid={path.read_text().strip()})")
+                path.unlink(missing_ok=True)
+            except PermissionError:
+                return False
+
+        try:
+            fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            return True
+        except FileExistsError:
+            return False
 
     def _remove_pid(self) -> None:
         path = Path(self._pid_path)
-        if path.exists():
-            path.unlink()
-
-    def _is_already_running(self) -> bool:
-        path = Path(self._pid_path)
-        if not path.exists():
-            return False
-        try:
-            pid = int(path.read_text().strip())
-            # Check if the process is actually alive
-            os.kill(pid, 0)
-            return True
-        except (ValueError, ProcessLookupError, PermissionError, OSError):
-            # Stale PID file — previous broker crashed
-            path.unlink(missing_ok=True)
-            return False
+        path.unlink(missing_ok=True)
 
     def _cleanup(self) -> None:
         self._remove_pid()
@@ -113,17 +166,13 @@ class BrokerService:
 
     @staticmethod
     def stop_broker(pid_path: str = _DEFAULT_PID_PATH) -> bool:
-        """Send SIGTERM/TerminateProcess to the running broker. Returns True if stopped."""
+        """Send SIGTERM to the running broker. Returns True if stopped."""
         path = Path(pid_path)
         if not path.exists():
             return False
         try:
             pid = int(path.read_text().strip())
-            if sys.platform == "win32":
-                os.kill(pid, signal.SIGTERM)
-            else:
-                os.kill(pid, signal.SIGTERM)
-            # Remove PID file after sending signal
+            os.kill(pid, signal.SIGTERM)
             path.unlink(missing_ok=True)
             return True
         except (ValueError, ProcessLookupError, PermissionError, OSError):

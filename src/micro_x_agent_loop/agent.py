@@ -130,11 +130,14 @@ class Agent:
         if self._metrics_enabled and isinstance(self._compaction_strategy, SummarizeCompactionStrategy):
             self._compaction_strategy._on_compaction_completed = self._on_compaction_completed
 
-        self._voice_runtime = VoiceRuntime(
-            line_prefix=self._LINE_PREFIX,
-            tool_map=self._tool_map,
-            on_utterance=self._process_voice_utterance,
-        )
+        if config.autonomous:
+            self._voice_runtime = None
+        else:
+            self._voice_runtime = VoiceRuntime(
+                line_prefix=self._LINE_PREFIX,
+                tool_map=self._tool_map,
+                on_utterance=self._process_voice_utterance,
+            )
 
         self._session_controller = SessionController(line_prefix=self._LINE_PREFIX)
         self._checkpoint_service = CheckpointService(line_prefix=self._LINE_PREFIX)
@@ -519,7 +522,8 @@ class Agent:
     async def shutdown(self) -> None:
         if self._metrics_enabled:
             emit_metric(build_session_summary_metric(self._session_accumulator))
-        await self._voice_runtime.shutdown()
+        if self._voice_runtime:
+            await self._voice_runtime.shutdown()
 
     @property
     def active_session_id(self) -> str | None:
