@@ -41,10 +41,12 @@ class Scheduler:
         dispatcher: RunDispatcher,
         *,
         poll_interval: int = 5,
+        recovery_policy: str = "skip",
     ) -> None:
         self._store = store
         self._dispatcher = dispatcher
         self._poll_interval = poll_interval
+        self._recovery_policy = recovery_policy
         self._stop_event = asyncio.Event()
 
     async def start(self) -> None:
@@ -85,13 +87,31 @@ class Scheduler:
         self._stop_event.set()
 
     def _initialise_schedules(self) -> None:
-        """Set next_run_at for enabled jobs that don't have one yet."""
+        """Set next_run_at for enabled jobs that don't have one yet.
+
+        Also applies missed-run recovery policy for jobs whose next_run_at is in the past.
+        """
         jobs = self._store.list_jobs(enabled_only=True)
+        now = datetime.now(UTC).isoformat()
         for job in jobs:
-            if not job.get("next_run_at") and job.get("cron_expr"):
-                next_run = compute_next_run(job["cron_expr"], job.get("timezone") or "UTC")
+            cron_expr = job.get("cron_expr")
+            if not cron_expr:
+                continue
+            tz_name = job.get("timezone") or "UTC"
+
+            if not job.get("next_run_at"):
+                next_run = compute_next_run(cron_expr, tz_name)
                 self._store.update_job(job["id"], next_run_at=next_run)
                 logger.info(f"Initialised schedule for job {job['name']!r}: next={next_run}")
+            elif job["next_run_at"] < now:
+                if self._recovery_policy == "run_once":
+                    # Leave next_run_at in the past — the poll loop will pick it up and dispatch
+                    logger.info(f"Recovery (run_once): missed job {job['name']!r} will run on next poll")
+                else:
+                    # Skip — advance to next future occurrence
+                    next_run = compute_next_run(cron_expr, tz_name)
+                    self._store.update_job(job["id"], next_run_at=next_run)
+                    logger.info(f"Recovery (skip): advanced job {job['name']!r} to next={next_run}")
 
     async def _poll_and_dispatch(self) -> None:
         """Check for due jobs and dispatch them."""
@@ -135,11 +155,39 @@ class Scheduler:
             self._dispatcher.dispatch(
                 run_id=run_id,
                 prompt=job["prompt_template"],
+                job=job,
                 config_profile=job.get("config_profile"),
                 session_id=job.get("session_id"),
                 timeout_seconds=job.get("timeout_seconds"),
                 response_channel=job.get("response_channel", "log"),
                 response_target=job.get("response_target"),
+            )
+
+        # Dispatch due retry runs
+        retries = self._store.list_due_retries()
+        for retry_run in retries:
+            if self._dispatcher.at_capacity:
+                break
+
+            self._store.start_run(retry_run["id"])
+            job = None
+            if retry_run.get("job_id"):
+                job = self._store.get_job(retry_run["job_id"])
+
+            logger.info(
+                f"Dispatching retry run {retry_run['id'][:8]} "
+                f"(attempt {retry_run.get('attempt_number', '?')})"
+            )
+
+            self._dispatcher.dispatch(
+                run_id=retry_run["id"],
+                prompt=retry_run["prompt"],
+                job=job,
+                config_profile=job.get("config_profile") if job else None,
+                session_id=retry_run.get("session_id"),
+                timeout_seconds=job.get("timeout_seconds") if job else None,
+                response_channel=job.get("response_channel", "log") if job else "log",
+                response_target=job.get("response_target") if job else None,
             )
 
     def _advance_schedule(self, job: dict) -> None:

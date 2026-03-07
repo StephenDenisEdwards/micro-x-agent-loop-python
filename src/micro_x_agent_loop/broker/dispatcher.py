@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -27,10 +28,12 @@ class RunDispatcher:
         response_router: ResponseRouter,
         *,
         max_concurrent_runs: int = 2,
+        broker_url: str | None = None,
     ) -> None:
         self._store = store
         self._response_router = response_router
         self._max_concurrent_runs = max_concurrent_runs
+        self._broker_url = broker_url
         self._running_tasks: dict[str, asyncio.Task] = {}
 
     @property
@@ -71,15 +74,27 @@ class RunDispatcher:
             response_target=response_target,
         )
 
+        # Build HITL env vars if enabled for this job
+        extra_env: dict[str, str] | None = None
+        if job and job.get("hitl_enabled") and self._broker_url:
+            hitl_timeout = job.get("hitl_timeout_seconds") or 300
+            extra_env = {
+                "MICRO_X_BROKER_URL": self._broker_url,
+                "MICRO_X_RUN_ID": run_id,
+                "MICRO_X_HITL_TIMEOUT": str(hitl_timeout),
+            }
+
         task = asyncio.create_task(
             self._execute_run(
                 run_id=run_id,
                 prompt=prompt,
+                job=job,
                 config_profile=config_profile,
                 session_id=session_id,
                 timeout_seconds=timeout_seconds,
                 response_channel=response_channel,
                 response_target=response_target,
+                extra_env=extra_env,
             ),
             name=f"broker-run-{run_id[:8]}",
         )
@@ -91,19 +106,22 @@ class RunDispatcher:
         *,
         run_id: str,
         prompt: str,
+        job: dict | None,
         config_profile: str | None,
         session_id: str | None,
         timeout_seconds: int | None,
         response_channel: str,
         response_target: str | None,
+        extra_env: dict[str, str] | None = None,
     ) -> None:
-        """Execute a single run, update status, and route response."""
+        """Execute a single run, update status, route response, and schedule retries."""
         try:
             result = await run_agent(
                 prompt=prompt,
                 config=config_profile,
                 session_id=session_id,
                 timeout_seconds=timeout_seconds,
+                extra_env=extra_env,
             )
             if result.ok:
                 self._store.complete_run(run_id, result_summary=result.summary)
@@ -127,6 +145,27 @@ class RunDispatcher:
             result=result,
             store=self._store,
         )
+
+        # Schedule retry if applicable
+        if not result.ok and job and job.get("max_retries", 0) > 0:
+            run_record = self._store.get_run(run_id)
+            attempt = run_record.get("attempt_number", 1) if run_record else 1
+            if attempt < job["max_retries"]:
+                delay = job.get("retry_delay_seconds", 60) * (2 ** (attempt - 1))
+                scheduled_at = (datetime.now(UTC) + timedelta(seconds=delay)).isoformat()
+                retry_id = self._store.create_retry_run(
+                    job_id=job["id"],
+                    trigger_source="retry",
+                    prompt=prompt,
+                    session_id=session_id,
+                    attempt_number=attempt + 1,
+                    scheduled_at=scheduled_at,
+                )
+                logger.info(
+                    f"Retry scheduled for run {run_id[:8]}: "
+                    f"attempt {attempt + 1}/{job['max_retries']}, "
+                    f"delay {delay}s, retry_id={retry_id[:8]}"
+                )
 
     async def wait_for_all(self) -> None:
         """Wait for all in-flight runs to complete. Called during shutdown."""

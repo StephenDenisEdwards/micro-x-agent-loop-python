@@ -34,6 +34,8 @@ class BrokerService:
         webhook_host: str = "127.0.0.1",
         webhook_port: int = 8321,
         channels_config: dict[str, Any] | None = None,
+        recovery_policy: str = "skip",
+        api_secret: str | None = None,
     ) -> None:
         self._db_path = db_path
         self._pid_path = pid_path
@@ -43,6 +45,8 @@ class BrokerService:
         self._webhook_host = webhook_host
         self._webhook_port = webhook_port
         self._channels_config = channels_config or {}
+        self._recovery_policy = recovery_policy
+        self._api_secret = api_secret
         self._store: BrokerStore | None = None
         self._scheduler: Scheduler | None = None
         self._dispatcher: RunDispatcher | None = None
@@ -57,16 +61,20 @@ class BrokerService:
         # Build channel adapters and shared components
         adapters = build_adapters(self._channels_config)
         response_router = ResponseRouter(adapters)
+
+        broker_url = f"http://{self._webhook_host}:{self._webhook_port}" if self._webhook_enabled else None
         self._dispatcher = RunDispatcher(
             self._store,
             response_router,
             max_concurrent_runs=self._max_concurrent_runs,
+            broker_url=broker_url,
         )
 
         self._scheduler = Scheduler(
             self._store,
             self._dispatcher,
             poll_interval=self._poll_interval,
+            recovery_policy=self._recovery_policy,
         )
 
         # Register signal handlers for graceful shutdown
@@ -97,6 +105,7 @@ class BrokerService:
                     adapters,
                     host=self._webhook_host,
                     port=self._webhook_port,
+                    api_secret=self._api_secret,
                 )
                 tasks.append(asyncio.create_task(webhook_server.start(), name="webhook-server"))
                 logger.info(f"Webhook server enabled on {self._webhook_host}:{self._webhook_port}")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -105,6 +106,8 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv, *, autonomous: bool
     if app.user_memory_enabled:
         user_memory = _load_user_memory(user_memory_dir, app.user_memory_max_lines)
 
+    hitl_enabled = autonomous and bool(os.environ.get("MICRO_X_BROKER_URL"))
+
     agent = Agent(
         AgentConfig(
             model=app.model,
@@ -119,6 +122,7 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv, *, autonomous: bool
                 concise_output_enabled=app.concise_output_enabled,
                 working_directory=app.working_directory,
                 autonomous=autonomous,
+                hitl_enabled=hitl_enabled,
             ),
             autonomous=autonomous,
             max_tool_result_chars=app.max_tool_result_chars,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from dataclasses import dataclass
 
@@ -45,6 +46,7 @@ async def run_agent(
     config: str | None = None,
     session_id: str | None = None,
     timeout_seconds: int | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> RunResult:
     """Spawn the agent as a subprocess in one-shot autonomous mode.
 
@@ -53,6 +55,7 @@ async def run_agent(
         config: Optional config file path.
         session_id: Optional session ID to resume.
         timeout_seconds: Optional run timeout (defaults to 1 hour).
+        extra_env: Optional extra environment variables for the subprocess.
 
     Returns:
         RunResult with exit code, stdout, and stderr.
@@ -65,6 +68,10 @@ async def run_agent(
     if session_id:
         cmd.extend(["--session", session_id])
 
+    env = None
+    if extra_env:
+        env = {**os.environ, **extra_env}
+
     logger.info(
         f"Dispatching agent run: prompt={prompt[:80]!r}, "
         f"config={config!r}, session={session_id!r}, timeout={effective_timeout}s"
@@ -75,6 +82,7 @@ async def run_agent(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
         stdout_bytes, stderr_bytes = await asyncio.wait_for(
             process.communicate(),

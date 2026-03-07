@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +71,21 @@ class BrokerStore:
                 ON broker_runs(job_id, started_at);
             CREATE INDEX IF NOT EXISTS idx_broker_runs_status
                 ON broker_runs(status, started_at);
+
+            CREATE TABLE IF NOT EXISTS broker_questions (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES broker_runs(id) ON DELETE CASCADE,
+                question_text TEXT NOT NULL,
+                options TEXT,
+                answer TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                asked_at TEXT NOT NULL,
+                answered_at TEXT,
+                timeout_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_broker_questions_run_status
+                ON broker_questions(run_id, status);
         """)
 
         # Migration: add response columns for existing databases created before Phase 2
@@ -86,6 +101,31 @@ class BrokerStore:
             except sqlite3.OperationalError:
                 pass  # Column already exists
 
+        # Migration: add HITL and retry columns to broker_jobs
+        for col, col_type, default in [
+            ("hitl_enabled", "INTEGER NOT NULL", "0"),
+            ("hitl_timeout_seconds", "INTEGER", "300"),
+            ("max_retries", "INTEGER NOT NULL", "0"),
+            ("retry_delay_seconds", "INTEGER NOT NULL", "60"),
+        ]:
+            try:
+                self._conn.execute(
+                    f"ALTER TABLE broker_jobs ADD COLUMN {col} {col_type} DEFAULT {default}"
+                )
+            except sqlite3.OperationalError:
+                pass
+
+        # Migration: add attempt_number and scheduled_at to broker_runs
+        for col, col_type, default in [
+            ("attempt_number", "INTEGER NOT NULL", "1"),
+            ("scheduled_at", "TEXT", None),
+        ]:
+            try:
+                default_clause = f" DEFAULT {default}" if default else ""
+                self._conn.execute(f"ALTER TABLE broker_runs ADD COLUMN {col} {col_type}{default_clause}")
+            except sqlite3.OperationalError:
+                pass
+
     # -- Job CRUD --
 
     def create_job(
@@ -99,6 +139,10 @@ class BrokerStore:
         config_profile: str | None = None,
         overlap_policy: str = "skip_if_running",
         timeout_seconds: int | None = None,
+        hitl_enabled: bool = False,
+        hitl_timeout_seconds: int = 300,
+        max_retries: int = 0,
+        retry_delay_seconds: int = 60,
     ) -> dict[str, Any]:
         job_id = str(uuid.uuid4())
         now = _now_iso()
@@ -107,10 +151,13 @@ class BrokerStore:
                (id, name, trigger_type, cron_expr, timezone, enabled,
                 prompt_template, session_id, config_profile,
                 response_channel, overlap_policy, timeout_seconds,
+                hitl_enabled, hitl_timeout_seconds, max_retries, retry_delay_seconds,
                 created_at, updated_at)
-               VALUES (?, ?, 'cron', ?, ?, 1, ?, ?, ?, 'log', ?, ?, ?, ?)""",
+               VALUES (?, ?, 'cron', ?, ?, 1, ?, ?, ?, 'log', ?, ?, ?, ?, ?, ?, ?, ?)""",
             (job_id, name, cron_expr, timezone, prompt_template,
              session_id, config_profile, overlap_policy, timeout_seconds,
+             1 if hitl_enabled else 0, hitl_timeout_seconds,
+             max_retries, retry_delay_seconds,
              now, now),
         )
         self._conn.commit()
@@ -138,6 +185,7 @@ class BrokerStore:
             "name", "cron_expr", "timezone", "enabled", "prompt_template",
             "session_id", "config_profile", "overlap_policy", "timeout_seconds",
             "response_channel", "response_target",
+            "hitl_enabled", "hitl_timeout_seconds", "max_retries", "retry_delay_seconds",
             "last_run_at", "next_run_at",
         }
         updates = {k: v for k, v in fields.items() if k in allowed}
@@ -291,6 +339,115 @@ class BrokerStore:
             "SELECT * FROM broker_runs WHERE id = ?", (run_id,)
         ).fetchone()
         return dict(row) if row else None
+
+    # -- Question tracking (HITL) --
+
+    def create_question(
+        self,
+        *,
+        run_id: str,
+        question_text: str,
+        options: str | None = None,
+        timeout_seconds: int = 300,
+    ) -> str:
+        qid = str(uuid.uuid4())
+        now = datetime.now(UTC)
+        timeout_at = (now + timedelta(seconds=timeout_seconds)).isoformat()
+        self._conn.execute(
+            """INSERT INTO broker_questions
+               (id, run_id, question_text, options, status, asked_at, timeout_at)
+               VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
+            (qid, run_id, question_text, options, now.isoformat(), timeout_at),
+        )
+        self._conn.commit()
+        return qid
+
+    def get_question(self, question_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM broker_questions WHERE id = ?", (question_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        q = dict(row)
+        # Auto-timeout expired pending questions
+        if q["status"] == "pending" and q["timeout_at"] <= _now_iso():
+            self._conn.execute(
+                "UPDATE broker_questions SET status = 'timed_out' WHERE id = ? AND status = 'pending'",
+                (question_id,),
+            )
+            self._conn.commit()
+            q["status"] = "timed_out"
+        return q
+
+    def get_pending_question(self, run_id: str) -> dict[str, Any] | None:
+        """Get the most recent pending question for a run."""
+        row = self._conn.execute(
+            "SELECT * FROM broker_questions WHERE run_id = ? AND status = 'pending' "
+            "ORDER BY asked_at DESC LIMIT 1",
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        q = dict(row)
+        if q["timeout_at"] <= _now_iso():
+            self._conn.execute(
+                "UPDATE broker_questions SET status = 'timed_out' WHERE id = ? AND status = 'pending'",
+                (q["id"],),
+            )
+            self._conn.commit()
+            return None
+        return q
+
+    def answer_question(self, question_id: str, *, answer: str) -> bool:
+        cursor = self._conn.execute(
+            "UPDATE broker_questions SET answer = ?, status = 'answered', answered_at = ? "
+            "WHERE id = ? AND status = 'pending'",
+            (answer, _now_iso(), question_id),
+        )
+        self._conn.commit()
+        return cursor.rowcount > 0
+
+    # -- Retry support --
+
+    def create_retry_run(
+        self,
+        *,
+        job_id: str,
+        trigger_source: str,
+        prompt: str,
+        session_id: str | None = None,
+        attempt_number: int,
+        scheduled_at: str,
+    ) -> str:
+        run_id = str(uuid.uuid4())
+        self._conn.execute(
+            """INSERT INTO broker_runs
+               (id, job_id, trigger_source, prompt, session_id, status,
+                attempt_number, scheduled_at)
+               VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)""",
+            (run_id, job_id, trigger_source, prompt, session_id,
+             attempt_number, scheduled_at),
+        )
+        self._conn.commit()
+        return run_id
+
+    def list_due_retries(self) -> list[dict[str, Any]]:
+        now = _now_iso()
+        rows = self._conn.execute(
+            "SELECT * FROM broker_runs WHERE status = 'queued' "
+            "AND scheduled_at IS NOT NULL AND scheduled_at <= ? "
+            "ORDER BY scheduled_at",
+            (now,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def start_run(self, run_id: str) -> None:
+        """Transition a queued run to running status."""
+        self._conn.execute(
+            "UPDATE broker_runs SET status = 'running', started_at = ? WHERE id = ?",
+            (_now_iso(), run_id),
+        )
+        self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()

@@ -75,6 +75,8 @@ class ChannelAdapter(Protocol):
 
     async def send_response(self, target: str, result: RunResult) -> bool: ...
 
+    async def send_question(self, target: str, question: str, options: list[dict] | None = None) -> bool: ...
+
 
 # -- Built-in adapters --
 
@@ -138,6 +140,21 @@ class HttpAdapter:
         except Exception:
             return False
 
+    async def send_question(self, target: str, question: str, options: list[dict] | None = None) -> bool:
+        if not target:
+            return False
+        import httpx
+
+        payload: dict[str, Any] = {"type": "question", "question": question}
+        if options:
+            payload["options"] = options
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(target, json=payload, timeout=30)
+                return resp.is_success
+        except Exception:
+            return False
+
 
 @dataclass
 class LogAdapter:
@@ -170,6 +187,12 @@ class LogAdapter:
         status = "completed" if result.ok else "failed"
         logger.info(f"Run {status}: {result.summary[:200]}")
         return True
+
+    async def send_question(self, target: str, question: str, options: list[dict] | None = None) -> bool:
+        from loguru import logger
+
+        logger.info(f"HITL question (log-only, no reply channel): {question}")
+        return False
 
 
 def build_trigger_filter(config: dict[str, Any] | None) -> TriggerFilter:

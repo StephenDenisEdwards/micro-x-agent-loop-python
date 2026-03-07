@@ -28,6 +28,8 @@ async def handle_broker_command(args: list[str], config: dict | None = None) -> 
     webhook_host = str(broker_config.get("BrokerHost", "127.0.0.1"))
     webhook_port = int(broker_config.get("BrokerPort", 8321))
     channels_config = broker_config.get("BrokerChannels", {})
+    recovery_policy = str(broker_config.get("BrokerRecoveryPolicy", "skip"))
+    api_secret = broker_config.get("BrokerApiSecret") or None
 
     if sub == "start":
         service = BrokerService(
@@ -38,6 +40,8 @@ async def handle_broker_command(args: list[str], config: dict | None = None) -> 
             webhook_host=webhook_host,
             webhook_port=webhook_port,
             channels_config=channels_config,
+            recovery_policy=recovery_policy,
+            api_secret=api_secret,
         )
         try:
             await service.start()
@@ -108,7 +112,8 @@ def _job_add(store: BrokerStore, args: list[str]) -> None:
         print(
             "Usage: --job add <name> <cron_expr> <prompt> "
             "[--tz TZ] [--config path] [--session id] "
-            "[--response-channel channel] [--response-target target]"
+            "[--response-channel channel] [--response-target target] "
+            "[--hitl] [--hitl-timeout secs] [--max-retries N] [--retry-delay secs]"
         )
         return
 
@@ -122,6 +127,10 @@ def _job_add(store: BrokerStore, args: list[str]) -> None:
     session_id = None
     response_channel = "log"
     response_target = None
+    hitl_enabled = False
+    hitl_timeout = 300
+    max_retries = 0
+    retry_delay = 60
     i = 3
     while i < len(args):
         if args[i] == "--tz" and i + 1 < len(args):
@@ -138,6 +147,18 @@ def _job_add(store: BrokerStore, args: list[str]) -> None:
             i += 2
         elif args[i] == "--response-target" and i + 1 < len(args):
             response_target = args[i + 1]
+            i += 2
+        elif args[i] == "--hitl":
+            hitl_enabled = True
+            i += 1
+        elif args[i] == "--hitl-timeout" and i + 1 < len(args):
+            hitl_timeout = int(args[i + 1])
+            i += 2
+        elif args[i] == "--max-retries" and i + 1 < len(args):
+            max_retries = int(args[i + 1])
+            i += 2
+        elif args[i] == "--retry-delay" and i + 1 < len(args):
+            retry_delay = int(args[i + 1])
             i += 2
         else:
             i += 1
@@ -157,6 +178,10 @@ def _job_add(store: BrokerStore, args: list[str]) -> None:
         timezone=tz,
         config_profile=config_profile,
         session_id=session_id,
+        hitl_enabled=hitl_enabled,
+        hitl_timeout_seconds=hitl_timeout,
+        max_retries=max_retries,
+        retry_delay_seconds=retry_delay,
     )
 
     # Set response routing if specified
@@ -172,6 +197,10 @@ def _job_add(store: BrokerStore, args: list[str]) -> None:
     print(f"  Prompt: {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
     if response_channel != "log":
         print(f"  Response: {response_channel} -> {response_target or '(sender)'}")
+    if hitl_enabled:
+        print(f"  HITL: enabled (timeout={hitl_timeout}s)")
+    if max_retries > 0:
+        print(f"  Retries: max={max_retries}, delay={retry_delay}s (exponential backoff)")
 
 
 def _job_list(store: BrokerStore) -> None:
@@ -190,6 +219,10 @@ def _job_list(store: BrokerStore) -> None:
         resp_ch = job.get("response_channel", "log")
         if resp_ch != "log":
             print(f"           Response: {resp_ch} -> {job.get('response_target', '(sender)')}")
+        if job.get("hitl_enabled"):
+            print(f"           HITL: timeout={job.get('hitl_timeout_seconds', 300)}s")
+        if job.get("max_retries", 0) > 0:
+            print(f"           Retries: max={job['max_retries']}, delay={job.get('retry_delay_seconds', 60)}s")
         if job.get("next_run_at"):
             print(f"           Next: {job['next_run_at']}")
         if job.get("last_run_at"):
@@ -337,6 +370,8 @@ def _print_job_help() -> None:
     print("Job commands:")
     print("  --job add <name> <cron> <prompt> [--tz TZ] [--config path] [--session id]")
     print("                                   [--response-channel ch] [--response-target target]")
+    print("                                   [--hitl] [--hitl-timeout secs]")
+    print("                                   [--max-retries N] [--retry-delay secs]")
     print("  --job list        List all jobs")
     print("  --job remove <id> Remove a job")
     print("  --job enable <id> Enable a job")

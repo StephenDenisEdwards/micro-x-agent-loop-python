@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 from loguru import logger
@@ -80,10 +81,24 @@ class Agent:
                 "LLM will discover tools via tool_search"
             )
 
-        # Ask-user (human-in-the-loop questioning) — disabled in autonomous mode
+        # Ask-user (human-in-the-loop questioning)
+        # - Interactive mode: terminal-based AskUserHandler
+        # - Autonomous + HITL: broker-based BrokerAskUserHandler (posts questions via HTTP)
+        # - Autonomous without HITL: disabled (ask_user tool removed)
         self._autonomous = config.autonomous
         if config.autonomous:
-            self._ask_user_handler = None
+            broker_url = os.environ.get("MICRO_X_BROKER_URL")
+            run_id = os.environ.get("MICRO_X_RUN_ID")
+            if broker_url and run_id:
+                from micro_x_agent_loop.broker.broker_ask_user import BrokerAskUserHandler
+
+                hitl_timeout = int(os.environ.get("MICRO_X_HITL_TIMEOUT", "300"))
+                self._ask_user_handler = BrokerAskUserHandler(
+                    broker_url=broker_url, run_id=run_id, timeout=hitl_timeout,
+                )
+                logger.info(f"HITL mode: questions routed to broker at {broker_url}")
+            else:
+                self._ask_user_handler = None
         else:
             self._ask_user_handler = AskUserHandler(
                 line_prefix=self._LINE_PREFIX,

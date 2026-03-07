@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
@@ -24,16 +25,36 @@ class WebhookServer:
         *,
         host: str = "127.0.0.1",
         port: int = 8321,
+        api_secret: str | None = None,
     ) -> None:
         self._store = store
         self._dispatcher = dispatcher
         self._adapters = adapters
         self._host = host
         self._port = port
+        self._api_secret = api_secret
         self._server: asyncio.Server | None = None
 
         self._app = FastAPI(title="micro-x-agent broker", docs_url=None, redoc_url=None)
+        if api_secret:
+            self._register_auth_middleware()
         self._register_routes()
+
+    def _register_auth_middleware(self) -> None:
+        """Add bearer token auth to all endpoints except /api/health."""
+        secret = self._api_secret
+
+        @self._app.middleware("http")
+        async def auth_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+            if request.url.path != "/api/health":
+                auth = request.headers.get("authorization", "")
+                if auth != f"Bearer {secret}":
+                    return Response(
+                        status_code=401,
+                        content='{"error": "Unauthorized"}',
+                        media_type="application/json",
+                    )
+            return await call_next(request)
 
     def _register_routes(self) -> None:
         app = self._app
@@ -60,6 +81,128 @@ class WebhookServer:
             if run is None:
                 return Response(status_code=404, content='{"error": "Run not found"}', media_type="application/json")
             return run
+
+        @app.post("/api/runs/{run_id}/questions")
+        async def post_question(run_id: str, request: Request) -> dict[str, Any] | Response:
+            """Agent subprocess posts a question for async human-in-the-loop."""
+            run = self._store.get_run(run_id)
+            if run is None:
+                return Response(
+                    status_code=404,
+                    content='{"error": "Run not found"}',
+                    media_type="application/json",
+                )
+
+            try:
+                data = await request.json()
+            except Exception:
+                return Response(
+                    status_code=400,
+                    content='{"error": "Invalid JSON"}',
+                    media_type="application/json",
+                )
+
+            question_text = data.get("question", "").strip()
+            if not question_text:
+                return Response(
+                    status_code=400,
+                    content='{"error": "Question text required"}',
+                    media_type="application/json",
+                )
+
+            options = data.get("options")
+
+            # Determine HITL timeout from job config
+            timeout = 300
+            if run.get("job_id"):
+                job = self._store.get_job(run["job_id"])
+                if job:
+                    timeout = job.get("hitl_timeout_seconds") or 300
+
+            options_json = json.dumps(options) if options else None
+            qid = self._store.create_question(
+                run_id=run_id,
+                question_text=question_text,
+                options=options_json,
+                timeout_seconds=timeout,
+            )
+
+            # Route question to channel adapter
+            channel = run.get("response_channel", "log")
+            target = run.get("response_target", "")
+            adapter = self._adapters.get(channel)
+            if adapter:
+                try:
+                    await adapter.send_question(target or "", question_text, options)
+                except Exception as ex:
+                    logger.warning(f"Failed to route HITL question via {channel}: {ex}")
+
+            logger.info(f"HITL question created: qid={qid[:8]}, run={run_id[:8]}, timeout={timeout}s")
+            return {"question_id": qid, "timeout_seconds": timeout}
+
+        @app.get("/api/runs/{run_id}/questions/{question_id}")
+        async def get_question(run_id: str, question_id: str) -> dict[str, Any] | Response:
+            """Agent subprocess polls for answer."""
+            q = self._store.get_question(question_id)
+            if q is None or q["run_id"] != run_id:
+                return Response(
+                    status_code=404,
+                    content='{"error": "Question not found"}',
+                    media_type="application/json",
+                )
+            return q
+
+        @app.post("/api/runs/{run_id}/questions/{question_id}/answer")
+        async def answer_question(run_id: str, question_id: str, request: Request) -> dict[str, Any] | Response:
+            """External client or channel adapter posts an answer."""
+            q = self._store.get_question(question_id)
+            if q is None or q["run_id"] != run_id:
+                return Response(
+                    status_code=404,
+                    content='{"error": "Question not found"}',
+                    media_type="application/json",
+                )
+
+            if q["status"] != "pending":
+                return Response(
+                    status_code=409,
+                    content=json.dumps({"error": f"Question is already {q['status']}"}),
+                    media_type="application/json",
+                )
+
+            try:
+                data = await request.json()
+            except Exception:
+                return Response(
+                    status_code=400,
+                    content='{"error": "Invalid JSON"}',
+                    media_type="application/json",
+                )
+
+            answer = data.get("answer", "").strip()
+            if not answer:
+                return Response(
+                    status_code=400,
+                    content='{"error": "Answer text required"}',
+                    media_type="application/json",
+                )
+
+            success = self._store.answer_question(question_id, answer=answer)
+            if not success:
+                return Response(
+                    status_code=409,
+                    content='{"error": "Question is no longer pending"}',
+                    media_type="application/json",
+                )
+
+            logger.info(f"HITL answer received: qid={question_id[:8]}, run={run_id[:8]}")
+            return {"status": "answered"}
+
+        @app.get("/api/runs/{run_id}/questions")
+        async def list_questions(run_id: str) -> dict[str, Any] | Response:
+            """List pending questions for a run."""
+            q = self._store.get_pending_question(run_id)
+            return {"pending_question": q}
 
         @app.post("/api/trigger/{channel}")
         async def trigger(channel: str, request: Request) -> dict[str, Any] | Response:
