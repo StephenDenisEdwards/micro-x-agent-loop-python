@@ -80,10 +80,14 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv, *, autonomous: bool
         )
 
         if app.resume_session_id:
-            resolved = session_manager.resolve_session_identifier(app.resume_session_id)
-            if resolved is None:
-                raise ValueError(f"Resume session not found: {app.resume_session_id}")
-            active_session_id = resolved["id"]
+            if autonomous:
+                # In --run mode, create the session if it doesn't exist yet
+                active_session_id = session_manager.load_or_create(app.resume_session_id)
+            else:
+                resolved = session_manager.resolve_session_identifier(app.resume_session_id)
+                if resolved is None:
+                    raise ValueError(f"Resume session not found: {app.resume_session_id}")
+                active_session_id = resolved["id"]
         elif app.continue_conversation and app.configured_session_id:
             active_session_id = session_manager.load_or_create(app.configured_session_id)
         else:
