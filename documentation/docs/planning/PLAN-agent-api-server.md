@@ -10,26 +10,68 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
 
 ## Phased Rollout
 
-### Phase 1: StreamBridge — Decouple Output from stdout
+### Phase 1: AgentChannel — Bidirectional Agent-Client Protocol
 
-**Scope:** Extract all `print()` calls from the streaming path into a `StreamBridge` protocol. No server yet — just the abstraction that makes one possible.
+**Scope:** Replace all direct `print()` / `input()` / `AskUserHandler` coupling with a single `AgentChannel` protocol. No server yet — just the abstraction that makes one possible. CLI behaviour unchanged.
+
+**What AgentChannel replaces:**
+
+| Current component | Absorbed into |
+|-------------------|---------------|
+| `print(delta)` in providers | `channel.emit_text_delta()` |
+| `print()` in turn_engine (status) | `channel.emit_tool_started()` / `emit_tool_completed()` |
+| `AskUserHandler` (terminal ask_user) | `TerminalChannel.ask_user()` |
+| `BrokerAskUserHandler` (HTTP HITL) | `BrokerChannel.ask_user()` |
+| `Spinner` class in `llm_client.py` | `TerminalChannel` private detail |
+| `line_prefix` in Agent | `TerminalChannel` private detail |
 
 **Deliverables:**
-- [ ] `StreamBridge` protocol in `src/micro_x_agent_loop/stream_bridge.py`
-- [ ] `TerminalStreamBridge` — reimplements current stdout + spinner behaviour
-- [ ] `BufferedStreamBridge` — accumulates output into a string (for `--run` mode and tests)
-- [ ] `NullStreamBridge` — discards output (for tests)
-- [ ] Modify `anthropic_provider.py` — accept `StreamBridge`, emit `text_delta` instead of `print()`
+- [ ] `AgentChannel` protocol in `src/micro_x_agent_loop/agent_channel.py`
+  - `emit_text_delta(text)` — LLM streaming token
+  - `emit_tool_started(tool_use_id, tool_name)` — tool begins
+  - `emit_tool_completed(tool_use_id, tool_name, is_error)` — tool ends
+  - `emit_turn_complete(usage)` — turn finished with metrics
+  - `emit_error(message)` — error occurred
+  - `async ask_user(question, options)` → `str` — HITL question/answer
+- [ ] `TerminalChannel` — reimplements current CLI behaviour:
+  - `emit_text_delta` → `print(text, end="", flush=True)` with `assistant> ` prefix on first delta
+  - `emit_tool_started` → starts spinner (current `Spinner` class, moved here)
+  - `emit_tool_completed` → stops spinner
+  - `ask_user` → terminal input via questionary (current `AskUserHandler` logic)
+- [ ] `BufferedChannel` — for `--run` mode and tests:
+  - `emit_text_delta` → accumulates into string buffer
+  - `ask_user` → returns timeout/default message
+- [ ] `BrokerChannel` — for broker HITL runs:
+  - `ask_user` → HTTP POST to broker API + poll for answer (current `BrokerAskUserHandler` logic)
+  - Output events are no-ops (subprocess stdout is captured by runner)
+- [ ] Modify `anthropic_provider.py` — accept channel, call `emit_text_delta()` instead of `print()`
 - [ ] Modify `openai_provider.py` — same
-- [ ] Modify `turn_engine.py` — pass `StreamBridge` through; status messages via `emit_status()`
-- [ ] Modify `agent.py` — inject `StreamBridge`; remove `line_prefix` from Agent (move to `TerminalStreamBridge`)
-- [ ] Move spinner logic from `llm_client.py` into `TerminalStreamBridge`
-- [ ] All existing tests pass with no output changes
-- [ ] `--run` mode uses `BufferedStreamBridge` (captures output for broker subprocess IPC)
+- [ ] Modify `turn_engine.py`:
+  - Accept channel reference
+  - Call `emit_tool_started()` / `emit_tool_completed()` during tool execution
+  - Call `emit_turn_complete()` at end of turn
+- [ ] Modify `agent.py`:
+  - Accept `AgentChannel` via `AgentConfig`
+  - Remove `_LINE_PREFIX`, `_line_prefix`, `_ask_user_handler`
+  - Route `ask_user` calls through `channel.ask_user()`
+- [ ] Modify `bootstrap.py`:
+  - Create appropriate channel based on context (interactive / autonomous / HITL)
+  - Inject into `AgentConfig`
+- [ ] Delete `ask_user.py` (absorbed into `TerminalChannel`)
+- [ ] Delete `broker_ask_user.py` (absorbed into `BrokerChannel`)
+- [ ] Move `Spinner` class from `llm_client.py` into `TerminalChannel`
+- [ ] All 370 existing tests pass with no output changes
+- [ ] New unit tests for each channel implementation
 
 **Risk:** This touches the core streaming path. Every provider, the turn engine, and the agent need modification. Must be done carefully with full test coverage.
 
-**Estimated complexity:** Medium-high. Many files touched, but each change is mechanical (replace `print()` with `bridge.emit_*()`).
+**Complexity:** Medium-high. Many files touched, but each change is mechanical — replace `print()` with `channel.emit_*()`, replace `ask_user_handler` with `channel.ask_user()`.
+
+**Key design decisions (settled):**
+- Protocol is pure Python, framework-agnostic — no FastAPI dependency
+- Spinner is a UI concern — `TerminalChannel` shows one on `tool_started`, other channels don't
+- `TurnEvents` (memory, metrics, checkpoints) remains separate from `AgentChannel` (client communication)
+- Each channel implementation owns its own presentation logic
 
 ### Phase 2: API Server Foundation
 
@@ -41,7 +83,10 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
 - [ ] `src/micro_x_agent_loop/server/` package
 - [ ] `server/app.py` — FastAPI application with CORS, auth middleware
 - [ ] `server/agent_manager.py` — creates/caches/evicts Agent instances per session
-- [ ] `server/ws_bridge.py` — `WebSocketStreamBridge` implementation
+- [ ] `server/ws_channel.py` — `WebSocketChannel` implementation:
+  - `emit_text_delta` → sends `{"type": "text_delta", "text": "..."}` frame
+  - `emit_tool_started` → sends `{"type": "tool_started", ...}` frame
+  - `ask_user` → sends question frame, awaits answer frame
 - [ ] REST endpoints:
   - [ ] `POST /api/chat` — send message, return complete response (non-streaming)
   - [ ] `POST /api/sessions` — create session
@@ -52,16 +97,16 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
   - [ ] `GET /api/health` — health check
 - [ ] WebSocket endpoint:
   - [ ] `WS /api/ws/{session_id}` — streaming chat
-  - [ ] JSON message protocol (text_delta, tool_started, tool_completed, turn_complete, error)
+  - [ ] JSON message protocol (text_delta, tool_started, tool_completed, turn_complete, error, question, answer)
   - [ ] Turn cancellation via `{"type": "cancel"}`
 - [ ] CLI flag: `--server start` to launch the server
 - [ ] Bearer token auth (reuse broker pattern)
-- [ ] Session timeout and eviction
+- [ ] Session timeout and eviction (configurable)
 
 **Decisions to make:**
 - Agent pool size limit (how many concurrent sessions?)
 - Session timeout policy (evict after N minutes idle?)
-- Should HITL questions route through WebSocket to the connected client?
+- HITL questions: route through WebSocket to connected client? (likely yes)
 
 ### Phase 3: Broker Convergence
 
@@ -86,7 +131,7 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
 
 **Deliverables:**
 - [ ] `--server http://host:port` flag — CLI connects as WebSocket client
-- [ ] Streaming output via WebSocket → terminal (with spinner, line prefix)
+- [ ] Streaming output via WebSocket → `TerminalChannel` (spinner, line prefix)
 - [ ] HITL questions received via WebSocket → terminal `ask_user` prompt
 - [ ] Session management commands (`/session list`, `/session resume`) work via REST API
 - [ ] Fallback: if server is unreachable, offer to run in-process
@@ -112,13 +157,13 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
 | `fastapi` | HTTP/WS server framework | Yes (broker uses it) |
 | `uvicorn` | ASGI server | Yes (broker uses it) |
 | `websockets` | WebSocket support in FastAPI | Bundled with FastAPI |
-| `httpx` | HTTP client (for CLI-as-client mode) | Yes |
+| `httpx` | HTTP client (for CLI-as-client and BrokerChannel) | Yes |
 
 ## Architecture Decisions
 
 ### Why WebSocket over SSE?
 
-- **Bidirectional:** Client can send cancel signals mid-stream. SSE is server→client only.
+- **Bidirectional:** Client can send cancel signals and HITL answers mid-stream. SSE is server→client only.
 - **Natural fit:** Chat is inherently bidirectional. WebSocket maps directly to the interaction model.
 - **Mobile support:** WebSocket works well on Android and iOS. SSE has quirks on mobile platforms.
 - **Existing pattern:** The broker already uses FastAPI which supports WebSocket natively.
@@ -141,7 +186,7 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
 | | In-process | Subprocess |
 |--|-----------|------------|
 | **Latency** | Low (no process startup) | Higher (~2-5s startup) |
-| **Streaming** | Native (StreamBridge) | Not available (stdout capture) |
+| **Streaming** | Native (AgentChannel) | Not available (stdout capture) |
 | **Isolation** | Shared memory space | Full process isolation |
 | **Use case** | Interactive chat | Cron jobs, untrusted prompts |
 

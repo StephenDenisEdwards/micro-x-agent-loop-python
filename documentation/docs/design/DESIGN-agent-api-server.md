@@ -4,28 +4,31 @@
 
 The agent is currently tightly coupled to the CLI. All output goes to stdout via `print()`, input comes from `input()` or `--run` args, and the REPL loop lives in `__main__.py`. This prevents non-CLI clients (web apps, desktop apps, mobile apps) from using the agent.
 
-To support multiple client platforms (web, desktop, Android, iOS) alongside the existing CLI, we need an API server that exposes the agent's capabilities over HTTP/WebSocket while keeping the CLI as a first-class client.
+To support multiple client platforms (web, desktop, Android, iOS) alongside the existing CLI, we need:
+1. A **bidirectional protocol** between the agent core and any client
+2. An **API server** that exposes this protocol over HTTP/WebSocket
 
 ## Architecture
 
 ```
-                           ┌──────────────────────┐
-                           │   Agent API Server    │
-                           │   (FastAPI + WS)      │
-                           │                       │
-   Web app  ──HTTP/WS──→  │  ┌─────────────────┐  │
-   Desktop  ──HTTP/WS──→  │  │  AgentManager    │  │  ←── AppConfig (shared)
-   Android  ──HTTP/WS──→  │  │  (pool of agent  │  │  ←── MCP connections (shared)
-   iOS      ──HTTP/WS──→  │  │   instances)     │  │
-                           │  └────────┬────────┘  │
-   CLI      ──in-process──→  Agent    │            │
-                           │          ↓            │
-                           │  ┌─────────────────┐  │
-                           │  │  StreamBridge    │  │
-                           │  │  (routes tokens  │  │
-                           │  │   to client)     │  │
-                           │  └─────────────────┘  │
-                           └──────────────────────┘
+                           ┌──────────────────────────┐
+                           │    Agent API Server       │
+                           │    (FastAPI + WS)         │
+                           │                           │
+   Web app  ──HTTP/WS──→  │  ┌───────────────────┐    │
+   Desktop  ──HTTP/WS──→  │  │   AgentManager     │   │  ←── AppConfig (shared)
+   Android  ──HTTP/WS──→  │  │   (pool of agent   │   │  ←── MCP connections (shared)
+   iOS      ──HTTP/WS──→  │  │    instances)       │   │
+                           │  └────────┬──────────┘    │
+                           │           │               │
+                           │  ┌────────▼──────────┐    │
+                           │  │   AgentChannel     │   │
+                           │  │   (bidirectional   │   │
+                           │  │    protocol)       │   │
+                           │  └───────────────────┘    │
+                           └──────────────────────────┘
+
+   CLI      ──in-process──→  Agent + TerminalChannel
 ```
 
 ### Key Principles
@@ -38,54 +41,128 @@ To support multiple client platforms (web, desktop, Android, iOS) alongside the 
 
 ## Component Design
 
-### 1. StreamBridge — Decoupling Output from stdout
+### 1. AgentChannel — Bidirectional Agent-Client Protocol
 
-**The core problem:** The Anthropic provider prints text deltas directly to stdout (`print(event.delta.text, end="", flush=True)`). The TurnEngine has no streaming callback — text goes straight to the terminal.
+The core abstraction. Replaces all direct `print()` calls, `input()` calls, `AskUserHandler`, and `BrokerAskUserHandler` with a single bidirectional protocol.
 
-**Solution:** Introduce a `StreamBridge` protocol that replaces all `print()` calls in the streaming path:
+#### What flows through the channel
+
+**Agent → Client (output):**
+
+| Event | Data | Purpose |
+|-------|------|---------|
+| `text_delta` | `text: str` | LLM streaming token |
+| `tool_started` | `tool_use_id: str, tool_name: str` | Tool execution begins (clients show spinner/indicator) |
+| `tool_completed` | `tool_use_id: str, tool_name: str, is_error: bool` | Tool execution ends (clients hide spinner/indicator) |
+| `turn_complete` | `usage: dict` | Turn finished, cost/token metrics |
+| `error` | `message: str` | Error occurred |
+
+**Agent → Client → Agent (bidirectional):**
+
+| Event | Data | Purpose |
+|-------|------|---------|
+| `ask_user` | `question: str, options: list[dict] | None` → returns `str` | Human-in-the-loop questioning |
+
+**Client → Agent (input):**
+
+| Event | Data | Purpose |
+|-------|------|---------|
+| `message` | `text: str` | User prompt |
+| `answer` | `answer: str` | Response to `ask_user` |
+| `cancel` | — | Cancel current turn |
+
+#### Protocol definition
 
 ```python
-class StreamBridge(Protocol):
-    """Routes agent output to the appropriate client."""
+class AgentChannel(Protocol):
+    """Bidirectional communication between agent core and any client."""
 
-    def emit_text_delta(self, text: str) -> None:
-        """Called for each text token from the LLM stream."""
-        ...
+    # Agent → Client
+    def emit_text_delta(self, text: str) -> None: ...
+    def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None: ...
+    def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None: ...
+    def emit_turn_complete(self, usage: dict) -> None: ...
+    def emit_error(self, message: str) -> None: ...
 
-    def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
-        """Called when a tool begins execution."""
-        ...
-
-    def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
-        """Called when a tool finishes execution."""
-        ...
-
-    def emit_status(self, message: str) -> None:
-        """Called for system status messages (e.g., compaction, max_tokens retry)."""
-        ...
-
-    def emit_metric(self, metric: dict) -> None:
-        """Called for structured metrics (cost, tokens, timing)."""
-        ...
+    # Agent → Client → Agent (blocking/awaitable)
+    async def ask_user(self, question: str, options: list[dict] | None = None) -> str: ...
 ```
 
-**Implementations:**
+Note: `receive_message()` and `cancel_turn()` are not part of the protocol — they are handled by the REPL loop (CLI) or the WebSocket handler (server), which call `agent.run()` and manage cancellation externally.
 
-| Implementation | Client | Behaviour |
-|----------------|--------|-----------|
-| `TerminalStreamBridge` | CLI | Prints to stdout with spinner coordination (current behaviour) |
-| `WebSocketStreamBridge` | Web/mobile | Sends JSON frames over WebSocket |
-| `BufferedStreamBridge` | HTTP REST | Accumulates text, returns complete response |
-| `NullStreamBridge` | Tests | Discards output |
+#### Implementations
 
-**Integration points to modify:**
-- `anthropic_provider.py:91` — `print(event.delta.text)` → `stream_bridge.emit_text_delta(delta)`
-- `openai_provider.py` — same pattern
-- `turn_engine.py:116-120` — status messages → `stream_bridge.emit_status()`
-- `llm_client.py` — spinner logic moves into `TerminalStreamBridge`
-- `agent.py` — line_prefix handling moves into `TerminalStreamBridge`
+| Implementation | Client | How it works |
+|----------------|--------|-------------|
+| `TerminalChannel` | CLI (in-process) | `print()` for output, `input()` via questionary for `ask_user`, spinner on `tool_started`/`tool_completed` |
+| `WebSocketChannel` | Web/desktop/mobile | JSON frames over FastAPI WebSocket. `ask_user` sends question frame, awaits answer frame |
+| `BrokerChannel` | Cron/scheduled runs | HTTP POST question to broker API, polls for answer (existing HITL pattern) |
+| `BufferedChannel` | Tests / `--run` mode | Accumulates text output into string buffer. `ask_user` returns timeout/default |
 
-### 2. AgentManager — Agent Lifecycle for Server Context
+#### What each implementation absorbs
+
+The `AgentChannel` replaces several existing components:
+
+| Current component | Absorbed into |
+|-------------------|---------------|
+| `AskUserHandler` (terminal `ask_user`) | `TerminalChannel.ask_user()` |
+| `BrokerAskUserHandler` (HTTP polling `ask_user`) | `BrokerChannel.ask_user()` |
+| `Spinner` class in `llm_client.py` | `TerminalChannel` (private implementation detail) |
+| `line_prefix` logic in `Agent` | `TerminalChannel` (decides whether to prefix output) |
+| `print()` calls in providers | Replaced by `channel.emit_text_delta()` |
+| `print()` calls in turn engine | Replaced by `channel.emit_tool_started()` etc. |
+
+#### UI concerns stay in the channel implementation
+
+The spinner is a terminal UI concern. The protocol does not have `show_spinner()` or `hide_spinner()`. Instead:
+
+- `TerminalChannel` starts a spinner when it receives `emit_tool_started()` and stops it on `emit_tool_completed()` or `emit_text_delta()`
+- `WebSocketChannel` sends `{"type": "tool_started"}` — the web client decides how to render it (CSS animation, progress bar, etc.)
+- `BufferedChannel` ignores tool lifecycle events entirely
+
+Each client is responsible for its own UI presentation. The protocol provides the events; the client decides the rendering.
+
+### 2. Integration Points — What Changes in the Agent Core
+
+#### Provider (anthropic_provider.py, openai_provider.py)
+
+Current:
+```python
+print(event.delta.text, end="", flush=True)
+```
+
+After:
+```python
+channel.emit_text_delta(event.delta.text)
+```
+
+The provider receives the channel (or a callback) from the TurnEngine. The provider's `stream_chat()` signature gains a channel parameter.
+
+#### TurnEngine (turn_engine.py)
+
+The TurnEngine owns the channel reference. It:
+- Passes the channel to the provider for `stream_chat()`
+- Calls `channel.emit_tool_started()` / `channel.emit_tool_completed()` during tool execution
+- Calls `channel.emit_turn_complete()` at end of turn
+
+The existing `TurnEvents` protocol (for memory, metrics, checkpoints) remains separate — `TurnEvents` is for internal bookkeeping, `AgentChannel` is for client communication.
+
+#### Agent (agent.py)
+
+- Receives `AgentChannel` via `AgentConfig` (injected at construction)
+- Passes it to `TurnEngine`
+- `ask_user` calls go through `channel.ask_user()` instead of `self._ask_user_handler.handle()`
+- `_LINE_PREFIX`, `_line_prefix`, spinner coordination all move to `TerminalChannel`
+
+#### Bootstrap (bootstrap.py)
+
+- `bootstrap_runtime()` creates the appropriate channel based on context:
+  - Interactive CLI → `TerminalChannel`
+  - Autonomous `--run` → `BufferedChannel`
+  - Autonomous + HITL → `BrokerChannel`
+- Channel is injected into `AgentConfig`
+
+### 3. AgentManager — Agent Lifecycle for Server Context
 
 In CLI mode, one Agent lives for the entire process. In server mode, we need to manage multiple concurrent agents.
 
@@ -103,13 +180,13 @@ class AgentManager:
     async def create_agent(
         self,
         session_id: str | None = None,
-        stream_bridge: StreamBridge | None = None,
+        channel: AgentChannel | None = None,
     ) -> Agent: ...
 
     async def get_or_create_agent(
         self,
         session_id: str,
-        stream_bridge: StreamBridge | None = None,
+        channel: AgentChannel | None = None,
     ) -> Agent: ...
 
     async def destroy_agent(self, session_id: str) -> None: ...
@@ -120,9 +197,9 @@ class AgentManager:
 - **MCP connections are shared.** MCP servers are expensive to start (Node.js subprocesses). The AgentManager holds one McpManager, and all agents share the same tool proxies. MCP tool proxies are stateless (each call is independent), so this is safe.
 - **Memory store is shared.** One SQLite connection, multiple sessions. Already thread-safe (WAL mode + busy timeout).
 - **Agents are per-session.** Each active conversation gets its own Agent instance with its own message history. Idle agents can be evicted after a timeout.
-- **StreamBridge is per-request.** Each WebSocket connection or HTTP request gets its own bridge instance.
+- **Channel is per-connection.** Each WebSocket connection gets its own `WebSocketChannel` instance, bound to one agent.
 
-### 3. API Endpoints
+### 4. API Endpoints
 
 Built on FastAPI (already a dependency for the broker webhook server).
 
@@ -145,24 +222,24 @@ GET    /api/config                  Current config (non-sensitive)
 WS     /api/ws/{session_id}         Streaming chat connection
 ```
 
-**WebSocket message protocol:**
+**WebSocket message protocol (JSON frames):**
 
 ```jsonc
 // Client → Server
 {"type": "message", "text": "What is 2+2?"}
-{"type": "cancel"}                              // Cancel current turn
+{"type": "answer", "question_id": "q1", "text": "Use PDF format"}
+{"type": "cancel"}
 
 // Server → Client
-{"type": "text_delta", "text": "The answer"}    // Streaming token
-{"type": "tool_started", "tool": "read_file"}   // Tool execution status
-{"type": "tool_completed", "tool": "read_file", "error": false}
-{"type": "status", "message": "Compacting..."}  // System status
-{"type": "turn_complete", "usage": {...}}        // Turn finished
-{"type": "error", "message": "..."}             // Error
-{"type": "question", "id": "...", "text": "..."} // HITL question
+{"type": "text_delta", "text": "The answer"}
+{"type": "tool_started", "tool_use_id": "t1", "tool": "read_file"}
+{"type": "tool_completed", "tool_use_id": "t1", "tool": "read_file", "error": false}
+{"type": "turn_complete", "usage": {"input_tokens": 100, "output_tokens": 50, "cost_usd": 0.01}}
+{"type": "error", "message": "..."}
+{"type": "question", "id": "q1", "text": "What format?", "options": [...]}
 ```
 
-### 4. CLI as Client
+### 5. CLI as Client
 
 The CLI gains a `--server` flag:
 
@@ -181,9 +258,9 @@ In server mode, the CLI becomes a thin WebSocket client:
 - Sends user input as `{"type": "message", "text": "..."}`
 - Receives `text_delta` frames and prints them with the `assistant> ` prefix
 - Receives `tool_started`/`tool_completed` and shows spinner
-- Receives `question` frames and prompts for input via `ask_user`
+- Receives `question` frames and prompts for input via terminal `ask_user`
 
-### 5. Broker Convergence
+### 6. Broker Convergence
 
 The broker's webhook server and the agent API server converge into one process:
 
@@ -210,26 +287,41 @@ Client                     Server                      LLM Provider
   │                          │                              │
   │──{"type":"message",──→   │                              │
   │   "text":"hello"}        │                              │
-  │                          │──stream_chat()──────────→    │
+  │                          │──stream_chat(channel)────→   │
   │                          │                              │
   │   ←──{"type":            │   ←──text_delta──────────    │
-  │       "text_delta",      │                              │
+  │       "text_delta",      │     channel.emit_text_delta()│
   │       "text":"Hi"}       │                              │
   │                          │                              │
   │   ←──{"type":            │   ←──tool_use────────────    │
-  │       "tool_started",    │                              │
+  │       "tool_started",    │     channel.emit_tool_started()
   │       "tool":"read"}     │                              │
   │                          │──tool.execute()              │
-  │   ←──{"type":            │                              │
+  │   ←──{"type":            │     channel.emit_tool_completed()
   │       "tool_completed"}  │                              │
-  │                          │──stream_chat() (continue)──→ │
+  │                          │──stream_chat(channel)────→   │
   │   ←──{"type":            │   ←──text_delta──────────    │
   │       "text_delta",      │                              │
   │       "text":"Done"}     │                              │
   │                          │                              │
-  │   ←──{"type":            │                              │
+  │   ←──{"type":            │     channel.emit_turn_complete()
   │       "turn_complete",   │                              │
   │       "usage":{...}}     │                              │
+```
+
+## Data Flow: Human-in-the-Loop (ask_user)
+
+```
+Client                     Server                      Agent
+  │                          │                           │
+  │                          │   ←── channel.ask_user()  │  (agent suspends)
+  │   ←──{"type":"question", │                           │
+  │       "id":"q1",         │                           │
+  │       "text":"Format?"} │                           │
+  │                          │                           │
+  │──{"type":"answer",───→   │                           │
+  │   "question_id":"q1",   │──── returns "PDF" ────→   │  (agent resumes)
+  │   "text":"PDF"}          │                           │
 ```
 
 ## Security Considerations
