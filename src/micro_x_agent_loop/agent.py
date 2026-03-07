@@ -45,6 +45,7 @@ from micro_x_agent_loop.voice_runtime import VoiceRuntime
 
 class Agent:
     _LINE_PREFIX = "assistant> "
+    _LINE_PREFIX_AUTONOMOUS = ""
     _USER_PROMPT = "you> "
 
     _MAX_TOKENS_RETRIES = MAX_TOKENS_RETRIES
@@ -86,6 +87,7 @@ class Agent:
         # - Autonomous + HITL: broker-based BrokerAskUserHandler (posts questions via HTTP)
         # - Autonomous without HITL: disabled (ask_user tool removed)
         self._autonomous = config.autonomous
+        self._line_prefix = self._LINE_PREFIX_AUTONOMOUS if config.autonomous else self._LINE_PREFIX
         if config.autonomous:
             broker_url = os.environ.get("MICRO_X_BROKER_URL")
             run_id = os.environ.get("MICRO_X_RUN_ID")
@@ -101,7 +103,7 @@ class Agent:
                 self._ask_user_handler = None
         else:
             self._ask_user_handler = AskUserHandler(
-                line_prefix=self._LINE_PREFIX,
+                line_prefix=self._line_prefix,
                 user_prompt=self._USER_PROMPT,
             )
             from micro_x_agent_loop.system_prompt import _ASK_USER_DIRECTIVE
@@ -149,13 +151,13 @@ class Agent:
             self._voice_runtime = None
         else:
             self._voice_runtime = VoiceRuntime(
-                line_prefix=self._LINE_PREFIX,
+                line_prefix=self._line_prefix,
                 tool_map=self._tool_map,
                 on_utterance=self._process_voice_utterance,
             )
 
-        self._session_controller = SessionController(line_prefix=self._LINE_PREFIX)
-        self._checkpoint_service = CheckpointService(line_prefix=self._LINE_PREFIX)
+        self._session_controller = SessionController(line_prefix=self._line_prefix)
+        self._checkpoint_service = CheckpointService(line_prefix=self._line_prefix)
 
         # Mode analysis
         self._mode_analysis_enabled = config.mode_analysis_enabled
@@ -185,7 +187,7 @@ class Agent:
             system_prompt=self._system_prompt,
             converted_tools=self._converted_tools,
             tool_map=self._tool_map,
-            line_prefix=self._LINE_PREFIX,
+            line_prefix=self._line_prefix,
             max_tool_result_chars=self._max_tool_result_chars,
             max_tokens_retries=self._MAX_TOKENS_RETRIES,
             events=self,
@@ -203,7 +205,7 @@ class Agent:
         self._prompt_command_store = PromptCommandStore(commands_dir)
 
         self._command_handler = CommandHandler(
-            line_prefix=self._LINE_PREFIX,
+            line_prefix=self._line_prefix,
             session_accumulator=self._session_accumulator,
             memory=self._memory,
             memory_enabled=self._memory_enabled,
@@ -254,16 +256,16 @@ class Agent:
         if stripped.startswith("/prompt "):
             filename = stripped[len("/prompt "):].strip()
             if not filename:
-                print(f"{self._LINE_PREFIX}Usage: /prompt <filename>")
+                print(f"{self._line_prefix}Usage: /prompt <filename>")
                 return
             resolved = self._resolve_file(filename)
             if resolved is None:
-                print(f"{self._LINE_PREFIX}File not found: {filename}")
+                print(f"{self._line_prefix}File not found: {filename}")
                 return
             try:
                 user_message = resolved.read_text(encoding="utf-8")
             except OSError as ex:
-                print(f"{self._LINE_PREFIX}Error reading file: {ex}")
+                print(f"{self._line_prefix}Error reading file: {ex}")
                 return
 
         command_result = await self._handle_local_command(user_message)
