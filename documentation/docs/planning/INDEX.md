@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-03-06
+Last updated: 2026-03-07
 
 ## Priority Queue
 
@@ -19,7 +19,7 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | **9** | [X/Twitter MCP](PLAN-x-twitter-mcp.md) | **Completed** | Good reach but hostile API (PKCE auth, unstable, write-only free tier). Less bang-for-buck than dev.to/Reddit for technical audience |
 | **10** | [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | **Completed** | Community building — low value until the project has active users. Extends existing GitHub MCP server |
 | ~~11~~ | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | Replaced by Trigger Broker below — retained as reference for full gateway capabilities |
-| **11** | [Trigger Broker](PLAN-trigger-broker.md) | **Phase 1 Complete** | Always-on run dispatcher for cron and external triggers (WhatsApp, webhooks). Phase 1 (cron + autonomous mode) done. See plan for rationale |
+| **11** | [Trigger Broker](PLAN-trigger-broker.md) | **Phase 2a Complete** | Always-on run dispatcher for cron and external triggers (WhatsApp, webhooks). Phase 2a (webhook ingress, response routing, HTTP adapter) done. Phase 2a+ (messaging adapters) in progress |
 | **12** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Frictionless onboarding becomes critical once promotional channels drive traffic to the repo. Benefits from stable post-broker architecture |
 | **13** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, sub-agents, schema optimisation) | Planning | Architectural changes, higher effort; model routing can be done in TurnEngine/Provider layer without gateway |
 | **14** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
@@ -59,7 +59,7 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools via config-declared path params |
 | [Mode Selection — LLM Classification](PLAN-mode-selection-llm-classification.md) | Completed | Phase 2 complete. Phase 4 requires tools to return JSON — see [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) |
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Superseded | Replaced by [Trigger Broker](PLAN-trigger-broker.md) — retained as reference for full gateway capabilities |
-| [Trigger Broker](PLAN-trigger-broker.md) | Phase 1 Complete | Lightweight always-on run dispatcher for cron, webhooks, and messaging triggers. Completed 2026-03-06 |
+| [Trigger Broker](PLAN-trigger-broker.md) | Phase 2a Complete | Lightweight always-on run dispatcher for cron, webhooks, and messaging triggers. Phase 2a done 2026-03-07 |
 | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based routing preserving prefix caching. See [DESIGN](../design/DESIGN-cache-preserving-tool-routing.md) |
 | [Codegen Prompt Discipline](PLAN-codegen-prompt-discipline.md) | Completed | Tightened codegen prompt, added infra file deny, compact output format |
 | [LinkedIn Publishing MCP](PLAN-linkedin-publishing-mcp.md) | Completed | Draft-post, draft-article, publish-draft tools |

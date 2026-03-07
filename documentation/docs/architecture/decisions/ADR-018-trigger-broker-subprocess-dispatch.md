@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted (extended 2026-03-07 with Phase 2a decisions)
 
 ## Context
 
@@ -40,6 +40,47 @@ Subprocess dispatch was chosen over in-process execution because:
 - **Simplicity** — no need to manage agent lifecycle, reset state, or handle re-entrant initialization
 - **Existing infrastructure** — the `--run` flag and autonomous mode already exist; the broker just orchestrates them
 
+## Phase 2a Extension: Channel Adapters and Webhook Ingress (2026-03-07)
+
+Phase 2a added webhook ingress, response routing, and the channel adapter pattern. Key decisions:
+
+### Channel Adapter Protocol
+
+All external channels (HTTP, WhatsApp, Telegram, email) implement the same `ChannelAdapter` protocol for both ingress and egress. This was chosen over per-channel bespoke integrations because:
+
+- **Uniform dispatch** — the `RunDispatcher` doesn't need to know which channel triggered the run
+- **Future multi-client direction** — the adapter pattern extends naturally to `ClientAdapter` with streaming support
+- **Testability** — adapters are small, independent units with a clear protocol
+
+### Unified Trigger Filtering
+
+All messaging channels use the same `TriggerFilter` mechanism (`chat_ids`, `sender_ids`, `prefix`) rather than per-channel filtering logic. This was a deliberate design correction — the initial design treated WhatsApp and Telegram differently, but the filtering problem is identical across channels. Making it a config concern (not a channel concern) means adding a new messaging channel requires zero filtering code.
+
+### FastAPI for Webhook Server
+
+FastAPI was chosen for the webhook server over alternatives (aiohttp, raw asyncio HTTP) because:
+
+- **Already available** as a dependency (used by MCP servers in the ecosystem)
+- **OpenAPI generation** — useful for future multi-client API documentation
+- **URL path parameters** — `POST /api/trigger/{channel}` maps naturally to channel routing
+- **Minimal overhead** — runs as a uvicorn server inside the broker's asyncio event loop
+
+The `/api/` URL prefix was chosen to reserve namespace for the future multi-client API (`/api/run`, `/api/run/{id}/stream`).
+
+### Response Router with Fallback
+
+Completed run results are routed through a `ResponseRouter` that:
+
+1. Attempts delivery via the configured channel adapter
+2. Falls back to `LogAdapter` if the channel fails
+3. Records delivery status (`response_sent`, `response_error`) on each run record
+
+This ensures no result is silently lost, even if the egress channel is temporarily unavailable.
+
+### RunDispatcher as Shared Component
+
+Run dispatch was extracted from the scheduler into a standalone `RunDispatcher` used by both cron scheduling and webhook triggers. This avoids duplicating concurrency management, subprocess spawning, and response routing logic.
+
 ## Consequences
 
 ### Easier
@@ -47,7 +88,8 @@ Subprocess dispatch was chosen over in-process execution because:
 - Agent code requires zero changes — the broker is purely an orchestration layer
 - Each run gets a clean process with no leaked state from previous runs
 - Broker stays lightweight and stable — no LLM SDK, no MCP connections, minimal memory footprint
-- Adding new trigger sources (webhooks, message polling) only requires new ingress code, not agent changes
+- Adding new trigger sources (webhooks, message polling) only requires a new `ChannelAdapter` implementation
+- Response routing is decoupled from dispatch — any channel can route results without dispatcher changes
 
 ### Harder
 
