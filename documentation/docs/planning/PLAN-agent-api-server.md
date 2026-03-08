@@ -1,6 +1,6 @@
 # PLAN: Agent API Server — Multi-Client Support
 
-**Status:** In Progress (Phases 1–4 complete)
+**Status:** Completed (Phases 1–5)
 **Created:** 2026-03-07
 **Updated:** 2026-03-08
 **Design:** [DESIGN-agent-api-server.md](../design/DESIGN-agent-api-server.md)
@@ -127,19 +127,22 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
 - [ ] Session management commands (`/session list`, `/session resume`) work via REST API — deferred
 - [ ] Fallback: if server is unreachable, offer to run in-process — deferred
 
-### Phase 5: Client SDKs and Documentation
+### Phase 5: Client SDKs and Documentation ✅
+
+**Status: Completed** (2026-03-08, branch `feature/api-server`)
 
 **Scope:** Make it easy for client developers to build apps against the API.
 
 **Prerequisites:** Phase 2 stable.
 
 **Deliverables:**
-- [ ] OpenAPI spec auto-generated from FastAPI
-- [ ] Python client SDK (thin wrapper around httpx + websockets)
-- [ ] TypeScript/JavaScript client SDK (for web and React Native)
-- [ ] WebSocket protocol documentation
-- [ ] Example web client (minimal HTML + JS chat interface)
-- [ ] Example integration test using the Python client SDK
+- [x] OpenAPI spec auto-generated from FastAPI (available at `/docs` and `/openapi.json`)
+- [x] `server/sdk.py` — Python client SDK (`AgentClient` with REST and streaming methods)
+- [x] `DESIGN-websocket-protocol.md` — formal WebSocket protocol reference
+- [x] `examples/web-chat.html` — minimal HTML + JS chat interface
+- [x] `examples/sdk_example.py` — Python SDK usage example
+- [x] 5 SDK tests (data classes, context manager, integration via TestClient, connection errors)
+- [ ] TypeScript/JavaScript client SDK — separate project, deferred
 
 ## Dependencies
 

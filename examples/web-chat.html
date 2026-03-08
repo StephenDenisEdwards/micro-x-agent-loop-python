@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>micro-x agent chat</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+  #header { padding: 12px 20px; background: #16213e; border-bottom: 1px solid #0f3460; display: flex; align-items: center; gap: 12px; }
+  #header h1 { font-size: 16px; font-weight: 600; color: #e94560; }
+  #status { font-size: 12px; color: #888; }
+  #status.connected { color: #4ecca3; }
+  #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 80%; padding: 10px 14px; border-radius: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; font-size: 14px; }
+  .msg.user { align-self: flex-end; background: #0f3460; color: #fff; }
+  .msg.assistant { align-self: flex-start; background: #222; color: #e0e0e0; }
+  .msg.error { align-self: flex-start; background: #3a1010; color: #e94560; }
+  .msg.tool { align-self: flex-start; background: #1a2a1a; color: #4ecca3; font-size: 12px; padding: 6px 12px; }
+  .msg.question { align-self: flex-start; background: #2a2a10; color: #f0c040; border: 1px solid #f0c040; }
+  .msg.question button { margin: 6px 4px 0 0; padding: 4px 12px; background: #f0c040; color: #000; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .msg.question button:hover { background: #ffd060; }
+  .msg.question input { margin-top: 6px; padding: 4px 8px; width: 100%; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; }
+  #input-area { padding: 12px 20px; background: #16213e; border-top: 1px solid #0f3460; display: flex; gap: 8px; }
+  #input { flex: 1; padding: 10px 14px; background: #222; color: #fff; border: 1px solid #333; border-radius: 8px; font-size: 14px; outline: none; }
+  #input:focus { border-color: #e94560; }
+  #send { padding: 10px 20px; background: #e94560; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
+  #send:hover { background: #ff6b81; }
+  #send:disabled { background: #555; cursor: not-allowed; }
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #4ecca3; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 6px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>micro-x agent</h1>
+  <span id="status">Disconnected</span>
+</div>
+
+<div id="messages"></div>
+
+<div id="input-area">
+  <input type="text" id="input" placeholder="Type a message..." autocomplete="off">
+  <button id="send">Send</button>
+</div>
+
+<script>
+const SERVER = location.search.match(/server=([^&]+)/)?.[1] || 'ws://localhost:8321';
+const SESSION = location.search.match(/session=([^&]+)/)?.[1] || crypto.randomUUID();
+
+const messagesEl = document.getElementById('messages');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const statusEl = document.getElementById('status');
+
+let ws = null;
+let currentAssistantMsg = null;
+let waitingForTurn = false;
+
+function addMessage(text, cls) {
+  const div = document.createElement('div');
+  div.className = `msg ${cls}`;
+  div.textContent = text;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+function connect() {
+  const wsUrl = `${SERVER}/api/ws/${SESSION}`;
+  statusEl.textContent = 'Connecting...';
+  statusEl.className = '';
+
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    statusEl.textContent = `Connected (session: ${SESSION.slice(0, 8)}...)`;
+    statusEl.className = 'connected';
+    inputEl.disabled = false;
+    sendBtn.disabled = false;
+  };
+
+  ws.onclose = () => {
+    statusEl.textContent = 'Disconnected';
+    statusEl.className = '';
+    inputEl.disabled = true;
+    sendBtn.disabled = true;
+    // Reconnect after 3s
+    setTimeout(connect, 3000);
+  };
+
+  ws.onerror = () => {
+    statusEl.textContent = 'Connection error';
+    statusEl.className = '';
+  };
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+
+    switch (data.type) {
+      case 'text_delta':
+        if (!currentAssistantMsg) {
+          currentAssistantMsg = addMessage('', 'assistant');
+        }
+        currentAssistantMsg.textContent += data.text;
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        break;
+
+      case 'tool_started':
+        addMessage(`\u2699 Running ${data.tool}...`, 'tool');
+        break;
+
+      case 'tool_completed':
+        if (data.error) {
+          addMessage(`\u2717 ${data.tool} failed`, 'tool');
+        }
+        break;
+
+      case 'turn_complete':
+        currentAssistantMsg = null;
+        waitingForTurn = false;
+        inputEl.disabled = false;
+        sendBtn.disabled = false;
+        inputEl.focus();
+        break;
+
+      case 'error':
+        addMessage(`Error: ${data.message}`, 'error');
+        currentAssistantMsg = null;
+        waitingForTurn = false;
+        inputEl.disabled = false;
+        sendBtn.disabled = false;
+        break;
+
+      case 'question':
+        handleQuestion(data);
+        break;
+
+      case 'pong':
+        break;
+    }
+  };
+}
+
+function handleQuestion(data) {
+  const div = document.createElement('div');
+  div.className = 'msg question';
+  div.innerHTML = `<strong>\u2753 ${escapeHtml(data.text)}</strong><br>`;
+
+  if (data.options && data.options.length > 0) {
+    data.options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.textContent = opt.label;
+      btn.onclick = () => {
+        ws.send(JSON.stringify({ type: 'answer', question_id: data.id, text: opt.label }));
+        div.innerHTML += `<br><em>Answered: ${escapeHtml(opt.label)}</em>`;
+        div.querySelectorAll('button, input').forEach(el => el.remove());
+      };
+      div.appendChild(btn);
+    });
+  }
+
+  const answerInput = document.createElement('input');
+  answerInput.placeholder = 'Or type your answer...';
+  answerInput.onkeydown = (e) => {
+    if (e.key === 'Enter' && answerInput.value.trim()) {
+      const answer = answerInput.value.trim();
+      ws.send(JSON.stringify({ type: 'answer', question_id: data.id, text: answer }));
+      div.innerHTML += `<br><em>Answered: ${escapeHtml(answer)}</em>`;
+      div.querySelectorAll('button, input').forEach(el => el.remove());
+    }
+  };
+  div.appendChild(answerInput);
+
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+  addMessage(text, 'user');
+  ws.send(JSON.stringify({ type: 'message', text }));
+  inputEl.value = '';
+  waitingForTurn = true;
+  inputEl.disabled = true;
+  sendBtn.disabled = true;
+}
+
+sendBtn.onclick = sendMessage;
+inputEl.onkeydown = (e) => { if (e.key === 'Enter') sendMessage(); };
+
+// Keepalive ping every 30s
+setInterval(() => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'ping' }));
+  }
+}, 30000);
+
+connect();
+</script>
+</body>
+</html>
