@@ -60,6 +60,12 @@ class WebSocketChannel:
             "message": message,
         }))
 
+    def emit_system_message(self, text: str) -> None:
+        asyncio.ensure_future(self._send({
+            "type": "system_message",
+            "text": text,
+        }))
+
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:
         self._question_counter += 1
         question_id = f"q{self._question_counter}"

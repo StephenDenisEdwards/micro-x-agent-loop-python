@@ -94,6 +94,10 @@ class AgentChannel(Protocol):
         """Called when an error occurs."""
         ...
 
+    def emit_system_message(self, text: str) -> None:
+        """Called for non-LLM system output (e.g. slash-command results)."""
+        ...
+
     # Agent → Client → Agent (bidirectional)
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:
         """Ask the user a question. Returns the answer text."""
@@ -156,6 +160,9 @@ class TerminalChannel:
     def emit_error(self, message: str) -> None:
         self._stop_spinner()
         print(f"\n{self._line_prefix}[Error: {message}]")
+
+    def emit_system_message(self, text: str) -> None:
+        self.print_line(text)
 
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:
         self._stop_spinner()
@@ -259,6 +266,9 @@ class BufferedChannel:
     def emit_error(self, message: str) -> None:
         self.errors.append(message)
 
+    def emit_system_message(self, text: str) -> None:
+        self.text += text + "\n"
+
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:
         return (
             "No response from human — question timed out. "
@@ -297,6 +307,9 @@ class BrokerChannel:
         pass
 
     def emit_error(self, message: str) -> None:
+        pass
+
+    def emit_system_message(self, text: str) -> None:
         pass
 
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:

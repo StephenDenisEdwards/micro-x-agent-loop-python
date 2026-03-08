@@ -38,8 +38,10 @@ class CommandHandler:
         user_memory_dir: str,
         prompt_command_store: PromptCommandStore,
         on_session_reset: Callable[[str, list[dict]], None],
+        output: Callable[[str], None] = print,
     ) -> None:
         self._p = line_prefix
+        self._print = output
         self._prompt_command_store = prompt_command_store
         self._session_accumulator = session_accumulator
         self._memory = memory
@@ -60,49 +62,49 @@ class CommandHandler:
         self._print_help()
 
     def on_unknown_command(self, trimmed: str) -> None:
-        print(f"{self._p}Unknown local command: {trimmed}")
+        self._print(f"{self._p}Unknown local command: {trimmed}")
 
     def _print_help(self) -> None:
         p = self._p
-        print(f"{p}Available commands:")
-        print(f"{p}- /help")
-        print(f"{p}- /prompt <filename>")
-        print(f"{p}- /command")
-        print(f"{p}- /command <name> [arguments]")
-        print(f"{p}- /cost")
-        print(
+        self._print(f"{p}Available commands:")
+        self._print(f"{p}- /help")
+        self._print(f"{p}- /prompt <filename>")
+        self._print(f"{p}- /command")
+        self._print(f"{p}- /command <name> [arguments]")
+        self._print(f"{p}- /cost")
+        self._print(
             f"{p}- /voice start [microphone|loopback] "
             "[--mic-device-id <id>] [--mic-device-name <name>] "
             "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>]"
         )
-        print(f"{p}- /voice status")
-        print(f"{p}- /voice devices")
-        print(f"{p}- /voice events [limit]")
-        print(f"{p}- /voice stop")
-        print(f"{p}- /tools mcp")
-        print(f"{p}- /tool")
-        print(f"{p}- /tool <name>")
-        print(f"{p}- /tool <name> schema")
-        print(f"{p}- /tool <name> config")
-        print(f"{p}- /console-log-level [TRACE|DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL|OFF]")
-        print(f"{p}- /debug show-api-payload [N]")
+        self._print(f"{p}- /voice status")
+        self._print(f"{p}- /voice devices")
+        self._print(f"{p}- /voice events [limit]")
+        self._print(f"{p}- /voice stop")
+        self._print(f"{p}- /tools mcp")
+        self._print(f"{p}- /tool")
+        self._print(f"{p}- /tool <name>")
+        self._print(f"{p}- /tool <name> schema")
+        self._print(f"{p}- /tool <name> config")
+        self._print(f"{p}- /console-log-level [TRACE|DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL|OFF]")
+        self._print(f"{p}- /debug show-api-payload [N]")
         if self._user_memory_enabled:
-            print(f"{p}- /memory")
-            print(f"{p}- /memory list")
-            print(f"{p}- /memory edit")
-            print(f"{p}- /memory reset")
+            self._print(f"{p}- /memory")
+            self._print(f"{p}- /memory list")
+            self._print(f"{p}- /memory edit")
+            self._print(f"{p}- /memory reset")
         if self._memory_enabled:
-            print(f"{p}- /session")
-            print(f"{p}- /session new [title]")
-            print(f"{p}- /session list [limit]")
-            print(f"{p}- /session name <title>")
-            print(f"{p}- /session resume <id-or-name>")
-            print(f"{p}- /session fork")
-            print(f"{p}- /rewind <checkpoint_id>")
-            print(f"{p}- /checkpoint list [limit]")
-            print(f"{p}- /checkpoint rewind <checkpoint_id>")
+            self._print(f"{p}- /session")
+            self._print(f"{p}- /session new [title]")
+            self._print(f"{p}- /session list [limit]")
+            self._print(f"{p}- /session name <title>")
+            self._print(f"{p}- /session resume <id-or-name>")
+            self._print(f"{p}- /session fork")
+            self._print(f"{p}- /rewind <checkpoint_id>")
+            self._print(f"{p}- /checkpoint list [limit]")
+            self._print(f"{p}- /checkpoint rewind <checkpoint_id>")
         else:
-            print(
+            self._print(
                 f"{p}Memory commands are available when MemoryEnabled=true "
                 "(see operations/config.md)."
             )
@@ -119,7 +121,7 @@ class CommandHandler:
         name = parts[1]
         prompt = self._prompt_command_store.load_command(name)
         if prompt is None:
-            print(f"{self._p}Unknown command: {name}")
+            self._print(f"{self._p}Unknown command: {name}")
             self._print_command_list()
             return None
 
@@ -130,12 +132,12 @@ class CommandHandler:
     def _print_command_list(self) -> None:
         commands = self._prompt_command_store.list_commands()
         if not commands:
-            print(f"{self._p}No commands found. Add .md files to the .commands/ directory.")
+            self._print(f"{self._p}No commands found. Add .md files to the .commands/ directory.")
             return
         max_name = max(len(name) for name, _ in commands)
-        print(f"{self._p}Available commands:")
+        self._print(f"{self._p}Available commands:")
         for name, description in commands:
-            print(f"{self._p}  {name:<{max_name}}  {description}")
+            self._print(f"{self._p}  {name:<{max_name}}  {description}")
 
     # -- /console-log-level --
 
@@ -144,33 +146,33 @@ class CommandHandler:
 
         consumer = ConsoleLogConsumer.get_instance()
         if consumer is None:
-            print(f"{self._p}No console log consumer is active.")
+            self._print(f"{self._p}No console log consumer is active.")
             return
 
         parts = command.split()
         if len(parts) == 1:
-            print(f"{self._p}Console log level: {consumer.level}")
+            self._print(f"{self._p}Console log level: {consumer.level}")
             return
 
         valid_levels = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL", "OFF")
         new_level = parts[1].upper()
         if new_level not in valid_levels:
-            print(f"{self._p}Invalid level: {parts[1]}. Valid: {', '.join(valid_levels)}")
+            self._print(f"{self._p}Invalid level: {parts[1]}. Valid: {', '.join(valid_levels)}")
             return
 
         consumer.set_level(new_level)
-        print(f"{self._p}Console log level set to {new_level}")
+        self._print(f"{self._p}Console log level set to {new_level}")
 
     # -- /cost --
 
     async def handle_cost(self, command: str) -> None:
-        print(f"{self._p}{self._session_accumulator.format_summary()}")
+        self._print(f"{self._p}{self._session_accumulator.format_summary()}")
 
     # -- /memory --
 
     async def handle_memory(self, command: str) -> None:
         if not self._user_memory_enabled or not self._user_memory_dir:
-            print(f"{self._p}User memory commands require UserMemoryEnabled=true")
+            self._print(f"{self._p}User memory commands require UserMemoryEnabled=true")
             return
 
         parts = command.split()
@@ -179,30 +181,30 @@ class CommandHandler:
         if len(parts) == 1:
             memory_file = memory_dir / "MEMORY.md"
             if not memory_file.exists():
-                print(f"{self._p}No memory file found ({memory_file})")
+                self._print(f"{self._p}No memory file found ({memory_file})")
                 return
             content = memory_file.read_text(encoding="utf-8")
-            print(f"{self._p}Contents of MEMORY.md:\n{content}")
+            self._print(f"{self._p}Contents of MEMORY.md:\n{content}")
             return
 
         if len(parts) == 2 and parts[1] == "list":
             if not memory_dir.exists():
-                print(f"{self._p}No memory files found")
+                self._print(f"{self._p}No memory files found")
                 return
             files = sorted(p.name for p in memory_dir.iterdir() if p.suffix == ".md")
             if not files:
-                print(f"{self._p}No memory files found")
+                self._print(f"{self._p}No memory files found")
                 return
-            print(f"{self._p}Memory files:")
+            self._print(f"{self._p}Memory files:")
             for name in files:
-                print(f"{self._p}  - {name}")
+                self._print(f"{self._p}  - {name}")
             return
 
         if len(parts) == 2 and parts[1] == "edit":
             memory_file = memory_dir / "MEMORY.md"
             editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
             if not editor:
-                print(
+                self._print(
                     f"{self._p}No $EDITOR set. "
                     f"Edit manually: {memory_file}"
                 )
@@ -212,21 +214,21 @@ class CommandHandler:
                 memory_file.write_text("", encoding="utf-8")
             try:
                 subprocess.run([editor, str(memory_file)], check=True)
-                print(f"{self._p}Editor closed.")
+                self._print(f"{self._p}Editor closed.")
             except Exception as ex:
-                print(f"{self._p}Failed to open editor: {ex}")
+                self._print(f"{self._p}Failed to open editor: {ex}")
             return
 
         if len(parts) >= 2 and parts[1] == "reset":
             if not memory_dir.exists():
-                print(f"{self._p}No memory directory to reset")
+                self._print(f"{self._p}No memory directory to reset")
                 return
             if len(parts) == 2:
                 files = [p.name for p in memory_dir.iterdir() if p.suffix == ".md"]
                 if not files:
-                    print(f"{self._p}No memory files to reset")
+                    self._print(f"{self._p}No memory files to reset")
                     return
-                print(
+                self._print(
                     f"{self._p}This will delete {len(files)} memory file(s). "
                     f"Run '/memory reset confirm' to proceed."
                 )
@@ -238,12 +240,12 @@ class CommandHandler:
                         p.unlink()
                         deleted += 1
                 if deleted:
-                    print(f"{self._p}Deleted {deleted} memory file(s).")
+                    self._print(f"{self._p}Deleted {deleted} memory file(s).")
                 else:
-                    print(f"{self._p}No memory files to delete.")
+                    self._print(f"{self._p}No memory files to delete.")
                 return
 
-        print(f"{self._p}Usage: /memory | /memory list | /memory edit | /memory reset")
+        self._print(f"{self._p}Usage: /memory | /memory list | /memory edit | /memory reset")
 
     # -- /tools --
 
@@ -252,7 +254,7 @@ class CommandHandler:
         if len(parts) == 2 and parts[1] == "mcp":
             self._print_mcp_tools()
             return
-        print(f"{self._p}Usage: /tools mcp")
+        self._print(f"{self._p}Usage: /tools mcp")
 
     def _print_mcp_tools(self) -> None:
         groups: dict[str, list[str]] = {}
@@ -262,13 +264,13 @@ class CommandHandler:
             server, short = name.split("__", 1)
             groups.setdefault(server, []).append(short)
         if not groups:
-            print(f"{self._p}No MCP tools loaded.")
+            self._print(f"{self._p}No MCP tools loaded.")
             return
-        print(f"{self._p}MCP servers:")
+        self._print(f"{self._p}MCP servers:")
         for server in sorted(groups):
-            print(f"{self._p}  {server}:")
+            self._print(f"{self._p}  {server}:")
             for short in sorted(groups[server]):
-                print(f"{self._p}    - {short}")
+                self._print(f"{self._p}    - {short}")
 
     # -- /tool --
 
@@ -291,7 +293,7 @@ class CommandHandler:
         if sub == "config":
             self._print_tool_config(tool)
             return
-        print(
+        self._print(
             f"{self._p}Usage: /tool | /tool <name> | "
             "/tool <name> schema | /tool <name> config"
         )
@@ -306,16 +308,16 @@ class CommandHandler:
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
-            print(f"{self._p}Ambiguous tool name '{name_arg}'. Matches:")
+            self._print(f"{self._p}Ambiguous tool name '{name_arg}'. Matches:")
             for t in sorted(matches, key=lambda t: t.name):
-                print(f"{self._p}  - {t.name}")
+                self._print(f"{self._p}  - {t.name}")
             return None
-        print(f"{self._p}Tool not found: {name_arg}")
+        self._print(f"{self._p}Tool not found: {name_arg}")
         return None
 
     def _print_tool_list(self) -> None:
         if not self._tool_map:
-            print(f"{self._p}No tools loaded.")
+            self._print(f"{self._p}No tools loaded.")
             return
         groups: dict[str, list[str]] = {}
         for name in sorted(self._tool_map):
@@ -325,30 +327,30 @@ class CommandHandler:
                 server, short = "(built-in)", name
             groups.setdefault(server, []).append(short)
         for server in sorted(groups):
-            print(f"{self._p}[{server}]")
+            self._print(f"{self._p}[{server}]")
             for short in sorted(groups[server]):
-                print(f"{self._p}  - {short}")
+                self._print(f"{self._p}  - {short}")
 
     def _print_tool_details(self, tool: Tool) -> None:
-        print(f"{self._p}Name: {tool.name}")
-        print(f"{self._p}Description: {tool.description}")
-        print(f"{self._p}Mutating: {tool.is_mutating}")
+        self._print(f"{self._p}Name: {tool.name}")
+        self._print(f"{self._p}Description: {tool.description}")
+        self._print(f"{self._p}Mutating: {tool.is_mutating}")
 
     def _print_tool_schema(self, tool: Tool) -> None:
-        print(f"{self._p}Input schema:")
-        print(json.dumps(tool.input_schema, indent=2))
+        self._print(f"{self._p}Input schema:")
+        self._print(json.dumps(tool.input_schema, indent=2))
         if hasattr(tool, "output_schema") and tool.output_schema is not None:
-            print(f"{self._p}Output schema:")
-            print(json.dumps(tool.output_schema, indent=2))
+            self._print(f"{self._p}Output schema:")
+            self._print(json.dumps(tool.output_schema, indent=2))
 
     def _print_tool_config(self, tool: Tool) -> None:
         fmt = self._tool_result_formatter.get_tool_format(tool.name)
         if fmt is not None:
-            print(f"{self._p}ToolFormatting config for {tool.name}:")
-            print(json.dumps(fmt, indent=2))
+            self._print(f"{self._p}ToolFormatting config for {tool.name}:")
+            self._print(json.dumps(fmt, indent=2))
         else:
-            print(f"{self._p}ToolFormatting config for {tool.name} (using default):")
-            print(json.dumps(self._tool_result_formatter.default_format, indent=2))
+            self._print(f"{self._p}ToolFormatting config for {tool.name} (using default):")
+            self._print(json.dumps(self._tool_result_formatter.default_format, indent=2))
 
     # -- /debug --
 
@@ -360,11 +362,11 @@ class CommandHandler:
                 try:
                     index = int(parts[2])
                 except ValueError:
-                    print(f"{self._p}Usage: /debug show-api-payload [N]")
+                    self._print(f"{self._p}Usage: /debug show-api-payload [N]")
                     return
             self._print_api_payload(index)
             return
-        print(f"{self._p}Usage: /debug show-api-payload [N]")
+        self._print(f"{self._p}Usage: /debug show-api-payload [N]")
 
     def _print_api_payload(self, index: int) -> None:
         from datetime import datetime
@@ -372,9 +374,9 @@ class CommandHandler:
         payload = self._api_payload_store.get(index)
         if payload is None:
             if len(self._api_payload_store) == 0:
-                print(f"{self._p}No API payloads recorded yet.")
+                self._print(f"{self._p}No API payloads recorded yet.")
             else:
-                print(
+                self._print(
                     f"{self._p}Payload index {index} out of range "
                     f"(0..{len(self._api_payload_store) - 1})."
                 )
@@ -425,35 +427,35 @@ class CommandHandler:
             cost_str = f"${cost:.6f}" if cost > 0 else "n/a (unknown model)"
 
         p = self._p
-        print(f"{p}API Payload #{index} (most recent):" if index == 0 else f"{p}API Payload #{index}:")
-        print(f"{p}  Timestamp:    {ts}")
-        print(f"{p}  Model:        {payload.model}")
-        print(f"{p}  System prompt: {payload.system_prompt[:80]}... ({len(payload.system_prompt)} chars)")
-        print(f"{p}  Messages:     {len(payload.messages)}")
-        print(f"{p}  Last user msg: {last_user_msg[:80]}")
-        print(f"{p}  Tools:        {payload.tools_count}")
-        print(f"{p}  Stop reason:  {payload.stop_reason}")
-        print(f"{p}  Response:     {response_text[:80]}... ({len(response_text)} chars)")
-        print(f"{p}  Usage:        {usage_str}")
-        print(f"{p}  Cost:         {cost_str}")
+        self._print(f"{p}API Payload #{index} (most recent):" if index == 0 else f"{p}API Payload #{index}:")
+        self._print(f"{p}  Timestamp:    {ts}")
+        self._print(f"{p}  Model:        {payload.model}")
+        self._print(f"{p}  System prompt: {payload.system_prompt[:80]}... ({len(payload.system_prompt)} chars)")
+        self._print(f"{p}  Messages:     {len(payload.messages)}")
+        self._print(f"{p}  Last user msg: {last_user_msg[:80]}")
+        self._print(f"{p}  Tools:        {payload.tools_count}")
+        self._print(f"{p}  Stop reason:  {payload.stop_reason}")
+        self._print(f"{p}  Response:     {response_text[:80]}... ({len(response_text)} chars)")
+        self._print(f"{p}  Usage:        {usage_str}")
+        self._print(f"{p}  Cost:         {cost_str}")
 
     # -- /session --
 
     async def handle_session(self, command: str) -> None:
         sm = self._memory.session_manager
         if not self._memory_enabled or sm is None:
-            print(f"{self._p}Session commands require MemoryEnabled=true")
+            self._print(f"{self._p}Session commands require MemoryEnabled=true")
             return
 
         parts = command.split()
         if len(parts) == 1:
             active_id = self._memory.active_session_id
             if active_id is None:
-                print(f"{self._p}Current session: none")
+                self._print(f"{self._p}Current session: none")
                 return
             session = sm.get_session(active_id)
             title = session.get("title", active_id) if session else active_id
-            print(
+            self._print(
                 f"{self._p}Current session: {title} "
                 f"[{self._session_controller.short_id(active_id)}] (id={active_id})"
             )
@@ -465,15 +467,15 @@ class CommandHandler:
                 try:
                     limit = int(parts[2])
                 except ValueError:
-                    print(f"{self._p}Usage: /session list [limit]")
+                    self._print(f"{self._p}Usage: /session list [limit]")
                     return
             sessions = sm.list_sessions(limit=limit)
             if not sessions:
-                print(f"{self._p}No sessions found.")
+                self._print(f"{self._p}No sessions found.")
                 return
-            print(f"{self._p}Recent sessions:")
+            self._print(f"{self._p}Recent sessions:")
             for s in sessions:
-                print(self._session_controller.format_session_list_entry(
+                self._print(self._session_controller.format_session_list_entry(
                     s, active_session_id=self._memory.active_session_id
                 ))
             return
@@ -484,7 +486,7 @@ class CommandHandler:
             self._memory.active_session_id = new_id
             self._on_session_reset(new_id, self._memory.load_messages(new_id))
             session = sm.get_session(new_id) or {"title": new_id}
-            print(
+            self._print(
                 f"{self._p}Started new session: {session.get('title', new_id)} "
                 f"[{self._session_controller.short_id(new_id)}] (id={new_id})"
             )
@@ -493,55 +495,55 @@ class CommandHandler:
         if len(parts) >= 3 and parts[1] == "name":
             active_id = self._memory.active_session_id
             if active_id is None:
-                print(f"{self._p}No active session to name")
+                self._print(f"{self._p}No active session to name")
                 return
             title = command.partition("name")[2].strip()
             if not title:
-                print(f"{self._p}Usage: /session name <title>")
+                self._print(f"{self._p}Usage: /session name <title>")
                 return
             sm.set_session_title(active_id, title)
-            print(f"{self._p}Session named: {title}")
+            self._print(f"{self._p}Session named: {title}")
             return
 
         if len(parts) >= 3 and parts[1] == "resume":
             target = command.partition("resume")[2].strip()
             if not target:
-                print(f"{self._p}Usage: /session resume <id-or-name>")
+                self._print(f"{self._p}Usage: /session resume <id-or-name>")
                 return
             try:
                 session = sm.resolve_session_identifier(target)
             except ValueError as ex:
-                print(f"{self._p}{ex}")
+                self._print(f"{self._p}{ex}")
                 return
             if session is None:
-                print(f"{self._p}Session not found: {target}")
+                self._print(f"{self._p}Session not found: {target}")
                 return
             resolved_id = session["id"]
             self._memory.active_session_id = resolved_id
             new_messages = self._memory.load_messages(resolved_id)
             self._on_session_reset(resolved_id, new_messages)
             summary = sm.build_session_summary(resolved_id)
-            print(
+            self._print(
                 f"{self._p}Resumed session {summary['title']} "
                 f"[{self._session_controller.short_id(resolved_id)}] (id={resolved_id}, {len(new_messages)} messages)"
             )
             for line in self._session_controller.format_resumed_summary_lines(summary):
-                print(line)
+                self._print(line)
             return
 
         if len(parts) == 2 and parts[1] == "fork":
             active_id = self._memory.active_session_id
             if active_id is None:
-                print(f"{self._p}No active session to fork")
+                self._print(f"{self._p}No active session to fork")
                 return
             source_id = active_id
             fork_id = sm.fork_session(source_id)
             self._memory.active_session_id = fork_id
             self._on_session_reset(fork_id, self._memory.load_messages(fork_id))
-            print(f"{self._p}Forked session {source_id} -> {fork_id}")
+            self._print(f"{self._p}Forked session {source_id} -> {fork_id}")
             return
 
-        print(
+        self._print(
             f"{self._p}Usage: /session | /session new [title] | /session list [limit] | "
             "/session name <title> | /session resume <id-or-name> | /session fork"
         )
@@ -551,22 +553,22 @@ class CommandHandler:
     async def handle_rewind(self, command: str) -> None:
         cm = self._memory.checkpoint_manager
         if not self._memory_enabled or cm is None:
-            print(f"{self._p}Rewind requires MemoryEnabled=true")
+            self._print(f"{self._p}Rewind requires MemoryEnabled=true")
             return
         parts = command.split()
         if len(parts) != 2:
-            print(f"{self._p}Usage: /rewind <checkpoint_id>")
+            self._print(f"{self._p}Usage: /rewind <checkpoint_id>")
             return
 
         checkpoint_id = parts[1]
         try:
             _, outcomes = cm.rewind_files(checkpoint_id)
         except Exception as ex:
-            print(f"{self._p}Rewind failed: {ex}")
+            self._print(f"{self._p}Rewind failed: {ex}")
             return
 
         for line in self._checkpoint_service.format_rewind_outcome_lines(checkpoint_id, outcomes):
-            print(line)
+            self._print(line)
 
     # -- /checkpoint --
 
@@ -578,7 +580,7 @@ class CommandHandler:
             or cm is None
             or active_id is None
         ):
-            print(f"{self._p}Checkpoint commands require MemoryEnabled=true")
+            self._print(f"{self._p}Checkpoint commands require MemoryEnabled=true")
             return
 
         parts = command.split()
@@ -588,22 +590,22 @@ class CommandHandler:
                 try:
                     limit = int(parts[2])
                 except ValueError:
-                    print(f"{self._p}Usage: /checkpoint list [limit]")
+                    self._print(f"{self._p}Usage: /checkpoint list [limit]")
                     return
             checkpoints = cm.list_checkpoints(active_id, limit=limit)
             if not checkpoints:
-                print(f"{self._p}No checkpoints found for current session.")
+                self._print(f"{self._p}No checkpoints found for current session.")
                 return
-            print(f"{self._p}Recent checkpoints:")
+            self._print(f"{self._p}Recent checkpoints:")
             for cp in checkpoints:
-                print(self._checkpoint_service.format_checkpoint_list_entry(cp))
+                self._print(self._checkpoint_service.format_checkpoint_list_entry(cp))
             return
 
         if len(parts) == 3 and parts[1] == "rewind":
             await self.handle_rewind(f"/rewind {parts[2]}")
             return
 
-        print(
+        self._print(
             f"{self._p}Usage: /checkpoint list [limit] | /checkpoint rewind <checkpoint_id>"
         )
 
@@ -613,10 +615,10 @@ class CommandHandler:
         try:
             parts = parse_voice_command(command)
         except ValueError:
-            print(f"{self._p}Invalid command syntax")
+            self._print(f"{self._p}Invalid command syntax")
             return
         if len(parts) == 1:
-            print(
+            self._print(
                 f"{self._p}Usage: /voice start [microphone|loopback] "
                 "[--mic-device-id <id>] [--mic-device-name <name>] "
                 "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>] | "
@@ -628,10 +630,10 @@ class CommandHandler:
         if action == "start":
             opts, error = parse_voice_start_options(parts, line_prefix=self._p)
             if error:
-                print(error)
+                self._print(error)
                 return
             assert opts is not None
-            print(
+            self._print(
                 await self._voice_runtime.start(
                     opts.source,
                     opts.mic_device_id,
@@ -644,11 +646,11 @@ class CommandHandler:
             return
 
         if action == "status":
-            print(await self._voice_runtime.status())
+            self._print(await self._voice_runtime.status())
             return
 
         if action == "devices":
-            print(await self._voice_runtime.devices())
+            self._print(await self._voice_runtime.devices())
             return
 
         if action == "events":
@@ -657,16 +659,16 @@ class CommandHandler:
                 try:
                     limit = int(parts[2])
                 except ValueError:
-                    print(f"{self._p}Usage: /voice events [limit]")
+                    self._print(f"{self._p}Usage: /voice events [limit]")
                     return
-            print(await self._voice_runtime.events(limit))
+            self._print(await self._voice_runtime.events(limit))
             return
 
         if action == "stop":
-            print(await self._voice_runtime.stop())
+            self._print(await self._voice_runtime.stop())
             return
 
-        print(
+        self._print(
             f"{self._p}Usage: /voice start [microphone|loopback] "
             "[--mic-device-id <id>] [--mic-device-name <name>] "
             "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>] | "

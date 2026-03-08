@@ -111,6 +111,9 @@ async def run_client(
                             print()  # newline after response
                             turn_complete.set()
 
+                        elif msg_type == "system_message":
+                            channel.print_line(data.get("text", ""))
+
                         elif msg_type == "error":
                             channel.emit_error(data.get("message", "Unknown error"))
                             turn_complete.set()

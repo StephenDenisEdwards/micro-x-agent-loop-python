@@ -34,75 +34,59 @@ class AgentCommandTests(unittest.TestCase):
 
     def test_help_includes_new_commands(self) -> None:
         agent = self._make_agent()
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent._handle_local_command("/help"))
-        out = buf.getvalue()
+        asyncio.run(agent._handle_local_command("/help"))
+        out = agent._channel.text
         self.assertIn("/session new [title]", out)
         self.assertIn("/checkpoint list [limit]", out)
         self.assertIn("/cost", out)
 
     def test_unknown_local_command_message(self) -> None:
         agent = self._make_agent()
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent._handle_local_command("/unknown"))
-        self.assertIn("Unknown local command", buf.getvalue())
+        asyncio.run(agent._handle_local_command("/unknown"))
+        self.assertIn("Unknown local command", agent._channel.text)
 
     def test_session_new_and_name(self) -> None:
         agent = self._make_agent()
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent._handle_session_command("/session new Planning"))
-            asyncio.run(agent._handle_session_command("/session name Planning Updated"))
-        out = buf.getvalue()
+        asyncio.run(agent._handle_session_command("/session new Planning"))
+        asyncio.run(agent._handle_session_command("/session name Planning Updated"))
+        out = agent._channel.text
         self.assertIn("Started new session:", out)
         self.assertIn("Session named: Planning Updated", out)
 
     def test_session_resume_by_name_prints_summary(self) -> None:
         agent = self._make_agent()
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent._handle_session_command("/session resume Session One"))
-        out = buf.getvalue()
+        asyncio.run(agent._handle_session_command("/session resume Session One"))
+        out = agent._channel.text
         self.assertIn("Resumed session Session One", out)
         self.assertIn("Session summary:", out)
 
     def test_session_resume_not_found_and_ambiguous(self) -> None:
         agent = self._make_agent()
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent._handle_session_command("/session resume missing"))
-            asyncio.run(agent._handle_session_command("/session resume ambiguous"))
-        out = buf.getvalue()
+        asyncio.run(agent._handle_session_command("/session resume missing"))
+        asyncio.run(agent._handle_session_command("/session resume ambiguous"))
+        out = agent._channel.text
         self.assertIn("Session not found: missing", out)
         self.assertIn("ambiguous", out)
 
     def test_session_fork_updates_active(self) -> None:
         agent = self._make_agent()
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent._handle_session_command("/session fork"))
-        out = buf.getvalue()
+        asyncio.run(agent._handle_session_command("/session fork"))
+        out = agent._channel.text
         self.assertIn("Forked session s1 -> s-fork", out)
 
     def test_checkpoint_list_and_rewind_alias(self) -> None:
         agent = self._make_agent()
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent._handle_checkpoint_command("/checkpoint list"))
-            asyncio.run(agent._handle_checkpoint_command("/checkpoint rewind cp1"))
-        out = buf.getvalue()
+        asyncio.run(agent._handle_checkpoint_command("/checkpoint list"))
+        asyncio.run(agent._handle_checkpoint_command("/checkpoint rewind cp1"))
+        out = agent._channel.text
         self.assertIn("Recent checkpoints:", out)
         self.assertIn("Rewind cp1 results:", out)
 
     def test_checkpoint_usage_error_and_rewind_usage(self) -> None:
         agent = self._make_agent()
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent._handle_checkpoint_command("/checkpoint list x"))
-            asyncio.run(agent._handle_rewind_command("/rewind"))
-        out = buf.getvalue()
+        asyncio.run(agent._handle_checkpoint_command("/checkpoint list x"))
+        asyncio.run(agent._handle_rewind_command("/rewind"))
+        out = agent._channel.text
         self.assertIn("Usage: /checkpoint list [limit]", out)
         self.assertIn("Usage: /rewind <checkpoint_id>", out)
 
@@ -124,10 +108,8 @@ class AgentCommandTests(unittest.TestCase):
 
     def test_cost_command_prints_summary(self) -> None:
         agent = self._make_agent()
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            asyncio.run(agent._handle_cost_command("/cost"))
-        out = buf.getvalue()
+        asyncio.run(agent._handle_cost_command("/cost"))
+        out = agent._channel.text
         self.assertIn("Session Cost Summary", out)
         self.assertIn("Total API calls:", out)
         self.assertIn("Total cost:", out)

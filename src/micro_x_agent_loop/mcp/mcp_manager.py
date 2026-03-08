@@ -14,20 +14,41 @@ from micro_x_agent_loop.tool import Tool
 _SHUTDOWN_TIMEOUT = 5.0
 
 
+# ---------------------------------------------------------------------------
+# MCP notification routing — routes log notifications to active channels
+# ---------------------------------------------------------------------------
+
+_notification_channels: set[Any] = set()
+
+
+def add_notification_channel(channel: Any) -> None:
+    """Register a channel to receive MCP logging notifications."""
+    _notification_channels.add(channel)
+
+
+def remove_notification_channel(channel: Any) -> None:
+    """Unregister a channel from MCP logging notifications."""
+    _notification_channels.discard(channel)
+
+
 async def _mcp_logging_callback(params: LoggingMessageNotificationParams) -> None:
-    """Forward MCP server log notifications to the terminal and loguru.
+    """Forward MCP server log notifications to active channels and loguru.
 
     MCP servers use ctx.info()/ctx.warning()/ctx.error() for user-facing
-    progress messages (e.g. codegen status).  These must always be visible
-    on the terminal regardless of the logging configuration.
+    progress messages (e.g. codegen status).  These are routed to all
+    registered channels, or fall back to terminal output when none are active.
     """
     level = str(params.level).upper()
     source = f"mcp.{params.logger}" if params.logger else "mcp"
     msg = str(params.data) if params.data is not None else ""
 
-    # Always print to terminal so progress is visible without console logging.
-    # Uses print_through_spinner to avoid colliding with any active spinner.
-    print_through_spinner(f"[{source}] {msg}")
+    text = f"[{source}] {msg}"
+    if _notification_channels:
+        for channel in _notification_channels:
+            channel.emit_system_message(text)
+    else:
+        # Fallback: direct terminal output (e.g. during startup before any channel)
+        print_through_spinner(text)
 
     # Also forward to loguru for file/structured logging
     getattr(logger.opt(depth=1), level.lower(), logger.info)(f"[{source}] {msg}")

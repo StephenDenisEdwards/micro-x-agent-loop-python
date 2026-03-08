@@ -198,6 +198,7 @@ class Agent:
             user_memory_dir=self._user_memory_dir,
             prompt_command_store=self._prompt_command_store,
             on_session_reset=self._on_session_reset,
+            output=self._channel.emit_system_message if self._channel is not None else print,
         )
 
         self._command_router = CommandRouter(
@@ -227,7 +228,18 @@ class Agent:
 
     async def run(self, user_message: str) -> None:
         async with self._run_lock:
-            await self._run_inner(user_message)
+            if self._channel is not None:
+                from micro_x_agent_loop.mcp.mcp_manager import (
+                    add_notification_channel,
+                    remove_notification_channel,
+                )
+                add_notification_channel(self._channel)
+                try:
+                    await self._run_inner(user_message)
+                finally:
+                    remove_notification_channel(self._channel)
+            else:
+                await self._run_inner(user_message)
 
     async def _run_inner(self, user_message: str) -> None:
         # /prompt <filename> — read file and use contents as the user message
@@ -235,16 +247,16 @@ class Agent:
         if stripped.startswith("/prompt "):
             filename = stripped[len("/prompt "):].strip()
             if not filename:
-                print(f"{self._line_prefix}Usage: /prompt <filename>")
+                self._system_print(f"{self._line_prefix}Usage: /prompt <filename>")
                 return
             resolved = self._resolve_file(filename)
             if resolved is None:
-                print(f"{self._line_prefix}File not found: {filename}")
+                self._system_print(f"{self._line_prefix}File not found: {filename}")
                 return
             try:
                 user_message = resolved.read_text(encoding="utf-8")
             except OSError as ex:
-                print(f"{self._line_prefix}Error reading file: {ex}")
+                self._system_print(f"{self._line_prefix}Error reading file: {ex}")
                 return
 
         command_result = await self._handle_local_command(user_message)
@@ -487,6 +499,13 @@ class Agent:
             is_error=is_error,
             message_id=message_id,
         )
+
+    def _system_print(self, text: str) -> None:
+        """Print system output through the channel if available, else stdout."""
+        if self._channel is not None:
+            self._channel.emit_system_message(text)
+        else:
+            print(text)
 
     async def _handle_local_command(self, user_message: str) -> bool | str:
         return await self._command_router.try_handle(user_message)
