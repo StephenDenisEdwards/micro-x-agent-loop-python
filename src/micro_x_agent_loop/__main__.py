@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sys
 import threading
 
@@ -120,10 +121,11 @@ def _parse_cli_args() -> dict:
         --session <id>          Session ID for --run
         --broker <subcommand>   Broker daemon management (start/stop/status)
         --job <subcommand> ...  Job management (add/list/remove/enable/disable/run-now/runs)
+        --server <subcommand>   API server management (start)
     """
     args: dict = {
         "config": None, "run": None, "session": None,
-        "broker": None, "job": None,
+        "broker": None, "job": None, "server": None,
     }
     argv = sys.argv[1:]
     i = 0
@@ -144,6 +146,10 @@ def _parse_cli_args() -> dict:
         elif argv[i] == "--job":
             # Collect remaining args as job subcommand
             args["job"] = argv[i + 1:]
+            break
+        elif argv[i] == "--server":
+            # Collect remaining args as server subcommand
+            args["server"] = argv[i + 1:]
             break
         else:
             i += 1
@@ -241,6 +247,24 @@ async def main() -> None:
             await handle_broker_command(cli_args["broker"], config=raw_config)
         else:
             await handle_job_command(cli_args["job"], config=raw_config)
+        return
+
+    # -- Server command: start the API server --
+    if cli_args["server"] is not None:
+        server_args = cli_args["server"]
+        if not server_args or server_args[0] == "start":
+            from micro_x_agent_loop.server.app import run_server
+            await run_server(
+                config_path=cli_args["config"],
+                host=os.environ.get("SERVER_HOST", "127.0.0.1"),
+                port=int(os.environ.get("SERVER_PORT", "8321")),
+                api_secret=os.environ.get("SERVER_API_SECRET"),
+                max_sessions=int(os.environ.get("SERVER_MAX_SESSIONS", "10")),
+                session_timeout_minutes=int(os.environ.get("SERVER_SESSION_TIMEOUT_MINUTES", "30")),
+            )
+        else:
+            print(f"Unknown server command: {server_args[0]}")
+            print("Usage: --server start")
         return
 
     app = parse_app_config(raw_config)

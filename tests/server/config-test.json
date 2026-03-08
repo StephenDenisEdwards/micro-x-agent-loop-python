@@ -1,0 +1,5 @@
+{
+  "Provider": "anthropic",
+  "Model": "test-model",
+  "MemoryEnabled": false
+}
