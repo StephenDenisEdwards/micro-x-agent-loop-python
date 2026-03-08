@@ -34,6 +34,7 @@ def create_app(
     max_sessions: int = 10,
     session_timeout_minutes: int = 30,
     broker_enabled: bool = False,
+    agent_manager: AgentManager | None = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application."""
 
@@ -67,15 +68,17 @@ def create_app(
                 retention_days=app_config.memory_retention_days,
             )
 
-        agent_manager = AgentManager(
-            app_config=app_config,
-            api_key=env.provider_api_key,
-            tools=tools,
-            memory_store=memory_store,
-            event_sink=event_sink,
-            max_sessions=max_sessions,
-            session_timeout_minutes=session_timeout_minutes,
-        )
+        nonlocal agent_manager
+        if agent_manager is None:
+            agent_manager = AgentManager(
+                app_config=app_config,
+                api_key=env.provider_api_key,
+                tools=tools,
+                memory_store=memory_store,
+                event_sink=event_sink,
+                max_sessions=max_sessions,
+                session_timeout_minutes=session_timeout_minutes,
+            )
 
         _state.update({
             "app_config": app_config,
