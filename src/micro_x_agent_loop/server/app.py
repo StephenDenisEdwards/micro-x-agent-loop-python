@@ -380,6 +380,16 @@ def create_app(
 
         logger.info(f"WebSocket connected: session={session_id[:8]}...")
 
+        agent_task: asyncio.Task | None = None
+
+        async def _run_agent(text: str) -> None:
+            try:
+                await agent.run(text)
+            except Exception as ex:
+                channel.emit_error(str(ex))
+            finally:
+                channel.emit_turn_complete({})
+
         try:
             while True:
                 data = await ws.receive_json()
@@ -388,8 +398,9 @@ def create_app(
                 if msg_type == "message":
                     text = data.get("text", "").strip()
                     if text:
-                        await agent.run(text)
-                        channel.emit_turn_complete({})
+                        # Run agent concurrently so we can still receive
+                        # answer/ping messages during HITL questions
+                        agent_task = asyncio.create_task(_run_agent(text))
 
                 elif msg_type == "answer":
                     question_id = data.get("question_id", "")
@@ -403,6 +414,13 @@ def create_app(
             logger.info(f"WebSocket disconnected: session={session_id[:8]}...")
         except Exception as ex:
             logger.warning(f"WebSocket error: session={session_id[:8]}..., error={ex}")
+        finally:
+            if agent_task is not None and not agent_task.done():
+                agent_task.cancel()
+                try:
+                    await agent_task
+                except asyncio.CancelledError:
+                    pass
 
     return app
 
