@@ -21,12 +21,13 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | ~~11~~ | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | Replaced by Trigger Broker below — retained as reference for full gateway capabilities |
 | **11** | [Trigger Broker](PLAN-trigger-broker.md) | **Completed** | Always-on run dispatcher for cron, webhooks, messaging channels, HITL, retries |
 | **12** | [Agent API Server](PLAN-agent-api-server.md) | **Completed** | HTTP/WebSocket API, broker convergence, CLI client, Python SDK, examples |
-| **13** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Frictionless onboarding becomes critical once promotional channels drive traffic to the repo. Benefits from stable post-broker architecture |
-| **14** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, sub-agents, schema optimisation) | Planning | Architectural changes, higher effort; model routing can be done in TurnEngine/Provider layer without gateway |
-| **15** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
-| **16** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | Nice-to-have, not promotional |
-| **17** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools; internal plumbing |
-| **18** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based tool routing that preserves prompt caching; do when cost data justifies it |
+| **13** | [Sub-Agents](PLAN-sub-agents.md) | Planning | In-process sub-agent delegation for context protection, task isolation, parallelism, and cost reduction |
+| **14** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Frictionless onboarding becomes critical once promotional channels drive traffic to the repo. Benefits from stable post-broker architecture |
+| **15** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, schema optimisation) | Planning | Architectural changes, higher effort; model routing can be done in TurnEngine/Provider layer without gateway |
+| **16** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
+| **17** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | Nice-to-have, not promotional |
+| **18** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools; internal plumbing |
+| **19** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based tool routing that preserves prompt caching; do when cost data justifies it |
 
 
 ---
@@ -39,7 +40,8 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
-| Planned | 4 |
+| Planning | 2 |
+| Planned | 3 |
 
 ## All Plans
 
@@ -62,6 +64,7 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Superseded | Replaced by [Trigger Broker](PLAN-trigger-broker.md) — retained as reference for full gateway capabilities |
 | [Trigger Broker](PLAN-trigger-broker.md) | Completed | Always-on run dispatcher with cron, webhooks, messaging channels, HITL, retries, missed-run recovery, auth |
 | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based routing preserving prefix caching. See [DESIGN](../design/DESIGN-cache-preserving-tool-routing.md) |
+| [Sub-Agents](PLAN-sub-agents.md) | Planning | In-process sub-agent delegation: context protection, task isolation, parallelism, cost reduction |
 | [Codegen Prompt Discipline](PLAN-codegen-prompt-discipline.md) | Completed | Tightened codegen prompt, added infra file deny, compact output format |
 | [LinkedIn Publishing MCP](PLAN-linkedin-publishing-mcp.md) | Completed | Draft-post, draft-article, publish-draft tools |
 | [Dev.to Publishing MCP](PLAN-devto-publishing-mcp.md) | Completed | Long-form blog publishing via Forem API. Completed 2026-03-06 |
