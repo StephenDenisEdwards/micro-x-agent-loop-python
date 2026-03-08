@@ -240,13 +240,30 @@ async def main() -> None:
 
     raw_config, config_source = load_json_config(config_path=cli_args["config"])
 
-    # -- Broker/job commands: don't need full agent bootstrap --
-    if cli_args["broker"] is not None or cli_args["job"] is not None:
-        from micro_x_agent_loop.broker.cli import handle_broker_command, handle_job_command
-        if cli_args["broker"] is not None:
-            await handle_broker_command(cli_args["broker"], config=raw_config)
+    # -- Job commands: don't need full agent bootstrap --
+    if cli_args["job"] is not None:
+        from micro_x_agent_loop.broker.cli import handle_job_command
+        await handle_job_command(cli_args["job"], config=raw_config)
+        return
+
+    # -- Broker start → alias for --server start with broker enabled --
+    if cli_args["broker"] is not None:
+        broker_args = cli_args["broker"]
+        if not broker_args or broker_args[0] == "start":
+            # Broker start now launches the unified API server with broker enabled
+            from micro_x_agent_loop.server.app import run_server
+            await run_server(
+                config_path=cli_args["config"],
+                host=os.environ.get("SERVER_HOST", raw_config.get("BrokerHost", "127.0.0.1")),
+                port=int(os.environ.get("SERVER_PORT", raw_config.get("BrokerPort", "8321"))),
+                api_secret=os.environ.get("SERVER_API_SECRET", raw_config.get("BrokerApiSecret")),
+                max_sessions=int(os.environ.get("SERVER_MAX_SESSIONS", "10")),
+                session_timeout_minutes=int(os.environ.get("SERVER_SESSION_TIMEOUT_MINUTES", "30")),
+                broker_enabled=True,
+            )
         else:
-            await handle_job_command(cli_args["job"], config=raw_config)
+            from micro_x_agent_loop.broker.cli import handle_broker_command
+            await handle_broker_command(broker_args, config=raw_config)
         return
 
     # -- Server command: start the API server --
@@ -254,6 +271,7 @@ async def main() -> None:
         server_args = cli_args["server"]
         if not server_args or server_args[0] == "start":
             from micro_x_agent_loop.server.app import run_server
+            broker_flag = "--broker" in server_args if server_args else False
             await run_server(
                 config_path=cli_args["config"],
                 host=os.environ.get("SERVER_HOST", "127.0.0.1"),
@@ -261,10 +279,11 @@ async def main() -> None:
                 api_secret=os.environ.get("SERVER_API_SECRET"),
                 max_sessions=int(os.environ.get("SERVER_MAX_SESSIONS", "10")),
                 session_timeout_minutes=int(os.environ.get("SERVER_SESSION_TIMEOUT_MINUTES", "30")),
+                broker_enabled=broker_flag or bool(os.environ.get("SERVER_BROKER_ENABLED")),
             )
         else:
             print(f"Unknown server command: {server_args[0]}")
-            print("Usage: --server start")
+            print("Usage: --server start [--broker]")
         return
 
     app = parse_app_config(raw_config)

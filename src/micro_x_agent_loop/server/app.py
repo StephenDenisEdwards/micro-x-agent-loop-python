@@ -33,6 +33,7 @@ def create_app(
     cors_origins: list[str] | None = None,
     max_sessions: int = 10,
     session_timeout_minutes: int = 30,
+    broker_enabled: bool = False,
 ) -> FastAPI:
     """Create and configure the FastAPI application."""
 
@@ -78,6 +79,7 @@ def create_app(
 
         _state.update({
             "app_config": app_config,
+            "raw_config": raw_config,
             "env": env,
             "mcp_manager": mcp_manager,
             "memory_store": memory_store,
@@ -86,15 +88,115 @@ def create_app(
             "tools": tools,
         })
 
+        # -- Broker integration --
+        broker_tasks: list[asyncio.Task] = []
+        polling_ingresses: list = []
+
+        if broker_enabled:
+            from micro_x_agent_loop.broker.channels import build_adapters
+            from micro_x_agent_loop.broker.dispatcher import RunDispatcher
+            from micro_x_agent_loop.broker.polling import PollingIngress
+            from micro_x_agent_loop.broker.response_router import ResponseRouter
+            from micro_x_agent_loop.broker.scheduler import Scheduler
+            from micro_x_agent_loop.broker.store import BrokerStore
+            from micro_x_agent_loop.server.broker_routes import create_broker_router
+
+            broker_db_path = raw_config.get("BrokerDatabase", ".micro_x/broker.db")
+            broker_store = BrokerStore(broker_db_path)
+
+            channels_config = raw_config.get("BrokerChannels", {})
+            adapters = build_adapters(channels_config)
+            response_router = ResponseRouter(adapters)
+
+            host = os.environ.get("SERVER_HOST", "127.0.0.1")
+            port = os.environ.get("SERVER_PORT", "8321")
+            broker_url = f"http://{host}:{port}"
+
+            max_concurrent = int(raw_config.get("BrokerMaxConcurrentRuns", 2))
+            dispatcher = RunDispatcher(
+                broker_store,
+                response_router,
+                max_concurrent_runs=max_concurrent,
+                broker_url=broker_url,
+            )
+
+            poll_interval = int(raw_config.get("BrokerPollIntervalSeconds", 5))
+            recovery_policy = str(raw_config.get("BrokerRecoveryPolicy", "skip"))
+            scheduler = Scheduler(
+                broker_store,
+                dispatcher,
+                poll_interval=poll_interval,
+                recovery_policy=recovery_policy,
+            )
+
+            # Mount broker routes
+            broker_router = create_broker_router(broker_store, dispatcher, adapters)
+            app.include_router(broker_router)
+
+            # Start scheduler
+            broker_tasks.append(asyncio.create_task(scheduler.start(), name="scheduler"))
+
+            # Start polling ingress for adapters that support it
+            for name, adapter in adapters.items():
+                if adapter.supports_polling:
+                    adapter_poll = channels_config.get(name, {}).get("poll_interval", 10)
+                    ingress = PollingIngress(
+                        adapter, dispatcher, broker_store,
+                        poll_interval=adapter_poll,
+                    )
+                    polling_ingresses.append(ingress)
+                    broker_tasks.append(asyncio.create_task(
+                        ingress.start(), name=f"polling-{name}",
+                    ))
+
+            _state.update({
+                "broker_store": broker_store,
+                "broker_dispatcher": dispatcher,
+                "broker_scheduler": scheduler,
+                "broker_adapters": adapters,
+                "broker_polling_ingresses": polling_ingresses,
+            })
+
+            logger.info(
+                f"Broker enabled: jobs={len(broker_store.list_jobs())}, "
+                f"channels={list(adapters.keys())}, "
+                f"max_concurrent_runs={max_concurrent}"
+            )
+
         logger.info(
             f"API server started: model={app_config.model}, "
             f"tools={len(tools)}, memory={'on' if app_config.memory_enabled else 'off'}, "
-            f"max_sessions={max_sessions}"
+            f"max_sessions={max_sessions}, broker={'on' if broker_enabled else 'off'}"
         )
 
         yield
 
         # -- Shutdown --
+
+        # Stop broker components
+        if broker_enabled:
+            scheduler = _state.get("broker_scheduler")
+            if scheduler:
+                scheduler.stop()
+            for ingress in polling_ingresses:
+                ingress.stop()
+
+            # Wait for broker tasks to finish
+            for task in broker_tasks:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            dispatcher = _state.get("broker_dispatcher")
+            if dispatcher:
+                await dispatcher.wait_for_all()
+
+            broker_store = _state.get("broker_store")
+            if broker_store:
+                broker_store.close()
+
         await agent_manager.shutdown_all()
         if mcp_manager:
             await mcp_manager.shutdown()
@@ -136,12 +238,27 @@ def create_app(
     @app.get("/api/health")
     async def health() -> dict:
         agent_manager: AgentManager | None = _state.get("agent_manager")
-        return {
+        result: dict[str, Any] = {
             "status": "ok",
             "active_sessions": agent_manager.active_count if agent_manager else 0,
             "tools": len(_state.get("tools", [])),
             "memory_enabled": bool(_state.get("app_config") and _state["app_config"].memory_enabled),
         }
+        # Include broker status if enabled
+        broker_store = _state.get("broker_store")
+        if broker_store:
+            from micro_x_agent_loop.broker.store import BrokerStore
+
+            jobs = broker_store.list_jobs()
+            dispatcher = _state.get("broker_dispatcher")
+            result["broker"] = {
+                "enabled": True,
+                "jobs_total": len(jobs),
+                "jobs_enabled": sum(1 for j in jobs if j["enabled"]),
+                "active_runs": dispatcher.active_run_count if dispatcher else 0,
+                "channels": list(_state.get("broker_adapters", {}).keys()),
+            }
+        return result
 
     # -- Sessions -------------------------------------------------------------
 
@@ -298,6 +415,7 @@ async def run_server(
     cors_origins: list[str] | None = None,
     max_sessions: int = 10,
     session_timeout_minutes: int = 30,
+    broker_enabled: bool = False,
 ) -> None:
     """Start the API server. Blocks until shutdown."""
     import uvicorn
@@ -308,6 +426,7 @@ async def run_server(
         cors_origins=cors_origins,
         max_sessions=max_sessions,
         session_timeout_minutes=session_timeout_minutes,
+        broker_enabled=broker_enabled,
     )
 
     config = uvicorn.Config(

@@ -1,0 +1,6 @@
+{
+  "Provider": "anthropic",
+  "Model": "test-model",
+  "MemoryEnabled": false,
+  "BrokerDatabase": ".micro_x/test-broker.db"
+}
