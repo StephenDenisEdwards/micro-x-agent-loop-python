@@ -52,6 +52,7 @@ The server is configured via environment variables (in `.env` or shell):
 | `SERVER_API_SECRET` | _(none)_ | Bearer token for authentication. If set, all endpoints except `/api/health` require `Authorization: Bearer <secret>` |
 | `SERVER_MAX_SESSIONS` | `10` | Maximum concurrent agent sessions |
 | `SERVER_SESSION_TIMEOUT_MINUTES` | `30` | Idle session eviction timeout |
+| `SERVER_BROKER_ENABLED` | _(false)_ | Enable broker (scheduler, webhooks, polling) in the server |
 
 The server loads the same `config.json` as the CLI. Use `--config path` to specify a different config file:
 
@@ -215,6 +216,79 @@ Client (web/mobile/desktop)
                                         ↕
                                   ask_user question/answer
 ```
+
+## CLI Client Mode
+
+Instead of running the agent in-process, the CLI can connect to a running API server as a WebSocket client:
+
+```bash
+# Start the server (in one terminal)
+python -m micro_x_agent_loop --server start
+
+# Connect as a client (in another terminal)
+python -m micro_x_agent_loop --server http://localhost:8321
+```
+
+The CLI client provides the same interactive experience as direct mode:
+- Streaming text output with `assistant>` prefix
+- Spinner during tool execution
+- Terminal-based `ask_user` prompts for HITL questions
+- Session reuse via `--session <id>`
+
+```bash
+# Resume an existing session
+python -m micro_x_agent_loop --session my-session --server http://localhost:8321
+```
+
+The client performs a health check on connect and displays server status (tools, memory). If the server is unreachable, it prints an error and exits.
+
+## Broker Integration
+
+The API server can run the trigger broker (cron scheduler, webhook triggers, polling ingress) in the same process:
+
+```bash
+# Start server with broker enabled
+python -m micro_x_agent_loop --server start --broker
+
+# Or use --broker start (backwards-compatible alias)
+python -m micro_x_agent_loop --broker start
+
+# Or via environment variable
+SERVER_BROKER_ENABLED=1 python -m micro_x_agent_loop --server start
+```
+
+When broker is enabled, the health endpoint includes broker status:
+
+```json
+{
+  "status": "ok",
+  "active_sessions": 2,
+  "tools": 12,
+  "memory_enabled": true,
+  "broker": {
+    "enabled": true,
+    "jobs_total": 3,
+    "jobs_enabled": 2,
+    "active_runs": 0,
+    "channels": ["log", "telegram"]
+  }
+}
+```
+
+Additional broker endpoints become available:
+
+```
+GET    /api/jobs                                    List all jobs
+GET    /api/runs/{run_id}                           Get run details
+POST   /api/runs/{run_id}/questions                 Post HITL question (agent subprocess)
+GET    /api/runs/{run_id}/questions/{question_id}   Poll for answer
+POST   /api/runs/{run_id}/questions/{qid}/answer    Submit answer
+GET    /api/runs/{run_id}/questions                 List pending questions
+GET    /api/trigger/{channel}                       Webhook verification
+POST   /api/trigger/{channel}                       Webhook trigger
+```
+
+Job management (`--job add`, `--job list`, etc.) continues to work via the CLI as before. See [Trigger Broker Operations](trigger-broker.md) for details.
 
 ## Troubleshooting
 

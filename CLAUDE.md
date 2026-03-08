@@ -33,7 +33,9 @@ python -m micro_x_agent_loop --job run-now <id>
 python -m micro_x_agent_loop --job runs [id]
 
 # API server (HTTP/WebSocket for web, desktop, mobile clients)
-python -m micro_x_agent_loop --server start
+python -m micro_x_agent_loop --server start              # Start server
+python -m micro_x_agent_loop --server start --broker     # Start server with broker
+python -m micro_x_agent_loop --server http://host:port   # Connect CLI to server
 
 # Tests
 python -m pytest tests/ -v
@@ -96,6 +98,8 @@ API Server (--server start):
 | `server/app.py` | FastAPI API server with REST + WebSocket endpoints |
 | `server/agent_manager.py` | Per-session Agent lifecycle (create, cache, evict) |
 | `server/ws_channel.py` | WebSocketChannel: AgentChannel for real-time streaming |
+| `server/broker_routes.py` | Broker endpoints (jobs, runs, HITL, webhooks) as APIRouter |
+| `server/client.py` | WebSocket CLI client for `--server http://...` mode |
 
 ## Conventions
 

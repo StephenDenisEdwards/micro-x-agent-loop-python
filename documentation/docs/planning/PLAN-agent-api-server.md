@@ -1,6 +1,6 @@
 # PLAN: Agent API Server — Multi-Client Support
 
-**Status:** In Progress (Phases 1–2 complete)
+**Status:** In Progress (Phases 1–4 complete)
 **Created:** 2026-03-07
 **Updated:** 2026-03-08
 **Design:** [DESIGN-agent-api-server.md](../design/DESIGN-agent-api-server.md)
@@ -87,33 +87,45 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
 - HITL questions: routed through WebSocket to connected client via question/answer frames
 - Server config: environment variables (`SERVER_HOST`, `SERVER_PORT`, `SERVER_API_SECRET`, etc.)
 
-### Phase 3: Broker Convergence
+### Phase 3: Broker Convergence ✅
+
+**Status: Completed** (2026-03-08, branch `feature/api-server`)
 
 **Scope:** Merge the broker's webhook server into the API server. One process serves both interactive clients and scheduled/triggered runs.
 
 **Prerequisites:** Phase 2 complete.
 
 **Deliverables:**
-- [ ] Migrate broker webhook routes into the API server
-- [ ] Broker endpoints (`/api/trigger`, `/api/jobs`, `/api/runs`) coexist with chat endpoints
-- [ ] Scheduler runs inside the API server process (no separate broker daemon)
-- [ ] In-process agent dispatch option (AgentManager) alongside subprocess dispatch
-- [ ] `--broker start` becomes `--server start` (backwards-compatible alias)
-- [ ] HITL questions route to WebSocket if client is connected, else to channel adapter
-- [ ] Unified health endpoint showing both server and broker status
+- [x] `server/broker_routes.py` — APIRouter with broker endpoints extracted from `webhook_server.py`
+- [x] Broker endpoints (`/api/trigger`, `/api/jobs`, `/api/runs`, `/api/runs/{id}/questions`) coexist with chat endpoints
+- [x] Scheduler, dispatcher, polling ingress run inside the API server lifespan
+- [x] `--broker start` launches the unified API server with broker enabled
+- [x] `--server start --broker` or `SERVER_BROKER_ENABLED` env var enables broker in server mode
+- [x] `--broker stop/status` still work via existing broker CLI
+- [x] Unified health endpoint includes broker status (jobs, active runs, channels)
+- [x] 10 broker route tests
+- [ ] In-process agent dispatch option (AgentManager) alongside subprocess dispatch — deferred
+- [ ] HITL questions route to WebSocket if client is connected — deferred
 
-### Phase 4: CLI as Server Client
+### Phase 4: CLI as Server Client ✅
+
+**Status: Completed** (2026-03-08, branch `feature/api-server`)
 
 **Scope:** The CLI can connect to a running API server instead of running the agent in-process.
 
 **Prerequisites:** Phase 2 complete.
 
 **Deliverables:**
-- [ ] `--server http://host:port` flag — CLI connects as WebSocket client
-- [ ] Streaming output via WebSocket → `TerminalChannel` (spinner, line prefix)
-- [ ] HITL questions received via WebSocket → terminal `ask_user` prompt
-- [ ] Session management commands (`/session list`, `/session resume`) work via REST API
-- [ ] Fallback: if server is unreachable, offer to run in-process
+- [x] `server/client.py` — WebSocket CLI client using `websockets` library
+- [x] `--server http://host:port` flag — CLI connects as WebSocket client
+- [x] Streaming output via WebSocket → `TerminalChannel` (spinner, line prefix)
+- [x] HITL questions received via WebSocket → terminal `ask_user` prompt
+- [x] `--session` flag works with client mode for session reuse
+- [x] Health check on connect, graceful error handling for unreachable servers
+- [x] `websockets>=13.0` added to `pyproject.toml`
+- [x] 4 client tests
+- [ ] Session management commands (`/session list`, `/session resume`) work via REST API — deferred
+- [ ] Fallback: if server is unreachable, offer to run in-process — deferred
 
 ### Phase 5: Client SDKs and Documentation
 
@@ -135,7 +147,7 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
 |------------|---------|--------------------|
 | `fastapi` | HTTP/WS server framework | Yes (broker uses it) |
 | `uvicorn` | ASGI server | Yes (broker uses it) |
-| `websockets` | WebSocket support in FastAPI | Bundled with FastAPI |
+| `websockets` | WebSocket client (CLI-as-client) + FastAPI WS | Added in Phase 4 |
 | `httpx` | HTTP client (for CLI-as-client and BrokerChannel) | Yes |
 
 ## Architecture Decisions
