@@ -32,6 +32,9 @@ python -m micro_x_agent_loop --job list
 python -m micro_x_agent_loop --job run-now <id>
 python -m micro_x_agent_loop --job runs [id]
 
+# API server (HTTP/WebSocket for web, desktop, mobile clients)
+python -m micro_x_agent_loop --server start
+
 # Tests
 python -m pytest tests/ -v
 
@@ -58,13 +61,18 @@ Trigger Broker (always-on daemon):
                     → webhook_server.py ↗        ↓
                                         response_router.py → channels.py (adapters)
                     broker/store.py (SQLite: broker_jobs, broker_runs, broker_questions)
+
+API Server (--server start):
+  server/app.py (FastAPI + lifespan) → AgentManager → Agent per session
+       ├── REST: /api/chat, /api/sessions, /api/health
+       └── WS:   /api/ws/{session_id} → WebSocketChannel → Agent
 ```
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
-| `__main__.py` | Entry point, REPL, CLI args (`--run`, `--broker`, `--job`), startup |
+| `__main__.py` | Entry point, REPL, CLI args (`--run`, `--broker`, `--job`, `--server`), startup |
 | `agent.py` | Orchestrator: message history, mode analysis, memory, metrics |
 | `turn_engine.py` | Single turn: LLM call → tool execution → response |
 | `mode_selector.py` | Stage 1 pattern matching + Stage 2 LLM classification |
@@ -75,8 +83,8 @@ Trigger Broker (always-on daemon):
 | `agent_config.py` | Runtime config dataclass (48 fields) |
 | `bootstrap.py` | Wires up memory, MCP servers, event sinks |
 | `compaction.py` | Conversation compaction strategies (none/summarize) |
+| `agent_channel.py` | AgentChannel protocol + implementations (Terminal, Buffered, Broker channels) |
 | `tool.py` | Tool protocol (name, description, execute, is_mutating) |
-| `ask_user.py` | Human-in-the-loop questioning via questionary |
 | `tool_search.py` | On-demand tool discovery for large tool sets |
 | `system_prompt.py` | LLM system prompt and directives (`_ASK_USER_DIRECTIVE`, etc.) |
 | `metrics.py` | Metric builders, `SessionAccumulator`, cost tracking |
@@ -85,6 +93,9 @@ Trigger Broker (always-on daemon):
 | `commands/` | Slash command routing (/session, /voice, /cost, etc.) |
 | `services/` | Session controller, checkpoint service |
 | `broker/` | Trigger broker: cron scheduler, webhook server, HITL, retries, channel adapters, CLI |
+| `server/app.py` | FastAPI API server with REST + WebSocket endpoints |
+| `server/agent_manager.py` | Per-session Agent lifecycle (create, cache, evict) |
+| `server/ws_channel.py` | WebSocketChannel: AgentChannel for real-time streaming |
 
 ## Conventions
 

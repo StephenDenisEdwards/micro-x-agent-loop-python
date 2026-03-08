@@ -103,6 +103,14 @@ uv sync
 uv run python -m micro_x_agent_loop
 ```
 
+**API server mode** (for web, desktop, or mobile clients):
+
+```bash
+python -m micro_x_agent_loop --server start
+```
+
+This starts a FastAPI server on `http://127.0.0.1:8321` with REST and WebSocket endpoints. See the [API Server Operations](api-server.md) guide for details.
+
 ## First Use
 
 Try a simple prompt to verify everything works:

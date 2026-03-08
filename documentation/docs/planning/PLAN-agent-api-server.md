@@ -1,7 +1,8 @@
 # PLAN: Agent API Server — Multi-Client Support
 
-**Status:** Draft
+**Status:** In Progress (Phases 1–2 complete)
 **Created:** 2026-03-07
+**Updated:** 2026-03-08
 **Design:** [DESIGN-agent-api-server.md](../design/DESIGN-agent-api-server.md)
 
 ## Goal
@@ -10,7 +11,9 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
 
 ## Phased Rollout
 
-### Phase 1: AgentChannel — Bidirectional Agent-Client Protocol
+### Phase 1: AgentChannel — Bidirectional Agent-Client Protocol ✅
+
+**Status: Completed** (2026-03-08, branch `feature/agent-channel`, merged to master)
 
 **Scope:** Replace all direct `print()` / `input()` / `AskUserHandler` coupling with a single `AgentChannel` protocol. No server yet — just the abstraction that makes one possible. CLI behaviour unchanged.
 
@@ -26,46 +29,21 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
 | `line_prefix` in Agent | `TerminalChannel` private detail |
 
 **Deliverables:**
-- [ ] `AgentChannel` protocol in `src/micro_x_agent_loop/agent_channel.py`
-  - `emit_text_delta(text)` — LLM streaming token
-  - `emit_tool_started(tool_use_id, tool_name)` — tool begins
-  - `emit_tool_completed(tool_use_id, tool_name, is_error)` — tool ends
-  - `emit_turn_complete(usage)` — turn finished with metrics
-  - `emit_error(message)` — error occurred
-  - `async ask_user(question, options)` → `str` — HITL question/answer
-- [ ] `TerminalChannel` — reimplements current CLI behaviour:
-  - `emit_text_delta` → `print(text, end="", flush=True)` with `assistant> ` prefix on first delta
-  - `emit_tool_started` → starts spinner (current `Spinner` class, moved here)
-  - `emit_tool_completed` → stops spinner
-  - `ask_user` → terminal input via questionary (current `AskUserHandler` logic)
-- [ ] `BufferedChannel` — for `--run` mode and tests:
-  - `emit_text_delta` → accumulates into string buffer
-  - `ask_user` → returns timeout/default message
-- [ ] `BrokerChannel` — for broker HITL runs:
-  - `ask_user` → HTTP POST to broker API + poll for answer (current `BrokerAskUserHandler` logic)
-  - Output events are no-ops (subprocess stdout is captured by runner)
-- [ ] Modify `anthropic_provider.py` — accept channel, call `emit_text_delta()` instead of `print()`
-- [ ] Modify `openai_provider.py` — same
-- [ ] Modify `turn_engine.py`:
-  - Accept channel reference
-  - Call `emit_tool_started()` / `emit_tool_completed()` during tool execution
-  - Call `emit_turn_complete()` at end of turn
-- [ ] Modify `agent.py`:
-  - Accept `AgentChannel` via `AgentConfig`
-  - Remove `_LINE_PREFIX`, `_line_prefix`, `_ask_user_handler`
-  - Route `ask_user` calls through `channel.ask_user()`
-- [ ] Modify `bootstrap.py`:
-  - Create appropriate channel based on context (interactive / autonomous / HITL)
-  - Inject into `AgentConfig`
-- [ ] Delete `ask_user.py` (absorbed into `TerminalChannel`)
-- [ ] Delete `broker_ask_user.py` (absorbed into `BrokerChannel`)
-- [ ] Move `Spinner` class from `llm_client.py` into `TerminalChannel`
-- [ ] All 370 existing tests pass with no output changes
-- [ ] New unit tests for each channel implementation
-
-**Risk:** This touches the core streaming path. Every provider, the turn engine, and the agent need modification. Must be done carefully with full test coverage.
-
-**Complexity:** Medium-high. Many files touched, but each change is mechanical — replace `print()` with `channel.emit_*()`, replace `ask_user_handler` with `channel.ask_user()`.
+- [x] `AgentChannel` protocol in `src/micro_x_agent_loop/agent_channel.py`
+- [x] `TerminalChannel` — reimplements current CLI behaviour (spinner, line prefix, questionary ask_user)
+- [x] `BufferedChannel` — for `--run` mode and tests (accumulates text, returns timeout on ask_user)
+- [x] `BrokerChannel` — for broker HITL runs (HTTP POST + poll for answer)
+- [x] `ASK_USER_SCHEMA` moved from `ask_user.py` to `agent_channel.py`
+- [x] Modify `anthropic_provider.py` — accept channel, call `emit_text_delta()` instead of `print()`
+- [x] Modify `openai_provider.py` — same
+- [x] Modify `turn_engine.py` — accept channel, route tool lifecycle and ask_user through it
+- [x] Modify `agent.py` — accept channel via `AgentConfig`, remove `_LINE_PREFIX`, `_ask_user_handler`
+- [x] Modify `bootstrap.py` — create appropriate channel based on context
+- [x] Delete `ask_user.py` (absorbed into `TerminalChannel` + `agent_channel.py`)
+- [x] Delete `broker_ask_user.py` (absorbed into `BrokerChannel`)
+- [x] Move `Spinner` class into `TerminalChannel`
+- [x] All 400 existing tests pass
+- [x] New unit tests for BufferedChannel, TerminalChannel, ASK_USER_SCHEMA
 
 **Key design decisions (settled):**
 - Protocol is pure Python, framework-agnostic — no FastAPI dependency
@@ -73,40 +51,41 @@ Enable web, desktop, and mobile clients to interact with the agent via an HTTP/W
 - `TurnEvents` (memory, metrics, checkpoints) remains separate from `AgentChannel` (client communication)
 - Each channel implementation owns its own presentation logic
 
-### Phase 2: API Server Foundation
+### Phase 2: API Server Foundation ✅
+
+**Status: Completed** (2026-03-08, branch `feature/api-server`)
 
 **Scope:** FastAPI server with REST endpoints and WebSocket streaming. Single-user, single-process.
 
 **Prerequisites:** Phase 1 complete.
 
 **Deliverables:**
-- [ ] `src/micro_x_agent_loop/server/` package
-- [ ] `server/app.py` — FastAPI application with CORS, auth middleware
-- [ ] `server/agent_manager.py` — creates/caches/evicts Agent instances per session
-- [ ] `server/ws_channel.py` — `WebSocketChannel` implementation:
-  - `emit_text_delta` → sends `{"type": "text_delta", "text": "..."}` frame
-  - `emit_tool_started` → sends `{"type": "tool_started", ...}` frame
-  - `ask_user` → sends question frame, awaits answer frame
-- [ ] REST endpoints:
-  - [ ] `POST /api/chat` — send message, return complete response (non-streaming)
-  - [ ] `POST /api/sessions` — create session
-  - [ ] `GET /api/sessions` — list sessions
-  - [ ] `GET /api/sessions/{id}` — session details
-  - [ ] `DELETE /api/sessions/{id}` — end session
-  - [ ] `GET /api/sessions/{id}/messages` — message history
-  - [ ] `GET /api/health` — health check
-- [ ] WebSocket endpoint:
-  - [ ] `WS /api/ws/{session_id}` — streaming chat
-  - [ ] JSON message protocol (text_delta, tool_started, tool_completed, turn_complete, error, question, answer)
-  - [ ] Turn cancellation via `{"type": "cancel"}`
-- [ ] CLI flag: `--server start` to launch the server
-- [ ] Bearer token auth (reuse broker pattern)
-- [ ] Session timeout and eviction (configurable)
+- [x] `src/micro_x_agent_loop/server/` package
+- [x] `server/app.py` — FastAPI application with lifespan startup/shutdown, CORS, auth middleware
+- [x] `server/agent_manager.py` — creates/caches/evicts Agent instances per session (configurable capacity + timeout)
+- [x] `server/ws_channel.py` — `WebSocketChannel` implementation (JSON frames, ask_user via question/answer with timeout)
+- [x] REST endpoints:
+  - [x] `POST /api/chat` — send message, return complete response (non-streaming, uses BufferedChannel)
+  - [x] `POST /api/sessions` — create session
+  - [x] `GET /api/sessions` — list sessions
+  - [x] `GET /api/sessions/{id}` — session details
+  - [x] `DELETE /api/sessions/{id}` — end session
+  - [x] `GET /api/sessions/{id}/messages` — message history
+  - [x] `GET /api/health` — health check
+- [x] WebSocket endpoint:
+  - [x] `WS /api/ws/{session_id}` — streaming chat
+  - [x] JSON message protocol (text_delta, tool_started, tool_completed, turn_complete, error, question, answer)
+  - [ ] Turn cancellation via `{"type": "cancel"}` — deferred to Phase 3/4
+- [x] CLI flag: `--server start` to launch the server
+- [x] Bearer token auth (Bearer header, skips /api/health and /docs)
+- [x] Session timeout and eviction (configurable via env vars)
+- [x] 26 server tests (AgentManager, WebSocketChannel, app endpoints, auth, CLI args)
 
-**Decisions to make:**
-- Agent pool size limit (how many concurrent sessions?)
-- Session timeout policy (evict after N minutes idle?)
-- HITL questions: route through WebSocket to connected client? (likely yes)
+**Decisions made:**
+- Agent pool size: configurable via `SERVER_MAX_SESSIONS` env var (default 10)
+- Session timeout: configurable via `SERVER_SESSION_TIMEOUT_MINUTES` env var (default 30 min)
+- HITL questions: routed through WebSocket to connected client via question/answer frames
+- Server config: environment variables (`SERVER_HOST`, `SERVER_PORT`, `SERVER_API_SECRET`, etc.)
 
 ### Phase 3: Broker Convergence
 

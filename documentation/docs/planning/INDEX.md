@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-03-07
+Last updated: 2026-03-08
 
 ## Priority Queue
 
@@ -20,7 +20,7 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | **10** | [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | **Completed** | Community building — low value until the project has active users. Extends existing GitHub MCP server |
 | ~~11~~ | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | Replaced by Trigger Broker below — retained as reference for full gateway capabilities |
 | **11** | [Trigger Broker](PLAN-trigger-broker.md) | **Completed** | Always-on run dispatcher for cron, webhooks, messaging channels, HITL, retries |
-| **12** | [Agent API Server](PLAN-agent-api-server.md) | Draft | HTTP/WebSocket API enabling web, desktop, and mobile clients. StreamBridge decouples output from stdout. Broker converges into server |
+| **12** | [Agent API Server](PLAN-agent-api-server.md) | **Phases 1–2 Complete** | HTTP/WebSocket API enabling web, desktop, and mobile clients. AgentChannel decouples output from stdout. Phases 3–5 remaining |
 | **13** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Frictionless onboarding becomes critical once promotional channels drive traffic to the repo. Benefits from stable post-broker architecture |
 | **14** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, sub-agents, schema optimisation) | Planning | Architectural changes, higher effort; model routing can be done in TurnEngine/Provider layer without gateway |
 | **15** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
@@ -36,9 +36,10 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | Status | Count |
 |--------|-------|
 | Completed | 17 |
+| In Progress | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
-| Draft | 2 |
+| Draft | 1 |
 | Planned | 4 |
 
 ## All Plans
@@ -68,5 +69,5 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | [Reddit MCP](PLAN-reddit-mcp.md) | Blocked | Reddit developer registration inaccessible |
 | [X/Twitter MCP](PLAN-x-twitter-mcp.md) | Completed | Tweet/thread publishing via X API v2. Completed 2026-03-06 |
 | [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | Completed | 5 tools: create, list, get, comment, categories. Completed 2026-03-06 |
-| [Agent API Server](PLAN-agent-api-server.md) | Draft | HTTP/WebSocket API for multi-client support (web, desktop, mobile) |
+| [Agent API Server](PLAN-agent-api-server.md) | Phases 1–2 Complete | HTTP/WebSocket API for multi-client support. AgentChannel + server foundation done |
 | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Interactive setup wizard for non-expert users |
