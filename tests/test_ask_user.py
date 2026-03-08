@@ -1,4 +1,4 @@
-"""Tests for ask_user — human-in-the-loop questioning pseudo-tool."""
+"""Tests for AgentChannel implementations and ask_user integration."""
 
 from __future__ import annotations
 
@@ -7,8 +7,12 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
-from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA, BufferedChannel
-from micro_x_agent_loop.ask_user import AskUserHandler, _OTHER_SENTINEL
+from micro_x_agent_loop.agent_channel import (
+    ASK_USER_SCHEMA,
+    BufferedChannel,
+    TerminalChannel,
+    _NO_RESPONSE_MSG,
+)
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult
 from tests.fakes import FakeStreamProvider, FakeTool
@@ -16,163 +20,153 @@ from tests.test_turn_engine import RecordingEvents
 
 
 # ---------------------------------------------------------------------------
-# AskUserHandler unit tests
+# ASK_USER_SCHEMA tests
 # ---------------------------------------------------------------------------
 
 
-class TestIsAskUserCall(unittest.TestCase):
-    def test_true_for_ask_user(self) -> None:
-        self.assertTrue(AskUserHandler.is_ask_user_call("ask_user"))
-
-    def test_false_for_other(self) -> None:
-        self.assertFalse(AskUserHandler.is_ask_user_call("tool_search"))
-        self.assertFalse(AskUserHandler.is_ask_user_call("read_file"))
-        self.assertFalse(AskUserHandler.is_ask_user_call(""))
-
-
-class TestGetSchema(unittest.TestCase):
+class TestAskUserSchema(unittest.TestCase):
     def test_has_correct_name(self) -> None:
-        schema = AskUserHandler.get_schema()
-        self.assertEqual("ask_user", schema["name"])
+        self.assertEqual("ask_user", ASK_USER_SCHEMA["name"])
 
     def test_has_required_question(self) -> None:
-        schema = AskUserHandler.get_schema()
-        self.assertIn("question", schema["input_schema"]["properties"])
-        self.assertIn("question", schema["input_schema"]["required"])
+        self.assertIn("question", ASK_USER_SCHEMA["input_schema"]["properties"])
+        self.assertIn("question", ASK_USER_SCHEMA["input_schema"]["required"])
 
     def test_has_optional_options(self) -> None:
-        schema = AskUserHandler.get_schema()
-        self.assertIn("options", schema["input_schema"]["properties"])
-        # options is NOT required
-        self.assertNotIn("options", schema["input_schema"]["required"])
+        self.assertIn("options", ASK_USER_SCHEMA["input_schema"]["properties"])
+        self.assertNotIn("options", ASK_USER_SCHEMA["input_schema"]["required"])
 
 
-class TestAskUserHandle(unittest.TestCase):
-    def _make_handler(self) -> AskUserHandler:
-        return AskUserHandler(line_prefix="test> ", user_prompt="you> ")
+# ---------------------------------------------------------------------------
+# BufferedChannel tests
+# ---------------------------------------------------------------------------
 
-    def test_handle_with_options_selects_first(self) -> None:
-        """Selecting the first option returns its label."""
-        handler = self._make_handler()
-        tool_input = {
-            "question": "Which approach?",
-            "options": [
-                {"label": "Option A", "description": "First approach"},
-                {"label": "Option B", "description": "Second approach"},
-            ],
-        }
-        with patch.object(AskUserHandler, "_prompt_with_options", return_value="Option A"):
-            result = asyncio.run(handler.handle(tool_input))
-        parsed = json.loads(result)
-        self.assertEqual("Option A", parsed["answer"])
 
-    def test_handle_with_options_selects_second(self) -> None:
-        handler = self._make_handler()
-        tool_input = {
-            "question": "Which approach?",
-            "options": [
-                {"label": "Option A", "description": "First approach"},
-                {"label": "Option B", "description": "Second approach"},
-            ],
-        }
-        with patch.object(AskUserHandler, "_prompt_with_options", return_value="Option B"):
-            result = asyncio.run(handler.handle(tool_input))
-        parsed = json.loads(result)
-        self.assertEqual("Option B", parsed["answer"])
+class TestBufferedChannel(unittest.TestCase):
+    def test_emit_text_delta_accumulates(self) -> None:
+        ch = BufferedChannel()
+        ch.emit_text_delta("Hello")
+        ch.emit_text_delta(" world")
+        self.assertEqual("Hello world", ch.text)
 
-    def test_handle_other_triggers_free_text(self) -> None:
-        """Selecting 'Other' in questionary.select returns the follow-up text answer."""
-        handler = self._make_handler()
-        tool_input = {
-            "question": "Which approach?",
-            "options": [
-                {"label": "Option A", "description": "First approach"},
-                {"label": "Option B", "description": "Second approach"},
-            ],
-        }
-        # _prompt_with_options handles the full Other→text flow internally,
-        # so we just mock its return value to be the free-text answer.
-        with patch.object(AskUserHandler, "_prompt_with_options", return_value="Actually, do option C"):
-            result = asyncio.run(handler.handle(tool_input))
-        parsed = json.loads(result)
-        self.assertEqual("Actually, do option C", parsed["answer"])
+    def test_emit_tool_events_recorded(self) -> None:
+        ch = BufferedChannel()
+        ch.emit_tool_started("t1", "read_file")
+        ch.emit_tool_completed("t1", "read_file", False)
+        self.assertEqual(2, len(ch.tool_events))
+        self.assertEqual(("started", "t1", "read_file"), ch.tool_events[0])
+        self.assertEqual(("completed", "t1", "read_file"), ch.tool_events[1])
 
-    def test_handle_without_options(self) -> None:
-        """Free-form question uses _prompt_free_text and returns the typed text."""
-        handler = self._make_handler()
-        tool_input = {"question": "What file should I read?"}
-        with patch.object(AskUserHandler, "_prompt_free_text", return_value="main.py"):
-            result = asyncio.run(handler.handle(tool_input))
-        parsed = json.loads(result)
-        self.assertEqual("main.py", parsed["answer"])
+    def test_emit_error_recorded(self) -> None:
+        ch = BufferedChannel()
+        ch.emit_error("something broke")
+        self.assertEqual(["something broke"], ch.errors)
 
-    def test_handle_returns_valid_json_with_answer_key(self) -> None:
-        handler = self._make_handler()
-        tool_input = {"question": "Yes or no?"}
-        with patch.object(AskUserHandler, "_prompt_free_text", return_value="yes"):
-            result = asyncio.run(handler.handle(tool_input))
-        parsed = json.loads(result)
-        self.assertIn("answer", parsed)
+    def test_emit_turn_complete_recorded(self) -> None:
+        ch = BufferedChannel()
+        ch.emit_turn_complete({"input_tokens": 10})
+        self.assertEqual([{"input_tokens": 10}], ch.turn_usages)
 
-    def test_fallback_on_questionary_error(self) -> None:
-        """When questionary raises, the handler falls back to plain input."""
-        handler = self._make_handler()
-        tool_input = {"question": "What file?"}
+    def test_ask_user_returns_timeout_message(self) -> None:
+        ch = BufferedChannel()
+        answer = asyncio.run(ch.ask_user("What file?"))
+        self.assertIn("No response from human", answer)
+
+    def test_ask_user_with_options_returns_timeout(self) -> None:
+        ch = BufferedChannel()
+        options = [{"label": "A", "description": "First"}, {"label": "B", "description": "Second"}]
+        answer = asyncio.run(ch.ask_user("Pick one", options))
+        self.assertIn("No response from human", answer)
+
+
+# ---------------------------------------------------------------------------
+# TerminalChannel tests
+# ---------------------------------------------------------------------------
+
+
+class TestTerminalChannel(unittest.TestCase):
+    def test_emit_text_delta_prints(self) -> None:
+        ch = TerminalChannel()
+        with patch("builtins.print") as mock_print:
+            ch.emit_text_delta("Hello")
+            mock_print.assert_called_once_with("Hello", end="", flush=True)
+
+    def test_ask_user_free_text(self) -> None:
+        ch = TerminalChannel()
+        with patch.object(TerminalChannel, "_prompt_free_text", return_value="main.py"):
+            answer = asyncio.run(ch.ask_user("Which file?"))
+        self.assertEqual("main.py", answer)
+
+    def test_ask_user_with_options(self) -> None:
+        ch = TerminalChannel()
+        options = [{"label": "A", "description": "First"}, {"label": "B", "description": "Second"}]
+        with patch.object(TerminalChannel, "_prompt_with_options", return_value="A"):
+            answer = asyncio.run(ch.ask_user("Pick one", options))
+        self.assertEqual("A", answer)
+
+    def test_ask_user_fallback_on_error(self) -> None:
+        ch = TerminalChannel()
         with (
-            patch.object(AskUserHandler, "_prompt_free_text", side_effect=RuntimeError("not a tty")),
-            patch.object(handler, "_fallback_prompt", return_value="fallback.py") as mock_fb,
+            patch.object(TerminalChannel, "_prompt_free_text", side_effect=RuntimeError("not a tty")),
+            patch.object(ch, "_fallback_prompt", return_value="fallback.py"),
         ):
-            result = asyncio.run(handler.handle(tool_input))
-        parsed = json.loads(result)
-        self.assertEqual("fallback.py", parsed["answer"])
-        mock_fb.assert_called_once_with("What file?", [])
+            answer = asyncio.run(ch.ask_user("Which file?"))
+        self.assertEqual("fallback.py", answer)
 
-
-# ---------------------------------------------------------------------------
-# _prompt_with_options unit tests (mock questionary directly)
-# ---------------------------------------------------------------------------
-
-
-class TestPromptWithOptions(unittest.TestCase):
-    def _options(self) -> list[dict[str, str]]:
-        return [
-            {"label": "OAuth 2.0", "description": "Industry standard"},
-            {"label": "API Keys", "description": "Simple, stateless"},
-        ]
-
-    @patch("micro_x_agent_loop.ask_user.questionary")
-    def test_returns_selected_option(self, mock_q: MagicMock) -> None:
+    @patch("micro_x_agent_loop.agent_channel.questionary")
+    def test_prompt_with_options_returns_selected(self, mock_q: MagicMock) -> None:
         mock_q.select.return_value.ask.return_value = "OAuth 2.0"
-        result = AskUserHandler._prompt_with_options("Which auth?", self._options())
+        result = TerminalChannel._prompt_with_options(
+            "Which auth?",
+            [{"label": "OAuth 2.0", "description": "Standard"}, {"label": "API Keys", "description": "Simple"}],
+        )
         self.assertEqual("OAuth 2.0", result)
 
-    @patch("micro_x_agent_loop.ask_user.questionary")
-    def test_other_triggers_text_prompt(self, mock_q: MagicMock) -> None:
-        mock_q.select.return_value.ask.return_value = _OTHER_SENTINEL
+    @patch("micro_x_agent_loop.agent_channel.questionary")
+    def test_prompt_with_options_other_triggers_text(self, mock_q: MagicMock) -> None:
+        mock_q.select.return_value.ask.return_value = "__other__"
         mock_q.text.return_value.ask.return_value = "Custom answer"
-        result = AskUserHandler._prompt_with_options("Which auth?", self._options())
+        result = TerminalChannel._prompt_with_options(
+            "Which auth?",
+            [{"label": "OAuth 2.0", "description": "Standard"}, {"label": "API Keys", "description": "Simple"}],
+        )
         self.assertEqual("Custom answer", result)
         mock_q.text.assert_called_once()
 
-    @patch("micro_x_agent_loop.ask_user.questionary")
-    def test_ctrl_c_returns_empty(self, mock_q: MagicMock) -> None:
+    @patch("micro_x_agent_loop.agent_channel.questionary")
+    def test_prompt_with_options_ctrl_c_returns_empty(self, mock_q: MagicMock) -> None:
         mock_q.select.return_value.ask.return_value = None
-        result = AskUserHandler._prompt_with_options("Which auth?", self._options())
+        result = TerminalChannel._prompt_with_options(
+            "Which auth?",
+            [{"label": "OAuth 2.0", "description": "Standard"}],
+        )
         self.assertEqual("", result)
 
-
-class TestPromptFreeText(unittest.TestCase):
-    @patch("micro_x_agent_loop.ask_user.questionary")
-    def test_returns_typed_text(self, mock_q: MagicMock) -> None:
+    @patch("micro_x_agent_loop.agent_channel.questionary")
+    def test_prompt_free_text_returns_typed(self, mock_q: MagicMock) -> None:
         mock_q.text.return_value.ask.return_value = "hello world"
-        result = AskUserHandler._prompt_free_text("What?")
+        result = TerminalChannel._prompt_free_text("What?")
         self.assertEqual("hello world", result)
 
-    @patch("micro_x_agent_loop.ask_user.questionary")
-    def test_ctrl_c_returns_empty(self, mock_q: MagicMock) -> None:
+    @patch("micro_x_agent_loop.agent_channel.questionary")
+    def test_prompt_free_text_ctrl_c_returns_empty(self, mock_q: MagicMock) -> None:
         mock_q.text.return_value.ask.return_value = None
-        result = AskUserHandler._prompt_free_text("What?")
+        result = TerminalChannel._prompt_free_text("What?")
         self.assertEqual("", result)
+
+    def test_begin_streaming_starts_spinner(self) -> None:
+        ch = TerminalChannel()
+        ch.begin_streaming()
+        self.assertIsNotNone(ch._spinner)
+        ch.end_streaming()
+        self.assertIsNone(ch._spinner)
+
+    def test_tool_started_creates_spinner(self) -> None:
+        ch = TerminalChannel()
+        ch.emit_tool_started("t1", "read_file")
+        self.assertIsNotNone(ch._spinner)
+        ch.emit_tool_completed("t1", "read_file", False)
+        self.assertIsNone(ch._spinner)
 
 
 # ---------------------------------------------------------------------------
