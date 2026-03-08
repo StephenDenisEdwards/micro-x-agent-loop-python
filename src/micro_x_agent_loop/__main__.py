@@ -88,13 +88,13 @@ class _EscWatcher:
             if result != 0:  # WAIT_OBJECT_0
                 continue
 
-            # Peek first to avoid blocking
+            # Peek (not read) to avoid consuming events needed by questionary/input()
             avail = wt.DWORD(0)
             kernel32.GetNumberOfConsoleInputEvents(h_stdin, ctypes.byref(avail))
             if avail.value == 0:
                 continue
 
-            success = kernel32.ReadConsoleInputW(
+            success = kernel32.PeekConsoleInputW(
                 h_stdin, ctypes.byref(rec), 1, ctypes.byref(read_count)
             )
             if not success or read_count.value == 0:
@@ -105,11 +105,26 @@ class _EscWatcher:
                 and rec.Event.bKeyDown
                 and rec.Event.wVirtualKeyCode == VK_ESCAPE
             ):
+                # Consume only the ESC event
+                kernel32.ReadConsoleInputW(
+                    h_stdin, ctypes.byref(rec), 1, ctypes.byref(read_count)
+                )
                 task = self._task
                 loop = self._loop
                 if task is not None and loop is not None and not task.done():
                     loop.call_soon_threadsafe(task.cancel)
                 return
+
+            # Not ESC — flush the peeked event so we don't spin on it,
+            # but only if it's not a key event (mouse, focus, etc.)
+            if rec.EventType != KEY_EVENT:
+                kernel32.ReadConsoleInputW(
+                    h_stdin, ctypes.byref(rec), 1, ctypes.byref(read_count)
+                )
+            else:
+                # Key event that isn't ESC — leave it for input()/questionary.
+                # Sleep briefly to avoid busy-spinning while waiting for ESC.
+                self._stop_event.wait(0.1)
 
 
 def _parse_cli_args() -> dict:
@@ -401,4 +416,7 @@ def _install_transport_cleanup_hook() -> None:
 
 if __name__ == "__main__":
     _install_transport_cleanup_hook()
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass

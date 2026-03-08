@@ -11,6 +11,11 @@ Step-by-step walkthrough of every API server feature. Run these from the project
 > **Cleanup between test runs**
 > Sessions are in-memory and reset when the server restarts. No database cleanup needed unless broker is enabled.
 
+> **Interactive API docs**
+> Once the server is running, browse the full API interactively:
+> - **Swagger UI:** http://127.0.0.1:8321/docs — try endpoints directly from the browser
+> - **OpenAPI spec:** http://127.0.0.1:8321/openapi.json — raw JSON schema for code generation
+
 ---
 
 ## 1. Server Startup

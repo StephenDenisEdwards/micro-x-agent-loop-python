@@ -199,9 +199,9 @@ def create_app(
 
         await agent_manager.shutdown_all()
         if mcp_manager:
-            await mcp_manager.shutdown()
+            await mcp_manager.close()
         if event_sink:
-            await event_sink.stop()
+            await event_sink.close()
         _state.clear()
         logger.info("API server shut down")
 
@@ -389,6 +389,7 @@ def create_app(
                     text = data.get("text", "").strip()
                     if text:
                         await agent.run(text)
+                        channel.emit_turn_complete({})
 
                 elif msg_type == "answer":
                     question_id = data.get("question_id", "")

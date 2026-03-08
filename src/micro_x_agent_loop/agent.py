@@ -290,9 +290,6 @@ class Agent:
         self, analysis: ModeAnalysis, stage2: Stage2Result | None,
     ) -> RecommendedMode:
         """Prompt the user to choose between PROMPT and COMPILED execution mode."""
-        import questionary
-        from questionary import Choice, Style
-
         # Determine the recommendation to present
         if stage2:
             recommended = stage2.recommended_mode
@@ -316,6 +313,9 @@ class Agent:
         print("  COMPILED mode: structured batch execution — good for multi-item "
               "processing, data collection, scoring, and repeatable workflows.")
         print()
+
+        import questionary
+        from questionary import Choice, Style
 
         compiled_label = "COMPILED"
         prompt_label = "PROMPT"
@@ -353,7 +353,6 @@ class Agent:
         try:
             selected = await asyncio.to_thread(_do_select)
         except Exception:
-            # Non-interactive terminal — fall back to the recommendation
             print(f"[Mode Analysis] Non-interactive terminal, using recommendation: "
                   f"{recommended.value}")
             return recommended
