@@ -188,7 +188,7 @@ def _make_engine_with_search(
         system_prompt="sys",
         converted_tools=converted,
         tool_map={t.name: t for t in tool_list},
-        line_prefix="test> ",
+
         max_tool_result_chars=40_000,
         max_tokens_retries=3,
         events=events,
@@ -324,7 +324,7 @@ class TestTurnEngineToolSearch(unittest.TestCase):
             system_prompt="sys",
             converted_tools=[],
             tool_map={tool.name: tool},
-            line_prefix="test> ",
+    
             max_tool_result_chars=40_000,
             max_tokens_retries=3,
             events=events,

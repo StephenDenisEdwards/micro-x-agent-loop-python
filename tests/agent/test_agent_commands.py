@@ -5,6 +5,7 @@ from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from micro_x_agent_loop.agent import Agent
+from micro_x_agent_loop.agent_channel import BufferedChannel
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.usage import UsageResult
 from tests.fakes import (
@@ -27,6 +28,7 @@ class AgentCommandTests(unittest.TestCase):
                 session_manager=SessionManagerFake(),
                 checkpoint_manager=CheckpointManagerFake(),
                 event_emitter=FakeEventEmitter(),
+                channel=BufferedChannel(),
             )
         )
 
@@ -113,11 +115,12 @@ class AgentCommandTests(unittest.TestCase):
             UsageResult(),
         )
         with patch.object(agent._provider, "stream_chat", side_effect=[stream_result] * 3):
-            buf = io.StringIO()
-            with redirect_stdout(buf):
-                asyncio.run(agent.run("hello"))
-            out = buf.getvalue()
-            self.assertIn("Stopped: response exceeded max_tokens", out)
+            asyncio.run(agent.run("hello"))
+            errors = agent._channel.errors
+            self.assertTrue(
+                any("Stopped: response exceeded max_tokens" in e for e in errors),
+                f"Expected max_tokens error in channel errors, got: {errors}",
+            )
 
     def test_cost_command_prints_summary(self) -> None:
         agent = self._make_agent()

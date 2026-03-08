@@ -39,7 +39,6 @@ class AnthropicProviderStreamTests(unittest.TestCase):
                 system_prompt="sys",
                 messages=[{"role": "user", "content": "hi"}],
                 tools=[],
-                line_prefix="assistant> ",
             )
         )
 
@@ -68,7 +67,6 @@ class AnthropicProviderStreamTests(unittest.TestCase):
                 system_prompt="sys",
                 messages=[{"role": "user", "content": "hi"}],
                 tools=[],
-                line_prefix="assistant> ",
             )
         )
 

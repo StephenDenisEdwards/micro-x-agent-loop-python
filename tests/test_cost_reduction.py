@@ -259,7 +259,6 @@ class ToolSummarizationEngineTests(unittest.TestCase):
             system_prompt="sys",
             converted_tools=[],
             tool_map={t.name: t for t in tools},
-            line_prefix="test> ",
             max_tool_result_chars=100_000,
             max_tokens_retries=3,
             events=events,

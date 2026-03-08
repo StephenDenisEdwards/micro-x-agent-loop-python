@@ -17,8 +17,8 @@ class AutonomousModeTests(unittest.TestCase):
         prompt = get_system_prompt()
         self.assertNotIn("Autonomous Mode", prompt)
 
-    def test_autonomous_mode_excludes_ask_user_from_agent(self) -> None:
-        """When autonomous=True, agent should not wire up ask_user."""
+    def test_autonomous_mode_no_ask_user_without_channel(self) -> None:
+        """When autonomous=True with no channel, ask_user directive is absent."""
         from micro_x_agent_loop.agent import Agent
         from micro_x_agent_loop.agent_config import AgentConfig
 
@@ -28,21 +28,23 @@ class AutonomousModeTests(unittest.TestCase):
             autonomous=True,
         )
         agent = Agent(config)
-        self.assertIsNone(agent._ask_user_handler)
+        self.assertIsNone(agent._channel)
         self.assertTrue(agent._autonomous)
 
     def test_interactive_mode_includes_ask_user(self) -> None:
-        """Default (non-autonomous) mode should wire up ask_user."""
+        """When a channel is provided, ask_user directive is included."""
         from micro_x_agent_loop.agent import Agent
+        from micro_x_agent_loop.agent_channel import BufferedChannel
         from micro_x_agent_loop.agent_config import AgentConfig
 
         config = AgentConfig(
             model="test-model",
             api_key="test-key",
             autonomous=False,
+            channel=BufferedChannel(),
         )
         agent = Agent(config)
-        self.assertIsNotNone(agent._ask_user_handler)
+        self.assertIsNotNone(agent._channel)
         self.assertFalse(agent._autonomous)
 
 
