@@ -266,7 +266,7 @@ async def main() -> None:
             await handle_broker_command(broker_args, config=raw_config)
         return
 
-    # -- Server command: start the API server --
+    # -- Server command: start server or connect as client --
     if cli_args["server"] is not None:
         server_args = cli_args["server"]
         if not server_args or server_args[0] == "start":
@@ -281,9 +281,19 @@ async def main() -> None:
                 session_timeout_minutes=int(os.environ.get("SERVER_SESSION_TIMEOUT_MINUTES", "30")),
                 broker_enabled=broker_flag or bool(os.environ.get("SERVER_BROKER_ENABLED")),
             )
+        elif server_args[0].startswith("http://") or server_args[0].startswith("https://"):
+            # Client mode: connect to a running server
+            from micro_x_agent_loop.server.client import run_client
+            await run_client(
+                server_args[0],
+                session_id=cli_args["session"],
+                api_secret=os.environ.get("SERVER_API_SECRET"),
+            )
         else:
             print(f"Unknown server command: {server_args[0]}")
-            print("Usage: --server start [--broker]")
+            print("Usage:")
+            print("  --server start [--broker]              Start the API server")
+            print("  --server http://host:port [--session]  Connect to a running server")
         return
 
     app = parse_app_config(raw_config)
