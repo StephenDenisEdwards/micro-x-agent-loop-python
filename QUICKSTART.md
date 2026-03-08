@@ -5,7 +5,7 @@ Get Micro-X Agent running in 2 minutes.
 ## Prerequisites
 
 - [Python 3.11+](https://python.org/)
-- [Node.js 18+](https://nodejs.org/) — required for TypeScript MCP tool servers
+- [Node.js 18+](https://nodejs.org/) — required for TypeScript MCP tool servers (auto-built on first run)
 - A model provider API key:
   - [Anthropic API key](https://console.anthropic.com/) when `Provider=anthropic` (default), or
   - OpenAI API key when `Provider=openai`
@@ -28,31 +28,19 @@ git clone https://github.com/StephenDenisEdwards/micro-x-agent-loop-python.git
 cd micro-x-agent-loop-python
 ```
 
-Copy the example environment file and fill in your keys:
+Copy the example environment file and add at least your LLM provider key:
 
 ```bash
 cp .env.example .env
 ```
 
-Then edit `.env`:
+Edit `.env` — at minimum:
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-client-secret
-ANTHROPIC_ADMIN_API_KEY=sk-ant-admin...
-BRAVE_API_KEY=BSA...
-GITHUB_TOKEN=ghp_...
-DEEPGRAM_API_KEY=dg_...
+ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
 
-Required key depends on `Provider` in `config.json`:
-
-- `Provider: "anthropic"` (default) → `ANTHROPIC_API_KEY` required
-- `Provider: "openai"` → `OPENAI_API_KEY` required
-
-All other keys are optional and only enable specific tool sets.
+All other keys are optional and enable additional tool sets. Add them later as needed.
 
 | Key | Required | Used for |
 |-----|----------|----------|
@@ -81,11 +69,12 @@ run.bat
 
 That's it — one command. The script handles everything automatically:
 
-1. **First run:** Creates a Python virtual environment (`.venv/`), installs all dependencies via pip, then starts the agent. This takes 30-60 seconds.
-2. **Subsequent runs:** Detects that the venv and packages are already installed, skips straight to starting the agent (instant).
-3. **Recovery:** If the venv exists but packages are missing (e.g. after a failed install), it detects this and reinstalls automatically.
+1. **Config:** If no `config.json` exists, creates one pointing to `config-starter.json` (filesystem + web tools, sensible defaults).
+2. **Python:** Creates a virtual environment (`.venv/`), installs all dependencies via pip.
+3. **MCP servers:** If TypeScript MCP servers haven't been built yet, runs `npm install && npm run build` automatically (requires Node.js).
+4. **Subsequent runs:** Detects everything is already set up, skips straight to starting the agent.
 
-You never need to activate a virtual environment, run `pip install`, or know anything about Python packaging.
+You never need to activate a virtual environment, run `pip install`, build MCP servers, or edit JSON files.
 
 <details>
 <summary>Alternative: using uv</summary>
@@ -117,42 +106,80 @@ python -m micro_x_agent_loop
 ### You'll see:
 
 ```
-micro-x-agent-loop (type 'exit' to quit)
+micro-x-agent-loop [anthropic:claude-sonnet-4-5-20250929] (type 'exit' to quit, '/help' for commands)
 MCP servers:
-  - filesystem: bash, read_file, write_file, append_file, save_memory
-  - web: web_fetch, web_search
-  - linkedin: linkedin_jobs, linkedin_job_detail
-  - github: list_prs, get_pr, create_pr, list_issues, create_issue, get_file, search_code, list_repos
-  - google: gmail_search, gmail_read, gmail_send, calendar_list_events, ...
-  - anthropic-admin: anthropic_usage
-  - interview-assist: ia_healthcheck, ia_list_recordings, ...
-  - system-info: system_info, disk_info, network_info
-  - whatsapp: search_contacts, list_messages, list_chats, get_chat, ...
-Working directory: C:\path\to\your\documents
+  filesystem:
+    - bash
+    - read_file
+    - write_file
+    - append_file
+    - save_memory
+  web:
+    - web_fetch
+    - web_search
 Compaction: summarize (threshold: 80,000 tokens, tail: 6 messages)
-Logging: console (stderr, DEBUG), file (agent.log, DEBUG)
+Memory: enabled (session: abc12345)
 
 you>
 ```
 
 Type a natural-language prompt and press Enter. The agent will stream its response and call tools as needed. Type `exit` or `quit` to stop.
 
-All tools are provided by MCP servers. If a server fails to connect, a warning is logged but the agent starts normally with the remaining servers.
+The starter config enables filesystem and web tools. Add more MCP servers to `config.json` as needed (see [Adding more tools](#adding-more-tools) below). If a server fails to connect, a warning is logged but the agent starts normally with the remaining servers.
 
-### One-shot and scheduled runs
+### Adding more tools
 
-You can also run the agent non-interactively for automation:
+Edit your `config.json` (or `config-starter.json`) to add MCP servers. Each server is a block under `McpServers`:
 
-```bash
-# Execute a single prompt and exit (autonomous mode — no human interaction)
-python -m micro_x_agent_loop --run "Summarise today's news"
-
-# Schedule recurring jobs via the trigger broker
-python -m micro_x_agent_loop --job add "daily-news" "0 9 * * *" "Summarise today's news"
-python -m micro_x_agent_loop --broker start
+```json
+{
+  "McpServers": {
+    "github": {
+      "command": "node",
+      "args": ["mcp_servers/ts/packages/github/dist/index.js"]
+    }
+  }
+}
 ```
 
-See `--job list`, `--job run-now <id>`, `--broker status` for management. Full details in the [Trigger Broker plan](documentation/docs/planning/PLAN-trigger-broker.md).
+Add the corresponding API key to `.env`:
+
+```
+GITHUB_TOKEN=ghp_your-token-here
+```
+
+Available built-in MCP servers (all paths relative to the project root):
+
+| Server | Path | Required `.env` keys |
+|--------|------|---------------------|
+| filesystem | `mcp_servers/ts/packages/filesystem/dist/index.js` | — |
+| web | `mcp_servers/ts/packages/web/dist/index.js` | `BRAVE_API_KEY` (for search) |
+| github | `mcp_servers/ts/packages/github/dist/index.js` | `GITHUB_TOKEN` |
+| google | `mcp_servers/ts/packages/google/dist/index.js` | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
+| linkedin | `mcp_servers/ts/packages/linkedin/dist/index.js` | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` |
+| devto | `mcp_servers/ts/packages/devto/dist/index.js` | `DEV_TO_API_KEY` |
+| anthropic-admin | `mcp_servers/ts/packages/anthropic-admin/dist/index.js` | `ANTHROPIC_ADMIN_API_KEY` |
+
+### Other run modes
+
+```bash
+# One-shot: execute a single prompt and exit
+python -m micro_x_agent_loop --run "Summarise today's news"
+
+# API server: HTTP/WebSocket for web, desktop, or mobile clients
+python -m micro_x_agent_loop --server start
+
+# API server with trigger broker (cron jobs, webhooks)
+python -m micro_x_agent_loop --server start --broker
+
+# Connect CLI to a running server
+python -m micro_x_agent_loop --server http://localhost:8321
+
+# Schedule a recurring job
+python -m micro_x_agent_loop --job add "daily-news" "0 9 * * *" "Summarise today's news"
+```
+
+See `--job list`, `--job run-now <id>`, `--broker status` for management.
 
 ## 3. MCP server setup (optional)
 

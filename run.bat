@@ -1,26 +1,36 @@
 @echo off
+
+REM -- Config: create config.json if missing --
+if not exist config.json (
+    echo No config.json found — creating default ^(config-starter.json^)
+    echo ^{"ConfigFile": "config-starter.json"^} > config.json
+)
+
+REM -- Python: create venv and install --
 if not exist .venv\Scripts\python.exe (
     echo Creating virtual environment...
     python -m venv .venv
 )
 .venv\Scripts\pip install -q .
 
-REM Start WhatsApp bridge in background if available
-set BRIDGE_DIR=C:\Users\steph\source\repos\whatsapp-mcp\whatsapp-bridge
-set BRIDGE_STARTED=0
-if exist "%BRIDGE_DIR%\whatsapp-bridge.exe" (
-    start /B /D "%BRIDGE_DIR%" "" whatsapp-bridge.exe >nul 2>&1
-    timeout /t 3 /nobreak >nul
-    set BRIDGE_STARTED=1
+REM -- MCP servers: build if not already built --
+if not exist mcp_servers\ts\packages\filesystem\dist\index.js (
+    where node >nul 2>&1 || (
+        echo WARNING: Node.js not found — MCP tools will not be available.
+        echo Install Node.js 18+: https://nodejs.org/en/download
+        goto :mcp_done
+    )
+    echo Building MCP servers...
+    pushd mcp_servers\ts
+    call npm install
+    call npm run build
+    popd
+    echo MCP servers built.
 )
+:mcp_done
 
-REM Run the agent. MCP child-process cleanup may send Ctrl+C to the console
-REM group on exit, which causes the "Terminate batch job (Y/N)?" prompt.
+REM -- Run the agent --
+REM MCP child-process cleanup may send Ctrl+C to the console group on exit,
+REM which causes the "Terminate batch job (Y/N)?" prompt.
 REM Using cmd /C isolates the signal so it doesn't interrupt this script.
 cmd /C .venv\Scripts\python -m micro_x_agent_loop %*
-
-REM Clean up bridge on exit
-if "%BRIDGE_STARTED%"=="1" (
-    echo Stopping WhatsApp bridge...
-    taskkill /IM whatsapp-bridge.exe /F >nul 2>&1
-)

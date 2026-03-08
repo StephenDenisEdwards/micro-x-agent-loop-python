@@ -1,0 +1,21 @@
+{
+  "Provider": "anthropic",
+  "Model": "claude-sonnet-4-5-20250929",
+  "MaxTokens": 8192,
+  "Temperature": 0.7,
+  "CompactionStrategy": "summarize",
+  "MemoryEnabled": true,
+  "PromptCachingEnabled": true,
+  "CompactionModel": "claude-haiku-4-5-20251001",
+  "SmartCompactionTriggerEnabled": true,
+  "McpServers": {
+    "filesystem": {
+      "command": "node",
+      "args": ["mcp_servers/ts/packages/filesystem/dist/index.js"]
+    },
+    "web": {
+      "command": "node",
+      "args": ["mcp_servers/ts/packages/web/dist/index.js"]
+    }
+  }
+}
