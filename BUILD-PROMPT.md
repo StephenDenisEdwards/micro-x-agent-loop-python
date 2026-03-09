@@ -27,6 +27,7 @@ micro-x-agent-loop-python/
 │   ├── metrics.py                          # Usage tracking, cost estimation, session accumulator
 │   ├── mode_selector.py                    # Prompt mode analysis (Stage 1 pattern + Stage 2 LLM)
 │   ├── provider.py                         # LLM provider protocol & factory
+│   ├── sub_agent.py                        # Sub-agent runner, types, spawn_subagent pseudo-tool
 │   ├── system_prompt.py                    # System prompt construction with directives
 │   ├── tool.py                             # Tool protocol & ToolResult dataclass
 │   ├── tool_result_formatter.py            # Format structured tool results for LLM
@@ -96,6 +97,7 @@ micro-x-agent-loop-python/
     ├── test_api_payload_store.py
     ├── test_ask_user.py
     ├── test_cost_reduction.py
+    ├── test_sub_agent.py
     ├── test_llm_client_stream.py
     ├── agent/
     │   ├── test_agent_commands.py
@@ -311,7 +313,8 @@ Agent.__init__(config)
   → provider.convert_tools(tools) → converted_tools
   → Build tool_map: {tool.name: tool}
   → ToolSearchManager if tool_search active
-  → TurnEngine(provider, model, tools, events=self, channel, ...)
+  → SubAgentRunner if sub_agents_enabled (holds parent tools, provider config)
+  → TurnEngine(provider, model, tools, events=self, channel, sub_agent_runner, ...)
   → CommandRouter with handlers
   → SessionAccumulator for metrics
   → MemoryFacade (Active or Null)
@@ -339,9 +342,10 @@ TurnEngine.run(messages, user_message)
     → Append assistant message
     → If stop_reason == "max_tokens" and no tool_use: retry with continuation (up to MAX_TOKENS_RETRIES)
     → If tool_use blocks present:
-      → Classify into: search blocks, ask_user blocks, regular blocks
+      → Classify into: search blocks, ask_user blocks, subagent blocks, regular blocks
       → Handle search blocks inline (ToolSearchManager.handle_tool_search)
       → Handle ask_user blocks inline (channel.ask_user)
+      → Handle subagent blocks inline (SubAgentRunner.run — concurrent via asyncio.gather)
       → For regular blocks:
         → events.on_ensure_checkpoint_for_turn() — snapshot files before mutation
         → execute_tools(blocks) — parallel async execution:
@@ -382,11 +386,11 @@ class UsageResult:
 
 ### Constants (`constants.py`)
 
-Key values: `DEFAULT_MAX_TOKENS=8192`, `DEFAULT_MAX_TOOL_RESULT_CHARS=40000`, `DEFAULT_MAX_CONVERSATION_MESSAGES=50`, `DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD=4000`, `MAX_TOKENS_RETRIES=3`, `DEFAULT_COMPACTION_THRESHOLD_TOKENS=80000`, `DEFAULT_PROTECTED_TAIL_MESSAGES=6`, `COMPACTION_PREVIEW_TOTAL=700`, `COMPACTION_PREVIEW_HEAD=500`, `COMPACTION_PREVIEW_TAIL=200`, `COMPACTION_SUMMARIZE_INPUT_CAP=100000`, `TOOL_SEARCH_MAX_LOAD=20`, `TOOL_SEARCH_DEFAULT_THRESHOLD_PERCENT=40`, `CHARS_TO_TOKENS_DIVISOR=4`, plus memory defaults and context window lookup dict.
+Key values: `DEFAULT_MAX_TOKENS=8192`, `DEFAULT_MAX_TOOL_RESULT_CHARS=40000`, `DEFAULT_MAX_CONVERSATION_MESSAGES=50`, `DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD=4000`, `MAX_TOKENS_RETRIES=3`, `DEFAULT_COMPACTION_THRESHOLD_TOKENS=80000`, `DEFAULT_PROTECTED_TAIL_MESSAGES=6`, `COMPACTION_PREVIEW_TOTAL=700`, `COMPACTION_PREVIEW_HEAD=500`, `COMPACTION_PREVIEW_TAIL=200`, `COMPACTION_SUMMARIZE_INPUT_CAP=100000`, `TOOL_SEARCH_MAX_LOAD=20`, `TOOL_SEARCH_DEFAULT_THRESHOLD_PERCENT=40`, `CHARS_TO_TOKENS_DIVISOR=4`, `DEFAULT_SUBAGENT_TIMEOUT=120`, `DEFAULT_SUBAGENT_MAX_TURNS=15`, `DEFAULT_SUBAGENT_MAX_TOKENS=4096`, plus memory defaults and context window lookup dict.
 
 ### Config System (`app_config.py`)
 
-`AppConfig` dataclass with ~75 fields covering model, tools, compaction, memory, cost reduction, mode analysis, logging, broker, working directory, etc.
+`AppConfig` dataclass with ~80 fields covering model, tools, compaction, memory, cost reduction, mode analysis, sub-agents, logging, broker, working directory, etc.
 
 `load_json_config(config_path=None) -> tuple[dict, str]`:
 - Resolution: CLI arg → look for `ConfigFile` key (pointer to actual file) → `config.json` default
@@ -460,7 +464,7 @@ Token estimation: `estimate_tokens(messages)` uses tiktoken on JSON-serialized c
 `get_system_prompt(user_memory, user_memory_enabled, concise_output_enabled, tool_search_active, working_directory, autonomous, hitl_enabled) -> str`:
 - Base prompt: capabilities, tool access, conciseness, file handling, error recovery
 - Platform detection (Windows vs Unix)
-- Conditional directives: `_TOOL_SEARCH_DIRECTIVE`, `_ASK_USER_DIRECTIVE` or `_AUTONOMOUS_DIRECTIVE`, `_HITL_DIRECTIVE`, `_CONCISE_OUTPUT_DIRECTIVE`, `_USER_MEMORY_GUIDANCE`
+- Conditional directives: `_TOOL_SEARCH_DIRECTIVE`, `_ASK_USER_DIRECTIVE` or `_AUTONOMOUS_DIRECTIVE`, `_HITL_DIRECTIVE`, `_SUBAGENT_DIRECTIVE`, `_CONCISE_OUTPUT_DIRECTIVE`, `_USER_MEMORY_GUIDANCE`
 - Contains `{current_date}` placeholder
 
 `resolve_system_prompt(template) -> str`: replaces `{current_date}` with formatted today's date.
@@ -493,6 +497,20 @@ Metric builders: `build_api_call_metric()`, `build_tool_execution_metric()`, `bu
 - `begin_turn()`: clears loaded tools for new turn
 - `get_tools_for_api_call()`: returns `[tool_search_schema] + loaded_tools`
 - `handle_tool_search(query)`: term-matches tool names/descriptions, loads top matches (up to `TOOL_SEARCH_MAX_LOAD`), returns formatted results
+
+### Sub-Agents (`sub_agent.py`)
+
+`SPAWN_SUBAGENT_SCHEMA`: pseudo-tool definition injected when `SubAgentsEnabled=true`. Input: `task` (required), `type` (explore/summarize/general, default explore).
+
+`SubAgentType` enum: `EXPLORE`, `SUMMARIZE`, `GENERAL`. Each has a `SubAgentTypeConfig` with system prompt, read_only/no_tools flags, max_turns, max_tokens, timeout.
+
+`SubAgentRunner`:
+- `__init__(parent_tools, provider_name, api_key, parent_model, sub_agent_model, timeout, max_turns, max_tokens, max_tool_result_chars)`
+- `run(task, agent_type) -> SubAgentResult`: creates fresh provider + TurnEngine per invocation. Filters tools by type (explore=read-only, summarize=none, general=all). Wraps execution in `asyncio.wait_for` for timeout. Returns `SubAgentResult(text, usage, turns, timed_out)`.
+- Model selection: explore/summarize use `sub_agent_model` (or parent fallback); general always uses `parent_model`
+- Tool filtering: `_is_read_only_tool()` checks `is_mutating` flag and name patterns (`_MUTATING_PATTERNS` vs `_READ_ONLY_PATTERNS`)
+
+`_SubAgentEvents(BaseTurnEvents)`: lightweight event collector that appends messages to a list and collects `UsageResult` entries.
 
 ### Tool Result Formatter (`tool_result_formatter.py`)
 
@@ -781,6 +799,11 @@ async def main():
     "Stage2ClassificationEnabled": true,
     "Stage2Model": "claude-haiku-4-5-20251001",
     "MetricsEnabled": true,
+    "SubAgentsEnabled": false,
+    "SubAgentModel": "claude-haiku-4-5-20251001",
+    "SubAgentTimeout": 120,
+    "SubAgentMaxTurns": 15,
+    "SubAgentMaxTokens": 4096,
     "McpServers": {
         "server-name": {
             "transport": "stdio",
@@ -809,7 +832,7 @@ Config supports `ConfigFile` indirection and `Base` inheritance for variants.
 
 1. **Protocol-first architecture** — Tool, LLMProvider, AgentChannel, TurnEvents, CompactionStrategy, MemoryFacade, ChannelAdapter, VoiceIngress all use `@runtime_checkable Protocol`
 2. **Internal message format is Anthropic-style** — OpenAI provider converts to/from OpenAI format at the boundary
-3. **All tools are MCP servers** (TypeScript, external repos) — only pseudo-tools (ask_user, tool_search) are Python
+3. **All tools are MCP servers** (TypeScript, external repos) — only pseudo-tools (ask_user, tool_search, spawn_subagent) are Python
 4. **Callback pattern** — TurnEngine calls Agent (via TurnEvents) for lifecycle hooks, not the reverse
 5. **Channel abstraction** — same agent code works for CLI, autonomous, broker HITL, and WebSocket
 6. **Task-based MCP lifecycle** — asyncio.Task + Event, not AsyncExitStack

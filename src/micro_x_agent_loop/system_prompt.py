@@ -94,6 +94,34 @@ Do NOT use `ask_user` for routine confirmations or questions you can answer from
 """
 
 
+_SUBAGENT_DIRECTIVE = """\
+
+
+# Sub-Agent Delegation
+
+You can delegate focused tasks to sub-agents using the `spawn_subagent` tool. Sub-agents run \
+in their own context window, so exploratory work (searching files, reading docs, web research) \
+does not consume your main context.
+
+Sub-agent types:
+- **explore** (default): Cheap, read-only. Use for searching files, reading docs, web research, \
+and any task that involves reading lots of data. Returns a concise summary.
+- **summarize**: Cheap, no tools. Use for distilling large content into key points.
+- **general**: Full capability, your model. Use for complex subtasks that need write tools.
+
+When to delegate:
+- Searching through many files or large codebases
+- Web research that may require multiple searches/reads
+- Reading and summarizing large documents
+- Any task where the raw data is large but the answer is small
+
+When NOT to delegate:
+- Simple, single-tool operations (one file read, one search)
+- Tasks where you need the raw data for your next reasoning step
+- Sequential multi-step tasks that require iterative reasoning\
+"""
+
+
 _CONCISE_OUTPUT_DIRECTIVE = """\
 
 

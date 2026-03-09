@@ -54,9 +54,9 @@ __main__.py → app_config → bootstrap_runtime → Agent → REPL loop
                                                   ↓
                                             TurnEngine
                                           ↙         ↘
-                                   Provider        Tool dispatch
-                                 (Anthropic/       (MCP servers)
-                                   OpenAI)
+                                   Provider        Tool dispatch     SubAgentRunner
+                                 (Anthropic/       (MCP servers)     (spawn_subagent
+                                   OpenAI)                            pseudo-tool)
 
 Trigger Broker (always-on daemon):
   broker/service.py → scheduler.py ──→ dispatcher.py → runner.py (subprocess: --run)
@@ -88,7 +88,8 @@ API Server (--server start):
 | `agent_channel.py` | AgentChannel protocol + implementations (Terminal, Buffered, Broker channels) |
 | `tool.py` | Tool protocol (name, description, execute, is_mutating) |
 | `tool_search.py` | On-demand tool discovery for large tool sets |
-| `system_prompt.py` | LLM system prompt and directives (`_ASK_USER_DIRECTIVE`, etc.) |
+| `sub_agent.py` | SubAgentRunner, agent types (explore/summarize/general), spawn_subagent pseudo-tool |
+| `system_prompt.py` | LLM system prompt and directives (`_ASK_USER_DIRECTIVE`, `_SUBAGENT_DIRECTIVE`, etc.) |
 | `metrics.py` | Metric builders, `SessionAccumulator`, cost tracking |
 | `memory/` | SQLite session persistence, checkpoints, events, pruning |
 | `mcp/` | MCP server lifecycle, tool proxying |

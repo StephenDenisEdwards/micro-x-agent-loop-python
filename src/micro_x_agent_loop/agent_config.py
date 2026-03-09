@@ -8,6 +8,9 @@ from micro_x_agent_loop.constants import (
     DEFAULT_MAX_CONVERSATION_MESSAGES,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_TOOL_RESULT_CHARS,
+    DEFAULT_SUBAGENT_MAX_TOKENS,
+    DEFAULT_SUBAGENT_MAX_TURNS,
+    DEFAULT_SUBAGENT_TIMEOUT,
     DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD,
 )
 from micro_x_agent_loop.memory.checkpoints import CheckpointManager
@@ -51,5 +54,11 @@ class AgentConfig:
     default_format: dict = field(default_factory=lambda: {"format": "json"})
     # Autonomous mode (broker/cron runs — no human interaction)
     autonomous: bool = False
+    # Sub-agents
+    sub_agents_enabled: bool = False
+    sub_agent_model: str = ""  # empty = inherit from parent
+    sub_agent_timeout: int = DEFAULT_SUBAGENT_TIMEOUT
+    sub_agent_max_turns: int = DEFAULT_SUBAGENT_MAX_TURNS
+    sub_agent_max_tokens: int = DEFAULT_SUBAGENT_MAX_TOKENS
     # AgentChannel for bidirectional client communication
     channel: Any = None  # AgentChannel | None (Any to avoid circular import)

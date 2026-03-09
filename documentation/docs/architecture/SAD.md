@@ -1,8 +1,8 @@
 # Software Architecture Document
 
 **Project:** micro-x-agent-loop-python
-**Version:** 3.0
-**Last Updated:** 2026-03-04
+**Version:** 3.1
+**Last Updated:** 2026-03-09
 
 ## 1. Introduction and Goals
 
@@ -136,6 +136,7 @@ graph TD
     Agent --> Formatter["ToolResultFormatter<br/>Structured → Text"]
     Agent --> AskUser["AskUserHandler<br/>Human-in-the-Loop"]
     Agent --> ToolSearch["ToolSearchManager<br/>On-Demand Discovery"]
+    Agent --> SubAgent["SubAgentRunner<br/>Delegated Tasks"]
     Agent --> ModeSelect["ModeSelector<br/>Prompt vs Compiled"]
 
     TurnEngine --> Provider["LLMProvider<br/>Protocol"]
@@ -196,7 +197,8 @@ graph TD
 | `app_config` | Parses `config.json` into `AppConfig` dataclass; resolves runtime environment variables into `RuntimeEnv` |
 | `Agent` | Top-level orchestrator: holds conversation state, routes commands, delegates turns to `TurnEngine` |
 | `AgentConfig` | Dataclass holding all agent configuration (model, tools, memory components, compaction) |
-| `TurnEngine` | Executes a single LLM turn: streams response, classifies tool blocks (search/ask_user/regular), dispatches tools in parallel, handles retries |
+| `TurnEngine` | Executes a single LLM turn: streams response, classifies tool blocks (search/ask_user/subagent/regular), dispatches tools in parallel, handles retries |
+| `SubAgentRunner` | Creates lightweight, disposable in-process agent instances for focused tasks. Three types: explore (read-only, cheap), summarize (no tools), general (full capability). Results return as tool_result to parent. |
 | `TurnEvents` | Protocol defining lifecycle callbacks: `on_append_message`, `on_api_call_completed`, `on_tool_executed`, `on_ensure_checkpoint_for_turn`, etc. `BaseTurnEvents` provides no-op defaults. |
 | `AskUserHandler` | Pseudo-tool handler for human-in-the-loop questioning. Presents structured choices via `questionary` with "Other" free-text escape; falls back to plain `input()` for non-interactive terminals. |
 | `ToolSearchManager` | On-demand tool discovery pseudo-tool. Replaces large schema payloads with a single search tool when schema size exceeds a threshold. Uses `tiktoken` for token counting. |
@@ -224,7 +226,7 @@ graph TD
 | `logging_config` | `LogConsumer` Protocol with `ConsoleLogConsumer` and `FileLogConsumer` implementations for loguru setup |
 | `Tool` | Protocol class: `name`, `description`, `input_schema`, `is_mutating`, `predict_touched_paths`, `execute` |
 | `ToolResult` | Dataclass: `text`, `structured` (dict or None), `is_error` — returned by `Tool.execute()` |
-| `system_prompt` | System prompt text with conditional directives for tool search and ask_user |
+| `system_prompt` | System prompt text with conditional directives for tool search, ask_user, and sub-agent delegation |
 | `compaction` | Conversation compaction strategies: `NoOpCompaction` and `SummarizeCompaction` (LLM-based) |
 | `memory/store` | SQLite connection, schema bootstrap (6 tables), transaction context manager |
 | `memory/session_manager` | Session CRUD, message persistence with monotonic sequencing, fork, tool call recording |
@@ -272,7 +274,7 @@ sequenceDiagram
     P-->>TE: (message, tool_use_blocks, stop_reason)
     TE->>Mem: append_message(assistant)
 
-    Note over TE: Classify blocks: search / ask_user / regular
+    Note over TE: Classify blocks: search / ask_user / subagent / regular
 
     alt tool_search blocks
         TE->>TE: ToolSearchManager.handle_tool_search(query)
@@ -283,6 +285,12 @@ sequenceDiagram
         TE->>U: AskUserHandler.handle() — display question + options
         U-->>TE: User selects option or types answer
         Note over TE: Return {"answer": "..."} as tool_result
+    end
+
+    alt subagent blocks
+        TE->>TE: SubAgentRunner.run(task, type)
+        Note over TE: Fresh TurnEngine with filtered tools,<br/>cheap model, disposable context
+        Note over TE: Return summary as tool_result
     end
 
     alt No regular tools (pseudo-tools only)
@@ -413,5 +421,6 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | Checkpoint | A snapshot of file state before mutating tools execute within a user turn |
 | Rewind | Restoring files to their state at a given checkpoint |
 | MCP | Model Context Protocol; standard for connecting LLM agents to external tool servers |
-| Pseudo-tool | A tool handled inline by the agent (not via MCP execution) — e.g. `tool_search`, `ask_user` |
+| Pseudo-tool | A tool handled inline by the agent (not via MCP execution) — e.g. `tool_search`, `ask_user`, `spawn_subagent` |
+| Sub-agent | A lightweight, disposable in-process agent instance that runs a focused task in its own context window and returns a summary |
 | Compiled mode | Cost-aware execution mode that generates code for batch-processing tasks instead of running them conversationally |

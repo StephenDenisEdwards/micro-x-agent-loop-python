@@ -16,6 +16,9 @@ from micro_x_agent_loop.constants import (
     DEFAULT_MEMORY_MAX_SESSIONS,
     DEFAULT_MEMORY_RETENTION_DAYS,
     DEFAULT_PROTECTED_TAIL_MESSAGES,
+    DEFAULT_SUBAGENT_MAX_TOKENS,
+    DEFAULT_SUBAGENT_MAX_TURNS,
+    DEFAULT_SUBAGENT_TIMEOUT,
     DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD,
     DEFAULT_USER_MEMORY_MAX_LINES,
 )
@@ -72,6 +75,12 @@ class AppConfig:
     # Tool result formatting
     tool_formatting: dict
     default_format: dict
+    # Sub-agents
+    sub_agents_enabled: bool
+    sub_agent_model: str
+    sub_agent_timeout: int
+    sub_agent_max_turns: int
+    sub_agent_max_tokens: int
 
 
 def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
@@ -234,6 +243,11 @@ def parse_app_config(config: dict) -> AppConfig:
         tool_search_enabled=str(config.get("ToolSearchEnabled", "false")).strip().lower(),
         tool_formatting=config.get("ToolFormatting", {}),
         default_format=config.get("DefaultFormat", {"format": "json"}),
+        sub_agents_enabled=_to_bool(config.get("SubAgentsEnabled", False), default=False),
+        sub_agent_model=str(config.get("SubAgentModel", "")).strip(),
+        sub_agent_timeout=int(config.get("SubAgentTimeout", DEFAULT_SUBAGENT_TIMEOUT)),
+        sub_agent_max_turns=int(config.get("SubAgentMaxTurns", DEFAULT_SUBAGENT_MAX_TURNS)),
+        sub_agent_max_tokens=int(config.get("SubAgentMaxTokens", DEFAULT_SUBAGENT_MAX_TOKENS)),
     )
 
 

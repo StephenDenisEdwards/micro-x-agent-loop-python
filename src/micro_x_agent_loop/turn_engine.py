@@ -9,6 +9,7 @@ from loguru import logger
 
 from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
+from micro_x_agent_loop.sub_agent import SPAWN_SUBAGENT_SCHEMA, SubAgentRunner, SubAgentType
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
 
 if TYPE_CHECKING:
@@ -42,6 +43,7 @@ class TurnEngine:
         formatter: ToolResultFormatter | None = None,
         api_payload_store: ApiPayloadStore | None = None,
         tool_search_manager: ToolSearchManager | None = None,
+        sub_agent_runner: SubAgentRunner | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -61,6 +63,7 @@ class TurnEngine:
         self._formatter = formatter or ToolResultFormatter()
         self._api_payload_store = api_payload_store
         self._tool_search_manager = tool_search_manager
+        self._sub_agent_runner = sub_agent_runner
 
     async def run(
         self,
@@ -87,6 +90,8 @@ class TurnEngine:
                 if self._tool_search_manager is not None
                 else list(self._converted_tools)
             )
+            if self._sub_agent_runner is not None:
+                api_tools.append(SPAWN_SUBAGENT_SCHEMA)
             if self._channel is not None:
                 api_tools.append(ASK_USER_SCHEMA)
 
@@ -135,9 +140,10 @@ class TurnEngine:
             if not tool_use_blocks:
                 return current_user_message_id, last_assistant_message_id
 
-            # Classify blocks: search / ask_user / regular
+            # Classify blocks: search / ask_user / subagent / regular
             search_blocks: list[dict] = []
             ask_user_blocks: list[dict] = []
+            subagent_blocks: list[dict] = []
             regular_blocks: list[dict] = []
             for block in tool_use_blocks:
                 name = block["name"]
@@ -145,6 +151,8 @@ class TurnEngine:
                     search_blocks.append(block)
                 elif self._channel is not None and name == "ask_user":
                     ask_user_blocks.append(block)
+                elif self._sub_agent_runner is not None and name == "spawn_subagent":
+                    subagent_blocks.append(block)
                 else:
                     regular_blocks.append(block)
 
@@ -172,6 +180,11 @@ class TurnEngine:
                     "content": result_text,
                 })
                 logger.info(f"ask_user question={question!r}")
+
+            # Handle spawn_subagent calls (run sub-agents concurrently)
+            if subagent_blocks:
+                subagent_results = await self._execute_subagent_blocks(subagent_blocks)
+                inline_results.extend(subagent_results)
 
             # If only pseudo-tool calls (no regular tools), append results and continue
             if not regular_blocks:
@@ -297,6 +310,52 @@ class TurnEngine:
                 }
 
         return list(await asyncio.gather(*(run_one(b) for b in tool_use_blocks)))
+
+    async def _execute_subagent_blocks(self, blocks: list[dict]) -> list[dict]:
+        """Execute one or more spawn_subagent calls concurrently."""
+
+        async def _run_one(block: dict) -> dict:
+            tool_input = block["input"]
+            task = tool_input.get("task", "")
+            type_str = tool_input.get("type", "explore")
+            try:
+                agent_type = SubAgentType(type_str)
+            except ValueError:
+                agent_type = SubAgentType.EXPLORE
+
+            if self._channel is not None:
+                self._channel.emit_tool_started(block["id"], f"subagent:{agent_type.value}")
+
+            try:
+                result = await self._sub_agent_runner.run(task, agent_type)
+
+                # Aggregate sub-agent usage to parent metrics
+                for usage in result.usage:
+                    self._events.on_api_call_completed(usage, f"subagent:{agent_type.value}")
+
+                logger.info(
+                    f"spawn_subagent type={agent_type.value} turns={result.turns} "
+                    f"result_chars={len(result.text)} timed_out={result.timed_out}"
+                )
+
+                return {
+                    "type": "tool_result",
+                    "tool_use_id": block["id"],
+                    "content": result.text,
+                }
+            except Exception as ex:
+                logger.error(f"spawn_subagent failed: {ex}")
+                return {
+                    "type": "tool_result",
+                    "tool_use_id": block["id"],
+                    "content": f"Sub-agent error: {ex}",
+                    "is_error": True,
+                }
+            finally:
+                if self._channel is not None:
+                    self._channel.emit_tool_completed(block["id"], f"subagent:{agent_type.value}", False)
+
+        return list(await asyncio.gather(*(_run_one(b) for b in blocks)))
 
     async def _summarize_tool_result(self, result: str, tool_name: str) -> tuple[str, bool]:
         """Summarize a large tool result using a cheaper model.

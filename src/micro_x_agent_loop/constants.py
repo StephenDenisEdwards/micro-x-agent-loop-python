@@ -50,6 +50,14 @@ TOOL_SEARCH_CONTEXT_WINDOWS: dict[str, int] = {
 TOOL_SEARCH_DEFAULT_CONTEXT_WINDOW = 200_000
 
 # ---------------------------------------------------------------------------
+# Sub-agents
+# ---------------------------------------------------------------------------
+DEFAULT_SUBAGENT_TIMEOUT = 120
+DEFAULT_SUBAGENT_MAX_TURNS = 15
+DEFAULT_SUBAGENT_MAX_TOKENS = 4096
+DEFAULT_SUBAGENT_MODEL = ""  # empty = inherit from parent
+
+# ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------
 CHARS_TO_TOKENS_DIVISOR = 4

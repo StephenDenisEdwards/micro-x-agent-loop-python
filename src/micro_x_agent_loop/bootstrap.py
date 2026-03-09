@@ -164,6 +164,11 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv, *, autonomous: bool
             working_directory=app.working_directory,
             tool_formatting=app.tool_formatting,
             default_format=app.default_format,
+            sub_agents_enabled=app.sub_agents_enabled,
+            sub_agent_model=app.sub_agent_model,
+            sub_agent_timeout=app.sub_agent_timeout,
+            sub_agent_max_turns=app.sub_agent_max_turns,
+            sub_agent_max_tokens=app.sub_agent_max_tokens,
             channel=channel,
         )
     )

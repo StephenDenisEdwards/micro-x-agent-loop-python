@@ -1,7 +1,7 @@
 # Plan: Sub-Agent Architecture
 
-**Status:** Planning
-**Date:** 2026-03-08
+**Status:** Phase 1 Completed
+**Date:** 2026-03-09
 **Goal:** Enable the main agent to delegate focused tasks to lightweight, disposable sub-agents with isolated contexts, restricted tools, and optionally cheaper models.
 
 ---
@@ -293,16 +293,25 @@ Parent Agent
 
 ## 6. Implementation Roadmap
 
-### Phase 1 — Core sub-agent (2-3 days)
+### Phase 1 — Core sub-agent ✅ Completed (2026-03-09)
 
-1. **`SubAgentRunner`** — creates and runs a lightweight in-process Agent for a single task
-   - Accepts: task prompt, agent type, parent's MCP connections
-   - Returns: ToolResult with sub-agent's final response
-   - Enforces: timeout, turn limit, tool restriction
-2. **`spawn_subagent` pseudo-tool** — registered in TurnEngine alongside `ask_user` and `tool_search`
-3. **Agent type configs** — explore (Haiku, read-only), summarize (Haiku, no tools), general (inherited)
-4. **System prompt directive** — tells the main agent when and how to use sub-agents
-5. **Config** — `SubAgentsEnabled` flag (default false), `SubAgentModel` override
+1. **`SubAgentRunner`** (`sub_agent.py`) — creates and runs a lightweight in-process TurnEngine for a single task
+   - Accepts: task prompt, agent type, parent tools (filtered by type)
+   - Returns: `SubAgentResult` with text summary, usage metrics, turn count, timeout flag
+   - Enforces: timeout (`asyncio.wait_for`), tool restriction (read-only filtering for explore)
+   - Uses `BufferedChannel` (no terminal IO), `BaseTurnEvents` subclass for message collection
+   - Fresh provider instance per sub-agent (no prompt caching — short-lived)
+2. **`spawn_subagent` pseudo-tool** — handled inline in TurnEngine alongside `ask_user` and `tool_search`
+   - Multiple concurrent sub-agent calls execute via `asyncio.gather`
+   - Sub-agent usage metrics aggregate to parent via `on_api_call_completed(usage, "subagent:{type}")`
+   - Channel events emitted for tool_started/completed with `"subagent:{type}"` name
+3. **Agent type configs** — `SubAgentType` enum with `SubAgentTypeConfig` per type:
+   - `explore`: read-only tools (filtered via `_is_read_only_tool`), lower temperature (0.3)
+   - `summarize`: no tools, single turn
+   - `general`: all parent tools, parent model
+4. **System prompt directive** (`_SUBAGENT_DIRECTIVE`) — tells the LLM when and how to delegate
+5. **Config** — `SubAgentsEnabled` (default false), `SubAgentModel`, `SubAgentTimeout`, `SubAgentMaxTurns`, `SubAgentMaxTokens`
+6. **Tests** — 27 tests covering tool filtering, schema, runner execution, model selection, TurnEngine integration
 
 ### Phase 2 — Observability and persistence (2-3 days)
 

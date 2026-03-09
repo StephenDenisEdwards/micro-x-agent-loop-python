@@ -33,6 +33,7 @@ from micro_x_agent_loop.mode_selector import (
 from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
+from micro_x_agent_loop.sub_agent import SubAgentRunner
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
 from micro_x_agent_loop.tool_search import ToolSearchManager, should_activate_tool_search
@@ -88,6 +89,23 @@ class Agent:
         if self._channel is not None:
             from micro_x_agent_loop.system_prompt import _ASK_USER_DIRECTIVE
             self._system_prompt += _ASK_USER_DIRECTIVE
+
+        # Sub-agents
+        self._sub_agent_runner: SubAgentRunner | None = None
+        if config.sub_agents_enabled:
+            from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
+            self._system_prompt += _SUBAGENT_DIRECTIVE
+            self._sub_agent_runner = SubAgentRunner(
+                parent_tools=config.tools,
+                provider_name=config.provider,
+                api_key=config.api_key,
+                parent_model=config.model,
+                sub_agent_model=config.sub_agent_model,
+                timeout=config.sub_agent_timeout,
+                max_turns=config.sub_agent_max_turns,
+                max_tokens=config.sub_agent_max_tokens,
+                max_tool_result_chars=config.max_tool_result_chars,
+            )
 
         self._max_tool_result_chars = config.max_tool_result_chars
         self._max_conversation_messages = config.max_conversation_messages
@@ -178,6 +196,7 @@ class Agent:
             formatter=self._tool_result_formatter,
             api_payload_store=self._api_payload_store,
             tool_search_manager=self._tool_search_manager,
+            sub_agent_runner=self._sub_agent_runner,
         )
 
         commands_dir = Path(self._working_directory or ".") / ".commands"
