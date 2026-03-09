@@ -347,16 +347,8 @@ def create_app(
             return Response(status_code=400, content='{"error": "Message required"}', media_type="application/json")
 
         if not session_id:
-            memory_store: MemoryStore | None = _state.get("memory_store")
-            app_config: AppConfig | None = _state.get("app_config")
-            if memory_store and app_config and app_config.memory_enabled:
-                from micro_x_agent_loop.memory import EventEmitter
-                emitter = EventEmitter(memory_store, sink=_state.get("event_sink"))
-                sm = SessionManager(memory_store, app_config.model, emitter)
-                session_id = sm.create_session()
-            else:
-                import uuid
-                session_id = str(uuid.uuid4())
+            import uuid
+            session_id = str(uuid.uuid4())
 
         channel = BufferedChannel()
         agent = await agent_manager.get_or_create(session_id, channel=channel)

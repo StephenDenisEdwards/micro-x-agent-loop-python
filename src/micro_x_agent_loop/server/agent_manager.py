@@ -137,6 +137,7 @@ class AgentManager:
         if app.memory_enabled and self._memory_store is not None:
             event_emitter = EventEmitter(self._memory_store, sink=self._event_sink)
             session_manager = SessionManager(self._memory_store, app.model, event_emitter)
+            session_manager.load_or_create(session_id)
             checkpoint_manager = CheckpointManager(
                 self._memory_store,
                 event_emitter,
