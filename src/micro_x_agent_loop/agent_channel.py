@@ -7,15 +7,17 @@ to handle output events and human-in-the-loop interactions.
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
 import threading
 from typing import Any, Protocol, runtime_checkable
 
 import questionary
 from questionary import Choice, Style
-
-
+from rich.console import Console
+from rich.live import Live
+from rich.markdown import Markdown
+from rich.spinner import Spinner as RichSpinner
+from rich.text import Text
 
 # ---------------------------------------------------------------------------
 # ASK_USER_SCHEMA — tool definition for human-in-the-loop questioning
@@ -126,46 +128,92 @@ class TerminalChannel:
     """AgentChannel for the interactive CLI.
 
     Handles:
-    - Text output with ``assistant> `` prefix
-    - Spinner during tool execution (started/stopped by tool events)
+    - Text output with optional markdown rendering (``rich.Live`` + ``rich.Markdown``)
+    - Spinner during tool execution (``rich.spinner`` or thread-based fallback)
     - Human-in-the-loop via terminal input (questionary)
+
+    When ``markdown=True`` (default), uses the buffer-and-rerender pattern:
+    tokens accumulate in a buffer and are re-rendered as markdown on each delta.
+    When ``markdown=False``, falls back to plain ``print()`` output.
     """
 
-    def __init__(self, *, line_prefix: str = "assistant> ", user_prompt: str = "you> ") -> None:
+    def __init__(
+        self,
+        *,
+        line_prefix: str = "assistant> ",
+        user_prompt: str = "you> ",
+        markdown: bool = True,
+    ) -> None:
         self._line_prefix = line_prefix
         self._user_prompt = user_prompt
+        self._markdown = markdown
         self._first_delta_in_turn = True
+        # Plain-text mode state
         self._spinner: _Spinner | None = None
+        # Markdown mode state
+        self._renderer: _RichRenderer | None = None
 
     def emit_text_delta(self, text: str) -> None:
-        if self._spinner is not None:
-            self._spinner.stop()
-            self._spinner = None
-        if self._first_delta_in_turn:
-            self._first_delta_in_turn = False
-        print(text, end="", flush=True)
+        if self._markdown:
+            self._ensure_renderer()
+            self._renderer.append_text(text)
+        else:
+            if self._spinner is not None:
+                self._spinner.stop()
+                self._spinner = None
+            if self._first_delta_in_turn:
+                self._first_delta_in_turn = False
+            print(text, end="", flush=True)
 
     def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
-        self._stop_spinner()
-        self._spinner = _Spinner(prefix=self._line_prefix, label=f" Running {tool_name}...")
-        self._spinner.start()
+        if self._markdown:
+            self._ensure_renderer()
+            self._renderer.finalize_text()
+            self._renderer.start_spinner(f" Running {tool_name}...")
+        else:
+            self._stop_spinner()
+            self._spinner = _Spinner(prefix=self._line_prefix, label=f" Running {tool_name}...")
+            self._spinner.start()
 
     def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
-        self._stop_spinner()
+        if self._markdown:
+            if self._renderer is not None:
+                self._renderer.stop_spinner()
+        else:
+            self._stop_spinner()
 
     def emit_turn_complete(self, usage: dict[str, Any]) -> None:
-        self._stop_spinner()
+        if self._markdown:
+            if self._renderer is not None:
+                self._renderer.finalize_text()
+                self._renderer.stop()
+                self._renderer = None
+        else:
+            self._stop_spinner()
         self._first_delta_in_turn = True
 
     def emit_error(self, message: str) -> None:
-        self._stop_spinner()
-        print(f"\n{self._line_prefix}[Error: {message}]")
+        if self._markdown:
+            if self._renderer is not None:
+                self._renderer.stop()
+                self._renderer = None
+            console = Console()
+            console.print(f"\n{self._line_prefix}[Error: {message}]", style="bold red")
+        else:
+            self._stop_spinner()
+            print(f"\n{self._line_prefix}[Error: {message}]")
 
     def emit_system_message(self, text: str) -> None:
         self.print_line(text)
 
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:
-        self._stop_spinner()
+        if self._markdown:
+            if self._renderer is not None:
+                self._renderer.finalize_text()
+                self._renderer.stop()
+                self._renderer = None
+        else:
+            self._stop_spinner()
         try:
             if options:
                 answer = await asyncio.to_thread(self._prompt_with_options, question, options)
@@ -178,21 +226,40 @@ class TerminalChannel:
     def begin_streaming(self) -> None:
         """Called before an LLM stream starts. Starts the thinking spinner."""
         self._first_delta_in_turn = True
-        self._spinner = _Spinner(prefix=self._line_prefix)
-        self._spinner.start()
+        if self._markdown:
+            self._renderer = _RichRenderer(self._line_prefix)
+            self._renderer.start_spinner()
+        else:
+            self._spinner = _Spinner(prefix=self._line_prefix)
+            self._spinner.start()
 
     def end_streaming(self) -> None:
-        """Called after an LLM stream ends. Ensures spinner is stopped."""
-        self._stop_spinner()
+        """Called after an LLM stream ends. Ensures renderer/spinner is stopped."""
+        if self._markdown:
+            if self._renderer is not None:
+                self._renderer.finalize_text()
+                self._renderer.stop()
+                self._renderer = None
+        else:
+            self._stop_spinner()
 
     def print_line(self, text: str) -> None:
-        """Print a line through the spinner if active, or directly."""
-        if self._spinner is not None:
+        """Print a line through the renderer/spinner if active, or directly."""
+        if self._markdown and self._renderer is not None:
+            self._renderer.print_line(text)
+        elif self._spinner is not None:
             self._spinner.print_line(text)
         else:
             print(text, flush=True)
 
     # -- private helpers ---------------------------------------------------
+
+    def _ensure_renderer(self) -> None:
+        """Ensure a _RichRenderer exists, creating one if needed."""
+        if self._renderer is None:
+            self._renderer = _RichRenderer(self._line_prefix)
+        if self._renderer.is_showing_spinner():
+            self._renderer.switch_to_markdown()
 
     def _stop_spinner(self) -> None:
         if self._spinner is not None:
@@ -313,8 +380,8 @@ class BrokerChannel:
         pass
 
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:
-        from loguru import logger
         import httpx
+        from loguru import logger
 
         payload: dict[str, Any] = {"question": question}
         if options:
@@ -364,7 +431,104 @@ _NO_RESPONSE_MSG = (
 
 
 # ---------------------------------------------------------------------------
-# _Spinner — terminal spinner (private implementation detail)
+# _RichRenderer — progressive markdown rendering (private implementation)
+# ---------------------------------------------------------------------------
+
+
+class _RichRenderer:
+    """Manages a ``rich.Live`` context that switches between spinner and markdown.
+
+    Lifecycle:
+    - ``start_spinner()`` — show a spinner (thinking / tool running)
+    - ``switch_to_markdown()`` — transition from spinner to markdown rendering
+    - ``append_text(text)`` — buffer text and re-render as markdown
+    - ``finalize_text()`` — print the final rendered markdown and reset buffer
+    - ``start_spinner(label)`` — switch back to spinner (e.g. next tool call)
+    - ``stop()`` — clean up
+    """
+
+    def __init__(self, line_prefix: str = "") -> None:
+        self._line_prefix = line_prefix
+        self._console = Console()
+        self._live: Live | None = None
+        self._buffer = ""
+        self._showing_spinner = False
+
+    def start_spinner(self, label: str = " Thinking...") -> None:
+        """Start or switch to spinner mode."""
+        self._stop_live()
+        spinner = RichSpinner("dots", text=Text(label, style="cyan"), style="cyan")
+        self._live = Live(
+            spinner,
+            console=self._console,
+            refresh_per_second=10,
+            transient=True,
+        )
+        self._live.start()
+        self._showing_spinner = True
+
+    def stop_spinner(self) -> None:
+        """Stop the spinner without starting markdown."""
+        if self._showing_spinner:
+            self._stop_live()
+            self._showing_spinner = False
+
+    def is_showing_spinner(self) -> bool:
+        return self._showing_spinner
+
+    def switch_to_markdown(self) -> None:
+        """Transition from spinner to markdown rendering mode."""
+        self._stop_live()
+        self._showing_spinner = False
+        self._buffer = ""
+        self._live = Live(
+            Text(""),
+            console=self._console,
+            refresh_per_second=8,
+            transient=True,
+            vertical_overflow="visible",
+        )
+        self._live.start()
+
+    def append_text(self, text: str) -> None:
+        """Append text to the buffer and re-render as markdown."""
+        self._buffer += text
+        if self._live is not None:
+            self._live.update(Markdown(self._buffer))
+
+    def finalize_text(self) -> None:
+        """Print the final rendered markdown and reset the buffer."""
+        if not self._buffer:
+            return
+        self._stop_live()
+        # Print the final rendered markdown (non-transient)
+        self._console.print(Markdown(self._buffer))
+        self._buffer = ""
+
+    def print_line(self, text: str) -> None:
+        """Print a line above the live region (if active) or directly."""
+        if self._live is not None:
+            self._console.print(text)
+        else:
+            self._console.print(text)
+
+    def stop(self) -> None:
+        """Clean up the live context."""
+        self._stop_live()
+        self._showing_spinner = False
+        self._buffer = ""
+
+    def _stop_live(self) -> None:
+        if self._live is not None:
+            try:
+                self._live.stop()
+            except Exception:
+                pass
+            self._live = None
+
+
+# ---------------------------------------------------------------------------
+# _Spinner — thread-based terminal spinner (plain-text mode fallback)
 # ---------------------------------------------------------------------------
 
 

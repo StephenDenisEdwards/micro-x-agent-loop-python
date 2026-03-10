@@ -85,11 +85,18 @@ class TestBufferedChannel(unittest.TestCase):
 
 
 class TestTerminalChannel(unittest.TestCase):
-    def test_emit_text_delta_prints(self) -> None:
-        ch = TerminalChannel()
+    def test_emit_text_delta_prints_plain(self) -> None:
+        ch = TerminalChannel(markdown=False)
         with patch("builtins.print") as mock_print:
             ch.emit_text_delta("Hello")
             mock_print.assert_called_once_with("Hello", end="", flush=True)
+
+    def test_emit_text_delta_markdown_buffers(self) -> None:
+        ch = TerminalChannel(markdown=True)
+        ch.emit_text_delta("Hello")
+        self.assertIsNotNone(ch._renderer)
+        self.assertEqual(ch._renderer._buffer, "Hello")
+        ch.end_streaming()
 
     def test_ask_user_free_text(self) -> None:
         ch = TerminalChannel()
@@ -154,19 +161,33 @@ class TestTerminalChannel(unittest.TestCase):
         result = TerminalChannel._prompt_free_text("What?")
         self.assertEqual("", result)
 
-    def test_begin_streaming_starts_spinner(self) -> None:
-        ch = TerminalChannel()
+    def test_begin_streaming_starts_spinner_plain(self) -> None:
+        ch = TerminalChannel(markdown=False)
         ch.begin_streaming()
         self.assertIsNotNone(ch._spinner)
         ch.end_streaming()
         self.assertIsNone(ch._spinner)
 
-    def test_tool_started_creates_spinner(self) -> None:
-        ch = TerminalChannel()
+    def test_begin_streaming_starts_renderer_markdown(self) -> None:
+        ch = TerminalChannel(markdown=True)
+        ch.begin_streaming()
+        self.assertIsNotNone(ch._renderer)
+        self.assertTrue(ch._renderer.is_showing_spinner())
+        ch.end_streaming()
+        self.assertIsNone(ch._renderer)
+
+    def test_tool_started_creates_spinner_plain(self) -> None:
+        ch = TerminalChannel(markdown=False)
         ch.emit_tool_started("t1", "read_file")
         self.assertIsNotNone(ch._spinner)
         ch.emit_tool_completed("t1", "read_file", False)
         self.assertIsNone(ch._spinner)
+
+    def test_tool_started_creates_renderer_markdown(self) -> None:
+        ch = TerminalChannel(markdown=True)
+        ch.emit_tool_started("t1", "read_file")
+        self.assertIsNotNone(ch._renderer)
+        ch.emit_tool_completed("t1", "read_file", False)
 
 
 # ---------------------------------------------------------------------------

@@ -22,7 +22,7 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | **11** | [Trigger Broker](PLAN-trigger-broker.md) | **Completed** | Always-on run dispatcher for cron, webhooks, messaging channels, HITL, retries |
 | **12** | [Agent API Server](PLAN-agent-api-server.md) | **Completed** | HTTP/WebSocket API, broker convergence, CLI client, Python SDK, examples |
 | **13** | [Sub-Agents](PLAN-sub-agents.md) | **Phase 1 Completed** | In-process sub-agent delegation for context protection, task isolation, parallelism, and cost reduction |
-| **14** | [Markdown Rendering](PLAN-markdown-rendering.md) | Not Started | Progressive markdown rendering in CLI using rich — buffer-and-rerender pattern matching ChatGPT/Claude Code |
+| **14** | [Markdown Rendering](PLAN-markdown-rendering.md) | **Completed** | Progressive markdown rendering in CLI using rich — buffer-and-rerender pattern matching ChatGPT/Claude Code |
 | **15** | [Test Coverage 90%](PLAN-test-coverage-90.md) | Not Started | Raise test coverage from 59% to 90% — 4-phase plan covering broker, server, CLI, and utilities |
 | **16** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Frictionless onboarding becomes critical once promotional channels drive traffic to the repo. Benefits from stable post-broker architecture |
 | **17** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, schema optimisation) | Planning | Architectural changes, higher effort; model routing can be done in TurnEngine/Provider layer without gateway |
@@ -38,13 +38,13 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 
 | Status | Count |
 |--------|-------|
-| Completed | 18 |
+| Completed | 19 |
 | Phase 1 Completed | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
 | Planning | 1 |
-| Not Started | 2 |
+| Not Started | 1 |
 | Planned | 3 |
 
 ## All Plans
@@ -76,6 +76,6 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | [X/Twitter MCP](PLAN-x-twitter-mcp.md) | Completed | Tweet/thread publishing via X API v2. Completed 2026-03-06 |
 | [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | Completed | 5 tools: create, list, get, comment, categories. Completed 2026-03-06 |
 | [Agent API Server](PLAN-agent-api-server.md) | Completed | All 5 phases done: AgentChannel, server, broker convergence, CLI client, SDK |
-| [Markdown Rendering](PLAN-markdown-rendering.md) | Not Started | Progressive markdown rendering in CLI using rich — buffer-and-rerender pattern |
+| [Markdown Rendering](PLAN-markdown-rendering.md) | Completed | Progressive markdown rendering in CLI using rich — buffer-and-rerender pattern |
 | [Test Coverage 90%](PLAN-test-coverage-90.md) | Not Started | 4-phase plan: 59% → 90% coverage across all modules |
 | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Interactive setup wizard for non-expert users |

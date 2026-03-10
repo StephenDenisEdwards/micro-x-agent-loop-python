@@ -123,7 +123,7 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv, *, autonomous: bool
         else:
             channel = BufferedChannel()
     else:
-        channel = TerminalChannel()
+        channel = TerminalChannel(markdown=app.markdown_rendering_enabled)
 
     agent = Agent(
         AgentConfig(

@@ -60,5 +60,7 @@ class AgentConfig:
     sub_agent_timeout: int = DEFAULT_SUBAGENT_TIMEOUT
     sub_agent_max_turns: int = DEFAULT_SUBAGENT_MAX_TURNS
     sub_agent_max_tokens: int = DEFAULT_SUBAGENT_MAX_TOKENS
+    # Display
+    markdown_rendering_enabled: bool = True
     # AgentChannel for bidirectional client communication
     channel: Any = None  # AgentChannel | None (Any to avoid circular import)

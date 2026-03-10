@@ -308,10 +308,18 @@ class Agent:
         self._current_checkpoint_id = None
         self._last_assistant_message_id = None
         self._current_user_message_text = user_message
-        current_user_message_id, last_assistant_message_id = await self._turn_engine.run(
-            messages=self._messages,
-            user_message=user_message,
-        )
+
+        if self._channel is not None and hasattr(self._channel, "begin_streaming"):
+            self._channel.begin_streaming()
+        try:
+            current_user_message_id, last_assistant_message_id = await self._turn_engine.run(
+                messages=self._messages,
+                user_message=user_message,
+            )
+        finally:
+            if self._channel is not None and hasattr(self._channel, "end_streaming"):
+                self._channel.end_streaming()
+
         self._current_user_message_id = current_user_message_id
         self._last_assistant_message_id = last_assistant_message_id
 

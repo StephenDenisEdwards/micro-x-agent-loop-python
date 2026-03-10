@@ -1,6 +1,6 @@
 # Plan: Progressive Markdown Rendering
 
-**Status:** Not Started
+**Status:** Completed
 **Date:** 2026-03-10
 **Goal:** Stream markdown-formatted LLM output and render it progressively in the CLI, matching the display quality of ChatGPT and Claude Code.
 
