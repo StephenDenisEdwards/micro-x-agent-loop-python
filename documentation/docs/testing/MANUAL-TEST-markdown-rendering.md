@@ -8,11 +8,20 @@ Step-by-step walkthrough of the progressive markdown rendering feature. Run thes
 > - A working `config.json` with at least one LLM provider
 > - `.env` with valid API keys
 
+### How rendering works across client types
+
+| Client | Rendering | Notes |
+|--------|-----------|-------|
+| **Direct CLI** (`python -m micro_x_agent_loop`) | `TerminalChannel` with Rich markdown | Controlled by `MarkdownRenderingEnabled` config |
+| **WebSocket CLI** (`--server http://...`) | `TerminalChannel` with Rich markdown | Always `markdown=True` — ignores server config |
+| **Web/browser** (WebSocket API) | Raw `text_delta` JSON frames | Client must render markdown itself (e.g. react-markdown) |
+| **Broker subprocess** (`BrokerChannel`) | No rendering | Output events are no-ops; stdout captured by runner |
+
 ---
 
-## 1. Markdown Rendering Enabled (Default)
+## 1. Direct CLI — Markdown Rendering Enabled (Default)
 
-The default configuration has `MarkdownRenderingEnabled: true`. All tests in this section use the default.
+The default configuration has `MarkdownRenderingEnabled: true`. All tests in this section use the direct REPL (`python -m micro_x_agent_loop`).
 
 ### Test 1.1: Code block with syntax highlighting
 
@@ -107,7 +116,7 @@ Trigger an error by referencing a non-existent tool or causing a known failure.
 
 ---
 
-## 2. Markdown Rendering Disabled
+## 2. Direct CLI — Markdown Rendering Disabled
 
 To test plain-text mode, create a config file or modify your existing one:
 
@@ -143,7 +152,11 @@ you> What files are in the current directory?
 
 ## 3. WebSocket CLI Client
 
-Connect to a running API server to verify the WebSocket CLI client inherits markdown rendering.
+Connect to a running API server to verify the WebSocket CLI client renders markdown locally.
+
+> **Note:** The WebSocket CLI client creates its own `TerminalChannel(markdown=True)` locally —
+> it always renders markdown regardless of the server's `MarkdownRenderingEnabled` setting.
+> The server sends raw `text_delta` frames; the client renders them via Rich.
 
 ```bash
 # Terminal 1: Start the server
@@ -163,6 +176,28 @@ you> Write a Python hello world program
 - Same markdown rendering as direct REPL (code blocks, bold, etc.)
 - Spinner appears during thinking and tool execution
 - Streaming is smooth with no flicker
+
+### Test 3.2: Spinner lifecycle over WebSocket
+
+```
+you> Read the contents of pyproject.toml and summarize it.
+```
+
+**Expected:**
+- Thinking spinner starts when you submit the prompt (client calls `begin_streaming()`)
+- Spinner transitions to "Running ..." during tool calls
+- Markdown text streams after tool completes
+- Turn complete cleans up the renderer (via `emit_turn_complete()`)
+- Next `you>` prompt appears cleanly
+
+### Test 3.3: ask_user over WebSocket
+
+Trigger a prompt where the LLM calls `ask_user`.
+
+**Expected:**
+- Markdown renderer stops cleanly before the questionary prompt appears
+- After answering, response continues with markdown rendering
+- No visual artefacts from the renderer/spinner state transition
 
 ---
 
@@ -231,3 +266,17 @@ Add `"MarkdownRenderingEnabled": false` to config.
 Add `"MarkdownRenderingEnabled": true` to config.
 
 **Expected:** Same as Test 5.1.
+
+---
+
+## 6. Web / Browser Clients (informational)
+
+Browser clients connecting via the WebSocket API (`/api/ws/{session_id}`) receive raw JSON frames:
+
+```json
+{"type": "text_delta", "text": "Here is a **bold** word"}
+```
+
+The server does **not** render markdown — the browser client is responsible for assembling `text_delta` tokens and rendering them (e.g. using `react-markdown`, `marked`, or similar).
+
+This is by design: markdown rendering is a presentation concern handled at the client layer.

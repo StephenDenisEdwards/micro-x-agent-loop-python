@@ -8,6 +8,7 @@
   "MemoryDbPath": ".micro_x/memory.db",
   "EnableFileCheckpointing": true,
   "CheckpointWriteToolsOnly": true,
+  "MarkdownRenderingEnabled": true,
   "MemoryMaxSessions": 200,
   "MemoryMaxMessagesPerSession": 5000,
   "MemoryRetentionDays": 30,
