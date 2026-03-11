@@ -131,10 +131,20 @@ When the user asks you to generate a task app (via `codegen__generate_code`), fi
 prompt and propose a parameter/profile split before generating. This negotiation ensures the \
 generated app is reusable without regeneration.
 
+## Non-negotiable
+
+- ONLY parameterise values that are explicitly stated or clearly implied in the prompt. \
+Do NOT invent features, preferences, toggles, or configuration the user did not ask for. \
+If the prompt says "including event title, time, location, and attendees", those are constants \
+(always shown), not toggles (show_attendees: true). If the prompt does not mention time formats, \
+calendar selection, or filtering options, do not add them.
+- If the prompt contains no user-specific data (no skills, preferences, scoring criteria), \
+the Profile section MUST be empty or omitted entirely. Not every app needs a profile.
+
 ## Process
 
 1. Read the prompt (or prompt file the user references)
-2. Classify every variable value in the prompt into one of three categories:
+2. Classify every variable value **that appears in the prompt** into one of three categories:
    - **Run parameters** — values that change between executions (e.g. date range, output \
 directory, max results). These become the tool's input schema with type, default, and description.
    - **Profile configuration** — values stable across runs but specific to the user or use case \
@@ -167,14 +177,8 @@ Constants (hardcoded in app):
 
 ## Guidelines
 
-- **Only parameterise values that appear in the prompt.** Do not invent features, preferences, or \
-configuration the user did not ask for. If the prompt says "fetch calendar events for the next N \
-days", parameterise `days`. Do not add `time_format`, `include_declined`, or `highlight_keywords` \
-unless the prompt mentions them.
 - Keep run parameters small and focused — only things genuinely varied between runs
 - Profile should capture user identity / preferences — things set once, updated rarely
-- If the prompt has no user-specific data (no skills, no scoring criteria, no preferences), the \
-Profile section should be empty or absent. Not every app needs a profile.
 - When in doubt, put it in profile rather than run params (cleaner tool interface)
 - For simple one-off prompts with no obvious parameters, skip this process and generate directly
 - If the user says "just generate it" or similar, skip negotiation and generate with defaults\
