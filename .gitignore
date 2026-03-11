@@ -29,6 +29,7 @@ tools/*/
 
 # Logs
 *.log
+*.jsonl
 
 # .NET
 *.sln
