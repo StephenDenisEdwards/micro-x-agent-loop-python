@@ -188,14 +188,25 @@ class _McpNotificationFilter(logging.Filter):
 
 
 async def _shutdown_runtime(runtime) -> None:
-    """Clean up all runtime resources."""
-    await runtime.agent.shutdown()
-    if runtime.mcp_manager:
-        await runtime.mcp_manager.close()
-    if runtime.event_sink:
-        await runtime.event_sink.close()
-    if runtime.memory_store:
-        runtime.memory_store.close()
+    """Clean up all runtime resources.
+
+    On Windows, MCP server subprocess termination can send CTRL_C_EVENT to
+    the console process group, which makes cmd.exe show "Terminate batch job
+    (Y/N)?" if running from a .bat file.  We temporarily ignore SIGINT during
+    shutdown to prevent this.
+    """
+    import signal
+    prev_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    try:
+        await runtime.agent.shutdown()
+        if runtime.mcp_manager:
+            await runtime.mcp_manager.close()
+        if runtime.event_sink:
+            await runtime.event_sink.close()
+        if runtime.memory_store:
+            runtime.memory_store.close()
+    finally:
+        signal.signal(signal.SIGINT, prev_handler)
 
 
 async def _run_oneshot(app, env, prompt: str, session_id: str | None) -> None:

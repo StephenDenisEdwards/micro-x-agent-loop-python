@@ -30,7 +30,4 @@ if not exist mcp_servers\ts\packages\filesystem\dist\index.js (
 :mcp_done
 
 REM -- Run the agent --
-REM MCP child-process cleanup may send Ctrl+C to the console group on exit,
-REM which causes the "Terminate batch job (Y/N)?" prompt.
-REM Using cmd /C isolates the signal so it doesn't interrupt this script.
-cmd /C .venv\Scripts\python -m micro_x_agent_loop %*
+.venv\Scripts\python.exe -m micro_x_agent_loop %*
