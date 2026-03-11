@@ -140,6 +140,27 @@ async def run_client(
                     turn_complete.set()
 
             recv_task = asyncio.create_task(receiver())
+            from prompt_toolkit import PromptSession
+            from prompt_toolkit.formatted_text import HTML
+            from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+
+            bindings = KeyBindings()
+
+            @bindings.add("enter")
+            def _submit(event: KeyPressEvent) -> None:
+                event.current_buffer.validate_and_handle()
+
+            @bindings.add("s-enter")
+            @bindings.add("escape", "enter")
+            def _newline(event: KeyPressEvent) -> None:
+                event.current_buffer.insert_text("\n")
+
+            session: PromptSession[str] = PromptSession(
+                message=HTML("<b>you&gt; </b>"),
+                multiline=True,
+                key_bindings=bindings,
+                prompt_continuation=".... ",
+            )
 
             try:
                 while not receiver_done.is_set():
@@ -149,7 +170,7 @@ async def run_client(
                         break
 
                     try:
-                        user_input = await asyncio.to_thread(input, "you> ")
+                        user_input = await asyncio.to_thread(session.prompt)
                     except (EOFError, KeyboardInterrupt):
                         break
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
@@ -376,10 +378,36 @@ async def main() -> None:
     # --- ESC key listener for task interruption ---
     _esc_watcher = _EscWatcher()
 
+    # prompt_toolkit session — Enter submits, Shift+Enter inserts newline,
+    # and bracketed paste captures multi-line content in one go.
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.formatted_text import HTML
+    from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+
+    bindings = KeyBindings()
+
+    @bindings.add("enter")
+    def _submit(event: KeyPressEvent) -> None:
+        """Enter always submits, even when buffer has multiple lines."""
+        event.current_buffer.validate_and_handle()
+
+    @bindings.add("s-enter")
+    @bindings.add("escape", "enter")
+    def _newline(event: KeyPressEvent) -> None:
+        """Shift+Enter or Alt+Enter inserts a newline."""
+        event.current_buffer.insert_text("\n")
+
+    session: PromptSession[str] = PromptSession(
+        message=HTML("<b>you&gt; </b>"),
+        multiline=True,
+        key_bindings=bindings,
+        prompt_continuation=".... ",
+    )
+
     try:
         while True:
             try:
-                user_input = await asyncio.to_thread(input, "you> ")
+                user_input = await asyncio.to_thread(session.prompt)
             except (EOFError, KeyboardInterrupt):
                 break
 
