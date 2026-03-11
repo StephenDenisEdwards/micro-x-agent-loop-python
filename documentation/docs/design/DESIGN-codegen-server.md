@@ -1,6 +1,32 @@
 # Design: Code Generation MCP Server
 
-## Problem
+## Motivation: Why Generate Code?
+
+When a user asks the agent to process a batch of items — search Gmail for 50 job emails, score each one against criteria, and write a report — the agent loop handles it through serial tool calls. Each email requires an LLM turn: the model re-reads the full conversation, decides to call `gmail_read`, waits for the result, reasons about the next step, and repeats. For 50 emails this means 50+ turns, each re-sending the entire context window. The cost scales linearly with the number of items, the latency accumulates to minutes, and the model can lose track mid-way through the batch.
+
+Generated code does the same work in a single process:
+
+```typescript
+const emails = await gmailSearch(clients, "from:jobserve", 50);
+for (const id of emails) {
+    const msg = await gmailRead(clients, id);
+    // parse, score, collect — pure TypeScript, zero LLM cost
+}
+await writeFile("report.md", formatReport(results), config);
+```
+
+The loops, filtering, scoring, and formatting all run as deterministic TypeScript. The LLM is used once (to generate the code), not N times (to process each item).
+
+| | Agent loop (serial tool calls) | Generated code |
+|---|---|---|
+| **Cost** | N LLM turns, full context re-sent each time | 1 generation call + 1 execution |
+| **Speed** | Minutes (LLM latency × N) | Seconds (native code execution) |
+| **Reliability** | Model may hallucinate, lose track, or change strategy mid-batch | Deterministic loops, consistent output |
+| **Repeatability** | Must re-run the full agent conversation | Generated app is saved — re-run for free |
+
+The LLM is good at deciding *what* to do. It is wasteful at doing the *same thing* 50 times in a row. Code generation uses the LLM for what it's best at (understanding requirements, writing code) and delegates repetitive execution to deterministic code.
+
+## Problem: Why Isolate Code Generation?
 
 The agent loop cannot reliably generate code from a template, regardless of model (Haiku, Sonnet, gpt-4o-mini, gpt-4o). The consistent failure modes are:
 
