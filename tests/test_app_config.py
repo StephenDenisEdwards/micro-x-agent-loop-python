@@ -3,12 +3,14 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from micro_x_agent_loop.app_config import (
     _expand_env_vars,
     _resolve_config_with_base,
     _to_bool,
     load_json_config,
+    resolve_runtime_env,
 )
 
 
@@ -162,6 +164,80 @@ class LoadJsonConfigWithBaseTests(unittest.TestCase):
                 self.assertEqual(data["WorkingDirectory"], "/tmp/test_dir")
         finally:
             del os.environ["_TEST_DIR"]
+
+
+class LoadJsonConfigExtraTests(unittest.TestCase):
+    def test_load_config_path_not_found(self) -> None:
+        with self.assertRaises(FileNotFoundError):
+            load_json_config("/nonexistent/path/config.json")
+
+    def test_load_no_path_no_cwd_config(self) -> None:
+        """When config_path=None and no cwd config.json, returns empty dict."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                data, path = load_json_config(None)
+                self.assertEqual({}, data)
+            finally:
+                os.chdir(orig_cwd)
+
+    def test_load_no_path_with_cwd_config(self) -> None:
+        """When config_path=None and cwd has config.json, reads it."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "config.json").write_text(json.dumps({"Model": "test-model"}))
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                data, path = load_json_config(None)
+                self.assertEqual("test-model", data.get("Model"))
+            finally:
+                os.chdir(orig_cwd)
+
+    def test_load_config_file_indirection(self) -> None:
+        """config.json with ConfigFile key redirects to another file."""
+        with tempfile.TemporaryDirectory() as tmp:
+            actual = Path(tmp) / "actual.json"
+            actual.write_text(json.dumps({"Provider": "anthropic", "Model": "actual-model"}))
+            config_json = Path(tmp) / "config.json"
+            config_json.write_text(json.dumps({"ConfigFile": "actual.json"}))
+
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                data, path = load_json_config(None)
+                self.assertEqual("actual-model", data.get("Model"))
+            finally:
+                os.chdir(orig_cwd)
+
+    def test_load_config_file_target_not_found(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_json = Path(tmp) / "config.json"
+            config_json.write_text(json.dumps({"ConfigFile": "nonexistent.json"}))
+
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                with self.assertRaises(FileNotFoundError):
+                    load_json_config(None)
+            finally:
+                os.chdir(orig_cwd)
+
+
+class ResolveRuntimeEnvTests(unittest.TestCase):
+    def test_anthropic_provider(self) -> None:
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            env = resolve_runtime_env("anthropic")
+            self.assertEqual("test-key", env.provider_api_key)
+            self.assertEqual("ANTHROPIC_API_KEY", env.provider_env_var)
+
+    def test_openai_provider(self) -> None:
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "openai-key"}):
+            env = resolve_runtime_env("openai")
+            self.assertEqual("openai-key", env.provider_api_key)
+            self.assertEqual("OPENAI_API_KEY", env.provider_env_var)
 
 
 if __name__ == "__main__":
