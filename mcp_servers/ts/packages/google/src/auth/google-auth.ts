@@ -13,6 +13,13 @@ import { URL } from "node:url";
  */
 const serviceCache = new Map<string, ReturnType<typeof google.gmail> | ReturnType<typeof google.calendar> | ReturnType<typeof google.people>>();
 
+/**
+ * Base directory for OAuth token storage.
+ * Defaults to process.cwd() but can be overridden via GOOGLE_TOKEN_BASE_DIR
+ * so that task apps spawned in subdirectories reuse the main project's tokens.
+ */
+const TOKEN_BASE_DIR = process.env.GOOGLE_TOKEN_BASE_DIR || process.cwd();
+
 interface TokenData {
   access_token?: string;
   refresh_token?: string;
@@ -180,7 +187,7 @@ const GMAIL_SCOPES = [
 ];
 
 export async function getGmailService(clientId: string, clientSecret: string) {
-  const tokenDir = path.join(process.cwd(), ".gmail-tokens");
+  const tokenDir = path.join(TOKEN_BASE_DIR, ".gmail-tokens");
   const cacheKey = tokenDir;
 
   const cached = serviceCache.get(cacheKey);
@@ -201,7 +208,7 @@ const CALENDAR_SCOPES = [
 ];
 
 export async function getCalendarService(clientId: string, clientSecret: string) {
-  const tokenDir = path.join(process.cwd(), ".calendar-tokens");
+  const tokenDir = path.join(TOKEN_BASE_DIR, ".calendar-tokens");
   const cacheKey = tokenDir;
 
   const cached = serviceCache.get(cacheKey);
@@ -222,7 +229,7 @@ const CONTACTS_SCOPES = [
 ];
 
 export async function getContactsService(clientId: string, clientSecret: string) {
-  const tokenDir = path.join(process.cwd(), ".contacts-tokens");
+  const tokenDir = path.join(TOKEN_BASE_DIR, ".contacts-tokens");
   const cacheKey = tokenDir;
 
   const cached = serviceCache.get(cacheKey);

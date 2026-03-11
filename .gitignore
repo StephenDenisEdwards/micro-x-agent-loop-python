@@ -36,3 +36,4 @@ tools/*/
 *.sln
 bin/
 obj/
+*.tsbuildinfo

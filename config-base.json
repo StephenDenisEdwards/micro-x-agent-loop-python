@@ -145,7 +145,10 @@
     "google": {
       "transport": "stdio",
       "command": "node",
-      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\google\\dist\\index.js"]
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\google\\dist\\index.js"],
+      "env": {
+        "GOOGLE_TOKEN_BASE_DIR": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python"
+      }
     },
     "anthropic-admin": {
       "transport": "stdio",

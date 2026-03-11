@@ -1,0 +1,11 @@
+{
+  "Base": "config-base.json",
+  "Provider": "openai",
+  "Model": "gpt-4o",
+  "MaxTokens": 16384,
+  "CompactionModel": "gpt-4o-mini",
+  "LogConsumers": [
+    { "type": "file", "path": "C:\\Users\\steph\\source\\repos\\resources\\micro-x-agent-loop-logs\\agent.log" },
+    { "type": "api_payload", "path": "C:\\Users\\steph\\source\\repos\\resources\\micro-x-agent-loop-logs\\api_payloads.jsonl" }
+  ]
+}
