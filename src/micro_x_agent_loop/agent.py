@@ -217,6 +217,7 @@ class Agent:
             user_memory_dir=self._user_memory_dir,
             prompt_command_store=self._prompt_command_store,
             on_session_reset=self._on_session_reset,
+            on_tools_deleted=self._on_tools_deleted,
             output=self._channel.emit_system_message if self._channel is not None else print,
         )
 
@@ -541,6 +542,16 @@ class Agent:
         self._messages = new_messages
         self._session_accumulator.reset(session_id=session_id)
         self._turn_number = 0
+
+    def _on_tools_deleted(self, tool_names: list[str]) -> None:
+        if not tool_names:
+            return
+        to_remove = set(tool_names)
+        self._converted_tools[:] = [
+            tool for tool in self._converted_tools if tool.get("name") not in to_remove
+        ]
+        if self._tool_search_manager is not None:
+            self._tool_search_manager.remove_tools(tool_names)
 
     async def _process_voice_utterance(self, text: str) -> None:
         await self.run(text)

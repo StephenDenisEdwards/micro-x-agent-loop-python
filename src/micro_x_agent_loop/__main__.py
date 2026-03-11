@@ -248,13 +248,20 @@ async def _shutdown_runtime(runtime) -> None:
         signal.signal(signal.SIGINT, prev_handler)
 
 
-async def _run_oneshot(app, env, prompt: str, session_id: str | None) -> None:
+async def _run_oneshot(
+    app,
+    env,
+    prompt: str,
+    session_id: str | None,
+    *,
+    resolved_config: dict,
+) -> None:
     """Execute a single prompt in autonomous mode and exit."""
     if session_id:
         app.resume_session_id = session_id
 
     try:
-        runtime = await bootstrap_runtime(app, env, autonomous=True)
+        runtime = await bootstrap_runtime(app, env, autonomous=True, resolved_config=resolved_config)
     except ValueError as ex:
         logger.error(str(ex))
         sys.exit(1)
@@ -352,13 +359,19 @@ async def main() -> None:
 
     # One-shot mode: run prompt and exit.
     if cli_args["run"]:
-        await _run_oneshot(app, env, cli_args["run"], cli_args["session"])
+        await _run_oneshot(
+            app,
+            env,
+            cli_args["run"],
+            cli_args["session"],
+            resolved_config=raw_config,
+        )
         return
 
     print(f"Config: {config_source}")
 
     try:
-        runtime = await bootstrap_runtime(app, env)
+        runtime = await bootstrap_runtime(app, env, resolved_config=raw_config)
     except ValueError as ex:
         logger.error(str(ex))
         sys.exit(1)

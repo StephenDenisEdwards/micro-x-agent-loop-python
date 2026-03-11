@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,6 +28,7 @@ def _make_handler(
     api_payload_store: ApiPayloadStore | None = None,
     voice_runtime=None,
     prompt_commands: dict[str, str] | None = None,
+    on_tools_deleted=None,
 ) -> tuple[CommandHandler, list[str]]:
     """Build a CommandHandler with minimal mocks. Returns (handler, output_list)."""
     out: list[str] = [] if output is None else output
@@ -80,6 +82,7 @@ def _make_handler(
         user_memory_dir=user_memory_dir,
         prompt_command_store=pcs,
         on_session_reset=lambda sid, msgs: None,
+        on_tools_deleted=on_tools_deleted,
         output=out.append,
     )
     return handler, out
@@ -342,6 +345,73 @@ class ToolTests(unittest.TestCase):
         handler, out = _make_handler(tool_map={"server__foo": tool})
         asyncio.run(handler.handle_tool("/tool server__foo bogus"))
         self.assertTrue(any("Usage:" in line for line in out))
+
+    def test_tool_delete_generated_task(self) -> None:
+        from tests.fakes import FakeTool
+
+        project_root = Path.cwd() / ".tmp-run" / "tool-delete-test"
+        if project_root.exists():
+            shutil.rmtree(project_root)
+        deleted: list[list[str]] = []
+        try:
+            task_dir = project_root / "tools" / "email_summary"
+            task_dir.mkdir(parents=True)
+            manifest_path = project_root / "tools" / "manifest.json"
+            manifest_path.write_text(
+                """{
+  "email_summary": {
+    "tool_name": "email_summary",
+    "server": {
+      "cwd": "tools/email_summary/"
+    }
+  }
+}
+""",
+                encoding="utf-8",
+            )
+
+            handler, out = _make_handler(
+                tool_map={"email_summary__email_summary": FakeTool("email_summary__email_summary")},
+                on_tools_deleted=deleted.append,
+            )
+
+            original_cwd = Path.cwd()
+            os.chdir(project_root)
+            try:
+                asyncio.run(handler.handle_tool("/tool delete email_summary"))
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertFalse(task_dir.exists())
+            self.assertEqual("{}", manifest_path.read_text(encoding="utf-8").strip())
+            self.assertNotIn("email_summary__email_summary", handler._tool_map)
+            self.assertEqual([["email_summary__email_summary"]], deleted)
+            self.assertTrue(any("Deleted generated task: email_summary" in line for line in out))
+        finally:
+            if project_root.exists():
+                shutil.rmtree(project_root)
+
+    def test_tool_delete_generated_task_not_found(self) -> None:
+        project_root = Path.cwd() / ".tmp-run" / "tool-delete-missing-test"
+        if project_root.exists():
+            shutil.rmtree(project_root)
+        try:
+            manifest_dir = project_root / "tools"
+            manifest_dir.mkdir(parents=True)
+            (manifest_dir / "manifest.json").write_text("{}", encoding="utf-8")
+
+            handler, out = _make_handler()
+            original_cwd = Path.cwd()
+            os.chdir(project_root)
+            try:
+                asyncio.run(handler.handle_tool("/tool delete missing_task"))
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertTrue(any("Generated task not found: missing_task" in line for line in out))
+        finally:
+            if project_root.exists():
+                shutil.rmtree(project_root)
 
 
 class DebugTests(unittest.TestCase):

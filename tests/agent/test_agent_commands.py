@@ -243,6 +243,7 @@ class ToolCommandTests(unittest.TestCase):
         self.assertIn("/tool <name>", out)
         self.assertIn("/tool <name> schema", out)
         self.assertIn("/tool <name> config", out)
+        self.assertIn("/tool delete <name>", out)
 
 
 class DebugCommandTests(unittest.TestCase):

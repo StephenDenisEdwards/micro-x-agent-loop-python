@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -38,6 +39,7 @@ class CommandHandler:
         user_memory_dir: str,
         prompt_command_store: PromptCommandStore,
         on_session_reset: Callable[[str, list[dict]], None],
+        on_tools_deleted: Callable[[list[str]], None] | None = None,
         output: Callable[[str], None] = print,
     ) -> None:
         self._p = line_prefix
@@ -55,6 +57,7 @@ class CommandHandler:
         self._user_memory_enabled = user_memory_enabled
         self._user_memory_dir = user_memory_dir
         self._on_session_reset = on_session_reset
+        self._on_tools_deleted = on_tools_deleted or (lambda _tool_names: None)
 
     # -- /help --
 
@@ -86,6 +89,7 @@ class CommandHandler:
         self._print(f"{p}- /tool <name>")
         self._print(f"{p}- /tool <name> schema")
         self._print(f"{p}- /tool <name> config")
+        self._print(f"{p}- /tool delete <name>")
         self._print(f"{p}- /console-log-level [TRACE|DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL|OFF]")
         self._print(f"{p}- /debug show-api-payload [N]")
         if self._user_memory_enabled:
@@ -279,6 +283,9 @@ class CommandHandler:
         if len(parts) == 1:
             self._print_tool_list()
             return
+        if len(parts) == 3 and parts[1].lower() == "delete":
+            await self._delete_generated_tool(parts[2])
+            return
         name_arg = parts[1]
         tool = self._resolve_tool_name(name_arg)
         if tool is None:
@@ -295,8 +302,105 @@ class CommandHandler:
             return
         self._print(
             f"{self._p}Usage: /tool | /tool <name> | "
-            "/tool <name> schema | /tool <name> config"
+            "/tool <name> schema | /tool <name> config | /tool delete <name>"
         )
+
+    async def _delete_generated_tool(self, name_arg: str) -> None:
+        project_root = Path.cwd()
+        manifest_path = project_root / "tools" / "manifest.json"
+        if not manifest_path.exists():
+            self._print(f"{self._p}No generated tool manifest found: {manifest_path}")
+            return
+
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception as ex:
+            self._print(f"{self._p}Failed to read manifest: {ex}")
+            return
+
+        if not isinstance(manifest, dict):
+            self._print(f"{self._p}Manifest format is invalid.")
+            return
+
+        task_name = self._resolve_manifest_task_name(manifest, name_arg)
+        if task_name is None:
+            return
+
+        entry = manifest.pop(task_name)
+        try:
+            manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        except Exception as ex:
+            self._print(f"{self._p}Failed to update manifest: {ex}")
+            return
+
+        task_dir = self._resolve_manifest_task_dir(project_root, task_name, entry)
+        dir_removed = False
+        if task_dir is not None and task_dir.exists():
+            shutil.rmtree(task_dir)
+            dir_removed = True
+
+        deleted_tool_names = [
+            tool_name for tool_name in list(self._tool_map)
+            if tool_name == task_name or tool_name.startswith(f"{task_name}__")
+        ]
+        for tool_name in deleted_tool_names:
+            self._tool_map.pop(tool_name, None)
+        self._on_tools_deleted(deleted_tool_names)
+
+        self._print(f"{self._p}Deleted generated task: {task_name}")
+        self._print(f"{self._p}Manifest updated: {manifest_path}")
+        if task_dir is not None:
+            if dir_removed:
+                self._print(f"{self._p}Removed task directory: {task_dir}")
+            else:
+                self._print(f"{self._p}Task directory not found: {task_dir}")
+
+    def _resolve_manifest_task_name(
+        self,
+        manifest: dict[str, dict],
+        name_arg: str,
+    ) -> str | None:
+        if name_arg in manifest:
+            return name_arg
+
+        matches: list[str] = []
+        for task_name, entry in manifest.items():
+            tool_name = str(entry.get("tool_name", task_name))
+            proxy_name = f"{task_name}__{tool_name}"
+            if name_arg in {tool_name, proxy_name}:
+                matches.append(task_name)
+
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            self._print(f"{self._p}Ambiguous generated task name '{name_arg}'. Matches:")
+            for task_name in sorted(matches):
+                self._print(f"{self._p}  - {task_name}")
+            return None
+
+        self._print(f"{self._p}Generated task not found: {name_arg}")
+        return None
+
+    def _resolve_manifest_task_dir(
+        self,
+        project_root: Path,
+        task_name: str,
+        entry: dict,
+    ) -> Path | None:
+        server = entry.get("server", {})
+        cwd = server.get("cwd") if isinstance(server, dict) else None
+        if isinstance(cwd, str) and cwd.strip():
+            candidate = (project_root / cwd).resolve()
+        else:
+            candidate = (project_root / "tools" / task_name).resolve()
+
+        tools_root = (project_root / "tools").resolve()
+        try:
+            candidate.relative_to(tools_root)
+        except ValueError:
+            self._print(f"{self._p}Refusing to delete directory outside tools/: {candidate}")
+            return None
+        return candidate
 
     def _resolve_tool_name(self, name_arg: str) -> Tool | None:
         if name_arg in self._tool_map:

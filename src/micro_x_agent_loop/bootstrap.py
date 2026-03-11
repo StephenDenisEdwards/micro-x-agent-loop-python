@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_channel import BrokerChannel, BufferedChannel, TerminalChannel
@@ -36,7 +37,13 @@ def _load_user_memory(memory_dir: Path, max_lines: int) -> str:
     return "\n".join(lines[:max_lines])
 
 
-async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv, *, autonomous: bool = False) -> AppRuntime:
+async def bootstrap_runtime(
+    app: AppConfig,
+    env: RuntimeEnv,
+    *,
+    autonomous: bool = False,
+    resolved_config: dict[str, Any] | None = None,
+) -> AppRuntime:
     log_descriptions = setup_logging(level=app.log_level, consumers=app.log_consumers)
 
     mcp_manager: McpManager | None = None
@@ -50,7 +57,11 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv, *, autonomous: bool
     project_root = Path.cwd()
     if mcp_manager is None:
         mcp_manager = McpManager({})
-    manifest_tools = load_manifest(project_root, connect_fn=mcp_manager.connect_on_demand)
+    manifest_tools = load_manifest(
+        project_root,
+        connect_fn=mcp_manager.connect_on_demand,
+        resolved_config=resolved_config,
+    )
     tools.extend(manifest_tools)
 
     if app.compaction_strategy_name == "summarize":

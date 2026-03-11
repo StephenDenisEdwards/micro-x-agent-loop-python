@@ -192,3 +192,16 @@ class ToolSearchManager:
     @property
     def total_tool_count(self) -> int:
         return len(self._all_tools)
+
+    def remove_tools(self, tool_names: list[str]) -> None:
+        """Remove tools from the search index after live deletion."""
+        if not tool_names:
+            return
+        to_remove = set(tool_names)
+        self._all_tools = [tool for tool in self._all_tools if tool.name not in to_remove]
+        self._all_converted_tools = [
+            tool for tool in self._all_converted_tools if tool.get("name") not in to_remove
+        ]
+        for name in to_remove:
+            self._tool_index.pop(name, None)
+            self._loaded_tool_names.discard(name)

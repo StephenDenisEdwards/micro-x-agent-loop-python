@@ -16,6 +16,13 @@
     "web": {
       "command": "node",
       "args": ["mcp_servers/ts/packages/web/dist/index.js"]
+    },
+    "google": {
+      "command": "node",
+      "args": ["mcp_servers/ts/packages/google/dist/index.js"],
+      "env": {
+        "GOOGLE_TOKEN_BASE_DIR": "."
+      }
     }
   }
 }

@@ -95,6 +95,7 @@ class ManifestTool:
 def load_manifest(
     project_root: Path,
     connect_fn: Any,
+    resolved_config: dict[str, Any] | None = None,
 ) -> list[ManifestTool]:
     """Load tools/manifest.json and create ManifestTool placeholders.
 
@@ -127,8 +128,16 @@ def load_manifest(
             logger.warning(f"Manifest entry '{task_name}': directory '{cwd}' not found, skipping")
             continue
 
-        # Resolve cwd to absolute path
-        server_config = {**server_config, "cwd": str(task_dir.resolve())}
+        env = dict(server_config.get("env", {}))
+        if resolved_config is not None:
+            env["MICRO_X_AGENT_CONFIG_JSON"] = json.dumps(resolved_config)
+
+        # Resolve cwd to absolute path and inject the parent's resolved config.
+        server_config = {
+            **server_config,
+            "cwd": str(task_dir.resolve()),
+            "env": env,
+        }
 
         tool_name = entry.get("tool_name", task_name)
         description = entry.get("description", f"Generated task: {task_name}")
