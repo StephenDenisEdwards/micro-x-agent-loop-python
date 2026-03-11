@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-03-09
+Last updated: 2026-03-11
 
 ## Priority Queue
 
@@ -23,7 +23,7 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | **12** | [Agent API Server](PLAN-agent-api-server.md) | **Completed** | HTTP/WebSocket API, broker convergence, CLI client, Python SDK, examples |
 | **13** | [Sub-Agents](PLAN-sub-agents.md) | **Phase 1 Completed** | In-process sub-agent delegation for context protection, task isolation, parallelism, and cost reduction |
 | **14** | [Markdown Rendering](PLAN-markdown-rendering.md) | **Completed** | Progressive markdown rendering in CLI using rich — buffer-and-rerender pattern matching ChatGPT/Claude Code |
-| **15** | [Test Coverage 90%](PLAN-test-coverage-90.md) | Not Started | Raise test coverage from 59% to 90% — 4-phase plan covering broker, server, CLI, and utilities |
+| **15** | [Test Coverage 90%](PLAN-test-coverage-90.md) | **Completed** | Raised test coverage from 59% to 85% (acceptable threshold) |
 | **16** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Frictionless onboarding becomes critical once promotional channels drive traffic to the repo. Benefits from stable post-broker architecture |
 | **17** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, schema optimisation) | Planning | Architectural changes, higher effort; model routing can be done in TurnEngine/Provider layer without gateway |
 | **18** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
@@ -38,13 +38,12 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 
 | Status | Count |
 |--------|-------|
-| Completed | 20 |
+| Completed | 24 |
 | Phase 1 Completed | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
 | Planning | 1 |
-| Not Started | 1 |
 | Planned | 4 |
 
 ## All Plans
@@ -77,7 +76,10 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | Completed | 5 tools: create, list, get, comment, categories. Completed 2026-03-06 |
 | [Agent API Server](PLAN-agent-api-server.md) | Completed | All 5 phases done: AgentChannel, server, broker convergence, CLI client, SDK |
 | [Markdown Rendering](PLAN-markdown-rendering.md) | Completed | Progressive markdown rendering in CLI using rich — buffer-and-rerender pattern |
-| [Test Coverage 90%](PLAN-test-coverage-90.md) | Not Started | 4-phase plan: 59% → 90% coverage across all modules |
+| [Tool Search](PLAN-tool-search.md) | Completed | On-demand tool discovery for large tool sets — defers schemas until needed |
+| [Ask User](PLAN-ask-user.md) | Completed | `ask_user` pseudo-tool for mid-execution clarification questions |
+| [MCP Server Reimplementation](PLAN-mcp-server-reimplementation.md) | Completed | Reimplemented all tools as TypeScript MCP servers |
+| [Test Coverage 90%](PLAN-test-coverage-90.md) | Completed | 59% → 85% coverage (acceptable threshold) |
 | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Interactive setup wizard for non-expert users |
 | [Codegen Agentic Loop](PLAN-codegen-agentic-loop.md) | Completed | Mini agentic loop inside the codegen server for file reading and multi-turn generation |
 | [TypeScript Codegen Template](PLAN-typescript-codegen-template.md) | Planned | Migrate codegen template from Python to TypeScript to fix Windows subprocess/venv issues |
