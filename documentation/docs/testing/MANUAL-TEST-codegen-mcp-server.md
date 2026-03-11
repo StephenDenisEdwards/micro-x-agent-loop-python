@@ -1,8 +1,8 @@
-# Codegen MCP Server Generation — Manual Test Plan (Steps 2 & 3)
+# Codegen MCP Server Generation - Manual Test Plan (Steps 2 & 3)
 
 **Status: Not yet tested** (2026-03-11)
 
-Tests whether the codegen pipeline correctly generates MCP servers with typed input schemas, profile configuration, and manifest registration — and whether the agent can discover and call them on demand.
+Tests whether the codegen pipeline correctly generates MCP servers with typed input schemas, profile configuration, and manifest registration - and whether the agent can discover and call them on demand.
 
 Depends on Step 1 (schema negotiation directive). See `MANUAL-TEST-codegen-parameterisation.md` for Step 1 tests.
 
@@ -11,10 +11,10 @@ Depends on Step 1 (schema negotiation directive). See `MANUAL-TEST-codegen-param
 ### Step 2: Generation
 
 1. **Does `generate_code` produce a valid MCP server?** The generated `task.ts` should export `TOOL_NAME`, `TOOL_DESCRIPTION`, `TOOL_INPUT_SCHEMA`, and `handleTool`.
-2. **Is `profile.json` generated correctly?** Values from the prompt should appear in the profile, not hardcoded in the code.
+2. **Is profile data handled correctly?** User-specific values from the prompt should be written into `profile.json` when needed, and read from `profile` at runtime instead of being hardcoded in the code.
 3. **Does `tools/manifest.json` get updated?** New entry with tool name, description, and server config.
-4. **Do vitest tests still pass?** Tests should import `handleTool` directly, not spin up an MCP server.
-5. **Does `run_task` still work?** Standalone execution via `--run` flag should produce output.
+4. **Do vitest tests still pass?** Generated tests should focus on pure logic modules and should not require spinning up an MCP server.
+5. **Does `run_task` still work?** Standalone execution via `--run` flag should produce a successful result.
 
 ### Step 3: Discovery & Integration
 
@@ -25,7 +25,7 @@ Depends on Step 1 (schema negotiation directive). See `MANUAL-TEST-codegen-param
 
 ---
 
-## Test 1: Simple Email Summary — Full Pipeline
+## Test 1: Simple Email Summary - Full Pipeline
 
 **Prompt:**
 ```
@@ -40,7 +40,7 @@ Generate a reusable app that reads my last N emails and creates an email-summary
    - `TOOL_NAME = "email_summary"`
    - `TOOL_INPUT_SCHEMA` with `count` (number, default 20) and `outputFile` (string)
    - `handleTool` that calls `gmailSearch`/`gmailRead`
-5. `profile.json` is empty or not generated (no user-specific data)
+5. `profile.json` remains empty or minimal (no meaningful user-specific data required)
 6. `tools/manifest.json` has entry for `email_summary`
 7. Vitest passes
 
@@ -48,7 +48,7 @@ Generate a reusable app that reads my last N emails and creates an email-summary
 ```
 Run the email_summary task
 ```
-Should execute via `--run` mode and produce output.
+Should execute via `--run` mode and produce a successful result.
 
 **Follow-up: Discover via tool search:**
 ```
@@ -58,7 +58,7 @@ Should find `email_summary__email_summary` in results.
 
 ---
 
-## Test 2: Job Search with Profile — Complex Pipeline
+## Test 2: Job Search with Profile - Complex Pipeline
 
 **Prompt:**
 ```
@@ -66,7 +66,7 @@ Generate a reusable app from job-search-prompt-v3.txt
 ```
 
 **Expected flow:**
-1. Agent proposes params/profile split (complex — skills, rate, exclusions in profile)
+1. Agent proposes params/profile split (complex - skills, rate, exclusions in profile)
 2. User confirms
 3. Generated `task.ts` has:
    - `TOOL_INPUT_SCHEMA` with `days`, `outputDir`
@@ -81,7 +81,7 @@ Generate a reusable app from job-search-prompt-v3.txt
 
 ---
 
-## Test 3: Calendar Briefing — Minimal Profile
+## Test 3: Calendar Briefing - Minimal Profile
 
 **Prompt:**
 ```
@@ -90,7 +90,7 @@ Generate a reusable app that fetches my calendar events for the next N days and 
 
 **Expected:**
 - `TOOL_INPUT_SCHEMA`: `{ days: z.number().default(1), outputFile: z.string().default("daily-briefing.md") }`
-- `profile.json`: empty or minimal (maybe `calendar_id`)
+- `profile.json`: empty or minimal (for example `calendar_id` if the implementation needs it)
 - `SERVERS`: `["google"]`
 
 **Key check:** Does the LLM correctly use the new exports format instead of the old `runTask` format?
@@ -108,7 +108,7 @@ codegen__run_task(task_name="<task_name>")
 - Runs `npx tsx src/index.ts --run --config ...`
 - Connects upstream MCP servers
 - Calls `handleTool` with default parameters
-- Prints JSON result to stdout
+- Prints the final result as JSON, though stdout may also include config/log lines
 - Exits cleanly
 
 **What to watch for:**
@@ -127,7 +127,7 @@ npx tsx src/index.ts
 ```
 
 **Expected:**
-- Server starts on stdio (no output to stdout — MCP transport)
+- Server starts on stdio (no output to stdout except MCP transport)
 - Logging goes to stderr
 - Responds to MCP `tools/list` and `tools/call` requests
 
@@ -153,13 +153,13 @@ After generating 2+ apps, check `tools/manifest.json`:
       "cwd": "tools/email_summary/"
     }
   },
-  "job_search": { ... }
+  "job_search": { "...": "..." }
 }
 ```
 
 **What to check:**
 - Each entry has `tool_name`, `description`, `created`, `server` with `transport`, `command`, `args`, `cwd`
-- `tool_name` matches the `TOOL_NAME` export from task.ts
+- `tool_name` matches the `TOOL_NAME` export from `task.ts`
 - `description` matches the `TOOL_DESCRIPTION` export
 - Multiple entries coexist without overwriting
 
@@ -173,7 +173,7 @@ Start a fresh agent session with manifest tools available.
 ```
 Search for tools related to email
 ```
-(or use tool_search if in tool-search mode)
+(or use `tool_search` if in tool-search mode)
 
 **Expected:**
 - Tool search results include manifest tools (e.g. `email_summary__email_summary`)
@@ -186,7 +186,7 @@ Call the email summary tool with count=5
 
 **Expected:**
 - Agent calls `email_summary__email_summary` with `{ "count": 5 }`
-- ManifestTool triggers on-demand MCP server connection
+- `ManifestTool` triggers on-demand MCP server connection
 - Generated server starts, connects upstream MCP servers
 - `handleTool` executes, returns structured result
 - Agent receives and presents the result
@@ -216,7 +216,7 @@ Run the email summary again with count=10
 
 **Expected:**
 - `load_manifest()` logs a warning about missing directory
-- The stale entry is skipped — not added to tool search
+- The stale entry is skipped - not added to tool search
 - No crash or error
 
 ---
@@ -225,7 +225,7 @@ Run the email summary again with count=10
 
 1. Generate a job search app with profile
 2. Run it once (via `run_task` or tool call)
-3. Edit `tools/job_search/profile.json` — change a skill or rate
+3. Edit `tools/job_search/profile.json` - change a skill or rate
 4. Run again
 
 **Expected:**
@@ -235,7 +235,7 @@ Run the email summary again with count=10
 
 ---
 
-## Test 11: Backward Compatibility — Old-Style Apps
+## Test 11: Backward Compatibility - Old-Style Apps
 
 If any old-style apps exist (using `runTask` instead of `handleTool`):
 
@@ -251,12 +251,12 @@ If any old-style apps exist (using `runTask` instead of `handleTool`):
 
 | Criterion | Pass | Fail |
 |-----------|------|------|
-| Generated task.ts has new exports | `TOOL_NAME`, `TOOL_INPUT_SCHEMA`, `handleTool` | Old `runTask` format |
-| TOOL_INPUT_SCHEMA uses Zod | Flat raw shape with `.default()`, `.describe()` | JSON schema, no Zod, or `z.object()` |
-| profile.json generated correctly | User-specific values from prompt | Empty when profile was agreed, or values hardcoded in code |
-| Manifest updated | Entry with tool_name, description, server config | No manifest entry, or corrupt format |
-| Vitest passes | Tests import `handleTool`, test pure logic | Tests fail, or test MCP server registration |
-| `run_task --run` works | Standalone execution, JSON output | Starts MCP server instead, or hangs |
+| Generated `task.ts` has new exports | `TOOL_NAME`, `TOOL_INPUT_SCHEMA`, `handleTool` | Old `runTask` format |
+| `TOOL_INPUT_SCHEMA` uses Zod | Flat raw shape with `.default()`, `.describe()` | JSON schema, no Zod, or `z.object()` |
+| Profile data handled correctly | User-specific values written to/read from `profile.json` | Values hardcoded in code when profile data was agreed |
+| Manifest updated | Entry with `tool_name`, `description`, server config | No manifest entry, or corrupt format |
+| Vitest passes | Tests cover pure logic modules without requiring MCP server startup | Tests fail, or depend on MCP server registration/runtime |
+| `run_task --run` works | Standalone execution succeeds and returns the task result | Starts MCP server instead, hangs, or fails |
 | Tool search finds manifest tools | Keywords match name/description | Not indexed, or wrong name |
 | On-demand connection works | First call connects, subsequent calls cached | Connection failure, or reconnects every call |
-| Profile changes take effect | Re-run reflects edited profile.json | Profile cached or hardcoded |
+| Profile changes take effect | Re-run reflects edited `profile.json` | Profile cached or hardcoded |

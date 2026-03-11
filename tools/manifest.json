@@ -1,0 +1,18 @@
+{
+  "email_summary": {
+    "tool_name": "email_summary",
+    "description": "Reads the last N emails from Gmail inbox and writes a markdown summary file.",
+    "created": "2026-03-11",
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/email_summary/"
+    }
+  }
+}
