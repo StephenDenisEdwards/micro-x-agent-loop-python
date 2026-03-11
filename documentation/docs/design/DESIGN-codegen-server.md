@@ -361,6 +361,65 @@ run_task("job_search")
   → stdout/stderr captured via capture_output
 ```
 
+## Future: Reusability
+
+Generated apps are currently fire-and-forget — run once, maybe again manually. Four capabilities would make them genuinely reusable:
+
+### 1. Parameterisation
+
+Currently all task-specific values (search queries, date ranges, scoring weights, output paths) are hardcoded in `task.ts`. If generated code accepted parameters, the same app could be reused with different inputs without regenerating.
+
+**Current:** Every variation requires a new `generate_code` call.
+```
+"Search Gmail for JobServe emails from the last 7 days"   → generate job_search
+"Search Gmail for JobServe emails from the last 30 days"  → generate job_search_2
+```
+
+**With parameters:** One app, many runs.
+```
+run_task("job_search", params: { days: 7 })
+run_task("job_search", params: { days: 30 })
+```
+
+This requires changes to the template contract: `task.ts` would accept a `params` object alongside `clients` and `config`, and `run_task` would pass user-supplied parameters through. The codegen system prompt would instruct the LLM to extract variable values into a params interface rather than hardcoding them.
+
+### 2. Scheduling via Trigger Broker
+
+The trigger broker already supports cron jobs (`--job add <name> <cron_expr> <prompt>`). If generated tasks could be registered as broker jobs, users would get scheduled execution for free:
+
+```
+"Run my job search report every morning at 8am"
+→ generate_code("job_search", prompt)
+→ job add "job_search" "0 8 * * *" "codegen__run_task(task_name='job_search')"
+```
+
+The plumbing exists — the broker dispatches prompts to the agent, which can call `run_task`. The missing piece is a streamlined `schedule_task` tool or command that wires this up without the user needing to know cron syntax or the broker's job format.
+
+### 3. Task Catalogue
+
+Generated apps sit in `tools/<task_name>/` but there's no index. Users must remember exact task names. A task catalogue would provide:
+
+- **Discovery:** `list_tasks` tool returning available tasks with descriptions
+- **Metadata:** When created, what prompt was used, last run time, run count
+- **Cleanup:** Identify stale/unused tasks for deletion
+
+This could be as simple as a `tasks.json` manifest in the `tools/` directory, updated by `generate_code` on creation and `run_task` on execution.
+
+### 4. Incremental Runs
+
+Most batch tasks would benefit from processing only new items since the last run. Currently every run starts from scratch — re-reading all 50 emails, re-scoring everything.
+
+**State persistence** would enable incremental processing:
+- Last-run timestamp — "only fetch emails since 2026-03-10"
+- Processed item IDs — "skip emails already in the report"
+- Accumulated results — "append new entries to the existing report"
+
+This touches both the template infrastructure (a state file read/write utility) and the codegen prompt (instruct the LLM to use state for incremental processing when appropriate). The state file would live in the task directory (e.g. `tools/job_search/.state.json`).
+
+### Priority
+
+Parameterisation and scheduling deliver the most immediate value — they make existing generated apps reusable without regeneration. The task catalogue is a quality-of-life improvement. Incremental runs are the most complex but have the highest payoff for daily-use tasks.
+
 ## Future: Sub-Agent Alternative
 
 If sub-agents are implemented in the agent loop, code generation could migrate from an MCP server to a sub-agent. This is now a natural migration path since codegen already uses a mini agentic loop with tool calls:
