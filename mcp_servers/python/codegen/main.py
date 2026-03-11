@@ -6,11 +6,13 @@ Tools:
 """
 
 import asyncio
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 # On Windows, npm/npx are .cmd files that require shell=True to be found
@@ -204,6 +206,43 @@ def _extract_text(messages: list[dict], start: int = 0) -> str:
     return text
 
 
+def _update_manifest(task_name: str, target_dir: Path, files: dict[str, str]) -> None:
+    """Add or update an entry in tools/manifest.json for the generated task."""
+    manifest_path = PROJECT_ROOT / "tools" / "manifest.json"
+
+    # Read existing manifest or create new one
+    manifest: dict[str, dict] = {}
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    # Extract tool metadata from the generated task.ts
+    task_ts = files.get("task.ts", "")
+    tool_name = task_name
+    description = f"Generated task: {task_name}"
+
+    # Parse TOOL_NAME and TOOL_DESCRIPTION from the source
+    name_match = re.search(r'export\s+const\s+TOOL_NAME\s*=\s*["\']([^"\']+)["\']', task_ts)
+    if name_match:
+        tool_name = name_match.group(1)
+    desc_match = re.search(r'export\s+const\s+TOOL_DESCRIPTION\s*=\s*["\']([^"\']+)["\']', task_ts)
+    if desc_match:
+        description = desc_match.group(1)
+
+    manifest[task_name] = {
+        "tool_name": tool_name,
+        "description": description,
+        "created": date.today().isoformat(),
+        "server": {
+            "transport": "stdio",
+            "command": "npx",
+            "args": ["tsx", "src/index.ts", "--config", "../../config.json"],
+            "cwd": f"tools/{task_name}/",
+        },
+    }
+
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
 async def _llm_loop(
     client: AsyncAnthropic,
     model: str,
@@ -281,14 +320,46 @@ def build_system_prompt(task_name: str, tools_ts: str, test_base_ts: str) -> str
 ## Runtime contract
 Target directory: tools/{task_name}/src/
 
-task.ts MUST export:
-- SERVERS: string[] — MCP server names (e.g. ["google", "linkedin"])
-- async function runTask(clients: Clients, config: Record<string, unknown>): Promise<void>
-  config is internal infrastructure (working directory, log paths, etc.) — do NOT
-  read task-specific parameters from it. Everything the task needs is in the user
-  prompt or discoverable via the available tools.
+The generated app is an MCP server exposing a single tool. task.ts MUST export:
+
+- SERVERS: string[] — upstream MCP server names to connect (e.g. ["google", "linkedin"])
+- TOOL_NAME: string — snake_case tool name (e.g. "{task_name}")
+- TOOL_DESCRIPTION: string — one-line description for tool discovery
+- TOOL_INPUT_SCHEMA: Zod raw shape — the tool's input parameters (see format below)
+- async function handleTool(input, clients, profile, config): Promise<Record<string, unknown>>
+
+handleTool receives:
+- input: the parsed tool parameters (typed by TOOL_INPUT_SCHEMA)
+- clients: Clients — connected upstream MCP servers
+- profile: Record<string, unknown> — contents of profile.json (user-specific config)
+- config: Record<string, unknown> — infrastructure config (working directory, etc.)
+
+handleTool MUST return a plain object (Record<string, unknown>) with the result data.
+Do NOT write to stdout or use console.log for results — return the data.
+Use console.error for debug logging only.
+
+## TOOL_INPUT_SCHEMA format
+Use a flat Zod raw shape (NOT z.object()). Example:
+```
+export const TOOL_INPUT_SCHEMA = {{
+  days: z.number().default(1).describe("How far back to search"),
+  outputDir: z.string().default(".").describe("Where to write the report"),
+}};
+```
+Each key is a parameter name, each value is a Zod type with .describe().
+Use .default() for parameters with sensible defaults.
+Use .optional() for truly optional parameters without defaults.
+
+## profile.json
+If the requirements specify user-specific configuration (skills, preferences,
+scoring criteria, exclusion rules, etc.), generate a profile.json file with
+those values. The file is read at startup and passed to handleTool as `profile`.
+
+Generate profile.json using the === profile.json === delimiter, same as .ts files.
+If no profile data is needed, do not generate profile.json (an empty default exists).
 
 Available imports (from files in the same src/ directory):
+- import {{ z }} from "zod"; (for TOOL_INPUT_SCHEMA)
 - import {{ ... }} from "./tools.js"; (typed MCP wrappers — signatures below)
 - import type {{ Clients }} from "./tools.js"; (type for the clients dict)
 - import {{ writeFile, appendFile }} from "./utils.js"; (both async)
@@ -379,7 +450,7 @@ def parse_files(response_text: str) -> tuple[dict[str, str], list[str]]:
         if filename in INFRASTRUCTURE_FILES:
             skipped.append(filename)
             continue
-        if not filename.endswith(".ts"):
+        if not (filename.endswith(".ts") or filename.endswith(".json")):
             skipped.append(filename)
             continue
         # Reject filenames with path separators — all generated files must be
@@ -594,12 +665,15 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
             task_name,
         )
 
-    # Step 6: Write generated files to src/
+    # Step 6: Write generated files to src/ (and profile.json to task root)
     await ctx.info(f"Writing {len(files)} file(s): {', '.join(sorted(files))}")
     src_dir = target_dir / "src"
     for filename, content in files.items():
-        filepath = src_dir / filename
-        filepath.write_text(content, encoding="utf-8")
+        if filename == "profile.json":
+            (target_dir / "profile.json").write_text(content, encoding="utf-8")
+        else:
+            filepath = src_dir / filename
+            filepath.write_text(content, encoding="utf-8")
 
     # Step 7: Install dependencies
     await ctx.info("Installing dependencies (npm install)...")
@@ -626,6 +700,13 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
     except Exception as e:
         await ctx.error(f"Validation error: {e}")
         validation = {"error": str(e), "tests_passed": False}
+
+    # Step 9: Update tools/manifest.json
+    try:
+        _update_manifest(task_name, target_dir, files)
+        await ctx.info(f"Manifest updated: tools/manifest.json")
+    except Exception as e:
+        await ctx.warning(f"Manifest update failed (non-fatal): {e}")
 
     # Build result
     structured = {
@@ -665,7 +746,8 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
             f"Validation: FAILED after {validation.get('test_rounds', 0)} round(s)"
         )
 
-    summary_lines.append(f"Run with: codegen__run_task(task_name=\"{task_name}\")")
+    summary_lines.append(f"Standalone: codegen__run_task(task_name=\"{task_name}\")")
+    summary_lines.append(f"MCP server: registered in tools/manifest.json — use tool_search to discover")
 
     await ctx.info("Done.")
     return CallToolResult(
@@ -707,7 +789,7 @@ async def run_task(ctx: Context, task_name: str,
     try:
         config_path = str(PROJECT_ROOT / "config.json")
         proc = subprocess.run(
-            ["npx", "tsx", "src/index.ts", "--config", config_path],
+            ["npx", "tsx", "src/index.ts", "--run", "--config", config_path],
             cwd=str(task_dir),
             capture_output=True,
             shell=_SHELL,

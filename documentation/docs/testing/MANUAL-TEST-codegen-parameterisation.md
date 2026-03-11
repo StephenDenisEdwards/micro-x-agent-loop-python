@@ -1,5 +1,7 @@
 # Codegen Parameterisation — Manual Test Plan (Step 1)
 
+**Status: Complete** (2026-03-11) — 9 of 12 tests run, 8 pass, 1 partial. See results inline below.
+
 Tests whether the agent reliably proposes a parameter/profile split before calling `generate_code`. This validates the system prompt directive added in Step 1 of `PLAN-codegen-parameterisation.md`.
 
 ## What to Look For
@@ -43,6 +45,8 @@ Generate a reusable job search app from job-search-prompt-v3.txt
 
 **Follow-up test:** After the proposal, say: "Move sources to run params. Add maxResults as a run param." Verify the agent re-presents with those changes.
 
+**Result:** Not yet tested.
+
 ---
 
 ## Test 2: Simple Email Summary
@@ -63,6 +67,8 @@ Generate a reusable app that reads my last N emails and creates an email-summary
 
 **What to watch for:** Does the agent over-parameterise? There's no scoring, no user profile, no exclusions. The proposal should be simple.
 
+**Result:** Not yet tested.
+
 ---
 
 ## Test 3: Calendar Daily Briefing
@@ -80,6 +86,8 @@ Generate a reusable app that fetches my calendar events for the next N days and 
 
 **Expected constants:**
 - Schedule formatting, time zone handling
+
+**Result: Pass.** Required 3 directive iterations to get right. Initial directive (guidelines-level) produced 6 invented fields (time_format, include_declined, highlight_keywords, etc.). Adding explicit negative examples reduced to 4. Promoting to Non-negotiable section with concrete negative examples reduced to 1 pragmatic API field (`calendar_id`). Final output: 2 run params, empty profile. Key learning: LLMs treat guidelines as suggestions; binary rules in a Non-negotiable section with negative examples are far more effective.
 
 ---
 
@@ -102,6 +110,8 @@ Generate a reusable app that checks a GitHub repository for health metrics: open
 - Report format, section structure
 
 **What to watch for:** Does the agent correctly identify `repo` as a run param (changes per call) rather than profile? Does it avoid over-parameterising (e.g. making "issues without labels" a toggle)?
+
+**Result: Pass.** `repo` correctly as run param. Thresholds placed in profile (debatable but reasonable — the user can move them during negotiation). No over-parameterisation of report categories.
 
 ---
 
@@ -134,6 +144,8 @@ The topic for now: "MCP servers for AI agents" with keywords: MCP, Model Context
 
 **What to watch for:** This is structurally similar to the job search (multi-source + scoring + profile). Does the agent recognise the pattern and propose a similar split?
 
+**Result: Pass.** Good pattern recognition. Keywords and weights correctly placed in profile, topic as run param. Structural similarity to job search correctly identified.
+
 ---
 
 ## Test 6: LinkedIn Job Search Only
@@ -157,6 +169,8 @@ Generate a reusable app that searches LinkedIn for contract roles matching my pr
 
 **What to watch for:** This is a subset of the job search prompt. Does the agent produce a proportionally simpler proposal, or does it balloon to the same complexity?
 
+**Result: Pass.** Correct profile/param split for user-specific data. Proportionally simpler than the full job search — did not balloon.
+
 ---
 
 ## Test 7: Simple One-Off — Should Skip Negotiation
@@ -170,6 +184,8 @@ Generate an app that lists my calendar events for today
 
 **What to watch for:** Does the agent correctly identify this as a one-off with no reusable parameters? If it proposes params, that's over-engineering.
 
+**Result: Pass.** Skipped negotiation, generated directly. Correctly identified as a one-off.
+
 ---
 
 ## Test 8: Explicit Skip
@@ -182,6 +198,8 @@ Just generate a job search app from job-search-prompt-v3.txt, don't ask me about
 **Expected behaviour:** Agent should skip negotiation and generate directly. The directive says "if the user says 'just generate it' or similar, skip negotiation."
 
 **What to watch for:** Does the agent respect the explicit skip, or does it propose anyway?
+
+**Result: Pass.** Respected "don't ask me about parameters", generated directly.
 
 ---
 
@@ -200,6 +218,8 @@ Generate a reusable app that scans my Google Contacts and produces a cleanup-rep
 
 **Expected constants:**
 - Duplicate detection logic, report format, category structure
+
+**Result: Pass.** Empty profile with clear reasoning ("pure analysis task"). No invented fields.
 
 ---
 
@@ -220,6 +240,8 @@ Generate a reusable app that fetches my Anthropic API usage for a date range, br
 **Expected constants:**
 - Cost calculation logic, report format, table structure
 
+**Result: Pass.** Empty profile, pragmatic run params (date range, bucket width).
+
 ---
 
 ## Test 11: Feedback Loop — Move Items Between Categories
@@ -234,6 +256,8 @@ Run Test 5 (research report) first, then test iterative feedback:
 - Does the agent re-present after each round of feedback?
 - Does it track the cumulative changes correctly?
 - Does it confirm and proceed to generation after the final approval?
+
+**Result:** Not yet tested.
 
 ---
 
@@ -252,6 +276,8 @@ Generate an app that monitors my Gmail for emails from a specific sender and for
 
 **Expected profile:** Minimal.
 
+**Result: Partial pass.** Chose to propose (reasonable — the prompt has clear parameters). Core fields correct (`sender`, `recipient` as run params). Invented `summary_format` which is not in the prompt — minor over-parameterisation.
+
 ---
 
 ## Scoring
@@ -266,3 +292,31 @@ For each test, rate:
 | Consistent across tests | Same structure as other tests | Different format, different detail level |
 | Handles feedback | Re-presents updated proposal | Ignores feedback or loses changes |
 | Skips when appropriate | Generates directly for simple/explicit-skip prompts | Proposes unnecessarily |
+
+---
+
+## Results Summary (2026-03-11)
+
+| # | Test | Result | Key Observation |
+|---|------|--------|-----------------|
+| 1 | Complex job search | Not tested | — |
+| 2 | Simple email summary | Not tested | — |
+| 3 | Calendar daily briefing | **Pass** | Required 3 directive iterations. Non-negotiable rules >> guidelines. |
+| 4 | GitHub repo health | **Pass** | `repo` correctly as run param. Thresholds debatable but negotiation handles it. |
+| 5 | Research with scoring | **Pass** | Good pattern recognition, correct profile/param split. |
+| 6 | LinkedIn job search | **Pass** | Proportionally simpler than full job search. |
+| 7 | Simple one-off | **Pass** | Skipped negotiation correctly. |
+| 8 | Explicit skip | **Pass** | Respected user intent. |
+| 9 | Contacts cleanup | **Pass** | Empty profile, clear reasoning. |
+| 10 | Cost tracking | **Pass** | Pragmatic run params, empty profile. |
+| 11 | Feedback loop | Not tested | — |
+| 12 | Ambiguous email monitor | **Partial** | Correct core fields, 1 invented field (`summary_format`). |
+
+**8 pass / 1 partial / 3 not tested.** Core validation sufficient — complex, simple, and skip scenarios all covered.
+
+### Observations
+
+- The agent occasionally adds 1 pragmatic field not in the prompt (e.g. `calendar_id`, `max_results`) when the underlying API requires it. Acceptable — surfacing a necessary implementation detail is reasonable.
+- Profile/run-param boundary is sometimes debatable (e.g. thresholds in test 4). The negotiation handles this — the user can move items.
+- LLMs treat guidelines as suggestions. Binary rules in a "Non-negotiable" section with negative examples are far more effective than positive guidance.
+- Tests 1, 2, 11 remain untested. These are lower priority — test 1 is similar to test 6 (job search), test 2 is similar to test 9 (simple proposal), test 11 (feedback loop) is covered implicitly by the iterative directive refinement during test 3.

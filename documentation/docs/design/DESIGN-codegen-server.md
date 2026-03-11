@@ -106,25 +106,27 @@ The TypeScript template provides sealed infrastructure that generated code impor
 
 | File | Purpose | Python Equivalent |
 |------|---------|-------------------|
-| `package.json` | Declares dependencies: `@anthropic-ai/sdk`, `@modelcontextprotocol/sdk`, `dotenv`, `tsx` (dev), `vitest` (dev) | *(implicit venv)* |
+| `package.json` | Declares dependencies: `@anthropic-ai/sdk`, `@modelcontextprotocol/sdk`, `dotenv`, `zod`, `tsx` (dev), `vitest` (dev) | *(implicit venv)* |
 | `tsconfig.json` | TypeScript config: ES2022, Node16 modules, strict mode | — |
-| `src/index.ts` | Entry point — load `.env`, read config, connect MCP servers, call `runTask()`, shut down | `__main__.py` |
+| `src/index.ts` | Dual-mode entry point: MCP server (default, stdio) or standalone (`--run`). Loads config, connects upstream MCP clients lazily, reads `profile.json`, registers tool from `task.ts` exports | `__main__.py` |
 | `src/mcp-client.ts` | MCP stdio client — connect, list tools, call tools with retry, return typed results | `mcp_client.py` |
 | `src/tools.ts` | Typed wrappers around MCP tools — 90+ functions covering Gmail, Calendar, Contacts, LinkedIn, Web, Filesystem, GitHub, Anthropic Admin, Interview Assist, STT | `tools.py` |
 | `src/llm.ts` | Anthropic Claude API helper — streaming, non-streaming, cost tracking | `llm.py` |
 | `src/utils.ts` | `writeFile()`, `appendFile()` async helpers with config-aware path resolution | `utils.py` |
 | `src/test-base.ts` | Test fixture factories: `makeJobserveJob()`, `makeLinkedinJob()`, `makeEmail()` | `test_base.py` |
 | `src/task.ts` | Placeholder — replaced by generated code | `task.py` |
+| `profile.json` | Empty template (`{}`). Replaced by generated profile data if the task has user-specific configuration. Read at startup by `index.ts`. | — |
 
 ### Generated Files (replaced per task)
 
 | File | Purpose |
 |------|---------|
-| `src/task.ts` | Must export `SERVERS: string[]` and `async function runTask(clients, config)` |
+| `src/task.ts` | Must export `SERVERS`, `TOOL_NAME`, `TOOL_DESCRIPTION`, `TOOL_INPUT_SCHEMA` (Zod raw shape), and `handleTool(input, clients, profile, config)` |
+| `profile.json` | User-specific configuration (skills, preferences, scoring criteria). Optional — omitted if no profile data needed. |
 | `src/collector.ts` (optional) | Async functions calling `tools.ts` wrappers, return typed data |
 | `src/scorer.ts` (optional) | Pure TypeScript scoring/ranking (no MCP, no LLM) |
 | `src/processor.ts` (optional) | Report generation using template literals (no LLM) |
-| `src/*.test.ts` | Unit tests using vitest — test pure functions only |
+| `src/*.test.ts` | Unit tests using vitest — test pure functions only (import `handleTool`, not MCP server) |
 
 ### Why TypeScript (ADR-019)
 
@@ -229,12 +231,16 @@ Since the codegen LLM has `read_file`, it fetches any referenced files itself. T
 
 **Example response:**
 ```
-Generated 2 files for tools/email_summary/src/:
+Generated 3 files for tools/email_summary/src/:
   - collector.ts
   - task.ts
+  - profile.json
 Model: claude-sonnet-4-6 | Tokens: 5200 in, 12000 out | Turns: 1
-Run with: codegen__run_task(task_name="email_summary")
+Standalone: codegen__run_task(task_name="email_summary")
+MCP server: registered in tools/manifest.json — use tool_search to discover
 ```
+
+After generation, `generate_code` also updates `tools/manifest.json` with the new server entry (tool name, description, server config). The manifest is used by tool search for discovery.
 
 ### `run_task`
 
@@ -243,7 +249,7 @@ Run with: codegen__run_task(task_name="email_summary")
 | `task_name` | string | yes | Name of a previously generated task (e.g. `job_search`). Must exist under `tools/<task_name>/`. |
 | `timeout_seconds` | int | no | Maximum runtime in seconds. Default: 600. |
 
-Runs `npx tsx src/index.ts` in the task directory with the specified timeout. Captures stdout and stderr. Automatically runs `npm install` if `node_modules/` doesn't exist.
+Runs `npx tsx src/index.ts --run` in the task directory with the specified timeout. The `--run` flag triggers standalone mode (direct execution, output to stdout) instead of MCP server mode. Captures stdout and stderr. Automatically runs `npm install` if `node_modules/` doesn't exist.
 
 **Structured result:**
 ```json
@@ -256,7 +262,9 @@ Runs `npx tsx src/index.ts` in the task directory with the specified timeout. Ca
 }
 ```
 
-**Why a dedicated tool instead of `filesystem__bash`:** Generated apps are TypeScript projects with ESM imports, MCP server connections, and config loading. They must be run via `npx tsx src/index.ts` from the task directory. The outer agent doesn't know this and will try `node task.ts`, which fails with import errors. `run_task` encapsulates the correct invocation.
+**Why a dedicated tool instead of `filesystem__bash`:** Generated apps are TypeScript projects with ESM imports, MCP server connections, and config loading. They must be run via `npx tsx src/index.ts --run` from the task directory. The outer agent doesn't know this and will try `node task.ts`, which fails with import errors. `run_task` encapsulates the correct invocation.
+
+**Note:** `run_task` is now a fallback for standalone execution (cron jobs, testing). The primary path is MCP tool invocation via the agent — the generated server is connected on demand when the agent calls the tool via tool search.
 
 ## Generation Prompt Structure
 
@@ -373,7 +381,7 @@ Currently all task-specific values are hardcoded in `task.ts`. The generated app
 
 Instead of generating a script that runs via `npx tsx src/index.ts`, generate an MCP server that exposes the task as a tool with a typed input schema and structured output. The generated server plugs into the agent's MCP infrastructure like any other server.
 
-**Current (script):**
+**Previous (script):**
 ```typescript
 export async function runTask(clients: Clients, config: Record<string, unknown>): Promise<void> {
     const emails = await gmailSearch(clients, "from:jobserve", 50);  // hardcoded
@@ -381,21 +389,33 @@ export async function runTask(clients: Clients, config: Record<string, unknown>)
 }
 ```
 
-**Target (MCP server):**
+**Current (MCP server — task.ts exports):**
 ```typescript
-server.tool("job_search", {
-    description: "Search job boards, score and rank matches against profile",
-    inputSchema: {
-        days: { type: "number", default: 1, description: "How far back to search" },
-        outputDir: { type: "string", default: ".", description: "Where to write the report" },
-    }
-}, async (params) => {
-    const profile = JSON.parse(await readFile("profile.json"));
-    const emails = await gmailSearch(clients, profile.sources, params.days);
-    // ... score, rank
+import { z } from "zod";
+import type { Clients } from "./tools.js";
+import { gmailSearch } from "./tools.js";
+
+export const SERVERS = ["google"];
+export const TOOL_NAME = "job_search";
+export const TOOL_DESCRIPTION = "Search job boards, score and rank matches against profile";
+export const TOOL_INPUT_SCHEMA = {
+    days: z.number().default(1).describe("How far back to search"),
+    outputDir: z.string().default(".").describe("Where to write the report"),
+};
+
+export async function handleTool(
+    input: { days: number; outputDir: string },
+    clients: Clients,
+    profile: Record<string, unknown>,
+    config: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+    const emails = await gmailSearch(clients, "from:jobserve", input.days);
+    // ... score, rank using profile.skills, profile.rate, etc.
     return { jobs: rankedJobs, summary: { total: 50, matched: 12 } };
-});
+}
 ```
+
+The LLM generates `task.ts` with these exports. The sealed `index.ts` handles `McpServer.tool()` registration, profile loading, upstream MCP client connection, and stdio transport — the LLM never touches MCP server APIs directly.
 
 **What this solves:**
 
@@ -469,11 +489,44 @@ The negotiation happens in the agent loop via `ask_user`, not inside codegen. Th
 
 5. **Dual-role server** — The generated server is both an MCP *server* (exposing tools to the agent) and an MCP *client* (calling gmail, linkedin, etc.). The template already handles MCP client connections, but the lifecycle is more complex.
 
+#### Discovery: Manifest + Tool Search
+
+Generated MCP servers are **not** added to `config.json`. Instead, they are registered in a separate `tools/manifest.json` file and discovered via the existing tool search mechanism:
+
+1. `generate_code` writes the server entry to `tools/manifest.json` (description, input schema, server config)
+2. Tool search includes manifest entries in its search index
+3. When the agent needs a generated tool, tool search finds it like any other tool
+4. `mcp_manager` connects on demand via stdio — no daemon, no stay-alive
+5. The tool is available for the session
+
+**Manifest structure:**
+```json
+{
+  "job_search": {
+    "description": "Search job boards, score and rank matches against profile",
+    "input_schema": {
+      "days": { "type": "number", "default": 1, "description": "How far back to search" }
+    },
+    "created": "2026-03-11",
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["tsx", "src/index.ts", "--config", "../../config.json"],
+      "cwd": "tools/job_search/"
+    }
+  }
+}
+```
+
+The manifest serves double duty as the task catalogue (see section 3 below) — no separate discovery mechanism needed. This keeps `config.json` clean (infrastructure only) while leveraging the tool search infrastructure that already exists.
+
 #### Incremental Validation Plan
 
-- **Step 1:** Agent-side only. Add a system prompt directive that makes the agent propose params vs profile for a given prompt, without generating anything. Test whether proposals are sensible and consistent across multiple prompts. Zero code changes.
-- **Step 2:** If proposals are reliable, extend the codegen template and system prompt to accept a structured contract (params schema + profile data) and generate an MCP server instead of a script.
-- **Step 3:** Wire up the full flow: agent negotiation → `generate_code` with contract → generated MCP server → agent connects to it.
+- **Step 1 (Complete):** Agent-side only. Added a system prompt directive for schema negotiation. Validated across 10+ prompts — proposals are consistent and sensible.
+- **Step 2 (Complete):** Template rewritten as dual-mode MCP server. Codegen system prompt updated for new exports contract. `profile.json` + `manifest.json` written on generation.
+- **Step 3 (Complete):** `ManifestTool` placeholders loaded at bootstrap, indexed by tool search. `McpManager.connect_on_demand()` enables mid-session server connection. Full flow: negotiation → generation → tool search → on-demand connection → tool call.
+
+See `PLAN-codegen-parameterisation.md` for detailed implementation notes and `MANUAL-TEST-codegen-parameterisation.md` for test results.
 
 ### 2. Scheduling via Trigger Broker
 
@@ -487,15 +540,15 @@ The trigger broker already supports cron jobs (`--job add <name> <cron_expr> <pr
 
 The plumbing exists — the broker dispatches prompts to the agent, which can call `run_task`. The missing piece is a streamlined `schedule_task` tool or command that wires this up without the user needing to know cron syntax or the broker's job format.
 
-### 3. Task Catalogue
+### 3. Task Catalogue (via Manifest)
 
-Generated apps sit in `tools/<task_name>/` but there's no index. Users must remember exact task names. A task catalogue would provide:
+Superseded by the manifest approach in section 1. The `tools/manifest.json` file serves as the task catalogue:
 
-- **Discovery:** `list_tasks` tool returning available tasks with descriptions
-- **Metadata:** When created, what prompt was used, last run time, run count
-- **Cleanup:** Identify stale/unused tasks for deletion
+- **Discovery:** Tool search includes manifest entries — the agent finds generated tools the same way it finds any tool
+- **Metadata:** Each entry has `description`, `input_schema`, `created` date, and server connection config
+- **Cleanup:** Entries can be validated on load (check `cwd` exists) and pruned if the task directory was deleted
 
-This could be as simple as a `tasks.json` manifest in the `tools/` directory, updated by `generate_code` on creation and `run_task` on execution.
+No separate `list_tasks` tool needed — tool search already provides discovery with keyword matching.
 
 ### 4. Incremental Runs
 

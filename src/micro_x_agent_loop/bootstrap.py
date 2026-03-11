@@ -10,6 +10,7 @@ from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.app_config import AppConfig, RuntimeEnv
 from micro_x_agent_loop.compaction import NoneCompactionStrategy, SummarizeCompactionStrategy
 from micro_x_agent_loop.logging_config import setup_logging
+from micro_x_agent_loop.manifest import load_manifest
 from micro_x_agent_loop.mcp.mcp_manager import McpManager
 from micro_x_agent_loop.memory import CheckpointManager, EventEmitter, MemoryStore, SessionManager, prune_memory
 from micro_x_agent_loop.memory.event_sink import AsyncEventSink
@@ -43,6 +44,14 @@ async def bootstrap_runtime(app: AppConfig, env: RuntimeEnv, *, autonomous: bool
     if app.mcp_server_configs:
         mcp_manager = McpManager(app.mcp_server_configs)
         tools = await mcp_manager.connect_all()
+
+    # Load manifest tools (generated MCP servers from tools/manifest.json).
+    # These connect on-demand when first called, not at startup.
+    project_root = Path.cwd()
+    if mcp_manager is None:
+        mcp_manager = McpManager({})
+    manifest_tools = load_manifest(project_root, connect_fn=mcp_manager.connect_on_demand)
+    tools.extend(manifest_tools)
 
     if app.compaction_strategy_name == "summarize":
         compaction_model = app.compaction_model or app.model

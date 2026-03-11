@@ -98,11 +98,14 @@ class _ServerConnection:
         # and allow per-server overrides from config.
         merged_env = dict(os.environ)
         merged_env.update(config.get("env") or {})
-        async with stdio_client(StdioServerParameters(
+        params = StdioServerParameters(
             command=config["command"],
             args=config.get("args", []),
             env=merged_env,
-        )) as (read_stream, write_stream):
+        )
+        if config.get("cwd"):
+            params.cwd = config["cwd"]
+        async with stdio_client(params) as (read_stream, write_stream):
             async with ClientSession(
                 read_stream, write_stream,
                 logging_callback=_mcp_logging_callback,
@@ -184,6 +187,21 @@ class McpManager:
                 logger.error(f"Failed to connect to MCP server '{conn.name}': {ex}")
 
         return all_tools
+
+    async def connect_on_demand(
+        self, server_name: str, config: dict[str, Any]
+    ) -> list[Tool]:
+        """Connect to a single MCP server on demand and return its tools.
+
+        Used for generated MCP servers from the manifest. The connection
+        is kept alive and cleaned up on close().
+        """
+        conn = _ServerConnection(server_name)
+        self._connections.append(conn)
+        await conn.start(config)
+        await conn.wait_ready()
+        logger.info(f"On-demand MCP server '{server_name}': {len(conn.tools)} tool(s)")
+        return conn.tools
 
     async def close(self) -> None:
         """Shut down all MCP servers."""
