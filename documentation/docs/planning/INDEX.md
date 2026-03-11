@@ -38,14 +38,14 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 
 | Status | Count |
 |--------|-------|
-| Completed | 19 |
+| Completed | 20 |
 | Phase 1 Completed | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
 | Planning | 1 |
 | Not Started | 1 |
-| Planned | 3 |
+| Planned | 4 |
 
 ## All Plans
 
@@ -79,3 +79,5 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | [Markdown Rendering](PLAN-markdown-rendering.md) | Completed | Progressive markdown rendering in CLI using rich — buffer-and-rerender pattern |
 | [Test Coverage 90%](PLAN-test-coverage-90.md) | Not Started | 4-phase plan: 59% → 90% coverage across all modules |
 | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Interactive setup wizard for non-expert users |
+| [Codegen Agentic Loop](PLAN-codegen-agentic-loop.md) | Completed | Mini agentic loop inside the codegen server for file reading and multi-turn generation |
+| [TypeScript Codegen Template](PLAN-typescript-codegen-template.md) | Planned | Migrate codegen template from Python to TypeScript to fix Windows subprocess/venv issues |
