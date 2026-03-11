@@ -75,26 +75,29 @@ def _error_result(message: str, task_name: str = "") -> CallToolResult:
     )
 
 
-def copy_template(task_name: str) -> tuple[Path, str]:
+def copy_template(task_name: str, max_attempts: int = 20) -> tuple[Path, str]:
     """Copy tools/template-ts/ to tools/<task_name>/ (excluding node_modules).
 
-    If it already exists, append _2, _3, etc.
+    If it already exists, append _2, _3, etc. Uses copytree's own
+    FileExistsError to avoid TOCTOU races with concurrent calls.
     Returns (target_dir, actual_task_name).
     """
-    base = PROJECT_ROOT / "tools" / task_name
-    target = base
     actual_name = task_name
     suffix = 1
-    while target.exists():
-        suffix += 1
-        actual_name = f"{task_name}_{suffix}"
+    for _ in range(max_attempts):
         target = PROJECT_ROOT / "tools" / actual_name
-    shutil.copytree(TEMPLATE_DIR, target, ignore=TEMPLATE_IGNORE)
-    # Verify key infrastructure files exist
-    for f in INFRASTRUCTURE_FILES:
-        if not (target / "src" / f).exists():
-            raise FileNotFoundError(f"src/{f} missing after template copy")
-    return target, actual_name
+        try:
+            shutil.copytree(TEMPLATE_DIR, target, ignore=TEMPLATE_IGNORE)
+        except FileExistsError:
+            suffix += 1
+            actual_name = f"{task_name}_{suffix}"
+            continue
+        # Verify key infrastructure files exist
+        for f in INFRASTRUCTURE_FILES:
+            if not (target / "src" / f).exists():
+                raise FileNotFoundError(f"src/{f} missing after template copy")
+        return target, actual_name
+    raise RuntimeError(f"Could not create task directory after {max_attempts} attempts")
 
 
 def _npm_install_sync(target_dir: Path) -> tuple[bool, str]:
@@ -172,6 +175,98 @@ def _process_tool_calls(response) -> tuple[list[dict], list[str]]:
                     "is_error": True,
                 })
     return results, files_read
+
+
+def _serialize_content(response) -> list[dict]:
+    """Convert response content blocks to serializable dicts."""
+    content = []
+    for block in response.content:
+        if block.type == "text":
+            content.append({"type": "text", "text": block.text})
+        elif block.type == "tool_use":
+            content.append({
+                "type": "tool_use",
+                "id": block.id,
+                "name": block.name,
+                "input": block.input,
+            })
+    return content
+
+
+def _extract_text(messages: list[dict], start: int = 0) -> str:
+    """Extract text from assistant messages in messages[start:]."""
+    text = ""
+    for msg in messages[start:]:
+        if msg["role"] == "assistant":
+            for block in msg["content"]:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text += block["text"]
+    return text
+
+
+async def _llm_loop(
+    client: AsyncAnthropic,
+    model: str,
+    messages: list[dict],
+    cached_system: list[dict],
+    cached_tools: list[dict],
+    ctx: Context,
+    max_turns: int,
+) -> tuple[str, int, int, int, int, str]:
+    """Run LLM turns until end_turn, handling tool_use and max_tokens.
+
+    Appends assistant/user messages to `messages` in-place.
+    Returns (text, input_tokens, output_tokens, cache_creation_tokens,
+             cache_read_tokens, resolved_model).
+    Only returns text from assistant messages added during this call.
+    """
+    start_len = len(messages)
+    total_in = 0
+    total_out = 0
+    total_cache_creation = 0
+    total_cache_read = 0
+    resolved_model = model
+
+    for turn in range(max_turns):
+        await ctx.info(f"  Turn {turn + 1}...")
+        async with client.messages.stream(
+            model=model,
+            max_tokens=MAX_TOKENS,
+            system=cached_system,
+            messages=messages,
+            tools=cached_tools,
+        ) as stream:
+            response = await stream.get_final_message()
+
+        total_in += response.usage.input_tokens
+        total_out += response.usage.output_tokens
+        total_cache_creation += getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+        total_cache_read += getattr(response.usage, "cache_read_input_tokens", 0) or 0
+        resolved_model = response.model
+
+        messages.append({"role": "assistant", "content": _serialize_content(response)})
+
+        if response.stop_reason == "end_turn":
+            break
+
+        if response.stop_reason == "tool_use":
+            tool_results, files_read = _process_tool_calls(response)
+            for f in files_read:
+                await ctx.info(f"  Reading file: {f}")
+            messages.append({"role": "user", "content": tool_results})
+            continue
+
+        if response.stop_reason == "max_tokens":
+            await ctx.info(f"  Hit max_tokens on turn {turn + 1} — continuing...")
+            messages.append({"role": "user", "content":
+                "Your response was cut off. Continue exactly where you left off."
+            })
+            continue
+    else:
+        raise RuntimeError(f"Agentic loop exhausted after {max_turns} turns without completing.")
+
+    text = _extract_text(messages, start_len)
+    return text, total_in, total_out, total_cache_creation, total_cache_read, resolved_model
 
 
 def build_system_prompt(task_name: str, tools_ts: str, test_base_ts: str) -> str:
@@ -336,7 +431,8 @@ async def _validate_code(ctx: Context, client: AsyncAnthropic, model: str,
                          cached_tools: list[dict]) -> dict:
     """Run the test files that were generated alongside the source code.
 
-    If tests fail, continue the existing conversation to ask the LLM to fix.
+    If tests fail, continue the existing conversation to ask the LLM to fix
+    using the same _llm_loop helper (supports tool_use and max_tokens).
     Mutates `files` in-place if source fixes are applied.
     """
     test_files = {k: v for k, v in files.items() if k.endswith(".test.ts")}
@@ -348,6 +444,8 @@ async def _validate_code(ctx: Context, client: AsyncAnthropic, model: str,
 
     total_input = 0
     total_output = 0
+    total_cache_creation = 0
+    total_cache_read = 0
     rounds = 0
     all_passed = False
     last_output = ""
@@ -372,22 +470,13 @@ async def _validate_code(ctx: Context, client: AsyncAnthropic, model: str,
             "using the same === filename === format."
         })
 
-        async with client.messages.stream(
-            model=model,
-            max_tokens=MAX_TOKENS,
-            system=cached_system,
-            messages=messages,
-            tools=cached_tools,
-        ) as stream:
-            response = await stream.get_final_message()
-
-        total_input += response.usage.input_tokens
-        total_output += response.usage.output_tokens
-
-        response_text = "".join(b.text for b in response.content if b.type == "text")
-        messages.append({"role": "assistant", "content": [
-            {"type": "text", "text": response_text}
-        ]})
+        response_text, in_tok, out_tok, cache_create, cache_read, _ = await _llm_loop(
+            client, model, messages, cached_system, cached_tools, ctx, max_turns=3
+        )
+        total_input += in_tok
+        total_output += out_tok
+        total_cache_creation += cache_create
+        total_cache_read += cache_read
 
         parsed, _ = parse_files(response_text)
         for filename, content in parsed.items():
@@ -405,6 +494,8 @@ async def _validate_code(ctx: Context, client: AsyncAnthropic, model: str,
         "test_output": last_output[-2000:] if last_output else "",
         "validation_input_tokens": total_input,
         "validation_output_tokens": total_output,
+        "validation_cache_creation_tokens": total_cache_creation,
+        "validation_cache_read_tokens": total_cache_read,
     }
 
 
@@ -443,6 +534,11 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
         return _error_result(f"Template copy failed: {e}", task_name)
     await ctx.info(f"Target: tools/{task_name}/")
 
+    # All steps after template copy are wrapped so we can clean up on failure.
+    # Cleanup removes the copied directory to avoid orphaned templates.
+    def _cleanup() -> None:
+        shutil.rmtree(target_dir, ignore_errors=True)
+
     # Step 2: Read tools.ts and test-base.ts for system prompt
     tools_ts = (target_dir / "src" / "tools.ts").read_text(encoding="utf-8")
     test_base_ts = (target_dir / "src" / "test-base.ts").read_text(encoding="utf-8")
@@ -455,12 +551,6 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
     # Step 4: Agentic loop (uses streaming to avoid SDK timeout on long generations)
     await ctx.info("Phase 1: Generating code...")
     client = AsyncAnthropic()
-    total_input_tokens = 0
-    total_output_tokens = 0
-    total_cache_creation_tokens = 0
-    total_cache_read_tokens = 0
-    resolved_model = model  # will be replaced by response.model (full ID with date suffix)
-    turns = 0
 
     # Enable prompt caching: system prompt and tools are identical across
     # turns in the agentic loop, so mark them with cache_control breakpoints.
@@ -470,106 +560,57 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
     cached_tools = [{**READ_FILE_TOOL, "cache_control": {"type": "ephemeral"}}]
 
     try:
-        for turn in range(MAX_TURNS):
-            turns += 1
-            await ctx.info(f"  Turn {turns}...")
-            async with client.messages.stream(
-                model=model,
-                max_tokens=MAX_TOKENS,
-                system=cached_system,
-                messages=messages,
-                tools=cached_tools,
-            ) as stream:
-                response = await stream.get_final_message()
-
-            total_input_tokens += response.usage.input_tokens
-            total_output_tokens += response.usage.output_tokens
-            total_cache_creation_tokens += getattr(response.usage, "cache_creation_input_tokens", 0) or 0
-            total_cache_read_tokens += getattr(response.usage, "cache_read_input_tokens", 0) or 0
-            resolved_model = response.model
-
-            # Append assistant response to conversation
-            # Convert content blocks to serializable dicts
-            assistant_content = []
-            for block in response.content:
-                if block.type == "text":
-                    assistant_content.append({"type": "text", "text": block.text})
-                elif block.type == "tool_use":
-                    assistant_content.append({
-                        "type": "tool_use",
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input,
-                    })
-            messages.append({"role": "assistant", "content": assistant_content})
-
-            if response.stop_reason == "end_turn":
-                await ctx.info(f"  Code generation complete ({turns} turn(s))")
-                break
-
-            if response.stop_reason == "tool_use":
-                tool_results, files_read = _process_tool_calls(response)
-                for f in files_read:
-                    await ctx.info(f"  Reading file: {f}")
-                messages.append({"role": "user", "content": tool_results})
-                continue
-
-            if response.stop_reason == "max_tokens":
-                await ctx.info(f"  Hit max_tokens on turn {turns} — continuing...")
-                messages.append({"role": "user", "content":
-                    "Your response was cut off. Continue exactly where you left off."
-                })
-                continue
-        else:
-            await ctx.error(f"Agentic loop exhausted after {MAX_TURNS} turns")
-            return _error_result(
-                f"Agentic loop exhausted after {MAX_TURNS} turns without completing.",
-                task_name,
+        response_text, total_input_tokens, total_output_tokens, \
+            total_cache_creation_tokens, total_cache_read_tokens, \
+            resolved_model = await _llm_loop(
+                client, model, messages, cached_system, cached_tools, ctx, MAX_TURNS
             )
+    except RuntimeError as e:
+        await ctx.error(str(e))
+        _cleanup()
+        return _error_result(str(e), task_name)
     except Exception as e:
         await ctx.error(f"LLM call failed: {e}")
+        _cleanup()
         return _error_result(f"LLM call failed: {e}", task_name)
 
-    # Step 5: Extract text from ALL assistant messages (handles max_tokens continuations)
-    response_text = ""
-    for msg in messages:
-        if msg["role"] == "assistant":
-            for block in msg["content"]:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    response_text += block["text"]
+    await ctx.info("  Code generation complete")
 
-    # Step 6: Parse files from response
+    # Step 5: Parse files from response
     files, skipped = parse_files(response_text)
 
     if not files:
         await ctx.error("No files parsed from LLM response")
+        _cleanup()
         return _error_result(
             f"No files parsed from LLM response. First 500 chars: {response_text[:500]}",
             task_name,
         )
     if "task.ts" not in files:
         await ctx.error(f"task.ts missing from response. Got: {', '.join(files.keys())}")
+        _cleanup()
         return _error_result(
             f"task.ts missing from response. Got: {', '.join(files.keys())}",
             task_name,
         )
 
-    # Step 7: Write generated files to src/
+    # Step 6: Write generated files to src/
     await ctx.info(f"Writing {len(files)} file(s): {', '.join(sorted(files))}")
     src_dir = target_dir / "src"
     for filename, content in files.items():
         filepath = src_dir / filename
         filepath.write_text(content, encoding="utf-8")
 
-    # Step 8: Install dependencies
+    # Step 7: Install dependencies
     await ctx.info("Installing dependencies (npm install)...")
     npm_ok, npm_output = await asyncio.to_thread(_npm_install_sync, target_dir)
     if not npm_ok:
         await ctx.error(f"npm install failed: {npm_output[-500:]}")
+        _cleanup()
         return _error_result(f"npm install failed in tools/{task_name}/", task_name)
     await ctx.info("  Dependencies installed")
 
-    # Step 9: Validate — run tests, fix failures
+    # Step 8: Validate — run tests, fix failures
     await ctx.info("Phase 2: Validation...")
     validation = {}
     try:
@@ -580,6 +621,8 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
         # Update total usage with validation costs
         total_input_tokens += validation.get("validation_input_tokens", 0)
         total_output_tokens += validation.get("validation_output_tokens", 0)
+        total_cache_creation_tokens += validation.get("validation_cache_creation_tokens", 0)
+        total_cache_read_tokens += validation.get("validation_cache_read_tokens", 0)
     except Exception as e:
         await ctx.error(f"Validation error: {e}")
         validation = {"error": str(e), "tests_passed": False}
@@ -596,14 +639,13 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
         "output_tokens": total_output_tokens,
         "cache_creation_input_tokens": total_cache_creation_tokens,
         "cache_read_input_tokens": total_cache_read_tokens,
-        "turns": turns,
         "validation": validation,
     }
 
     summary_lines = [
         f"Generated {len(files)} files for tools/{task_name}/src/:",
         *[f"  - {f}" for f in sorted(files.keys())],
-        f"Model: {model} | Tokens: {total_input_tokens} in, {total_output_tokens} out | Turns: {turns}",
+        f"Model: {model} | Tokens: {total_input_tokens} in, {total_output_tokens} out",
     ]
     if skipped:
         summary_lines.append(f"Skipped: {', '.join(skipped)}")
@@ -661,25 +703,25 @@ async def run_task(ctx: Context, task_name: str,
 
     await ctx.info(f"Running npx tsx src/index.ts in tools/{task_name}/ ...")
     timed_out = False
+    _MAX_OUTPUT = 10_000  # Cap stdout/stderr in structured result
     try:
-        try:
-            config_path = str(PROJECT_ROOT / "config.json")
-            proc = subprocess.run(
-                ["npx", "tsx", "src/index.ts", "--config", config_path],
-                cwd=str(task_dir),
-                capture_output=True,
-                shell=_SHELL,
-                stdin=subprocess.DEVNULL,
-                timeout=timeout_seconds,
-            )
-            exit_code = proc.returncode
-            stdout = proc.stdout.decode("utf-8", errors="replace")
-            stderr = proc.stderr.decode("utf-8", errors="replace")
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            exit_code = -1
-            stdout = ""
-            stderr = ""
+        config_path = str(PROJECT_ROOT / "config.json")
+        proc = subprocess.run(
+            ["npx", "tsx", "src/index.ts", "--config", config_path],
+            cwd=str(task_dir),
+            capture_output=True,
+            shell=_SHELL,
+            stdin=subprocess.DEVNULL,
+            timeout=timeout_seconds,
+        )
+        exit_code = proc.returncode
+        stdout = proc.stdout.decode("utf-8", errors="replace")
+        stderr = proc.stderr.decode("utf-8", errors="replace")
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        exit_code = -1
+        stdout = ""
+        stderr = ""
     except Exception as e:
         await ctx.error(f"Failed to run task: {e}")
         return _error_result(f"Failed to run task: {e}", task_name)
@@ -691,8 +733,8 @@ async def run_task(ctx: Context, task_name: str,
     structured = {
         "task_name": task_name,
         "exit_code": exit_code,
-        "stdout": stdout,
-        "stderr": stderr,
+        "stdout": stdout[-_MAX_OUTPUT:],
+        "stderr": stderr[-_MAX_OUTPUT:],
         "timed_out": timed_out,
     }
 
