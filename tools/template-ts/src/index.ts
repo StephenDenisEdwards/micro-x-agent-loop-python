@@ -5,7 +5,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import "dotenv/config";
 
 import { McpClient } from "./mcp-client.js";
@@ -18,28 +18,34 @@ interface McpServerConfig {
 }
 
 function loadJsonConfig(configPath?: string): [Record<string, unknown>, string] {
+  let p: string;
+  let source: string;
+
   if (configPath) {
-    const p = resolve(configPath);
-    const data = JSON.parse(readFileSync(p, "utf-8"));
-    return [data, p];
+    p = resolve(configPath);
+    source = p;
+  } else {
+    p = resolve(process.cwd(), "config.json");
+    source = "config.json";
   }
 
-  const defaultPath = resolve(process.cwd(), "config.json");
   let data: Record<string, unknown>;
   try {
-    data = JSON.parse(readFileSync(defaultPath, "utf-8"));
+    data = JSON.parse(readFileSync(p, "utf-8"));
   } catch {
     return [{}, "config.json (defaults)"];
   }
 
+  // Follow ConfigFile indirection — resolve relative to the config file's directory
   const configFile = data["ConfigFile"];
   if (typeof configFile === "string") {
-    const target = resolve(process.cwd(), configFile);
+    const configDir = dirname(p);
+    const target = resolve(configDir, configFile);
     const targetData = JSON.parse(readFileSync(target, "utf-8"));
     return [targetData, configFile];
   }
 
-  return [data, "config.json"];
+  return [data, source];
 }
 
 async function connectServers(

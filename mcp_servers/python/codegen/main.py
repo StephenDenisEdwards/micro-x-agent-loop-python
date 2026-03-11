@@ -659,8 +659,9 @@ async def run_task(ctx: Context, task_name: str,
     timed_out = False
     try:
         try:
+            config_path = str(PROJECT_ROOT / "config.json")
             proc = subprocess.run(
-                ["npx", "tsx", "src/index.ts"],
+                ["npx", "tsx", "src/index.ts", "--config", config_path],
                 cwd=str(task_dir),
                 capture_output=True,
                 shell=_SHELL,
