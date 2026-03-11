@@ -10,7 +10,12 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+# On Windows, npm/npx are .cmd files that require shell=True to be found
+# by subprocess.run(). On Unix, shell=False is preferred for safety.
+_SHELL = sys.platform == "win32"
 
 from anthropic import AsyncAnthropic
 from dotenv import load_dotenv
@@ -100,6 +105,7 @@ def _npm_install_sync(target_dir: Path) -> tuple[bool, str]:
             cwd=str(target_dir),
             capture_output=True,
             stdin=subprocess.DEVNULL,
+            shell=_SHELL,
             timeout=120,
         )
         output = proc.stdout.decode("utf-8", errors="replace")
@@ -304,6 +310,7 @@ def _run_tests_sync(target_dir: Path) -> tuple[bool, str]:
             cwd=str(target_dir),
             capture_output=True,
             stdin=subprocess.DEVNULL,
+            shell=_SHELL,
             timeout=60,
         )
         stdout = proc.stdout.decode("utf-8", errors="replace")
@@ -656,6 +663,7 @@ async def run_task(ctx: Context, task_name: str,
                 ["npx", "tsx", "src/index.ts"],
                 cwd=str(task_dir),
                 capture_output=True,
+                shell=_SHELL,
                 stdin=subprocess.DEVNULL,
                 timeout=timeout_seconds,
             )
