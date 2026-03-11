@@ -392,6 +392,7 @@ async def main() -> None:
                 print("\n")
             except Exception as ex:
                 logger.error(f"Unhandled error: {ex}")
+                print(f"\nassistant> Error: {ex}\n")
     finally:
         _esc_watcher.shutdown()
         await _shutdown_runtime(runtime)
