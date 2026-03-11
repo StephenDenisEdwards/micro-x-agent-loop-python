@@ -32,12 +32,13 @@ interface TokenData {
  * Run a local HTTP server to handle the OAuth2 redirect.
  * Opens the authorization URL and waits for the callback with the auth code.
  */
-async function getAuthCodeViaLocalServer(authorizeUrl: string): Promise<string> {
+async function getAuthCodeViaLocalServer(authorizeUrl: string): Promise<{ code: string; redirectUri: string }> {
   // Dynamic import for open (ESM-only package)
   const openModule = await import("open");
   const openBrowser = openModule.default;
 
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<{ code: string; redirectUri: string }>((resolve, reject) => {
+    let actualRedirectUri = "";
     const server = http.createServer((req, res) => {
       if (!req.url) {
         return;
@@ -59,7 +60,7 @@ async function getAuthCodeViaLocalServer(authorizeUrl: string): Promise<string> 
         res.writeHead(200, { "Content-Type": "text/html" });
         res.end("<html><body><h1>Authorization successful!</h1><p>You can close this window.</p></body></html>");
         server.close();
-        resolve(code);
+        resolve({ code, redirectUri: actualRedirectUri });
         return;
       }
 
@@ -74,11 +75,11 @@ async function getAuthCodeViaLocalServer(authorizeUrl: string): Promise<string> 
         return;
       }
 
-      const redirectUri = `http://127.0.0.1:${addr.port}`;
+      actualRedirectUri = `http://127.0.0.1:${addr.port}`;
 
       // Replace the redirect_uri in the authorize URL
       const authUrl = new URL(authorizeUrl);
-      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("redirect_uri", actualRedirectUri);
 
       // eslint-disable-next-line no-console
       console.error(`Opening browser for Google authorization...`);
@@ -157,12 +158,12 @@ async function getAuthenticatedClient(
     prompt: "consent",
   });
 
-  const code = await getAuthCodeViaLocalServer(authorizeUrl);
+  const { code, redirectUri } = await getAuthCodeViaLocalServer(authorizeUrl);
 
-  // Exchange the authorization code for tokens
-  // We need to create a new client with the correct redirect_uri that was used
-  // The local server's port was dynamic, so we re-create with the code
-  const { tokens } = await oauth2Client.getToken(code);
+  // Exchange the authorization code using a client with the exact redirect_uri
+  // that was sent to Google during authorization (must match for token exchange)
+  const exchangeClient = new OAuth2Client(clientId, clientSecret, redirectUri);
+  const { tokens } = await exchangeClient.getToken(code);
   oauth2Client.setCredentials(tokens);
 
   // Store tokens
