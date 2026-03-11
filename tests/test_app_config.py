@@ -225,6 +225,17 @@ class LoadJsonConfigExtraTests(unittest.TestCase):
             finally:
                 os.chdir(orig_cwd)
 
+    def test_shipped_no_console_profiles_do_not_enable_console_logging(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        for config_name in (
+            "config-standard-sonnet-no-console.json",
+            "config-standard-openai-no-console.json",
+        ):
+            with self.subTest(config_name=config_name):
+                data, _ = load_json_config(str(repo_root / config_name))
+                consumer_types = [item.get("type") for item in data.get("LogConsumers", [])]
+                self.assertNotIn("console", consumer_types)
+
 
 class ResolveRuntimeEnvTests(unittest.TestCase):
     def test_anthropic_provider(self) -> None:

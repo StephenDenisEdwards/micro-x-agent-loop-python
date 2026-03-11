@@ -28,6 +28,7 @@ class _EscWatcher:
         self._available = False
         try:
             import ctypes
+
             self._kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
             self._available = True
         except (ImportError, AttributeError, OSError):
@@ -117,14 +118,14 @@ class _EscWatcher:
                     loop.call_soon_threadsafe(task.cancel)
                 return
 
-            # Not ESC — flush the peeked event so we don't spin on it,
+            # Not ESC - flush the peeked event so we don't spin on it,
             # but only if it's not a key event (mouse, focus, etc.)
             if rec.EventType != KEY_EVENT:
                 kernel32.ReadConsoleInputW(
                     h_stdin, ctypes.byref(rec), 1, ctypes.byref(read_count)
                 )
             else:
-                # Key event that isn't ESC — leave it for input()/questionary.
+                # Key event that isn't ESC - leave it for input()/questionary.
                 # Sleep briefly to avoid busy-spinning while waiting for ESC.
                 self._stop_event.wait(0.1)
 
@@ -141,8 +142,12 @@ def _parse_cli_args() -> dict:
         --server <subcommand>   API server management (start)
     """
     args: dict = {
-        "config": None, "run": None, "session": None,
-        "broker": None, "job": None, "server": None,
+        "config": None,
+        "run": None,
+        "session": None,
+        "broker": None,
+        "job": None,
+        "server": None,
     }
     argv = sys.argv[1:]
     i = 0
@@ -158,15 +163,15 @@ def _parse_cli_args() -> dict:
             i += 2
         elif argv[i] == "--broker":
             # Collect remaining args as broker subcommand
-            args["broker"] = argv[i + 1:]
+            args["broker"] = argv[i + 1 :]
             break
         elif argv[i] == "--job":
             # Collect remaining args as job subcommand
-            args["job"] = argv[i + 1:]
+            args["job"] = argv[i + 1 :]
             break
         elif argv[i] == "--server":
             # Collect remaining args as server subcommand
-            args["server"] = argv[i + 1:]
+            args["server"] = argv[i + 1 :]
             break
         else:
             i += 1
@@ -178,9 +183,8 @@ class _McpNotificationFilter(logging.Filter):
 
     Some third-party MCP servers (e.g. mcp-discord) send non-standard
     notification methods like ``method='log'`` instead of the spec-compliant
-    ``notifications/message``.  The Python MCP SDK logs a wall of Pydantic
-    validation errors for each one.  These are harmless — the server still
-    works — but they clutter startup output badly.
+    ``notifications/message``. The Python MCP SDK logs a wall of validation
+    errors for each one. These are harmless, but they clutter startup output.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -189,15 +193,48 @@ class _McpNotificationFilter(logging.Filter):
         return True
 
 
+def _print_startup_banner() -> None:
+    print("MICRO-X AGENT AI")
+    print("By Stephen Edwards")
+    print()
+
+
+def _create_prompt_session():
+    """Build the interactive prompt_toolkit session."""
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.formatted_text import HTML
+    from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+
+    bindings = KeyBindings()
+
+    @bindings.add("enter")
+    def _submit(event: KeyPressEvent) -> None:
+        """Enter always submits, even when buffer has multiple lines."""
+        event.current_buffer.validate_and_handle()
+
+    @bindings.add("escape", "enter")
+    def _newline(event: KeyPressEvent) -> None:
+        """Alt+Enter inserts a newline."""
+        event.current_buffer.insert_text("\n")
+
+    return PromptSession(
+        message=HTML("<b>you&gt; </b>"),
+        multiline=True,
+        key_bindings=bindings,
+        prompt_continuation=".... ",
+    )
+
+
 async def _shutdown_runtime(runtime) -> None:
     """Clean up all runtime resources.
 
     On Windows, MCP server subprocess termination can send CTRL_C_EVENT to
     the console process group, which makes cmd.exe show "Terminate batch job
-    (Y/N)?" if running from a .bat file.  We temporarily ignore SIGINT during
+    (Y/N)?" if running from a .bat file. We temporarily ignore SIGINT during
     shutdown to prevent this.
     """
     import signal
+
     prev_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         await runtime.agent.shutdown()
@@ -242,44 +279,25 @@ async def main() -> None:
 
     cli_args = _parse_cli_args()
 
-    # -- Startup logo (display first, skip in one-shot mode) --
+    # Startup logo (display first, skip in one-shot mode).
     if not cli_args["run"]:
-        _YELLOW = "\033[33m"
-        _BLUE = "\033[34m"
-        _RESET = "\033[0m"
-        print(
-            f"{_YELLOW}"
-            "  ███╗   ███╗██╗ ██████╗██████╗  ██████╗     ██╗  ██╗\n"
-            "  ████╗ ████║██║██╔════╝██╔══██╗██╔═══██╗    ╚██╗██╔╝\n"
-            "  ██╔████╔██║██║██║     ██████╔╝██║   ██║█████╗╚███╔╝\n"
-            "  ██║╚██╔╝██║██║██║     ██╔══██╗██║   ██║╚════╝██╔██╗\n"
-            "  ██║ ╚═╝ ██║██║╚██████╗██║  ██║╚██████╔╝    ██╔╝ ██╗\n"
-            "  ╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝    ╚═╝  ╚═╝\n"
-            "        █████╗  ██████╗ ███████╗███╗   ██╗████████╗\n"
-            "       ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝\n"
-            "       ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║\n"
-            "       ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║\n"
-            "       ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║\n"
-            "       ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝"
-            f"{_RESET}\n"
-            f"{_BLUE}                        AI{_RESET}\n"
-            f"{_RESET}              By Stephen Edwards{_RESET}\n"
-        )
+        _print_startup_banner()
 
     raw_config, config_source = load_json_config(config_path=cli_args["config"])
 
-    # -- Job commands: don't need full agent bootstrap --
+    # Job commands do not need full agent bootstrap.
     if cli_args["job"] is not None:
         from micro_x_agent_loop.broker.cli import handle_job_command
+
         await handle_job_command(cli_args["job"], config=raw_config)
         return
 
-    # -- Broker start → alias for --server start with broker enabled --
+    # Broker start is an alias for --server start with broker enabled.
     if cli_args["broker"] is not None:
         broker_args = cli_args["broker"]
         if not broker_args or broker_args[0] == "start":
-            # Broker start now launches the unified API server with broker enabled
             from micro_x_agent_loop.server.app import run_server
+
             await run_server(
                 config_path=cli_args["config"],
                 host=os.environ.get("SERVER_HOST", raw_config.get("BrokerHost", "127.0.0.1")),
@@ -291,14 +309,16 @@ async def main() -> None:
             )
         else:
             from micro_x_agent_loop.broker.cli import handle_broker_command
+
             await handle_broker_command(broker_args, config=raw_config)
         return
 
-    # -- Server command: start server or connect as client --
+    # Server command: start server or connect as client.
     if cli_args["server"] is not None:
         server_args = cli_args["server"]
         if not server_args or server_args[0] == "start":
             from micro_x_agent_loop.server.app import run_server
+
             broker_flag = "--broker" in server_args if server_args else False
             await run_server(
                 config_path=cli_args["config"],
@@ -310,8 +330,8 @@ async def main() -> None:
                 broker_enabled=broker_flag or bool(os.environ.get("SERVER_BROKER_ENABLED")),
             )
         elif server_args[0].startswith("http://") or server_args[0].startswith("https://"):
-            # Client mode: connect to a running server
             from micro_x_agent_loop.server.client import run_client
+
             await run_client(
                 server_args[0],
                 session_id=cli_args["session"],
@@ -330,7 +350,7 @@ async def main() -> None:
         logger.error(f"{env.provider_env_var} environment variable is required.")
         sys.exit(1)
 
-    # -- One-shot mode: run prompt and exit --
+    # One-shot mode: run prompt and exit.
     if cli_args["run"]:
         await _run_oneshot(app, env, cli_args["run"], cli_args["session"])
         return
@@ -375,39 +395,27 @@ async def main() -> None:
         print(f"Logging: {', '.join(runtime.log_descriptions)}")
     print()
 
-    # --- ESC key listener for task interruption ---
+    # ESC key listener for task interruption.
     _esc_watcher = _EscWatcher()
 
-    # prompt_toolkit session — Enter submits, Shift+Enter inserts newline,
-    # and bracketed paste captures multi-line content in one go.
-    from prompt_toolkit import PromptSession
-    from prompt_toolkit.formatted_text import HTML
-    from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
-
-    bindings = KeyBindings()
-
-    @bindings.add("enter")
-    def _submit(event: KeyPressEvent) -> None:
-        """Enter always submits, even when buffer has multiple lines."""
-        event.current_buffer.validate_and_handle()
-
-    @bindings.add("s-enter")
-    @bindings.add("escape", "enter")
-    def _newline(event: KeyPressEvent) -> None:
-        """Shift+Enter or Alt+Enter inserts a newline."""
-        event.current_buffer.insert_text("\n")
-
-    session: PromptSession[str] = PromptSession(
-        message=HTML("<b>you&gt; </b>"),
-        multiline=True,
-        key_bindings=bindings,
-        prompt_continuation=".... ",
-    )
+    session = None
+    try:
+        logger.info("Creating prompt_toolkit session...")
+        session = await asyncio.wait_for(asyncio.to_thread(_create_prompt_session), timeout=5.0)
+        logger.info("PromptSession created, entering REPL loop...")
+    except TimeoutError:
+        logger.warning("prompt_toolkit setup timed out; falling back to basic console input")
+    except Exception as ex:
+        logger.warning(f"prompt_toolkit setup failed; falling back to basic console input: {ex}")
 
     try:
         while True:
             try:
-                user_input = await asyncio.to_thread(session.prompt)
+                if session is not None:
+                    logger.info("Calling session.prompt()...")
+                    user_input = await asyncio.to_thread(session.prompt)
+                else:
+                    user_input = await asyncio.to_thread(input, "you> ")
             except (EOFError, KeyboardInterrupt):
                 break
 

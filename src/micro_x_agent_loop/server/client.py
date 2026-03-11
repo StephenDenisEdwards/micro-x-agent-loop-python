@@ -150,7 +150,6 @@ async def run_client(
             def _submit(event: KeyPressEvent) -> None:
                 event.current_buffer.validate_and_handle()
 
-            @bindings.add("s-enter")
             @bindings.add("escape", "enter")
             def _newline(event: KeyPressEvent) -> None:
                 event.current_buffer.insert_text("\n")
