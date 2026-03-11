@@ -75,7 +75,7 @@ All 8 GitHub tool files benefit automatically with zero individual changes.
 | `packages/linkedin/src/tools/linkedin-job-detail.ts` | `fetch` → `resilientFetch` |
 | `packages/web/src/tools/web-fetch.ts` | Manual timeout+fetch → `resilientFetch` |
 | `packages/web/src/tools/web-search.ts` | Manual timeout+fetch → `resilientFetch` |
-| `tools/template/mcp_client.py` | tenacity `@retry` on `call_tool()` |
+| `tools/template-py/mcp_client.py` | tenacity `@retry` on `call_tool()` |
 
 ## Consequences
 

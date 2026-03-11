@@ -21,7 +21,8 @@ node_modules/
 
 # Agent-generated task apps (only tools/template/ and tools/windows-vhs/ are tracked)
 tools/*/
-!tools/template/
+!tools/template-py/
+!tools/template-ts/
 !tools/windows-vhs/
 
 # Generated demo recordings

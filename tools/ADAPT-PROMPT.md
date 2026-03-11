@@ -114,7 +114,7 @@ You are done when `task.py` (and any helpers) are written. Confirm:
 
 1. **Copy first.** Your very first action is the xcopy command. Do not write any code before the copy succeeds.
 2. **Never edit infrastructure files.** `__main__.py`, `mcp_client.py`, `llm.py`, `tools.py`, `utils.py` — do not touch these. They are tested and working.
-3. **Never modify files outside your copy.** Do not edit anything in `tools/template/` or anywhere else.
+3. **Never modify files outside your copy.** Do not edit anything in `tools/template-py/` or anywhere else.
 4. **No LLM calls** unless you can prove Python cannot do it. If you must use one, use exactly one Haiku call and justify it in a code comment.
 5. **No documentation files.** Only create `.py` files. No README, IMPLEMENTATION, QUICKSTART, SUMMARY, or any other non-code file.
 6. **Do not run the app.** Write the code and stop.

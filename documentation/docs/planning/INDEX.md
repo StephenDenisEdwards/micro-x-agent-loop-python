@@ -24,12 +24,14 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | **13** | [Sub-Agents](PLAN-sub-agents.md) | **Phase 1 Completed** | In-process sub-agent delegation for context protection, task isolation, parallelism, and cost reduction |
 | **14** | [Markdown Rendering](PLAN-markdown-rendering.md) | **Completed** | Progressive markdown rendering in CLI using rich — buffer-and-rerender pattern matching ChatGPT/Claude Code |
 | **15** | [Test Coverage 90%](PLAN-test-coverage-90.md) | **Completed** | Raised test coverage from 59% to 85% (acceptable threshold) |
-| **16** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Frictionless onboarding becomes critical once promotional channels drive traffic to the repo. Benefits from stable post-broker architecture |
-| **17** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, schema optimisation) | Planning | Architectural changes, higher effort; model routing can be done in TurnEngine/Provider layer without gateway |
-| **18** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
-| **19** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | Nice-to-have, not promotional |
-| **20** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools; internal plumbing |
-| **21** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based tool routing that preserves prompt caching; do when cost data justifies it |
+| **16** | [TypeScript Codegen Template](PLAN-typescript-codegen-template.md) | **Completed** | Migrate codegen template from Python to TypeScript — fixes Windows subprocess/venv issues |
+| **17** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based tool routing that preserves prompt caching; do when cost data justifies it |
+| **18** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Frictionless onboarding becomes critical once promotional channels drive traffic to the repo. Benefits from stable post-broker architecture |
+| **19** | [Cost Reduction](PLAN-cost-reduction.md) — Phase 3 (Model routing, schema optimisation) | Planning | Architectural changes, higher effort; model routing can be done in TurnEngine/Provider layer without gateway |
+| **20** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
+| **21** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | Nice-to-have, not promotional |
+| **22** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools; internal plumbing |
+| **23** | [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | Planning | Extract hardcoded PRICING dict to config; user-overridable, unknown-model warnings |
 
 
 ---
@@ -38,13 +40,13 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 
 | Status | Count |
 |--------|-------|
-| Completed | 24 |
+| Completed | 25 |
 | Phase 1 Completed | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
-| Planning | 1 |
-| Planned | 4 |
+| Planning | 2 |
+| Planned | 3 |
 
 ## All Plans
 
@@ -82,4 +84,5 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | [Test Coverage 90%](PLAN-test-coverage-90.md) | Completed | 59% → 85% coverage (acceptable threshold) |
 | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Interactive setup wizard for non-expert users |
 | [Codegen Agentic Loop](PLAN-codegen-agentic-loop.md) | Completed | Mini agentic loop inside the codegen server for file reading and multi-turn generation |
-| [TypeScript Codegen Template](PLAN-typescript-codegen-template.md) | Planned | Migrate codegen template from Python to TypeScript to fix Windows subprocess/venv issues |
+| [TypeScript Codegen Template](PLAN-typescript-codegen-template.md) | Completed | Migrate codegen template from Python to TypeScript to fix Windows subprocess/venv issues |
+| [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | Planning | Extract hardcoded PRICING dict to config.json; user-overridable model pricing |

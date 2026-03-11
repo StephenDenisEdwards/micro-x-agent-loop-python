@@ -6,7 +6,7 @@ Usage:
 Example:
     python -m tools.generate job_search
 
-Copies tools/template/ to tools/<task_name>/, reads the ADAPT-PROMPT and
+Copies tools/template-py/ to tools/<task_name>/, reads the ADAPT-PROMPT and
 user prompt, sends one API call to Claude, and writes the generated files.
 """
 
@@ -21,7 +21,7 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE_DIR = PROJECT_ROOT / "tools" / "template"
+TEMPLATE_DIR = PROJECT_ROOT / "tools" / "template-py"
 ADAPT_PROMPT = PROJECT_ROOT / "tools" / "ADAPT-PROMPT.md"
 MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 16384

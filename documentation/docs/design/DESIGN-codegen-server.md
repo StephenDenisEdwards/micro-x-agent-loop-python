@@ -7,7 +7,7 @@ The agent loop cannot reliably generate code from a template, regardless of mode
 1. **Agent distraction** — 59 tool schemas from 9 MCP servers give the model too many choices. Instead of following a code generation recipe, it explores the codebase, creates documentation, rewrites infrastructure files, or runs the app.
 2. **Competing instructions** — The system prompt says "be an agent, use tools." The code generation prompt says "follow this recipe, don't touch infrastructure." These conflict, and the system prompt wins.
 3. **Context drift** — Multi-turn tool use pushes the original instructions out of the model's attention window. By the time the model has copied the template, read files, and is ready to write code, the recipe is buried under tool call results.
-4. **Tool name collisions** — The MCP filesystem server exposes `write_file` and `read_file` tools. The template code has a Python `write_file()` function. The model confuses MCP tool calls with Python function calls.
+4. **Tool name collisions** — The MCP filesystem server exposes `write_file` and `read_file` tools. The template code has a `writeFile()` function. The model confuses MCP tool calls with template function calls.
 
 These are structural problems with using an agent loop for code generation. They cannot be fixed by improving the prompt alone.
 
@@ -15,13 +15,15 @@ These are structural problems with using an agent loop for code generation. They
 
 Add a `codegen` MCP server that exposes two tools: `generate_code` and `run_task`. When `generate_code` is called, it:
 
-1. Copies the template directory to a new task directory
-2. Reads the template's `tools.py` (the API surface available to generated code)
-3. Reads the user prompt file (the task requirements)
+1. Copies the TypeScript template directory to a new task directory
+2. Reads the template's `tools.ts` (the API surface available to generated code)
+3. Reads the user prompt (the task requirements)
 4. Runs a **mini agentic loop** with a single `read_file` tool (typically 2-3 turns) so the LLM can read any files referenced by the prompt
-5. Parses the response to extract Python file contents
-6. Writes the files to disk
-7. Returns a summary to the calling agent
+5. Parses the response to extract TypeScript file contents
+6. Writes the files to `src/`
+7. Runs `npm install` to install dependencies
+8. Validates via `vitest` (up to 3 fix rounds)
+9. Returns a summary to the calling agent
 
 The key insight: **code generation is not a full agent task, but it benefits from minimal tool access.** It's primarily a "context in, code out" transformation, but prompts often reference external files (criteria, schemas, examples). Rather than brittle regex-based auto-detection of referenced filenames, we give the LLM a single `read_file` tool so it can fetch what it needs. This is a constrained mini-loop (1 tool, focused system prompt, 10-turn hard limit), not the 59-tool chaos that motivated isolation.
 
@@ -49,25 +51,67 @@ The key insight: **code generation is not a full agent task, but it benefits fro
 │              codegen MCP Server                  │
 │                                                  │
 │  generate_code(task_name, prompt)                 │
-│    1. shutil.copytree template → tools/{task_name}│
-│    2. Read tools.py (API surface)                │
+│    1. copytree template-ts → tools/{task_name}/  │
+│       (excludes node_modules, dist)              │
+│    2. Read src/tools.ts (API surface)            │
 │    3. Mini agentic loop with read_file tool      │
 │       (infra files blocked server-side)          │
-│    4. Parse === filename === blocks               │
-│    5. Write .py files to disk                    │
-│    6. Validation: run tests, fix failures (≤3x)  │
-│    7. Return summary (incl. validation results)  │
+│    4. Parse === filename.ts === blocks           │
+│    5. Write .ts files to src/                    │
+│    6. npm install                                │
+│    7. Validation: run vitest, fix failures (≤3x) │
+│    8. Return summary (incl. validation results)  │
 │                                                  │
 │  run_task(task_name, timeout_seconds?)             │
-│    1. Validate tools/{task_name}/task.py exists   │
-│    2. python -m tools.{task_name} from PROJECT_ROOT│
-│    3. Capture stdout/stderr, configurable timeout │
-│    4. Return output                              │
+│    1. Validate tools/{task_name}/src/task.ts      │
+│    2. npm install (if node_modules missing)       │
+│    3. npx tsx src/index.ts in task dir            │
+│    4. Capture stdout/stderr, configurable timeout │
+│    5. Return output                              │
 │                                                  │
 │  [1 tool (read_file). Infra files denied.        │
 │   Max 10 turns. Validation: up to 3 test rounds.]│
 └─────────────────────────────────────────────────┘
 ```
+
+## Template Structure (`tools/template-ts/`)
+
+The TypeScript template provides sealed infrastructure that generated code imports but never modifies.
+
+| File | Purpose | Python Equivalent |
+|------|---------|-------------------|
+| `package.json` | Declares dependencies: `@anthropic-ai/sdk`, `@modelcontextprotocol/sdk`, `dotenv`, `tsx` (dev), `vitest` (dev) | *(implicit venv)* |
+| `tsconfig.json` | TypeScript config: ES2022, Node16 modules, strict mode | — |
+| `src/index.ts` | Entry point — load `.env`, read config, connect MCP servers, call `runTask()`, shut down | `__main__.py` |
+| `src/mcp-client.ts` | MCP stdio client — connect, list tools, call tools with retry, return typed results | `mcp_client.py` |
+| `src/tools.ts` | Typed wrappers around MCP tools — 90+ functions covering Gmail, Calendar, Contacts, LinkedIn, Web, Filesystem, GitHub, Anthropic Admin, Interview Assist, STT | `tools.py` |
+| `src/llm.ts` | Anthropic Claude API helper — streaming, non-streaming, cost tracking | `llm.py` |
+| `src/utils.ts` | `writeFile()`, `appendFile()` async helpers with config-aware path resolution | `utils.py` |
+| `src/test-base.ts` | Test fixture factories: `makeJobserveJob()`, `makeLinkedinJob()`, `makeEmail()` | `test_base.py` |
+| `src/task.ts` | Placeholder — replaced by generated code | `task.py` |
+
+### Generated Files (replaced per task)
+
+| File | Purpose |
+|------|---------|
+| `src/task.ts` | Must export `SERVERS: string[]` and `async function runTask(clients, config)` |
+| `src/collector.ts` (optional) | Async functions calling `tools.ts` wrappers, return typed data |
+| `src/scorer.ts` (optional) | Pure TypeScript scoring/ranking (no MCP, no LLM) |
+| `src/processor.ts` (optional) | Report generation using template literals (no LLM) |
+| `src/*.test.ts` | Unit tests using vitest — test pure functions only |
+
+### Why TypeScript (ADR-019)
+
+The original Python template had three systemic Windows runtime issues:
+
+1. **Dependency mismatch** — Generated tasks needed packages from the project's `.venv`, not the codegen server's `uv` environment. Required hardcoded `VENV_PYTHON` path.
+2. **Windows pipe inheritance hangs** — `subprocess.run(capture_output=True)` hung when grandchild MCP server processes inherited pipe handles. Required temp file workaround.
+3. **`sys.unraisablehook` noise** — Asyncio subprocess cleanup on Windows fired tracebacks. Required monkey-patching.
+
+TypeScript eliminates all three:
+- `npm install` creates self-contained `node_modules/` — no venv gymnastics
+- Node's `child_process` doesn't inherit parent pipe handles to grandchildren
+- No asyncio teardown issues
 
 ## Why This Works
 
@@ -76,10 +120,10 @@ The key insight: **code generation is not a full agent task, but it benefits fro
 | 59 tools distract the model | The generation call has one constrained tool (`read_file`). Model can read files but not explore, run, or modify anything. |
 | System prompt conflicts | The server controls the prompt. No "be an agent" instruction. Focused system prompt for code generation only. |
 | Context drift over turns | Typically 2-3 turns. System prompt stays in attention. Hard limit of 10 turns prevents runaway loops. |
-| Tool name collisions | Only `read_file` exists — no overlap with Python functions in the template. |
+| Tool name collisions | Only `read_file` exists — no overlap with TypeScript functions in the template. |
 | Model goes off-script | The model can only read files or return text. It can't explore the codebase, run commands, or write files directly. |
 | Prompt references external files | The LLM reads them itself via `read_file`, instead of brittle regex auto-detection. |
-| Agent doesn't know how to run generated apps | `run_task` handles the correct invocation (`python -m tools.<name>` from PROJECT_ROOT). The agent doesn't need to know the package structure. |
+| Agent doesn't know how to run generated apps | `run_task` handles the correct invocation (`npx tsx src/index.ts` in the task directory). The agent doesn't need to know the project structure. |
 
 ## Mini Agentic Loop
 
@@ -101,7 +145,7 @@ The fix: give the LLM a single `read_file` tool so it can read referenced files 
 | Max turns | 10 | Hard limit prevents runaway loops. Typical usage: 2-3 turns. |
 | File access scope | WORKING_DIR only | Path traversal protection via `resolve()` + `relative_to()`. |
 | Infrastructure deny | Server-side | `_execute_read_file` rejects any path whose filename is in INFRASTRUCTURE_FILES. Returns ACCESS_DENIED error. |
-| System prompt | Fixed, focused | Code generation role only. No agent instructions. |
+| System prompt | Fixed, focused | TypeScript code generation role only. No agent instructions. |
 
 ### Typical Flow
 
@@ -130,7 +174,7 @@ Since the codegen LLM has `read_file`, it fetches any referenced files itself. T
 {
   "task_name": "job_search",
   "target_dir": "...",
-  "files_written": ["task.py", "collector.py"],
+  "files_written": ["task.ts", "collector.ts"],
   "files_skipped": [],
   "model": "claude-sonnet-4-6",
   "input_tokens": 5200,
@@ -141,7 +185,7 @@ Since the codegen LLM has `read_file`, it fetches any referenced files itself. T
   "validation": {
     "test_rounds": 1,
     "tests_passed": true,
-    "test_files_generated": ["test_collector.py", "test_scorer.py"],
+    "test_files_generated": ["collector.test.ts", "scorer.test.ts"],
     "test_output": "...",
     "validation_input_tokens": 3000,
     "validation_output_tokens": 2000
@@ -159,9 +203,9 @@ Since the codegen LLM has `read_file`, it fetches any referenced files itself. T
 
 **Example response:**
 ```
-Generated 2 files for tools/email_summary/:
-  - collector.py
-  - task.py
+Generated 2 files for tools/email_summary/src/:
+  - collector.ts
+  - task.ts
 Model: claude-sonnet-4-6 | Tokens: 5200 in, 12000 out | Turns: 1
 Run with: codegen__run_task(task_name="email_summary")
 ```
@@ -173,7 +217,7 @@ Run with: codegen__run_task(task_name="email_summary")
 | `task_name` | string | yes | Name of a previously generated task (e.g. `job_search`). Must exist under `tools/<task_name>/`. |
 | `timeout_seconds` | int | no | Maximum runtime in seconds. Default: 600. |
 
-Runs `python -m tools.<task_name>` from PROJECT_ROOT with the specified timeout. Captures stdout and stderr. Uses `stdin=DEVNULL` to prevent the child from inheriting the codegen server's MCP stdin pipe.
+Runs `npx tsx src/index.ts` in the task directory with the specified timeout. Captures stdout and stderr. Automatically runs `npm install` if `node_modules/` doesn't exist.
 
 **Structured result:**
 ```json
@@ -186,7 +230,7 @@ Runs `python -m tools.<task_name>` from PROJECT_ROOT with the specified timeout.
 }
 ```
 
-**Why a dedicated tool instead of `filesystem__bash`:** Generated apps are Python packages with relative imports, MCP server connections, and config loading. They must be run as modules (`python -m tools.<name>`) from PROJECT_ROOT. The outer agent doesn't know this and will try `python task.py`, which fails with import errors. `run_task` encapsulates the correct invocation.
+**Why a dedicated tool instead of `filesystem__bash`:** Generated apps are TypeScript projects with ESM imports, MCP server connections, and config loading. They must be run via `npx tsx src/index.ts` from the task directory. The outer agent doesn't know this and will try `node task.ts`, which fails with import errors. `run_task` encapsulates the correct invocation.
 
 ## Generation Prompt Structure
 
@@ -194,17 +238,18 @@ The server splits the prompt into system and user messages:
 
 **System prompt** (static per generation) — structured for strict discipline:
 ```
-1. Role — one line: "You are a Python code generator. Output only code files, no prose."
+1. Role — one line: "You are a TypeScript code generator. Output only code files, no prose."
 2. Non-negotiables — binary rules:
    - No tool calls unless user prompt references an unseen file
    - Infrastructure is sealed (do not inspect, read, or modify)
    - No prose output — only the file manifest
-3. Runtime contract — what task.py must export, available imports, tools.py signatures inline
-4. Rules — pure Python for scoring/formatting, .py only, Windows strftime
-5. Generation budget — under 800 lines total, max 10 tests/module, no internal docstrings
-6. Unit tests — unittest.TestCase only, no async/IO tests
-7. Tool rules — explicit gate: only call read_file for files mentioned in user prompt
-8. Output format — compact "=== filename ===" delimiters, no markdown fences, no text between files
+3. Runtime contract — what task.ts must export, available imports, tools.ts signatures inline
+4. Import rules — all relative imports must use .js extension (Node16 ESM requirement)
+5. Rules — pure TypeScript for scoring/formatting, .ts only, Intl.DateTimeFormat for dates
+6. Generation budget — under 800 lines total, max 10 tests/module, no internal JSDoc
+7. Unit tests — vitest only, import from ./test-base.js, no mocking
+8. Tool rules — explicit gate: only call read_file for files mentioned in user prompt
+9. Output format — compact "=== filename ===" delimiters, no markdown fences, no text between files
 ```
 
 **User message** (per request):
@@ -214,7 +259,7 @@ Requirements:
 <the prompt text passed by the agent>
 ```
 
-The user message is minimal — no tool-use instructions (covered by system prompt). This is roughly 10-15K tokens of input. The model reads any additional files via `read_file`, then returns generated Python files using `=== filename ===` delimiters. The server extracts the code blocks, strips any markdown fences the LLM might add despite instructions, and writes them — skipping any infrastructure files.
+The user message is minimal — no tool-use instructions (covered by system prompt). This is roughly 10-15K tokens of input. The model reads any additional files via `read_file`, then returns generated TypeScript files using `=== filename ===` delimiters. The server extracts the code blocks, strips any markdown fences the LLM might add despite instructions, and writes them to `src/` — skipping any infrastructure files.
 
 ### Prompt Discipline Rationale
 
@@ -228,10 +273,10 @@ The prompt follows a proven pattern for constraining LLM output:
 ## Safety
 
 - **Infrastructure file deny (read):** `_execute_read_file` checks the filename against `INFRASTRUCTURE_FILES` before any filesystem access. Returns `ACCESS_DENIED` error, preventing the LLM from wasting turns reading template files.
-- **Infrastructure protection (write):** The server skips any files named `__main__.py`, `mcp_client.py`, `llm.py`, `tools.py`, or `utils.py` even if the model returns them in its output.
-- **Flat directory enforcement:** `parse_files()` rejects any filename containing `/` or `\`. All generated files must be flat in the target directory — subdirectory paths (e.g. `tools/__init__.py`) are skipped to prevent writes to non-existent directories.
-- **File type restriction:** Only `.py` files are written. Non-Python files are skipped.
-- **Directory isolation:** Files are only written into `tools/{task_name}/`. The server cannot write elsewhere.
+- **Infrastructure protection (write):** The server skips any files named `index.ts`, `mcp-client.ts`, `llm.ts`, `tools.ts`, `utils.ts`, or `test-base.ts` even if the model returns them in its output.
+- **Flat directory enforcement:** `parse_files()` rejects any filename containing `/` or `\`. All generated files must be flat in `src/` — subdirectory paths (e.g. `src/task.ts`) are skipped to prevent writes to non-existent directories.
+- **File type restriction:** Only `.ts` files are written. Non-TypeScript files are skipped.
+- **Directory isolation:** Files are only written into `tools/{task_name}/src/`. The server cannot write elsewhere.
 - **Template preservation:** The template is copied first, then only task-specific files are overwritten.
 - **Path traversal protection:** `read_file` resolves paths relative to WORKING_DIR and uses `resolve()` + `relative_to()` to prevent `..` escape.
 - **Loop bound:** Hard limit of 10 turns prevents runaway tool-call loops.
@@ -239,15 +284,15 @@ The prompt follows a proven pattern for constraining LLM output:
 
 ## Validation Phase
 
-After writing generated files, the server runs a validation phase:
+After writing generated files and installing dependencies, the server runs a validation phase:
 
-1. Discover all `test_*.py` files in the generated output
-2. Run `unittest discover` on the target directory (via `asyncio.to_thread` to avoid blocking the event loop)
+1. Discover all `*.test.ts` files in the generated output
+2. Run `npx vitest run` in the target directory (via `asyncio.to_thread` to avoid blocking the event loop)
 3. If tests pass, validation is complete
 4. If tests fail, continue the codegen conversation — append the test output and ask the LLM to fix
 5. Repeat up to `MAX_TEST_ROUNDS` (3) times
 
-The fix request uses the same `=== filename ===` output format. The LLM returns only the files that need changes, which are parsed and written over the originals. Validation token usage is tracked separately and included in the structured result.
+The fix request uses the same `=== filename ===` output format. The LLM returns only the files that need changes, which are parsed and written over the originals in `src/`. Validation token usage is tracked separately and included in the structured result.
 
 ### Why Continue the Conversation
 
@@ -261,8 +306,25 @@ The server needs:
 |---------|--------|---------|
 | `ANTHROPIC_API_KEY` | Environment variable | (from `.env`) |
 | `PROJECT_ROOT` | Environment variable or auto-detected | `C:\Users\steph\source\repos\micro-x-agent-loop-python` |
-| `TEMPLATE_DIR` | Derived from PROJECT_ROOT | `{PROJECT_ROOT}/tools/template` |
+| `TEMPLATE_DIR` | Derived from PROJECT_ROOT | `{PROJECT_ROOT}/tools/template-ts` |
 | `WORKING_DIR` | From agent config (passed as env) | `C:\Users\steph\source\repos\resources\documents` |
+
+## Task Execution Flow
+
+```
+generate_code("job_search", prompt)
+  → copy tools/template-ts/ to tools/job_search/ (excl. node_modules)
+  → LLM generates TypeScript files (task.ts, collector.ts, scorer.ts, etc.)
+  → write files to tools/job_search/src/
+  → run npm install in tools/job_search/
+  → run npx vitest run (validation)
+  → if tests fail, ask LLM to fix, re-run (up to 3 rounds)
+
+run_task("job_search")
+  → npm install if node_modules missing
+  → npx tsx src/index.ts in tools/job_search/
+  → stdout/stderr captured via capture_output
+```
 
 ## Future: Sub-Agent Alternative
 

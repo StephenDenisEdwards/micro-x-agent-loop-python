@@ -1,4 +1,4 @@
-"""Integration tests for GitHub template wrappers (tools/template/tools.py).
+"""Integration tests for GitHub template wrappers (tools/template-py/tools.py).
 
 Tests the full stack: Python wrapper -> McpClient -> MCP server -> GitHub API.
 Verifies that structuredContent propagates correctly and wrappers return

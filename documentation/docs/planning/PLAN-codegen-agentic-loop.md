@@ -11,7 +11,7 @@ The codegen MCP server currently uses a single-shot LLM call with zero tools. To
 ## Files Modified
 
 - `mcp_servers/python/codegen/main.py` — replaced single-shot with agentic loop, added `run_task` tool
-- `tools/template/utils.py` — added `append_file` function
+- `tools/template-py/utils.py` — added `append_file` function
 - `documentation/docs/design/DESIGN-codegen-server.md` — updated architecture + rationale
 
 ## Implementation

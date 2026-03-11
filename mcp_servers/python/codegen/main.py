@@ -1,4 +1,4 @@
-"""Codegen MCP Server — generates and runs task apps.
+"""Codegen MCP Server — generates and runs TypeScript task apps.
 
 Tools:
   generate_code(task_name, prompt, model?) — generate a task app via mini agentic loop
@@ -10,7 +10,6 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 from anthropic import AsyncAnthropic
@@ -22,14 +21,15 @@ load_dotenv()
 
 PROJECT_ROOT = Path(os.environ.get("PROJECT_ROOT", ""))
 WORKING_DIR = Path(os.environ.get("WORKING_DIR", ""))
-TEMPLATE_DIR = PROJECT_ROOT / "tools" / "template"
-# The project's .venv Python — guaranteed to have all dependencies installed.
-VENV_PYTHON = str(PROJECT_ROOT / ".venv" / "Scripts" / "python.exe")
+TEMPLATE_DIR = PROJECT_ROOT / "tools" / "template-ts"
 DEFAULT_MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 16384
 MAX_TURNS = 10
 MAX_TEST_ROUNDS = 3
-INFRASTRUCTURE_FILES = {"__main__.py", "mcp_client.py", "llm.py", "tools.py", "utils.py", "test_base.py"}
+# Infrastructure files in src/ that the LLM must not read or modify
+INFRASTRUCTURE_FILES = {"index.ts", "mcp-client.ts", "llm.ts", "tools.ts", "utils.ts", "test-base.ts"}
+# Directories/files to exclude when copying the template
+TEMPLATE_IGNORE = shutil.ignore_patterns("node_modules", "dist", "*.tsbuildinfo")
 
 READ_FILE_TOOL = {
     "name": "read_file",
@@ -71,8 +71,9 @@ def _error_result(message: str, task_name: str = "") -> CallToolResult:
 
 
 def copy_template(task_name: str) -> tuple[Path, str]:
-    """Copy tools/template/ to tools/<task_name>/. If it already exists, append _2, _3, etc.
+    """Copy tools/template-ts/ to tools/<task_name>/ (excluding node_modules).
 
+    If it already exists, append _2, _3, etc.
     Returns (target_dir, actual_task_name).
     """
     base = PROJECT_ROOT / "tools" / task_name
@@ -83,12 +84,32 @@ def copy_template(task_name: str) -> tuple[Path, str]:
         suffix += 1
         actual_name = f"{task_name}_{suffix}"
         target = PROJECT_ROOT / "tools" / actual_name
-    shutil.copytree(TEMPLATE_DIR, target)
-    # Verify key files exist
+    shutil.copytree(TEMPLATE_DIR, target, ignore=TEMPLATE_IGNORE)
+    # Verify key infrastructure files exist
     for f in INFRASTRUCTURE_FILES:
-        if not (target / f).exists():
-            raise FileNotFoundError(f"{f} missing after template copy")
+        if not (target / "src" / f).exists():
+            raise FileNotFoundError(f"src/{f} missing after template copy")
     return target, actual_name
+
+
+def _npm_install_sync(target_dir: Path) -> tuple[bool, str]:
+    """Run npm install in the target directory. Returns (success, output)."""
+    try:
+        proc = subprocess.run(
+            ["npm", "install", "--no-audit", "--no-fund"],
+            cwd=str(target_dir),
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            timeout=120,
+        )
+        output = proc.stdout.decode("utf-8", errors="replace")
+        if proc.stderr:
+            output += "\n" + proc.stderr.decode("utf-8", errors="replace")
+        return proc.returncode == 0, output
+    except subprocess.TimeoutExpired:
+        return False, "npm install timed out after 120 seconds."
+    except Exception as e:
+        return False, f"npm install failed: {e}"
 
 
 def _execute_read_file(path: str) -> str:
@@ -147,39 +168,45 @@ def _process_tool_calls(response) -> tuple[list[dict], list[str]]:
     return results, files_read
 
 
-def build_system_prompt(task_name: str, tools_py: str) -> str:
-    """Build the system prompt with role, contract, budget, and output format."""
-    return f"""You are a Python code generator. Output only code files, no prose.
+def build_system_prompt(task_name: str, tools_ts: str) -> str:
+    """Build the system prompt for TypeScript code generation."""
+    return f"""You are a TypeScript code generator. Output only code files, no prose.
 
 ## Non-negotiables
 - Do not call any tool unless the user prompt explicitly references a file not already in this prompt.
-- Infrastructure is sealed: __main__.py, mcp_client.py, llm.py, tools.py, utils.py. Do not inspect, read, or modify them.
+- Infrastructure is sealed: index.ts, mcp-client.ts, llm.ts, tools.ts, utils.ts, test-base.ts. Do not inspect, read, or modify them.
 - Do not output prose, explanations, or commentary — only the file manifest.
 
 ## Runtime contract
-Target directory: tools/{task_name}/
+Target directory: tools/{task_name}/src/
 
-task.py MUST export:
-- SERVERS: list[str] — MCP server names (e.g. ["google", "linkedin"])
-- async def run_task(clients: dict, config: dict) -> None
+task.ts MUST export:
+- SERVERS: string[] — MCP server names (e.g. ["google", "linkedin"])
+- async function runTask(clients: Clients, config: Record<string, unknown>): Promise<void>
   config is internal infrastructure (working directory, log paths, etc.) — do NOT
   read task-specific parameters from it. Everything the task needs is in the user
   prompt or discoverable via the available tools.
 
-Available imports:
-- from .tools import ... (signatures below)
-- from .utils import write_file, append_file (both async)
-  - await write_file(path, content, config) — overwrites, returns Path
-  - await append_file(path, content, config) — appends, returns Path
-  - When writing in stages, write_file first, append_file after.
-- Optional modules: collector.py, scorer.py, processor.py — use relative imports (from .collector import ...)
+Available imports (from files in the same src/ directory):
+- import {{ ... }} from "./tools.js"; (typed MCP wrappers — signatures below)
+- import type {{ Clients }} from "./tools.js"; (type for the clients dict)
+- import {{ writeFile, appendFile }} from "./utils.js"; (both async)
+  - await writeFile(path, content, config) — overwrites, returns resolved path string
+  - await appendFile(path, content, config) — appends, returns resolved path string
+  - When writing in stages, writeFile first, appendFile after.
+- import {{ createMessage, streamMessage, estimateCost, type Usage }} from "./llm.js"; (only if LLM calls needed)
+- import {{ makeJobserveJob, makeLinkedinJob, makeEmail }} from "./test-base.js"; (test fixtures only)
+- Optional modules: collector.ts, scorer.ts, processor.ts — import with ./module.js extension
 
-tools.py signatures:
-{tools_py}
+IMPORTANT: All relative imports MUST use the .js extension (e.g. "./collector.js"), even for .ts files.
+This is required by Node16 module resolution with ESM.
+
+tools.ts signatures:
+{tools_ts}
 
 ## Gmail data format
-gmail_search query for JobServe: use "from:jobserve" (not a full email address — the sender varies).
-gmail_read returns {{messageId, from, to, date, subject, body}}.
+gmailSearch query for JobServe: use "from:jobserve" (not a full email address — the sender varies).
+gmailRead returns {{messageId, from, to, date, subject, body}}.
 The body field is html-to-text converted email HTML:
 - Links appear as: text [url]  (e.g. "APPLY NOW [https://example.com/apply]")
 - Content is POSITIONAL — visual blocks separated by blank lines — NOT labeled key-value pairs.
@@ -190,28 +217,26 @@ The body field is html-to-text converted email HTML:
   https://www.jobserve.com/gb/en/JobLanding.aspx?jid=<jid>
 
 ## Rules
-- All scoring, ranking, filtering, statistics, and report formatting MUST be pure Python. No LLM calls for these.
-- Only create .py files.
-- Use datetime.now() for today's date.
-- Windows only: do NOT use %-d, %-m in strftime. Use %d, %m and strip leading zeros in Python if needed.
+- All scoring, ranking, filtering, statistics, and report formatting MUST be pure TypeScript. No LLM calls for these.
+- Only create .ts files.
+- Use new Date() for today's date.
+- Use Intl.DateTimeFormat for locale-aware date formatting.
+- Prefer const over let. Use strict TypeScript types where possible.
+- Use async/await (not .then() chains).
 
 ## Generation budget
 - Total generated code: under 800 lines across all files.
 - Unit tests: max 10 tests per module. Test core logic only.
-- No docstrings on internal functions. No comments that restate the code.
+- No JSDoc on internal functions. No comments that restate the code.
 
 ## Unit tests
-For every module with pure-logic functions, produce a test_<module>.py file:
-- Extend TaskTestCase from test_base.py (sealed infrastructure):
-  from tools.{task_name}.test_base import TaskTestCase
-- Import source modules using the FULL package path:
-  from tools.{task_name}.collector import _parse_jobserve_email, _extract_rate_str
-- Do NOT use sys.path manipulation, bare imports (import collector), or module stubs.
-  The test runner provides full package context automatically.
+For every module with pure-logic functions, produce a <module>.test.ts file:
+- Use vitest: import {{ describe, it, expect }} from "vitest";
+- Import test fixtures: import {{ makeJobserveJob, makeLinkedinJob, makeEmail }} from "./test-base.js";
+- Import source modules with .js extension:
+  import {{ parseJobserveEmail, extractRateStr }} from "./collector.js";
 - Do NOT test async functions, MCP calls, or anything requiring network/IO.
-- TaskTestCase provides: make_jobserve_job(**overrides), make_linkedin_job(**overrides),
-  make_email(subject, body, **overrides) — use these for test fixtures.
-- Each test file MUST end with: if __name__ == "__main__": unittest.main()
+- Do NOT mock modules or use vi.mock() — test pure functions only.
 
 ## Tool rules
 You must not call read_file unless the user prompt explicitly mentions a filename you have not seen.
@@ -219,13 +244,13 @@ You must not call read_file unless the user prompt explicitly mentions a filenam
 ## Output format
 Return each file using this exact delimiter format:
 
-=== task.py ===
+=== task.ts ===
 <code>
 
-=== collector.py ===
+=== collector.ts ===
 <code>
 
-=== test_collector.py ===
+=== collector.test.ts ===
 <code>
 
 No markdown fences. No explanatory text between files. Only code."""
@@ -245,17 +270,17 @@ def parse_files(response_text: str) -> tuple[dict[str, str], list[str]]:
         filename = match.group(1).strip("\"'`")
         content = match.group(2).strip("\n")
         # Strip markdown fences if the LLM wraps code despite instructions
-        content = re.sub(r"^```python\n?", "", content)
+        content = re.sub(r"^```(?:typescript|ts)?\n?", "", content)
         content = re.sub(r"\n?```\s*$", "", content)
         if filename in INFRASTRUCTURE_FILES:
             skipped.append(filename)
             continue
-        if not filename.endswith(".py"):
+        if not filename.endswith(".ts"):
             skipped.append(filename)
             continue
         # Reject filenames with path separators — all generated files must be
-        # flat in the target directory. The LLM sometimes generates paths like
-        # "tools/__init__.py" during fix rounds, which would crash the writer.
+        # flat in the src/ directory. The LLM sometimes generates paths like
+        # "src/task.ts" during fix rounds, which would crash the writer.
         if "/" in filename or "\\" in filename:
             skipped.append(filename)
             continue
@@ -264,38 +289,25 @@ def parse_files(response_text: str) -> tuple[dict[str, str], list[str]]:
 
 
 # ---------------------------------------------------------------------------
-# Validation — generate tests, run them, fix failures
+# Validation — run vitest, fix failures
 # ---------------------------------------------------------------------------
 
 
 def _run_tests_sync(target_dir: Path) -> tuple[bool, str]:
-    """Run unittest discover on test_*.py in target_dir. Returns (passed, output).
+    """Run vitest in the target directory. Returns (passed, output).
 
     Synchronous — call via asyncio.to_thread() to avoid blocking the event loop.
     """
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(PROJECT_ROOT)
     try:
-        # Use temp files instead of capture_output to avoid Windows pipe
-        # inheritance hangs (same pattern as run_task). stdin=DEVNULL prevents
-        # the child from inheriting the codegen server's MCP stdin pipe.
-        with tempfile.TemporaryFile() as out_f, \
-             tempfile.TemporaryFile() as err_f:
-            proc = subprocess.run(
-                [VENV_PYTHON, "-m", "unittest", "discover",
-                 "-s", str(target_dir), "-t", str(PROJECT_ROOT),
-                 "-p", "test_*.py", "-v"],
-                cwd=str(PROJECT_ROOT),
-                env=env,
-                stdin=subprocess.DEVNULL,
-                stdout=out_f,
-                stderr=err_f,
-                timeout=60,
-            )
-            out_f.seek(0)
-            err_f.seek(0)
-            stdout = out_f.read().decode("utf-8", errors="replace")
-            stderr = err_f.read().decode("utf-8", errors="replace")
+        proc = subprocess.run(
+            ["npx", "vitest", "run", "--reporter=verbose"],
+            cwd=str(target_dir),
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            timeout=60,
+        )
+        stdout = proc.stdout.decode("utf-8", errors="replace")
+        stderr = proc.stderr.decode("utf-8", errors="replace")
         output = stdout
         if stderr:
             output += "\n" + stderr
@@ -317,7 +329,7 @@ async def _validate_code(ctx: Context, client: AsyncAnthropic, model: str,
     If tests fail, continue the existing conversation to ask the LLM to fix.
     Mutates `files` in-place if source fixes are applied.
     """
-    test_files = {k: v for k, v in files.items() if k.startswith("test_")}
+    test_files = {k: v for k, v in files.items() if k.endswith(".test.ts")}
     if not test_files:
         await ctx.info("No test files generated — skipping validation")
         return {"skipped": True, "reason": "no test files"}
@@ -340,7 +352,7 @@ async def _validate_code(ctx: Context, client: AsyncAnthropic, model: str,
             all_passed = True
             break
 
-        fail_count = output.count("FAIL:") + output.count("ERROR:")
+        fail_count = output.count("FAIL") + output.count("AssertionError") + output.count("Error:")
         await ctx.info(f"  {fail_count} failure(s) — asking LLM to fix (round {round_num}/{MAX_TEST_ROUNDS})...")
 
         # Continue the codegen conversation with test failure output
@@ -370,7 +382,7 @@ async def _validate_code(ctx: Context, client: AsyncAnthropic, model: str,
         parsed, _ = parse_files(response_text)
         for filename, content in parsed.items():
             files[filename] = content
-            (target_dir / filename).write_text(content, encoding="utf-8")
+            (target_dir / "src" / filename).write_text(content, encoding="utf-8")
             await ctx.info(f"  Updated: {filename}")
 
     if not all_passed:
@@ -394,7 +406,7 @@ async def _validate_code(ctx: Context, client: AsyncAnthropic, model: str,
 @mcp.tool()
 async def generate_code(ctx: Context, task_name: str, prompt: str,
                         model: str = DEFAULT_MODEL) -> CallToolResult:
-    """Generate a task app from the template using a mini agentic loop with read_file.
+    """Generate a TypeScript task app from the template using a mini agentic loop with read_file.
 
     Args:
         task_name: Name for the task (e.g. "job_search"). Creates tools/<task_name>/.
@@ -412,7 +424,7 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
         await ctx.error(f"Template directory missing: {TEMPLATE_DIR}")
         return _error_result(f"Template directory missing: {TEMPLATE_DIR}", task_name)
 
-    # Step 1: Copy template
+    # Step 1: Copy template (excludes node_modules)
     await ctx.info("Copying template...")
     try:
         target_dir, task_name = copy_template(task_name)
@@ -421,11 +433,11 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
         return _error_result(f"Template copy failed: {e}", task_name)
     await ctx.info(f"Target: tools/{task_name}/")
 
-    # Step 2: Read tools.py
-    tools_py = (target_dir / "tools.py").read_text(encoding="utf-8")
+    # Step 2: Read tools.ts for system prompt
+    tools_ts = (target_dir / "src" / "tools.ts").read_text(encoding="utf-8")
 
     # Step 3: Build system prompt and first user message
-    system_prompt = build_system_prompt(task_name, tools_py)
+    system_prompt = build_system_prompt(task_name, tools_ts)
     first_message = build_user_message(prompt)
     messages = [{"role": "user", "content": first_message}]
 
@@ -524,20 +536,29 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
             f"No files parsed from LLM response. First 500 chars: {response_text[:500]}",
             task_name,
         )
-    if "task.py" not in files:
-        await ctx.error(f"task.py missing from response. Got: {', '.join(files.keys())}")
+    if "task.ts" not in files:
+        await ctx.error(f"task.ts missing from response. Got: {', '.join(files.keys())}")
         return _error_result(
-            f"task.py missing from response. Got: {', '.join(files.keys())}",
+            f"task.ts missing from response. Got: {', '.join(files.keys())}",
             task_name,
         )
 
-    # Step 7: Write files
+    # Step 7: Write generated files to src/
     await ctx.info(f"Writing {len(files)} file(s): {', '.join(sorted(files))}")
+    src_dir = target_dir / "src"
     for filename, content in files.items():
-        filepath = target_dir / filename
+        filepath = src_dir / filename
         filepath.write_text(content, encoding="utf-8")
 
-    # Step 8: Validate — generate tests, run them, fix failures
+    # Step 8: Install dependencies
+    await ctx.info("Installing dependencies (npm install)...")
+    npm_ok, npm_output = await asyncio.to_thread(_npm_install_sync, target_dir)
+    if not npm_ok:
+        await ctx.error(f"npm install failed: {npm_output[-500:]}")
+        return _error_result(f"npm install failed in tools/{task_name}/", task_name)
+    await ctx.info("  Dependencies installed")
+
+    # Step 9: Validate — run tests, fix failures
     await ctx.info("Phase 2: Validation...")
     validation = {}
     try:
@@ -569,7 +590,7 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
     }
 
     summary_lines = [
-        f"Generated {len(files)} files for tools/{task_name}/:",
+        f"Generated {len(files)} files for tools/{task_name}/src/:",
         *[f"  - {f}" for f in sorted(files.keys())],
         f"Model: {model} | Tokens: {total_input_tokens} in, {total_output_tokens} out | Turns: {turns}",
     ]
@@ -604,7 +625,7 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
 @mcp.tool()
 async def run_task(ctx: Context, task_name: str,
                    timeout_seconds: int = 600) -> CallToolResult:
-    """Run a previously generated task app.
+    """Run a previously generated TypeScript task app.
 
     Args:
         task_name: Name of the task (e.g. "job_search"). Must exist under tools/<task_name>/.
@@ -615,39 +636,37 @@ async def run_task(ctx: Context, task_name: str,
     if not task_dir.exists():
         await ctx.error(f"Task directory not found: tools/{task_name}/")
         return _error_result(f"Task directory not found: tools/{task_name}/", task_name)
-    if not (task_dir / "task.py").exists():
-        await ctx.error(f"task.py not found in tools/{task_name}/")
-        return _error_result(f"task.py not found in tools/{task_name}/", task_name)
+    if not (task_dir / "src" / "task.ts").exists():
+        await ctx.error(f"src/task.ts not found in tools/{task_name}/")
+        return _error_result(f"src/task.ts not found in tools/{task_name}/", task_name)
 
-    # Use temp files instead of pipes (capture_output) to avoid hanging on
-    # Windows.  With pipes, grandchild processes (MCP servers started by the
-    # task) inherit the pipe handles; after the task exits, communicate()
-    # blocks on stdout.read() waiting for those orphan processes to close
-    # the handles.  With temp files, communicate() just calls wait().
-    await ctx.info(f"Running python -m tools.{task_name} ...")
+    # Ensure dependencies are installed
+    if not (task_dir / "node_modules").exists():
+        await ctx.info("Installing dependencies (npm install)...")
+        npm_ok, npm_output = await asyncio.to_thread(_npm_install_sync, task_dir)
+        if not npm_ok:
+            await ctx.error(f"npm install failed: {npm_output[-500:]}")
+            return _error_result(f"npm install failed in tools/{task_name}/", task_name)
+
+    await ctx.info(f"Running npx tsx src/index.ts in tools/{task_name}/ ...")
     timed_out = False
     try:
-        with tempfile.TemporaryFile() as out_f, \
-             tempfile.TemporaryFile() as err_f:
-            try:
-                proc = subprocess.run(
-                    [VENV_PYTHON, "-m", f"tools.{task_name}"],
-                    cwd=str(PROJECT_ROOT),
-                    stdin=subprocess.DEVNULL,
-                    stdout=out_f,
-                    stderr=err_f,
-                    timeout=timeout_seconds,
-                )
-                exit_code = proc.returncode
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                exit_code = -1
-
-            # Read output regardless of success/failure/timeout
-            out_f.seek(0)
-            err_f.seek(0)
-            stdout = out_f.read().decode("utf-8", errors="replace")
-            stderr = err_f.read().decode("utf-8", errors="replace")
+        try:
+            proc = subprocess.run(
+                ["npx", "tsx", "src/index.ts"],
+                cwd=str(task_dir),
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                timeout=timeout_seconds,
+            )
+            exit_code = proc.returncode
+            stdout = proc.stdout.decode("utf-8", errors="replace")
+            stderr = proc.stderr.decode("utf-8", errors="replace")
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            exit_code = -1
+            stdout = ""
+            stderr = ""
     except Exception as e:
         await ctx.error(f"Failed to run task: {e}")
         return _error_result(f"Failed to run task: {e}", task_name)

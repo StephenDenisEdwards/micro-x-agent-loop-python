@@ -2,11 +2,11 @@
 
 ## Status
 
-Proposed
+Accepted (implemented 2026-03-11)
 
 ## Context
 
-The codegen MCP server (`mcp_servers/python/codegen/main.py`) generates task apps by copying a Python template (`tools/template/`) and asking the LLM to fill in task-specific code. On Windows, this architecture has accumulated three distinct runtime problems:
+The codegen MCP server (`mcp_servers/python/codegen/main.py`) generates task apps by copying a Python template (`tools/template-py/`) and asking the LLM to fill in task-specific code. On Windows, this architecture has accumulated three distinct runtime problems:
 
 1. **Dependency mismatch.** The codegen server runs in its own `uv` environment. Generated tasks run as subprocesses that need `tenacity`, `mcp`, `anthropic`, and `python-dotenv` — packages that live in the main project's `.venv`, not the codegen server's environment. Workaround: hardcode `VENV_PYTHON` to `.venv/Scripts/python.exe`.
 
@@ -45,7 +45,7 @@ Migrate the codegen template from Python to TypeScript. Generated task apps beco
 
 ### Migration strategy
 
-Generated task apps are disposable — they are regenerated from prompts each time. There is no need to migrate existing apps or maintain backward compatibility. The Python template (`tools/template/`) is deleted once the TypeScript template is validated.
+Generated task apps are disposable — they are regenerated from prompts each time. There is no need to migrate existing apps or maintain backward compatibility. The Python template (`tools/template-py/`) is retained as reference but is no longer used by the codegen server.
 
 ## Consequences
 

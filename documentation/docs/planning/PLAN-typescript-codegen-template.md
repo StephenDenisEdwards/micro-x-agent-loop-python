@@ -1,10 +1,10 @@
 # Plan: Migrate Codegen Template from Python to TypeScript
 
-**Status: Planned**
+**Status: Completed**
 
 ## Problem
 
-The Python codegen template (`tools/template/`) has systemic runtime issues on Windows:
+The Python codegen template (`tools/template-py/`) has systemic runtime issues on Windows:
 
 1. **Dependency mismatch.** The codegen MCP server runs via `uv run` (its own Python environment). Generated tasks run as subprocesses needing `tenacity`, `mcp`, `anthropic`, `python-dotenv` — which live in the main project's `.venv`, not the codegen server's environment. Current workaround: hardcode `VENV_PYTHON` path to the project's `.venv/Scripts/python.exe`.
 
@@ -32,7 +32,7 @@ Migrate the codegen template to TypeScript/Node. The generated task apps become 
 
 | Component | Current (Python) | Proposed (TypeScript) |
 |-----------|-----------------|----------------------|
-| Template location | `tools/template/*.py` | `tools/template-ts/` |
+| Template location | `tools/template-py/*.py` | `tools/template-ts/` |
 | Template infrastructure | `__main__.py`, `mcp_client.py`, `llm.py`, `tools.py`, `utils.py`, `test_base.py` | `src/index.ts`, `src/mcp-client.ts`, `src/tools.ts`, `src/utils.ts` |
 | Dependency declaration | `requirements.txt` (added as fix) | `package.json` |
 | Task execution | `python -m tools.<task_name>` | `npx tsx tools/<task_name>/src/index.ts` or `npm start` in task dir |
