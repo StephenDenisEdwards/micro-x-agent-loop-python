@@ -16,7 +16,7 @@ These are structural problems with using an agent loop for code generation. They
 Add a `codegen` MCP server that exposes two tools: `generate_code` and `run_task`. When `generate_code` is called, it:
 
 1. Copies the TypeScript template directory to a new task directory
-2. Reads the template's `tools.ts` (the API surface available to generated code)
+2. Reads the template's `tools.ts` and `test-base.ts` (the API surface and fixture shapes available to generated code)
 3. Reads the user prompt (the task requirements)
 4. Runs a **mini agentic loop** with a single `read_file` tool (typically 2-3 turns) so the LLM can read any files referenced by the prompt
 5. Parses the response to extract TypeScript file contents
@@ -53,7 +53,7 @@ The key insight: **code generation is not a full agent task, but it benefits fro
 │  generate_code(task_name, prompt)                 │
 │    1. copytree template-ts → tools/{task_name}/  │
 │       (excludes node_modules, dist)              │
-│    2. Read src/tools.ts (API surface)            │
+│    2. Read src/tools.ts + test-base.ts (API)      │
 │    3. Mini agentic loop with read_file tool      │
 │       (infra files blocked server-side)          │
 │    4. Parse === filename.ts === blocks           │
@@ -245,11 +245,12 @@ The server splits the prompt into system and user messages:
    - No prose output — only the file manifest
 3. Runtime contract — what task.ts must export, available imports, tools.ts signatures inline
 4. Import rules — all relative imports must use .js extension (Node16 ESM requirement)
-5. Rules — pure TypeScript for scoring/formatting, .ts only, Intl.DateTimeFormat for dates
-6. Generation budget — under 800 lines total, max 10 tests/module, no internal JSDoc
-7. Unit tests — vitest only, import from ./test-base.js, no mocking
-8. Tool rules — explicit gate: only call read_file for files mentioned in user prompt
-9. Output format — compact "=== filename ===" delimiters, no markdown fences, no text between files
+5. API surface — tools.ts signatures + test-base.ts fixture factories (full source inline)
+6. Rules — pure TypeScript for scoring/formatting, .ts only, Intl.DateTimeFormat for dates
+7. Generation budget — under 800 lines total, max 10 tests/module, no internal JSDoc
+8. Unit tests — vitest only, import from ./test-base.js, no mocking
+9. Tool rules — explicit gate: only call read_file for files mentioned in user prompt
+10. Output format — compact "=== filename ===" delimiters, no markdown fences, no text between files
 ```
 
 **User message** (per request):
@@ -293,6 +294,14 @@ After writing generated files and installing dependencies, the server runs a val
 5. Repeat up to `MAX_TEST_ROUNDS` (3) times
 
 The fix request uses the same `=== filename ===` output format. The LLM returns only the files that need changes, which are parsed and written over the originals in `src/`. Validation token usage is tracked separately and included in the structured result.
+
+### Test Fixture Visibility
+
+The system prompt includes the full source of `test-base.ts` alongside `tools.ts`. This is critical: the LLM must know the exact field names and value formats of `makeJobserveJob()`, `makeLinkedinJob()`, and `makeEmail()` to write passing tests.
+
+Without fixture source in the prompt, the LLM knows the factory names (from import examples) but guesses the shapes — e.g., it might expect `job.url` when the field is `job.applyUrl`, or `"£600/day"` when the format is `"£600 PER DAY"`. This mismatch causes systematic test failures where each fix round the LLM adjusts its guesses based on error output, wasting 2-3 validation rounds before converging. Including the source eliminates the guessing entirely.
+
+The general principle: **any type or factory the LLM is expected to use in generated code must have its full definition in the prompt, not just its name.** Sealed infrastructure should not be readable via `read_file`, but its API contract must be visible.
 
 ### Why Continue the Conversation
 

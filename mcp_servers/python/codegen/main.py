@@ -174,7 +174,7 @@ def _process_tool_calls(response) -> tuple[list[dict], list[str]]:
     return results, files_read
 
 
-def build_system_prompt(task_name: str, tools_ts: str) -> str:
+def build_system_prompt(task_name: str, tools_ts: str, test_base_ts: str) -> str:
     """Build the system prompt for TypeScript code generation."""
     return f"""You are a TypeScript code generator. Output only code files, no prose.
 
@@ -209,6 +209,9 @@ This is required by Node16 module resolution with ESM.
 
 tools.ts signatures:
 {tools_ts}
+
+test-base.ts fixtures (use these exact field names and value formats in tests):
+{test_base_ts}
 
 ## Gmail data format
 gmailSearch query for JobServe: use "from:jobserve" (not a full email address — the sender varies).
@@ -440,11 +443,12 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
         return _error_result(f"Template copy failed: {e}", task_name)
     await ctx.info(f"Target: tools/{task_name}/")
 
-    # Step 2: Read tools.ts for system prompt
+    # Step 2: Read tools.ts and test-base.ts for system prompt
     tools_ts = (target_dir / "src" / "tools.ts").read_text(encoding="utf-8")
+    test_base_ts = (target_dir / "src" / "test-base.ts").read_text(encoding="utf-8")
 
     # Step 3: Build system prompt and first user message
-    system_prompt = build_system_prompt(task_name, tools_ts)
+    system_prompt = build_system_prompt(task_name, tools_ts, test_base_ts)
     first_message = build_user_message(prompt)
     messages = [{"role": "user", "content": first_message}]
 
