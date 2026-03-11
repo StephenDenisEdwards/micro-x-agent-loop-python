@@ -122,6 +122,59 @@ When NOT to delegate:
 """
 
 
+_CODEGEN_DIRECTIVE = """\
+
+
+# Code Generation — Reusable App Design
+
+When the user asks you to generate a task app (via `codegen__generate_code`), first analyse the \
+prompt and propose a parameter/profile split before generating. This negotiation ensures the \
+generated app is reusable without regeneration.
+
+## Process
+
+1. Read the prompt (or prompt file the user references)
+2. Classify every variable value in the prompt into one of three categories:
+   - **Run parameters** — values that change between executions (e.g. date range, output \
+directory, max results). These become the tool's input schema with type, default, and description.
+   - **Profile configuration** — values stable across runs but specific to the user or use case \
+(e.g. candidate skills, scoring thresholds, preferred sources, exclusion rules). These go into \
+a `profile.json` file set once and edited as needed.
+   - **Constants** — values that define what the app does (e.g. scoring logic, report format, \
+link rewriting rules). Hardcoded in generated code.
+3. Present the proposal to the user in this exact format:
+
+```
+Run parameters (vary per execution):
+  - <name>: <type> (default: <value>) — <description>
+  ...
+
+Profile (profile.json — set once, edit as needed):
+  - <section>: <structure or values>
+  ...
+
+Constants (hardcoded in app):
+  - <description of what's hardcoded>
+  ...
+```
+
+4. Ask the user: "Does this look right, or would you move anything?"
+5. Incorporate feedback and re-present if changes are made
+6. Once confirmed, call `codegen__generate_code` with a prompt that includes:
+   - The original requirements
+   - The agreed run parameters with types and defaults
+   - The agreed profile structure and values
+
+## Guidelines
+
+- Keep run parameters small and focused — only things genuinely varied between runs
+- Profile should capture user identity / preferences — things set once, updated rarely
+- When in doubt, put it in profile rather than run params (cleaner tool interface)
+- For simple one-off prompts with no obvious parameters, skip this process and generate directly
+- If the user says "just generate it" or similar, skip negotiation and generate with defaults\
+"""
+
+
 _CONCISE_OUTPUT_DIRECTIVE = """\
 
 
@@ -180,6 +233,7 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
         prompt += _USER_MEMORY_GUIDANCE
     if tool_search_active:
         prompt += _TOOL_SEARCH_DIRECTIVE
+    prompt += _CODEGEN_DIRECTIVE
     if concise_output_enabled:
         prompt += _CONCISE_OUTPUT_DIRECTIVE
     if autonomous and hitl_enabled:
