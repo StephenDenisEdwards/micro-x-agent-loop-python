@@ -365,23 +365,115 @@ run_task("job_search")
 
 Generated apps are currently fire-and-forget — run once, maybe again manually. Four capabilities would make them genuinely reusable:
 
-### 1. Parameterisation
+### 1. Parameterisation — Generate MCP Servers, Not Scripts
 
-Currently all task-specific values (search queries, date ranges, scoring weights, output paths) are hardcoded in `task.ts`. If generated code accepted parameters, the same app could be reused with different inputs without regenerating.
+Currently all task-specific values are hardcoded in `task.ts`. The generated app is a standalone script with no input contract — every variation requires a new `generate_code` call.
 
-**Current:** Every variation requires a new `generate_code` call.
-```
-"Search Gmail for JobServe emails from the last 7 days"   → generate job_search
-"Search Gmail for JobServe emails from the last 30 days"  → generate job_search_2
+#### Target: Generated MCP Servers
+
+Instead of generating a script that runs via `npx tsx src/index.ts`, generate an MCP server that exposes the task as a tool with a typed input schema and structured output. The generated server plugs into the agent's MCP infrastructure like any other server.
+
+**Current (script):**
+```typescript
+export async function runTask(clients: Clients, config: Record<string, unknown>): Promise<void> {
+    const emails = await gmailSearch(clients, "from:jobserve", 50);  // hardcoded
+    // ... write report to file, output to stdout
+}
 ```
 
-**With parameters:** One app, many runs.
-```
-run_task("job_search", params: { days: 7 })
-run_task("job_search", params: { days: 30 })
+**Target (MCP server):**
+```typescript
+server.tool("job_search", {
+    description: "Search job boards, score and rank matches against profile",
+    inputSchema: {
+        days: { type: "number", default: 1, description: "How far back to search" },
+        outputDir: { type: "string", default: ".", description: "Where to write the report" },
+    }
+}, async (params) => {
+    const profile = JSON.parse(await readFile("profile.json"));
+    const emails = await gmailSearch(clients, profile.sources, params.days);
+    // ... score, rank
+    return { jobs: rankedJobs, summary: { total: 50, matched: 12 } };
+});
 ```
 
-This requires changes to the template contract: `task.ts` would accept a `params` object alongside `clients` and `config`, and `run_task` would pass user-supplied parameters through. The codegen system prompt would instruct the LLM to extract variable values into a params interface rather than hardcoding them.
+**What this solves:**
+
+| Capability | Script (current) | MCP Server (target) |
+|---|---|---|
+| Parameterisation | Hardcoded values | Typed input schema with defaults |
+| Output structure | stdout text | `structuredContent` (JSON) |
+| Discoverability | Must remember task name | `list_tools` shows available tasks with descriptions |
+| Integration | Special `run_task` call | Agent calls it like any other tool |
+| Composability | Isolated script | Other agents, generated apps, and the broker can call it |
+
+#### Two-Layer Parameter Model
+
+Prompts contain two kinds of variable data that behave differently:
+
+**Run parameters** change between executions — how far back to search, which output directory, whether to include a specific source. These are the MCP tool's input schema. Small, focused, genuinely vary per call.
+
+**Profile configuration** is stable across runs — candidate skills, target rate, exclusion rules, scoring thresholds, preferred sources. These define *who the user is* or *what the task operates on*. Set once, updated infrequently. Lives in a `profile.json` file in the task directory, read at runtime.
+
+Flattening both into the input schema would mean 30+ parameters on every call, most identical every time. Separating them keeps the tool interface clean:
+
+```
+job_search(days: 7, outputDir: "./reports")
+// profile.json provides: skills, rate, exclusions, scoring, sources
+```
+
+#### Agent-Guided Schema Negotiation
+
+The agent proposes the parameter/profile split *before* generating code. This is a conversation between the agent and the user, not a silent LLM decision:
+
+```
+User: "Generate a job search app from job-search-prompt-v3.txt"
+
+Agent: I've analysed the prompt. Here's what I propose:
+
+  Run parameters (MCP tool input schema — vary per execution):
+    - days: number (default: 1) — how far back to search
+    - outputDir: string (default: ".") — where to write the report
+
+  Profile (profile.json — set once, edit as needed):
+    - candidateProfile: { title, experience, location, contractPreference }
+    - skills: { dotnet: [...], azure: [...], python: [...], ... }
+    - targetRoles: ["Senior Architect", "Solution Architect", ...]
+    - rate: { min: 500, max: 700, currency: "GBP", preference: "Outside IR35" }
+    - sources: ["jobserve", "indeed", "cwjobs", "jobleads", "linkedin"]
+    - exclude: ["Junior/Graduate", "frontend-only", "legacy-only", ...]
+    - highValueKeywords: ["AI agents", "LLM orchestration", ...]
+    - scoring: { high: [9,10], medium: [7,8], low: [5,6], cutoff: 5 }
+
+  Constants (hardcoded in the app):
+    - Scoring logic, report format, link rewriting rules, write-then-append strategy
+
+  Does this look right, or would you move anything?
+
+User: "Move sources to run params, I want to experiment. Add maxResults."
+
+Agent: Updated. Generating...
+```
+
+The negotiation happens in the agent loop via `ask_user`, not inside codegen. The agent reasons about the prompt, proposes a schema, iterates with the user, and only calls `generate_code` once the contract is agreed. The codegen server receives a fully-specified prompt that already includes the parameter/profile split.
+
+#### Implementation Risks
+
+1. **Consistent proposals** — The agent needs to produce a structured proposal in a specific format, not free-form prose. The system prompt directive must specify the exact format: run params with types/defaults, profile structure, constants.
+
+2. **Schema fidelity** — After negotiation, the agent composes a prompt for `generate_code` that includes the original requirements *and* the agreed contract. If the agent paraphrases or drops detail, the generated code won't match. This is the highest-risk step.
+
+3. **Codegen prompt complexity** — The codegen system prompt must handle: "here are run params with types/defaults, here's the profile schema, read `profile.json` at runtime, expose run params as the MCP tool input schema." More complex than today's "hardcode everything."
+
+4. **Profile generation** — The codegen server must write `profile.json` alongside the code, populated with values from the original prompt. The user edits it later.
+
+5. **Dual-role server** — The generated server is both an MCP *server* (exposing tools to the agent) and an MCP *client* (calling gmail, linkedin, etc.). The template already handles MCP client connections, but the lifecycle is more complex.
+
+#### Incremental Validation Plan
+
+- **Step 1:** Agent-side only. Add a system prompt directive that makes the agent propose params vs profile for a given prompt, without generating anything. Test whether proposals are sensible and consistent across multiple prompts. Zero code changes.
+- **Step 2:** If proposals are reliable, extend the codegen template and system prompt to accept a structured contract (params schema + profile data) and generate an MCP server instead of a script.
+- **Step 3:** Wire up the full flow: agent negotiation → `generate_code` with contract → generated MCP server → agent connects to it.
 
 ### 2. Scheduling via Trigger Broker
 
