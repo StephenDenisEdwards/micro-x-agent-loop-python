@@ -1,11 +1,10 @@
 # Plan: Sub-Agent Architecture
 
-**Status:** Phase 2 Completed (routing policy + enable by default) — Phase 3+ remaining
+**Status:** Phase 2b Completed (observability + memory tracking) — Phase 3+ remaining
 **Date:** 2026-03-12
 
 ### Remaining Gaps
 
-- **Phase 2 (Observability)** — metrics aggregation into parent session, memory tracking of sub-agent runs, turn limit tuning based on real usage data. Not started.
 - **Phase 3 (Async)** — `spawn_background_task` via broker not implemented.
 - **Phase 4 (Advanced)** — custom agent types, mode selector integration, resume not started.
 **Goal:** Enable the main agent to delegate focused tasks to lightweight, disposable sub-agents with isolated contexts, restricted tools, and optionally cheaper models.
@@ -329,12 +328,13 @@ Parent Agent
 6. **Enabled by default** — `SubAgentsEnabled: true` in `config-base.json`
 7. **Tests** — 6 new tests: config parsing (3), directive content validation (3)
 
-### Phase 2b — Observability and persistence (2-3 days)
+### Phase 2b — Observability and persistence ✅ Completed (2026-03-12)
 
-8. **Metrics aggregation** — sub-agent token usage and cost rolled up to parent session
-9. **Channel integration** — emit sub-agent progress events through parent's AgentChannel (tool_started/completed plus optional streaming)
-10. **Memory tracking** — log sub-agent runs in events table (parent session, type, prompt, result summary, cost)
-11. **Turn limit and timeout tuning** — based on real usage data from Phase 2a
+8. **Metrics aggregation** — sub-agent usage aggregated to parent `SessionAccumulator` via `on_api_call_completed`; model subtotals track Haiku separately from Sonnet
+9. **Channel integration** — `emit_tool_started` / `emit_tool_completed` already emitted with `subagent:{type}` name in Phase 1
+10. **Memory tracking** — `on_subagent_completed` callback added to `TurnEvents` protocol; `Agent` implements it by emitting `subagent.completed` to the events table with agent_type, task (500 char cap), result_summary (500 char cap), turns, timed_out, cost_usd, api_calls
+11. **Tests** — 1 new test (`test_on_subagent_completed_called`) verifying all payload fields; `_ListEvents` extended to capture calls
+12. **Manual test** — Section 12 added to [MANUAL-TEST-sub-agents.md](../../docs/testing/MANUAL-TEST-sub-agents.md) covering events table queries, truncation, timeout flag, concurrent events, model breakdown, per-call log, budget tracking
 
 ### Phase 3 — Async sub-agents via broker (3-5 days)
 

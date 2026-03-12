@@ -42,6 +42,18 @@ class TurnEvents(Protocol):
         *, was_summarized: bool = False,
     ) -> None: ...
 
+    def on_subagent_completed(
+        self,
+        *,
+        agent_type: str,
+        task: str,
+        result_summary: str,
+        turns: int,
+        timed_out: bool,
+        cost_usd: float,
+        api_calls: int,
+    ) -> None: ...
+
 
 class BaseTurnEvents:
     """Base class with no-op defaults for all ``TurnEvents`` methods."""
@@ -85,6 +97,19 @@ class BaseTurnEvents:
     def on_tool_executed(
         self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool,
         *, was_summarized: bool = False,
+    ) -> None:
+        return
+
+    def on_subagent_completed(
+        self,
+        *,
+        agent_type: str,
+        task: str,
+        result_summary: str,
+        turns: int,
+        timed_out: bool,
+        cost_usd: float,
+        api_calls: int,
     ) -> None:
         return
 

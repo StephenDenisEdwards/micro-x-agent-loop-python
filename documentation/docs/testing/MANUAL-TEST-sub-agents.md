@@ -1,6 +1,6 @@
 # Sub-Agents — Manual Test Plan
 
-Step-by-step walkthrough of every sub-agent feature (Phase 1 + Phase 2a routing policy). Run these from the project root directory using the interactive REPL.
+Step-by-step walkthrough of every sub-agent feature (Phase 1 + Phase 2a routing policy + Phase 2b observability). Run these from the project root directory using the interactive REPL.
 
 > **Prerequisites**
 > - Python 3.11+ with the agent installed (`pip install -e .`)
@@ -473,9 +473,154 @@ you> Search the tests directory for all test classes related to cost reduction a
 
 ---
 
+## 12. Phase 2b — Observability (Memory Tracking + Cost Metrics)
+
+These tests verify that sub-agent runs are persisted to the memory events table and that cost data is visible in all the right places.
+
+> **Prerequisites:** `MemoryEnabled=true` in config (events table only exists when memory is on).
+
+### Test 12.1: `subagent.completed` event written to events table
+
+Run any sub-agent task:
+
+```
+you> Use a sub-agent to find the Python version requirement in pyproject.toml.
+```
+
+Then query the events table directly:
+
+```bash
+sqlite3 .micro_x/.micro_x/memory.db \
+  "SELECT type, json_extract(payload_json,'$.agent_type'), json_extract(payload_json,'$.task'), \
+   json_extract(payload_json,'$.turns'), json_extract(payload_json,'$.cost_usd') \
+   FROM events WHERE type='subagent.completed' ORDER BY created_at DESC LIMIT 5;"
+```
+
+**Expected:**
+- At least one row with `type = subagent.completed`
+- `agent_type` matches the type used (e.g. `explore`)
+- `task` contains the first 500 chars of the task prompt
+- `turns` is a small positive integer
+- `cost_usd` is a positive float (or `0.0` if the model has no pricing configured)
+
+### Test 12.2: `result_summary` is truncated to 500 chars
+
+Run a task that produces a long sub-agent response:
+
+```
+you> Use a sub-agent to read every .md file in the documentation/docs/architecture/ directory and list their titles.
+```
+
+Then inspect the event payload:
+
+```bash
+sqlite3 .micro_x/.micro_x/memory.db \
+  "SELECT length(json_extract(payload_json,'$.result_summary')), \
+          json_extract(payload_json,'$.result_summary') \
+   FROM events WHERE type='subagent.completed' ORDER BY created_at DESC LIMIT 1;"
+```
+
+**Expected:**
+- `length(result_summary)` is at most 500
+- The summary is the start of the sub-agent's final response, not the full text
+
+### Test 12.3: `timed_out` flag recorded correctly
+
+Set a very short timeout:
+
+```json
+{ "SubAgentsEnabled": true, "SubAgentTimeout": 3 }
+```
+
+Run a slow task:
+
+```
+you> Use a sub-agent to read all Python source files in src/micro_x_agent_loop/ and count total lines.
+```
+
+Then query:
+
+```bash
+sqlite3 .micro_x/.micro_x/memory.db \
+  "SELECT json_extract(payload_json,'$.timed_out'), json_extract(payload_json,'$.turns') \
+   FROM events WHERE type='subagent.completed' ORDER BY created_at DESC LIMIT 1;"
+```
+
+**Expected:**
+- `timed_out = 1` (SQLite boolean true)
+- `turns` may be 0 if the sub-agent timed out before completing its first turn
+
+Reset the timeout after this test.
+
+### Test 12.4: Multiple concurrent sub-agents produce multiple events
+
+```
+you> In parallel using sub-agents:
+1. Find the Python version in pyproject.toml
+2. Find the test count in the tests/ directory
+```
+
+Then query:
+
+```bash
+sqlite3 .micro_x/.micro_x/memory.db \
+  "SELECT json_extract(payload_json,'$.agent_type'), json_extract(payload_json,'$.task'), \
+          json_extract(payload_json,'$.api_calls') \
+   FROM events WHERE type='subagent.completed' ORDER BY created_at DESC LIMIT 5;"
+```
+
+**Expected:**
+- Two `subagent.completed` events, one per sub-agent call
+- Each has its own `task` and `api_calls` count
+
+### Test 12.5: Sub-agent costs in `/cost` model breakdown
+
+Run a mix of explore (Haiku) and general (Sonnet) sub-agent calls:
+
+```
+you> Use an explore sub-agent to find all files that import 'asyncio' in src/.
+you> Use a general sub-agent to read README.md and summarise it in one line.
+you> /cost
+```
+
+**Expected:**
+- The `/cost` summary shows a **model breakdown** section (appears when more than one model is used)
+- Two model entries: one for the parent model (e.g. `anthropic/claude-sonnet-4-6`) and one for the sub-agent model (e.g. `anthropic/claude-haiku-4-5-20251001`)
+- Each entry shows its own call count, token totals, and cost
+- The session total includes both
+
+### Test 12.6: Per-call log shows `subagent:` call types
+
+```
+you> /cost
+```
+
+In the per-call breakdown at the bottom of `/cost` output:
+
+**Expected:**
+- Entries with `call_type` of `subagent:explore`, `subagent:summarize`, or `subagent:general`
+- Each entry shows model, token counts, and cost
+- Parent LLM calls show `call_type = main`
+
+### Test 12.7: Sub-agent costs included in session budget tracking
+
+Set a budget:
+
+```json
+{ "SessionBudgetUSD": 0.10 }
+```
+
+Run several sub-agent tasks. Check the status bar (or `/cost`) after each.
+
+**Expected:**
+- The budget usage percentage climbs as sub-agent calls accumulate cost
+- Sub-agent costs are not excluded from the budget — they count towards the cap
+
+---
+
 ## Cleanup
 
-Reset your config to the desired production settings (e.g., remove short timeout overrides from test 6.1).
+Reset your config to the desired production settings (e.g., remove short timeout overrides from test 6.1 and 12.3).
 
 ---
 
@@ -513,3 +658,10 @@ Reset your config to the desired production settings (e.g., remove short timeout
 | 11.3 | Routing: direct tool use for simple ops | |
 | 11.4 | Routing: parallel delegation without instruction | |
 | 11.5 | Routing: default-enabled with no config | |
+| 12.1 | Memory: `subagent.completed` event written to events table | |
+| 12.2 | Memory: `result_summary` truncated to 500 chars | |
+| 12.3 | Memory: `timed_out` flag recorded on timeout | |
+| 12.4 | Memory: concurrent sub-agents produce separate events | |
+| 12.5 | Cost: model breakdown shows Haiku vs Sonnet separately | |
+| 12.6 | Cost: per-call log shows `subagent:` call types | |
+| 12.7 | Cost: sub-agent costs count towards session budget | |

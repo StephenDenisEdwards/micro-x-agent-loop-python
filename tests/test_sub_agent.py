@@ -271,10 +271,22 @@ class _ListEvents(BaseTurnEvents):
 
     def __init__(self, messages: list[dict]) -> None:
         self._messages = messages
+        self.subagent_completed_calls: list[dict] = []
 
     def on_append_message(self, role: str, content: str | list[dict]) -> str | None:
         self._messages.append({"role": role, "content": content})
         return None
+
+    def on_subagent_completed(self, *, agent_type, task, result_summary, turns, timed_out, cost_usd, api_calls):
+        self.subagent_completed_calls.append({
+            "agent_type": agent_type,
+            "task": task,
+            "result_summary": result_summary,
+            "turns": turns,
+            "timed_out": timed_out,
+            "cost_usd": cost_usd,
+            "api_calls": api_calls,
+        })
 
 
 class TestTurnEngineSubAgent(unittest.TestCase):
@@ -284,7 +296,7 @@ class TestTurnEngineSubAgent(unittest.TestCase):
         self,
         provider: FakeStreamProvider,
         sub_agent_runner: SubAgentRunner | None = None,
-    ) -> tuple[TurnEngine, list[dict]]:
+    ) -> tuple[TurnEngine, list[dict], _ListEvents]:
         messages: list[dict] = []
         events = _ListEvents(messages)
         engine = TurnEngine(
@@ -300,7 +312,7 @@ class TestTurnEngineSubAgent(unittest.TestCase):
             events=events,
             sub_agent_runner=sub_agent_runner,
         )
-        return engine, messages
+        return engine, messages, events
 
     def test_subagent_schema_included_when_runner_present(self) -> None:
         """spawn_subagent schema should be in api_tools when runner is set."""
@@ -315,7 +327,7 @@ class TestTurnEngineSubAgent(unittest.TestCase):
             timeout=5,
         )
 
-        engine, messages = self._make_engine(provider, sub_agent_runner=runner)
+        engine, messages, _ = self._make_engine(provider, sub_agent_runner=runner)
         asyncio.run(engine.run(messages=messages, user_message="hello"))
 
         # The FakeStreamProvider doesn't expose the tools argument directly,
@@ -327,7 +339,7 @@ class TestTurnEngineSubAgent(unittest.TestCase):
         provider = FakeStreamProvider()
         provider.queue(text="Hello.")
 
-        engine, messages = self._make_engine(provider, sub_agent_runner=None)
+        engine, messages, _ = self._make_engine(provider, sub_agent_runner=None)
         asyncio.run(engine.run(messages=messages, user_message="hello"))
         self.assertTrue(len(messages) > 0)
 
@@ -368,7 +380,7 @@ class TestTurnEngineSubAgent(unittest.TestCase):
 
         runner.run = mock_run
 
-        engine, messages = self._make_engine(provider, sub_agent_runner=runner)
+        engine, messages, _ = self._make_engine(provider, sub_agent_runner=runner)
         asyncio.run(engine.run(messages=messages, user_message="How many Python files?"))
 
         # Should have: user, assistant (with tool_use), user (tool_result), assistant (final)
@@ -380,6 +392,52 @@ class TestTurnEngineSubAgent(unittest.TestCase):
         self.assertIsInstance(content, list)
         self.assertEqual(content[0]["tool_use_id"], "tu_1")
         self.assertIn("42 Python files", content[0]["content"])
+
+    def test_on_subagent_completed_called(self) -> None:
+        """on_subagent_completed should be called with task, type, result, and cost info."""
+        from micro_x_agent_loop.sub_agent import SubAgentResult
+
+        provider = FakeStreamProvider()
+        provider.queue(
+            text="Delegating.",
+            tool_use_blocks=[{
+                "id": "tu_2",
+                "name": "spawn_subagent",
+                "input": {"task": "Find all config files", "type": "explore"},
+            }],
+            stop_reason="tool_use",
+        )
+        provider.queue(text="Done.")
+
+        runner = SubAgentRunner(
+            parent_tools=[],
+            provider_name="anthropic",
+            api_key="key",
+            parent_model="m",
+            timeout=5,
+        )
+
+        async def mock_run(task, agent_type):
+            return SubAgentResult(
+                text="Found 3 config files.",
+                usage=[UsageResult(input_tokens=50, output_tokens=20, model="haiku")],
+                turns=1,
+            )
+
+        runner.run = mock_run
+
+        engine, messages, events = self._make_engine(provider, sub_agent_runner=runner)
+        asyncio.run(engine.run(messages=messages, user_message="Find configs"))
+
+        self.assertEqual(len(events.subagent_completed_calls), 1)
+        call = events.subagent_completed_calls[0]
+        self.assertEqual(call["agent_type"], "explore")
+        self.assertEqual(call["task"], "Find all config files")
+        self.assertIn("3 config files", call["result_summary"])
+        self.assertEqual(call["turns"], 1)
+        self.assertFalse(call["timed_out"])
+        self.assertEqual(call["api_calls"], 1)
+        self.assertIsInstance(call["cost_usd"], float)
 
 
 # ---------------------------------------------------------------------------

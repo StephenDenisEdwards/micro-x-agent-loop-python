@@ -366,6 +366,16 @@ class TurnEngine:
                 for usage in result.usage:
                     self._events.on_api_call_completed(usage, f"subagent:{agent_type.value}")
 
+                self._events.on_subagent_completed(
+                    agent_type=agent_type.value,
+                    task=task,
+                    result_summary=result.text[:500],
+                    turns=result.turns,
+                    timed_out=result.timed_out,
+                    cost_usd=sum(estimate_cost(u) for u in result.usage),
+                    api_calls=len(result.usage),
+                )
+
                 logger.info(
                     f"spawn_subagent type={agent_type.value} turns={result.turns} "
                     f"result_chars={len(result.text)} timed_out={result.timed_out}"

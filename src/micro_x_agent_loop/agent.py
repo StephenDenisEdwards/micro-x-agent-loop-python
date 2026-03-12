@@ -574,6 +574,27 @@ class Agent:
     def on_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
         self._memory.emit_tool_completed(tool_use_id, tool_name, is_error)
 
+    def on_subagent_completed(
+        self,
+        *,
+        agent_type: str,
+        task: str,
+        result_summary: str,
+        turns: int,
+        timed_out: bool,
+        cost_usd: float,
+        api_calls: int,
+    ) -> None:
+        self._memory.emit_event("subagent.completed", {
+            "agent_type": agent_type,
+            "task": task[:500],
+            "result_summary": result_summary[:500],
+            "turns": turns,
+            "timed_out": timed_out,
+            "cost_usd": cost_usd,
+            "api_calls": api_calls,
+        })
+
     def on_record_tool_call(
         self,
         *,
