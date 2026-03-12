@@ -52,7 +52,199 @@ The formatter already does lossless field-level extraction for the **presentatio
 
 ---
 
-## 2. Why the Original Summarisation Failed
+## 2. How the Pipeline Works — Step by Step
+
+### Step 1: The MCP server produces two parallel representations
+
+Every TypeScript MCP server in this project returns **both** a `content` block (human-readable prose) and a `structuredContent` object (typed JSON) in the same response. They are independent representations of the same data.
+
+`bash.ts` lines 56–60:
+
+```typescript
+return {
+    structuredContent: { stdout, stderr, exit_code, timed_out },
+    content: [{ type: "text", text: textParts.join("\n") || "(no output)" }],
+    isError: result.exit_code !== 0 || result.timed_out,
+};
+```
+
+`web-search.ts` lines 118–121:
+
+```typescript
+return {
+    structuredContent: { query, results, total_results: results.length },
+    content: [{ type: "text", text: textParts.join("\n").trimEnd() }],
+};
+```
+
+The `outputSchema` declared at tool registration (e.g., `bash.ts` lines 17–22) formally types what `structuredContent` will contain. The MCP SDK validates the output against that schema before transmitting it.
+
+---
+
+### Step 2: `McpToolProxy.execute()` captures both into `ToolResult`
+
+`mcp_tool_proxy.py` lines 67–80:
+
+```python
+text_parts = [block.text for block in result.content if isinstance(block, TextContent)]
+output = "\n".join(text_parts) if text_parts else "(no output)"
+
+structured: dict[str, Any] | None = None
+if hasattr(result, "structuredContent") and result.structuredContent is not None:
+    structured = dict(result.structuredContent)
+
+return ToolResult(text=output, structured=structured)
+```
+
+After this, `ToolResult` holds both. For `web_search` returning five results:
+
+```python
+ToolResult(
+    text='Search: "python tutorials"\nResults: 5\n\n1. Real Python\n   https://realpython.com\n...',
+    structured={
+        "query": "python tutorials",
+        "results": [
+            {"title": "Real Python",  "url": "https://realpython.com",  "description": "..."},
+            {"title": "Python Docs",  "url": "https://docs.python.org", "description": "..."},
+            # 3 more rows
+        ],
+        "total_results": 5
+    }
+)
+```
+
+Both fields are exact copies of what the server sent. No transformation has occurred yet.
+
+---
+
+### Step 3: `TurnEngine` calls the formatter — this is where the paths diverge
+
+`turn_engine.py` line 301:
+
+```python
+formatted = self._formatter.format(tool_name, tool_result.text, tool_result.structured)
+```
+
+`tool_result_formatter.py` lines 46–59:
+
+```python
+def format(self, tool_name, text, structured):
+    if structured is None:
+        return text          # ← no structured data: use prose verbatim
+
+    fmt_config = self._tool_formatting.get(tool_name, self._default_format)
+    strategy = fmt_config.get("format", "json")
+
+    if strategy == "text":      return self._format_text(structured, fmt_config)
+    if strategy == "table":     return self._format_table(structured, fmt_config)
+    if strategy == "key_value": return self._format_key_value(structured)
+    return self._format_json(structured)
+```
+
+**`ToolResult.text` is only used if `structured is None`.** Once `structured` is populated, the prose string is discarded entirely — it never touches conversation history. The formatter works exclusively from the structured dict.
+
+---
+
+### Step 4: What each strategy does with the structured dict
+
+**`table` strategy — `web__web_search` config: `{ "format": "table", "max_rows": 20 }`**
+
+`_format_table()` lines 79–130:
+
+1. Scans `structured.values()` for the first `list` whose first element is a `dict` — finds `results`
+2. Slices: `rows = rows[:max_rows]` — rows beyond the limit are gone at this point
+3. Collects all keys across all retained rows as column names (insertion order)
+4. Builds a markdown table with aligned columns
+
+Output for five results:
+
+```
+| title       | url                     | description          |
+|-------------|-------------------------|----------------------|
+| Real Python | https://realpython.com  | Practical Python...  |
+| Python Docs | https://docs.python.org | Official docs...     |
+| ...         | ...                     | ...                  |
+```
+
+If there were 25 results and `max_rows: 20`, rows 21–25 are absent. Not summarised — dropped. The footer reads `[Showing 20 of 25 rows]`. This is a real token reduction: those 5 rows do not enter the context window.
+
+**`text` strategy — `filesystem__bash` config: `{ "format": "text", "field": "stdout" }`**
+
+`_format_text()` lines 66–76:
+
+```python
+field = config.get("field")   # "stdout"
+if field and field in structured:
+    return str(structured[field])
+```
+
+The structured dict is `{stdout, stderr, exit_code, timed_out}`. Only `stdout` is returned. `stderr`, `exit_code`, and `timed_out` do not enter the context. For a successful command these are usually empty/zero/false — but they are gone regardless of their values.
+
+**`json` strategy — `github__get_pr` config: `{ "format": "json" }`**
+
+```python
+return json.dumps(structured, indent=2, ensure_ascii=False, default=str)
+```
+
+The entire structured dict is serialised as pretty-printed JSON. All fields are present. No volume reduction — this strategy changes nothing about what the LLM sees except that it is valid JSON rather than prose.
+
+**`key_value` strategy — `filesystem__write_file`**
+
+```python
+for key, value in structured.items():
+    lines.append(f"{key}: {value_str}")
+```
+
+Flat `key: value` lines. Used for operations returning metadata (path, bytes written, status). Slightly more compact than JSON for shallow flat objects.
+
+---
+
+### Step 5: The formatted string continues to truncation, then into history
+
+`turn_engine.py` lines 302–303:
+
+```python
+result_text = self._truncate_tool_result(formatted, tool_name)
+result_text, was_summarized = await self._summarize_tool_result(result_text, tool_name)
+```
+
+At this point `formatted` is already a plain string — the structured dict has been consumed and is no longer referenced. Both truncation and the (disabled) LLM summarisation operate on this string.
+
+Then lines 319–323:
+
+```python
+return {
+    "type": "tool_result",
+    "tool_use_id": tool_use_id,
+    "content": result_text,
+}
+```
+
+This dict is appended to `self._messages` as a `tool` role message. `result_text` is what the LLM sees on the next API call. `ToolResult.text` and `ToolResult.structured` are both gone from this point forward.
+
+---
+
+### What this means for context window size — per strategy
+
+| Tool | Config | What enters history | What is dropped |
+|---|---|---|---|
+| `web__web_search` | `table`, `max_rows: 20` | Markdown table, ≤20 rows | Rows 21+ in full |
+| `filesystem__bash` | `text`, `field: "stdout"` | stdout string only | `stderr`, `exit_code`, `timed_out` |
+| `filesystem__read_file` | `text`, `field: "content"` | File content string only | Any metadata fields |
+| `github__get_pr` | `json` | Full JSON, all fields | Nothing |
+| `filesystem__write_file` | `key_value` | Flat key: value lines | JSON indentation overhead only |
+
+`max_rows` is the only current lever that actively reduces volume. The `text` strategy eliminates metadata fields. `json` and `key_value` change shape but not volume.
+
+---
+
+### Why the current LLM summarisation was blind to all of this
+
+`_summarize_tool_result()` operates on `result_text` — the already-formatted string output of Step 4. It never sees `ToolResult.structured`. It is trying to compress a markdown table, or a JSON blob, or a plain text string, with no knowledge of what the fields mean or which ones matter. The summarisation model sees the same string the LLM would see — it has no schema, no field names with meaning, no task context. That is why it dropped job listings. It was compressing by token count, not by semantic relevance.
+
+---
+
+## 3. Why the Original Summarisation Failed (Revisited)
 
 ADR-013 documents a production failure: a job search workflow with summarisation enabled missed job listings and their URLs compared to the same workflow with it disabled. Haiku was discarding listings it deemed less relevant — but all were required.
 
@@ -74,7 +266,7 @@ This applies to any LLM-based summarisation of unstructured results — web page
 
 ---
 
-## 3. What Changes with Structured Results
+## 4. What Changes with Structured Results
 
 Structured tool results are a different problem domain. The key distinction:
 
@@ -148,7 +340,7 @@ This is fundamentally different from unstructured summarisation because:
 
 ---
 
-## 4. What Already Works Today
+## 5. What Already Works Today
 
 The infrastructure for structured-result size reduction already exists. It is not fully wired up for context-window cost reduction, but the pieces are present:
 
@@ -168,7 +360,7 @@ The formatter currently runs before the LLM call and before the result enters hi
 
 ---
 
-## 5. The Real Problem with the Current Formatter
+## 6. The Real Problem with the Current Formatter
 
 The `ToolResultFormatter` converts structured data for **presentation** but does not optimise for **context window cost**. Specifically:
 
@@ -184,7 +376,7 @@ The `ToolResultFormatter` converts structured data for **presentation** but does
 
 ---
 
-## 6. What a Reliable Structured Summarisation Would Look Like
+## 7. What a Reliable Structured Summarisation Would Look Like
 
 Given the above analysis, "summarisation" with structured results should be reframed as **structured reduction** — lossless within its scope, declarative, config-driven, no LLM required for the common case.
 
@@ -241,7 +433,7 @@ In these cases, the extraction prompt should:
 
 ---
 
-## 7. Current LLM Summarisation — What to Do With It
+## 8. Current LLM Summarisation — What to Do With It
 
 The existing `_summarize_tool_result` in `turn_engine.py` is disabled by default and marked unreliable. Given the analysis above:
 
@@ -251,7 +443,7 @@ The existing `_summarize_tool_result` in `turn_engine.py` is disabled by default
 
 ---
 
-## 8. Recommended Approach
+## 9. Recommended Approach
 
 ### Phase 1 — Extend the formatter (no LLM, no risk)
 
@@ -285,7 +477,7 @@ This is distinct from the old summarisation: typed input → typed output, no pr
 
 ---
 
-## 9. Summary
+## 10. Summary
 
 | Approach | Reliability | LLM needed | Works with structured | Status |
 |---|---|---|---|---|
