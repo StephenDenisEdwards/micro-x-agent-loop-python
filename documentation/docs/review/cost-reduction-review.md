@@ -142,8 +142,8 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | **Code location** | `src/micro_x_agent_loop/mode_selector.py`; `src/micro_x_agent_loop/providers/` |
 | **Plan** | Listed as Tier 2 Lever #5 in `PLAN-cost-reduction.md`. No dedicated plan document. |
 | **Estimated impact** | 50–80% cost reduction for turns that don't need Sonnet capability. |
-| **Residual gaps** | (a) No classification scheme for turn complexity. (b) No per-turn model selection logic in `TurnEngine`. (c) Quality degradation risk not evaluated. (d) `Stage2Model` defaults to main model — using Haiku for classification itself would be a cheap quick win. |
-| **Action taken** | — |
+| **Residual gaps** | (a) No classification scheme for turn complexity. (b) No per-turn model selection logic in `TurnEngine`. (c) Quality degradation risk not evaluated. |
+| **Action taken** | `Stage2Model` changed from `#Model` to `claude-haiku-4-5-20251001` in `config-base.json` (2026-03-12). Classification call no longer uses the expensive main model. |
 
 ---
 
@@ -156,9 +156,9 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | **Status** | ⚠️ Partial |
 | **Review finding** | `ConciseOutputEnabled` config appends a system directive to minimise output tokens. Disabled by default. No per-turn adaptive `MaxTokens`. No measurement of actual output token distribution to know if the model is being unnecessarily verbose. |
 | **Code location** | `src/micro_x_agent_loop/system_prompt.py` |
-| **Config** | `ConciseOutputEnabled: false`, `MaxTokens: 32768` |
-| **Residual gaps** | No data on whether the model over-produces output. `MaxTokens: 32768` is generous — many turns need far fewer. Enabling `ConciseOutputEnabled` is a zero-cost configuration change worth evaluating. |
-| **Action taken** | — |
+| **Config** | `ConciseOutputEnabled: true`, `MaxTokens: 32768` |
+| **Residual gaps** | No data on whether the model over-produces output. `MaxTokens: 32768` is generous — many turns need far fewer. |
+| **Action taken** | Enabled in `config-base.json` (was already `true` at time of review). |
 
 ---
 
@@ -247,8 +247,8 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | 5 | Tool result size reduction | ⚠️ Partial | Medium — blocked on ADR-014 for real fix; hard truncation is active | — |
 | 6 | Tool result data format (ADR-014) | 🔲 Planned | **High** — blocks strategies 5, 11 | — |
 | 7 | Sub-agent delegation | ⚠️ Partial | Medium — architecture done; needs routing policy and system prompt guidance | — |
-| 8 | Per-turn model routing | 🔲 Planned | **High** — architecture ready; 50–80% saving on simple turns | — |
-| 9 | Output token reduction | ⚠️ Partial | Low — `ConciseOutputEnabled` exists but disabled; evaluate enabling | — |
+| 8 | Per-turn model routing | 🔲 Planned | **High** — architecture ready; 50–80% saving on simple turns | Stage2Model → Haiku done |
+| 9 | Output token reduction | ✅ Done | Low — `ConciseOutputEnabled` enabled in config-base.json | Enabled |
 | 10 | On-demand tool discovery | ⚠️ Partial | Low (Anthropic) / Medium (OpenAI) — provider-dependent | — |
 | 11 | Compiled mode / batch execution | 🔲 Planned | Low — Phase 4+, blocked on ADR-014 | — |
 | 12 | Batch API for broker jobs | ❌ Gap | Medium — 50% discount, natural fit for `--run` mode | — |
@@ -257,9 +257,9 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 
 ### Top Unaddressed Opportunities
 
-1. **Per-turn cost display in REPL** — metrics exist, just not surfaced. Quick win.
+1. ~~**Per-turn cost display in REPL**~~ — ✅ Done ([CLI Status Bar](../planning/PLAN-cli-status-bar.md)).
 2. **Session budget caps** — `SessionBudgetUSD` with warn/hard-stop on existing `SessionAccumulator`.
 3. **ADR-014 decision** — resolves the blocker for strategies 5, 6, 11.
 4. **Per-turn model routing** — connect Stage 2 classification output to actual model selection in `TurnEngine`.
 5. **Batch API for broker** — 50% cost reduction for all scheduled `--run` jobs, no quality tradeoff.
-6. **`Stage2Model` → Haiku** — the classification call itself uses the main model by default; routing it to Haiku is a one-line config change.
+6. ~~**`Stage2Model` → Haiku**~~ — ✅ Done (2026-03-12). Changed to `claude-haiku-4-5-20251001` in `config-base.json`.

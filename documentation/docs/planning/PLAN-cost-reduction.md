@@ -4,6 +4,8 @@
 
 **Phase 1 & 2 Completed** — Phases 1 (prompt caching, cheap compaction model) and 2 (tool result summarization, smart compaction trigger, concise output) implemented. Phase 3 (architecture) remains Planning.
 
+**Review:** [`cost-reduction-review.md`](../review/cost-reduction-review.md) — comprehensive 14-strategy review completed 2026-03-12 mapping all cost reduction strategies against current implementation. Identified 6 top unaddressed opportunities below.
+
 **Prerequisite:** [Cost Metrics Logging](PLAN-cost-metrics-logging.md) — structured metrics infrastructure required to measure ROI of all levers below.
 
 ## Problem
@@ -268,6 +270,90 @@ With `claude-sonnet-4-5-20250929` at $3/$15 per MTok (input/output):
 **Gaps:**
 - No analysis of retry frequency in production
 - No cost-aware retry policy
+
+---
+
+### Tier 0: Quick Wins from Review (2026-03-12)
+
+These items were identified by the [cost reduction review](../review/cost-reduction-review.md) as high-value, low-effort actions.
+
+#### QW-1. Stage2Model → Haiku
+
+**Impact:** The Stage 2 classification call uses the main model by default. Routing it to Haiku is a one-line config change in `config-base.json`.
+
+**Effort:** Trivial — config change only.
+
+---
+
+#### QW-2. Evaluate Enabling ConciseOutputEnabled
+
+**Impact:** Output tokens are 5× more expensive than input. `ConciseOutputEnabled` exists but is disabled by default. Evaluate enabling it and measure output token reduction.
+
+**Effort:** Trivial — config change + measurement.
+
+---
+
+#### QW-3. Sub-Agent Routing Policy
+
+**Impact:** Sub-agent architecture is fully implemented but disabled by default with no routing guidance. Adding system prompt directives for when the LLM should use `spawn_subagent` unlocks 40–70% savings on delegated tasks.
+
+**Effort:** Low — system prompt update + enable by default. See [PLAN-sub-agents.md](PLAN-sub-agents.md) Phase 2.
+
+---
+
+### Phase 2.5: Cost Visibility & Budget Enforcement
+
+#### 2.5a. Session Budget Caps
+
+**Impact:** `SessionBudgetUSD` with warn/hard-stop logic on the existing `SessionAccumulator`. Prevents runaway sessions.
+
+**Mechanism:** Add `SessionBudgetUSD` config. At each turn, check accumulated cost against budget. Warn at 80%, hard-stop at 100%. Uses existing `SessionAccumulator` in `metrics.py`.
+
+**Effort:** Low-medium — builds directly on existing metrics infrastructure.
+
+---
+
+### Phase 3: Architecture
+
+#### 3a. ADR-014 Decision (Tool Result Data Format)
+
+**Impact:** Resolves the blocker for strategies 5 (structured extraction), 6 (tool data format), and 11 (compiled mode). Recommended path: Option C (JSON from own tools, LLM fallback for third-party MCP servers).
+
+**Effort:** Decision + incremental migration of own tools to return structured JSON.
+
+---
+
+#### 3b. Per-Turn Model Routing
+
+**Impact:** 50–80% cost reduction for turns that don't need Sonnet capability. Connect Stage 2 classification output to actual model selection in `TurnEngine`.
+
+**Mechanism:** Classification scheme for turn complexity → per-turn model selection logic → quality evaluation.
+
+**Effort:** High — requires classification, routing logic, and quality benchmarking.
+
+---
+
+#### 3c. Batch API for Broker Jobs
+
+**Impact:** Anthropic Batch API charges 50% of standard pricing for async requests. Broker `--run` jobs are non-interactive and naturally compatible.
+
+**Mechanism:** (a) `AnthropicProvider` batch submission path, (b) async result polling in broker dispatcher, (c) config to opt broker jobs into batch mode.
+
+**Effort:** Medium-high — new provider path + broker integration.
+
+---
+
+## Recommended Next Actions (from Review)
+
+Ordered by effort-adjusted impact:
+
+1. **QW-1: Stage2Model → Haiku** — trivial config change
+2. **QW-2: Evaluate ConciseOutputEnabled** — trivial config change + measurement
+3. **QW-3: Sub-agent routing policy** — low effort, high impact
+4. **2.5a: Session budget caps** — low-medium effort on existing infrastructure
+5. **3a: ADR-014 decision** — unblocks 3 downstream strategies
+6. **3b: Per-turn model routing** — highest long-term savings, highest effort
+7. **3c: Batch API for broker** — 50% savings on all scheduled jobs
 
 ---
 

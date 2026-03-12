@@ -4,36 +4,50 @@ Last updated: 2026-03-12
 
 ## Priority Queue
 
-What to work on next, in order. Rationale: promotional publishing channels (now mostly complete) provided multi-channel reach. Next priority is the trigger broker - enabling scheduled and externally-triggered agent runs (cron, WhatsApp, webhooks). End-user deployment and remaining cost optimisation follow.
+What to work on next, in order. Rationale: infrastructure (metrics, broker, API server, publishing channels) is complete. Focus now shifts to **cost reduction** — the [cost reduction review](../review/cost-reduction-review.md) (2026-03-12) identified 14 strategies, 3 fully done, 6 partial, and 5 unstarted. Quick wins first, then architectural work.
 
-| Priority | Plan | Status | Why this order |
-|----------|------|--------|----------------|
-| **1** | [Cost Metrics Logging](PLAN-cost-metrics-logging.md) | **Completed** | Prerequisite for all cost work - need baseline measurements first |
-| **2** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 1 (Prompt caching, cheap compaction model) | **Completed** | Highest ROI cost levers, low effort, measurable with metrics from P1 |
-| **3** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 2 (Tool result reduction, smarter compaction, output reduction) | **Completed** | Next-highest ROI, requires per-tool data from metrics |
-| **4** | [Memory System](PLAN-claude-style-memory.md) - Phase 3 remainder | **Completed** | Event callback API + stress tests done; MCP mutation tracking extracted to own plan |
-| **5** | [Cross-Session User Memory](PLAN-cross-session-user-memory.md) | **Completed** | All phases done: read path, save_memory tool, /memory commands |
-| **6** | [LinkedIn Publishing MCP](PLAN-linkedin-publishing-mcp.md) | **Completed** | First promotional channel - highest-priority audience (senior engineers, CTOs) |
-| **7** | [Dev.to Publishing MCP](PLAN-devto-publishing-mcp.md) | **Completed** | Simplest auth (API key, no OAuth). Long-form technical content drives deep engagement and is indexable by search engines |
-| **8** | [Reddit MCP](PLAN-reddit-mcp.md) | **Blocked** | Reddit developer registration inaccessible - revisit later |
-| **9** | [X/Twitter MCP](PLAN-x-twitter-mcp.md) | **Completed** | Good reach but hostile API (PKCE auth, unstable, write-only free tier). Less bang-for-buck than dev.to/Reddit for technical audience |
-| **10** | [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | **Completed** | Community building - low value until the project has active users. Extends existing GitHub MCP server |
-| ~~11~~ | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | Replaced by Trigger Broker below - retained as reference for full gateway capabilities |
-| **11** | [Trigger Broker](PLAN-trigger-broker.md) | **Completed** | Always-on run dispatcher for cron, webhooks, messaging channels, HITL, retries |
-| **12** | [Agent API Server](PLAN-agent-api-server.md) | **Completed** | HTTP/WebSocket API, broker convergence, CLI client, Python SDK, examples |
-| **13** | [Sub-Agents](PLAN-sub-agents.md) | **Phase 1 Completed — Phase 2+ remaining** | Phase 1 done (architecture, runner, pseudo-tool). Gaps: disabled by default, no routing policy, no observability/async phases |
-| **14** | [Markdown Rendering](PLAN-markdown-rendering.md) | **Completed** | Progressive markdown rendering in CLI using rich - buffer-and-rerender pattern matching ChatGPT/Claude Code |
-| **15** | [Test Coverage 90%](PLAN-test-coverage-90.md) | **Completed** | Raised test coverage from 59% to 85% (acceptable threshold) |
-| **16** | [TypeScript Codegen Template](PLAN-typescript-codegen-template.md) | **Completed** | Migrate codegen template from Python to TypeScript - fixes Windows subprocess/venv issues |
-| **17** | [Codegen Parameterisation](PLAN-codegen-parameterisation.md) | **Completed** | Generated apps now expose typed MCP tools with manifest registration and on-demand discovery |
-| **18** | [Codegen Hardening](PLAN-codegen-hardening.md) | **Completed** | Validation/fix loop robustness and correctness fixes for the codegen server |
-| **19** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based tool routing that preserves prompt caching; do when cost data justifies it |
-| **20** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | Frictionless onboarding becomes critical once promotional channels drive traffic to the repo. Benefits from stable post-broker architecture |
-| **21** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3 (Model routing, schema optimisation) | Planning | Architectural changes, higher effort; model routing can be done in TurnEngine/Provider layer without gateway |
-| **22** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
-| **23** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | Nice-to-have, not promotional |
-| **24** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools; internal plumbing |
-| **25** | [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | **Completed** | Config.json Pricing key overlays hardcoded defaults; unknown-model warnings |
+| Priority | Plan | Status | Manual Test | Tested | Notes |
+|----------|------|--------|-------------|--------|-------|
+| **1** | [Cost Metrics Logging](PLAN-cost-metrics-logging.md) | **Completed** | — | — | Prerequisite for all cost work |
+| **2** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 1 | **Completed** | [prompt-caching](../testing/MANUAL-TEST-prompt-caching.md) · [compaction-model](../testing/MANUAL-TEST-compaction-model.md) | — | Prompt caching, cheap compaction model |
+| **3** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 2 | **Completed** | [compaction-strategy](../testing/MANUAL-TEST-compaction-strategy.md) | — | Tool result reduction, smarter compaction, output reduction |
+| **4** | [CLI Status Bar](PLAN-cli-status-bar.md) | **Completed** | — | — | Per-turn cost/token visibility in REPL |
+| **5** | [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | **Completed** | [pricing](../testing/MANUAL-TEST-pricing.md) | — | Config.json Pricing key; no hardcoded defaults |
+| **6** | [Cost Reduction](PLAN-cost-reduction.md) - QW-1: Stage2Model → Haiku | **Completed** | [stage2-haiku](../testing/MANUAL-TEST-stage2-model-haiku.md) | 🔴 | `config-base.json` → `claude-haiku-4-5-20251001` |
+| **7** | [Cost Reduction](PLAN-cost-reduction.md) - QW-2: ConciseOutputEnabled | **Completed** | [concise-output](../testing/MANUAL-TEST-concise-output.md) | 🔴 | Already enabled in `config-base.json` |
+| **8** | [Sub-Agents](PLAN-sub-agents.md) - Phase 2 | **Next** | [sub-agents](../testing/MANUAL-TEST-sub-agents.md) | 🔴 | Routing policy + enable by default. Delivers QW-3 |
+| **9** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 2.5a: Session budget caps | Planned | — | — | `SessionBudgetUSD` warn/stop on `SessionAccumulator` |
+| **10** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3a: ADR-014 decision | Planned | — | — | Unblocks 3 strategies |
+| **11** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3b: Per-turn model routing | Planning | — | — | 50–80% savings on simple turns |
+| **12** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3c: Batch API for broker | Planning | — | — | 50% discount on scheduled `--run` jobs |
+| **13** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | — | — | Provider-dependent priority (low Anthropic, high OpenAI) |
+| **14** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | — | — | Frictionless onboarding |
+| **15** | [Browser Automation](PLAN-browser-automation.md) | Planned | — | — | Phase 3 of web tooling |
+| **16** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | — | — | Nice-to-have |
+| **17** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | — | — | Opt-in checkpoint tracking |
+| — | [Reddit MCP](PLAN-reddit-mcp.md) | **Blocked** | — | — | Reddit dev registration inaccessible |
+| — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
+
+<details>
+<summary>Completed priorities (click to expand)</summary>
+
+| Priority | Plan | Status |
+|----------|------|--------|
+| — | [Memory System](PLAN-claude-style-memory.md) | Completed |
+| — | [Cross-Session User Memory](PLAN-cross-session-user-memory.md) | Completed |
+| — | [LinkedIn Publishing MCP](PLAN-linkedin-publishing-mcp.md) | Completed |
+| — | [Dev.to Publishing MCP](PLAN-devto-publishing-mcp.md) | Completed |
+| — | [X/Twitter MCP](PLAN-x-twitter-mcp.md) | Completed |
+| — | [GitHub Discussions Tool](PLAN-github-discussions-tool.md) | Completed |
+| — | [Trigger Broker](PLAN-trigger-broker.md) | Completed |
+| — | [Agent API Server](PLAN-agent-api-server.md) | Completed |
+| — | [Markdown Rendering](PLAN-markdown-rendering.md) | Completed |
+| — | [Test Coverage 90%](PLAN-test-coverage-90.md) | Completed |
+| — | [TypeScript Codegen Template](PLAN-typescript-codegen-template.md) | Completed |
+| — | [Codegen Parameterisation](PLAN-codegen-parameterisation.md) | Completed |
+| — | [Codegen Hardening](PLAN-codegen-hardening.md) | Completed |
+
+</details>
 
 
 ---
@@ -42,13 +56,14 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 
 | Status | Count |
 |--------|-------|
-| Completed | 29 |
+| Completed | 31 |
+| Next (cost reduction) | 1 |
 | Phase 1 Completed (remaining phases pending) | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
-| Planning | 1 |
-| Planned | 3 |
+| Planning | 2 |
+| Planned | 4 |
 
 ## All Plans
 
@@ -61,7 +76,7 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | [Interview Assist MCP](PLAN-interview-assist-mcp.md) | Completed | Phase 1 + STT extension, updated 2026-02-19 |
 | [Memory System](PLAN-claude-style-memory.md) | Completed | All phases done. MCP mutation tracking extracted to [own plan](PLAN-mcp-mutation-tracking.md) |
 | [Continuous Voice Agent](PLAN-continuous-voice-agent.md) | Completed | Phases 1-4 done. Optional future hardening: debounce, noise filters, crash recovery, confidence gating |
-| [Cost Reduction](PLAN-cost-reduction.md) | Phase 1 & 2 Completed | 12 prioritised cost levers; Phases 1-2 implemented, Phase 3 planned |
+| [Cost Reduction](PLAN-cost-reduction.md) | Phase 1 & 2 Completed — Quick wins + Phase 3 next | 14 strategies reviewed ([cost-reduction-review.md](../review/cost-reduction-review.md)): 3 done, 6 partial, 5 unstarted. Quick wins (Stage2Model, ConciseOutput, sub-agent routing) are next, then session budgets, ADR-014, per-turn routing, batch API |
 | [Cost Metrics Logging](PLAN-cost-metrics-logging.md) | Completed | Structured metrics for cost analysis - prerequisite for cost reduction. See [DESIGN-cost-metrics.md](../design/DESIGN-cost-metrics.md) |
 | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
 | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | |

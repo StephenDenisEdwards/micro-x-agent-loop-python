@@ -35,7 +35,7 @@
   "ConciseOutputEnabled": true,
   "ModeAnalysisEnabled": true,
   "Stage2ClassificationEnabled": true,
-  "Stage2Model": "#Model",
+  "Stage2Model": "claude-haiku-4-5-20251001",
   "SubAgentsEnabled": false,
   "SubAgentModel": "#Model",
   "SubAgentTimeout": 120,
