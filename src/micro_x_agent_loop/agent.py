@@ -93,6 +93,8 @@ class Agent:
         # Sub-agents
         self._sub_agent_runner: SubAgentRunner | None = None
         if config.sub_agents_enabled:
+            if not config.sub_agent_model:
+                raise ValueError("SubAgentModel must be set in config when SubAgentsEnabled is true")
             from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
             self._system_prompt += _SUBAGENT_DIRECTIVE
             self._sub_agent_runner = SubAgentRunner(
@@ -160,7 +162,9 @@ class Agent:
         # Mode analysis
         self._mode_analysis_enabled = config.mode_analysis_enabled
         self._stage2_classification_enabled = config.stage2_classification_enabled
-        self._stage2_model = config.stage2_model or config.model
+        if config.stage2_classification_enabled and not config.stage2_model:
+            raise ValueError("Stage2Model must be set in config when Stage2ClassificationEnabled is true")
+        self._stage2_model = config.stage2_model
         self._working_directory = config.working_directory
 
         # Tool result summarization

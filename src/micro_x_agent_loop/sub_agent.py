@@ -227,11 +227,11 @@ class SubAgentRunner:
 
         type_config = _TYPE_CONFIGS[agent_type]
 
-        # Determine model: general inherits parent, others use sub_agent_model or parent
+        # Determine model: general inherits parent, others use sub_agent_model
         if agent_type == SubAgentType.GENERAL:
             model = self._parent_model
         else:
-            model = self._sub_agent_model or self._parent_model
+            model = self._sub_agent_model
 
         # Filter tools
         tools = _filter_tools(self._parent_tools, type_config)
