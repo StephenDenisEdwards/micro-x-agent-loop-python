@@ -7,6 +7,7 @@ This folder contains code review documents for micro-x-agent-loop-python. Each r
 | Document | Topic | Date | Open Items |
 |----------|-------|------|------------|
 | [cost-reduction-review.md](cost-reduction-review.md) | Cost reduction strategies across all LLM API spend levers | 2026-03-12 | 6 high-priority items unaddressed (see summary table) |
+| [tool-result-summarisation-investigation.md](tool-result-summarisation-investigation.md) | Deep investigation — tool result summarisation with structured results | 2026-03-12 | Phase 1 formatter extensions not yet built |
 
 ### Manual Test Plans
 
