@@ -3,8 +3,8 @@ set -e
 
 # -- Config: create config.json if missing --
 if [ ! -f config.json ]; then
-    echo "No config.json found — creating default (config-starter.json)"
-    echo '{"ConfigFile": "config-starter.json"}' > config.json
+    echo "No config.json found — creating default (config-base.json)"
+    echo '{"ConfigFile": "config-base.json"}' > config.json
 fi
 
 # -- Python: create venv and install --

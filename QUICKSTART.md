@@ -69,7 +69,7 @@ run.bat
 
 That's it — one command. The script handles everything automatically:
 
-1. **Config:** If no `config.json` exists, creates one pointing to `config-starter.json` (filesystem + web tools, sensible defaults).
+1. **Config:** If no `config.json` exists, creates one pointing to `config-base.json` (all settings, MCP servers, and pricing data).
 2. **Python:** Creates a virtual environment (`.venv/`), installs all dependencies via pip.
 3. **MCP servers:** If TypeScript MCP servers haven't been built yet, runs `npm install && npm run build` automatically (requires Node.js).
 4. **Subsequent runs:** Detects everything is already set up, skips straight to starting the agent.
@@ -125,11 +125,11 @@ you>
 
 Type a natural-language prompt and press Enter. The agent will stream its response and call tools as needed. Type `exit` or `quit` to stop.
 
-The starter config enables filesystem and web tools. Add more MCP servers to `config.json` as needed (see [Adding more tools](#adding-more-tools) below). If a server fails to connect, a warning is logged but the agent starts normally with the remaining servers.
+The base config enables all built-in MCP servers. If a server fails to connect (e.g. missing Node.js binary or API key), a warning is logged but the agent starts normally with the remaining servers.
 
 ### Adding more tools
 
-Edit your `config.json` (or `config-starter.json`) to add MCP servers. Each server is a block under `McpServers`:
+Edit your `config.json` to add MCP servers. Each server is a block under `McpServers`:
 
 ```json
 {
@@ -325,7 +325,7 @@ App settings live in `config.json` in the project root:
 | `LogConsumers` | Array of log outputs (`console` and/or `file`) | `[]` |
 | `McpServers` | MCP server configurations (see [MCP docs](documentation/docs/operations/config.md#mcpservers)) | `{}` |
 
-All settings are optional — sensible defaults are used when missing. See [Configuration Reference](documentation/docs/operations/config.md) for full details.
+All settings are defined in `config-base.json`. Create a variant config with `"Base": "config-base.json"` to override specific settings. See [Configuration Reference](documentation/docs/operations/config.md) for full details.
 
 Secrets (API keys) stay in `.env` and are loaded by python-dotenv.
 

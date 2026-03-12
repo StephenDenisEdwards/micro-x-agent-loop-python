@@ -2,8 +2,8 @@
 
 REM Config: create config.json if missing
 if not exist config.json (
-    echo No config.json found - creating default ^(config-starter.json^)
-    echo ^{"ConfigFile": "config-starter.json"^} > config.json
+    echo No config.json found - creating default ^(config-base.json^)
+    echo ^{"ConfigFile": "config-base.json"^} > config.json
 )
 
 REM Python: create venv and install
