@@ -1,6 +1,6 @@
 # Sub-Agents — Manual Test Plan
 
-Step-by-step walkthrough of every sub-agent feature (Phase 1). Run these from the project root directory using the interactive REPL.
+Step-by-step walkthrough of every sub-agent feature (Phase 1 + Phase 2a routing policy). Run these from the project root directory using the interactive REPL.
 
 > **Prerequisites**
 > - Python 3.11+ with the agent installed (`pip install -e .`)
@@ -262,7 +262,7 @@ This tests robustness — the LLM might pass an invalid type. Not directly trigg
 python -m pytest tests/test_sub_agent.py -v
 ```
 
-**Expected:** All 27 tests pass, including the edge case where an invalid type defaults to `explore`.
+**Expected:** All 33 tests pass, including the edge case where an invalid type defaults to `explore`.
 
 ---
 
@@ -405,6 +405,74 @@ Send:
 
 ---
 
+## 11. Routing Policy (Phase 2a)
+
+These tests verify the enhanced routing directive — the LLM should **actively prefer** sub-agents for exploratory work without being explicitly asked.
+
+### Test 11.1: Implicit delegation for multi-file search
+
+Do **not** mention sub-agents in the prompt:
+
+```
+you> How does error handling work across the codebase? Look at the providers, turn engine, and agent modules.
+```
+
+**Expected:**
+- The agent should autonomously spawn an explore sub-agent to read multiple files
+- The agent should NOT read all files directly in its own context
+- The response should present a coherent summary from the sub-agent's findings
+
+### Test 11.2: Implicit delegation for web research
+
+```
+you> What are the current pricing tiers for the Anthropic API?
+```
+
+**Expected:**
+- The agent should spawn an explore sub-agent to do the web research
+- The sub-agent handles the web_search/web_fetch calls
+- Only the summary returns to the parent context
+
+### Test 11.3: Direct tool use for simple operations
+
+```
+you> Read config-base.json and tell me what model is configured.
+```
+
+**Expected:**
+- The agent should **NOT** spawn a sub-agent for this — it's a single file read
+- The agent reads the file directly in its own context
+- This verifies the "Do NOT delegate" rules are working
+
+### Test 11.4: Parallel delegation without explicit instruction
+
+```
+you> I need to understand both the compaction system and the metrics system. How do they work?
+```
+
+**Expected:**
+- The agent may spawn 2 explore sub-agents concurrently (one for compaction, one for metrics)
+- Or it may spawn one sub-agent for both topics — either is acceptable
+- The key test: the agent should prefer delegation over reading many files directly
+
+### Test 11.5: Default-enabled with no explicit config
+
+Start the agent with the default `config-base.json` (which now has `SubAgentsEnabled: true`):
+
+```bash
+python -m micro_x_agent_loop
+```
+
+```
+you> Search the tests directory for all test classes related to cost reduction and list them.
+```
+
+**Expected:**
+- Sub-agents work out of the box with no user configuration
+- The `spawn_subagent` tool is available and used for this multi-file search task
+
+---
+
 ## Cleanup
 
 Reset your config to the desired production settings (e.g., remove short timeout overrides from test 6.1).
@@ -440,3 +508,8 @@ Reset your config to the desired production settings (e.g., remove short timeout
 | 10.1 | Session persistence | |
 | 10.2 | API server (REST) | |
 | 10.3 | API server (WebSocket) | |
+| 11.1 | Routing: implicit delegation for multi-file search | |
+| 11.2 | Routing: implicit delegation for web research | |
+| 11.3 | Routing: direct tool use for simple ops | |
+| 11.4 | Routing: parallel delegation without instruction | |
+| 11.5 | Routing: default-enabled with no config | |

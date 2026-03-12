@@ -97,28 +97,52 @@ Do NOT use `ask_user` for routine confirmations or questions you can answer from
 _SUBAGENT_DIRECTIVE = """\
 
 
-# Sub-Agent Delegation
+# Sub-Agent Delegation — IMPORTANT
 
-You can delegate focused tasks to sub-agents using the `spawn_subagent` tool. Sub-agents run \
-in their own context window, so exploratory work (searching files, reading docs, web research) \
-does not consume your main context.
+You have the `spawn_subagent` tool to delegate tasks to sub-agents. Sub-agents run in their own \
+context window — their work does NOT consume your main context. This is critical for keeping your \
+context clean and costs low.
 
-Sub-agent types:
-- **explore** (default): Cheap, read-only. Use for searching files, reading docs, web research, \
-and any task that involves reading lots of data. Returns a concise summary.
-- **summarize**: Cheap, no tools. Use for distilling large content into key points.
-- **general**: Full capability, your model. Use for complex subtasks that need write tools.
+**You should actively prefer sub-agents for exploratory work.** The cost of a sub-agent explore \
+call (~$0.01 with Haiku) is far less than polluting your main context with large tool results \
+that trigger expensive compaction later.
 
-When to delegate:
-- Searching through many files or large codebases
-- Web research that may require multiple searches/reads
-- Reading and summarizing large documents
-- Any task where the raw data is large but the answer is small
+## Sub-agent types
 
-When NOT to delegate:
-- Simple, single-tool operations (one file read, one search)
-- Tasks where you need the raw data for your next reasoning step
-- Sequential multi-step tasks that require iterative reasoning\
+- **explore** (default): Cheap model, read-only tools. Best for searching, reading, and research.
+- **summarize**: Cheap model, no tools. Best for distilling content you already have.
+- **general**: Your model, all tools. For complex subtasks that need write access.
+
+## DELEGATE to a sub-agent when:
+
+- **Multi-file search**: "Find all usages of X" or "Search for files matching Y" — the sub-agent \
+reads many files and returns only what matters.
+- **Web research**: Any task requiring multiple web searches or fetches — raw HTML is huge.
+- **Large document reading**: Reading and extracting information from long files or multiple files.
+- **Codebase exploration**: "How does module X work?" or "What dependencies does Y have?"
+- **Data gathering**: Collecting information from multiple sources before you synthesize.
+- **Parallel research**: When you need to look up 2+ independent things, spawn multiple sub-agents \
+concurrently — they run in parallel via asyncio.gather.
+
+## Do NOT delegate when:
+
+- **Single-tool operations**: One file read, one web search — just do it directly.
+- **You need raw data**: If your next step requires the exact file contents (e.g., to edit a file), \
+read it directly so the data is in your context.
+- **Sequential reasoning**: Multi-step tasks where each step depends on the previous result.
+- **Writing/mutation**: Use the `general` type only when the sub-task genuinely needs write tools.
+
+## Examples
+
+Good delegation:
+- "Search the codebase for all references to deprecated_function" → explore
+- "Research the top 5 competitors and summarize their pricing" → explore
+- "Read these 3 long documents and extract the key decisions" → explore
+- "Summarize the conversation so far for a status update" → summarize
+
+Not worth delegating:
+- "Read config.json" → just read it directly
+- "What's in this file?" → one read_file call, do it yourself\
 """
 
 

@@ -382,5 +382,56 @@ class TestTurnEngineSubAgent(unittest.TestCase):
         self.assertIn("42 Python files", content[0]["content"])
 
 
+# ---------------------------------------------------------------------------
+# Config and directive tests
+# ---------------------------------------------------------------------------
+
+
+class TestSubAgentConfig(unittest.TestCase):
+    """Tests for sub-agent config parsing."""
+
+    def test_default_disabled(self) -> None:
+        from micro_x_agent_loop.app_config import parse_app_config
+        config = parse_app_config({})
+        self.assertFalse(config.sub_agents_enabled)
+
+    def test_enabled(self) -> None:
+        from micro_x_agent_loop.app_config import parse_app_config
+        config = parse_app_config({"SubAgentsEnabled": True})
+        self.assertTrue(config.sub_agents_enabled)
+
+    def test_provider_and_model_parsed(self) -> None:
+        from micro_x_agent_loop.app_config import parse_app_config
+        config = parse_app_config({
+            "SubAgentProvider": "anthropic",
+            "SubAgentModel": "claude-haiku-4-5-20251001",
+        })
+        self.assertEqual("anthropic", config.sub_agent_provider)
+        self.assertEqual("claude-haiku-4-5-20251001", config.sub_agent_model)
+
+
+class TestSubAgentDirective(unittest.TestCase):
+    """Tests for the sub-agent system prompt directive."""
+
+    def test_directive_contains_delegation_guidance(self) -> None:
+        from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
+        self.assertIn("DELEGATE", _SUBAGENT_DIRECTIVE)
+        self.assertIn("spawn_subagent", _SUBAGENT_DIRECTIVE)
+        self.assertIn("explore", _SUBAGENT_DIRECTIVE)
+        self.assertIn("summarize", _SUBAGENT_DIRECTIVE)
+        self.assertIn("general", _SUBAGENT_DIRECTIVE)
+
+    def test_directive_contains_examples(self) -> None:
+        from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
+        self.assertIn("Examples", _SUBAGENT_DIRECTIVE)
+        self.assertIn("Good delegation", _SUBAGENT_DIRECTIVE)
+        self.assertIn("Not worth delegating", _SUBAGENT_DIRECTIVE)
+
+    def test_directive_contains_cost_motivation(self) -> None:
+        from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
+        self.assertIn("cost", _SUBAGENT_DIRECTIVE.lower())
+        self.assertIn("context", _SUBAGENT_DIRECTIVE.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

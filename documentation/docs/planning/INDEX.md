@@ -15,7 +15,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | **5** | [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | **Completed** | [pricing](../testing/MANUAL-TEST-pricing.md) | — | Config.json Pricing key; no hardcoded defaults |
 | **6** | [Cost Reduction](PLAN-cost-reduction.md) - QW-1: Stage2Model → Haiku | **Completed** | [stage2-haiku](../testing/MANUAL-TEST-stage2-model-haiku.md) | 🔴 | `config-base.json` → `claude-haiku-4-5-20251001` |
 | **7** | [Cost Reduction](PLAN-cost-reduction.md) - QW-2: ConciseOutputEnabled | **Completed** | [concise-output](../testing/MANUAL-TEST-concise-output.md) | 🔴 | Already enabled in `config-base.json` |
-| **8** | [Sub-Agents](PLAN-sub-agents.md) - Phase 2 | **Next** | [sub-agents](../testing/MANUAL-TEST-sub-agents.md) | 🔴 | Routing policy + enable by default. Delivers QW-3 |
+| **8** | [Sub-Agents](PLAN-sub-agents.md) - Phase 2a (routing policy, enabled) | **Completed** | [sub-agents](../testing/MANUAL-TEST-sub-agents.md) | 🔴 | Routing directive rewritten, enabled by default. Delivers QW-3 |
 | **9** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 2.5a: Session budget caps | Planned | — | — | `SessionBudgetUSD` warn/stop on `SessionAccumulator` |
 | **10** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3a: ADR-014 decision | Planned | — | — | Unblocks 3 strategies |
 | **11** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3b: Per-turn model routing | Planning | — | — | 50–80% savings on simple turns |
@@ -56,9 +56,8 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 
 | Status | Count |
 |--------|-------|
-| Completed | 31 |
-| Next (cost reduction) | 1 |
-| Phase 1 Completed (remaining phases pending) | 1 |
+| Completed | 32 |
+| Phase 2a Completed (remaining phases pending) | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
@@ -86,7 +85,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Superseded | Replaced by [Trigger Broker](PLAN-trigger-broker.md) - retained as reference for full gateway capabilities |
 | [Trigger Broker](PLAN-trigger-broker.md) | Completed | Always-on run dispatcher with cron, webhooks, messaging channels, HITL, retries, missed-run recovery, auth |
 | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based routing preserving prefix caching. See [DESIGN](../design/DESIGN-cache-preserving-tool-routing.md) |
-| [Sub-Agents](PLAN-sub-agents.md) | Phase 1 Completed — Phase 2+ remaining | Phase 1 done (runner, pseudo-tool, types, tests). Remaining: routing policy, observability, async via broker, custom types |
+| [Sub-Agents](PLAN-sub-agents.md) | Phase 2a Completed — Phase 2b+ remaining | Phase 1 (architecture) + Phase 2a (routing policy, enabled by default) done. Remaining: observability, async via broker, custom types |
 | [Codegen Prompt Discipline](PLAN-codegen-prompt-discipline.md) | Completed | Tightened codegen prompt, added infra file deny, compact output format |
 | [LinkedIn Publishing MCP](PLAN-linkedin-publishing-mcp.md) | Completed | Draft-post, draft-article, publish-draft tools |
 | [Dev.to Publishing MCP](PLAN-devto-publishing-mcp.md) | Completed | Long-form blog publishing via Forem API. Completed 2026-03-06 |

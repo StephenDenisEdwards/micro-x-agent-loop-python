@@ -38,7 +38,7 @@
   "Stage2ClassificationEnabled": true,
   "Stage2Provider": "anthropic",
   "Stage2Model": "claude-haiku-4-5-20251001",
-  "SubAgentsEnabled": false,
+  "SubAgentsEnabled": true,
   "SubAgentProvider": "anthropic",
   "SubAgentModel": "#Model",
   "SubAgentTimeout": 120,

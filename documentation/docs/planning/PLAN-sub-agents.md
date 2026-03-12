@@ -1,13 +1,11 @@
 # Plan: Sub-Agent Architecture
 
-**Status:** Phase 1 Completed — Phase 2+ remaining
-**Date:** 2026-03-09
+**Status:** Phase 2 Completed (routing policy + enable by default) — Phase 3+ remaining
+**Date:** 2026-03-12
 
 ### Remaining Gaps
 
-- **No default task routing policy** — the LLM has the `spawn_subagent` tool but no guidance on when to prefer it over direct tool use. Needs system prompt examples or heuristic triggers.
-- **Disabled by default** — `SubAgentsEnabled: false`. No evaluation data to justify enabling.
-- **Phase 2 (Observability)** — metrics aggregation, memory tracking, and turn limit tuning not started.
+- **Phase 2 (Observability)** — metrics aggregation into parent session, memory tracking of sub-agent runs, turn limit tuning based on real usage data. Not started.
 - **Phase 3 (Async)** — `spawn_background_task` via broker not implemented.
 - **Phase 4 (Advanced)** — custom agent types, mode selector integration, resume not started.
 **Goal:** Enable the main agent to delegate focused tasks to lightweight, disposable sub-agents with isolated contexts, restricted tools, and optionally cheaper models.
@@ -321,12 +319,22 @@ Parent Agent
 5. **Config** — `SubAgentsEnabled` (default false), `SubAgentModel`, `SubAgentTimeout`, `SubAgentMaxTurns`, `SubAgentMaxTokens`
 6. **Tests** — 27 tests covering tool filtering, schema, runner execution, model selection, TurnEngine integration
 
-### Phase 2 — Observability and persistence (2-3 days)
+### Phase 2a — Routing policy and enable by default ✅ Completed (2026-03-12)
 
-6. **Metrics aggregation** — sub-agent token usage and cost rolled up to parent session
-7. **Channel integration** — emit sub-agent progress events through parent's AgentChannel (tool_started/completed plus optional streaming)
-8. **Memory tracking** — log sub-agent runs in events table (parent session, type, prompt, result summary, cost)
-9. **Turn limit and timeout tuning** — based on real usage data from Phase 1
+5. **Enhanced routing directive** — `_SUBAGENT_DIRECTIVE` in `system_prompt.py` rewritten with:
+   - Explicit cost motivation (sub-agent explore ~$0.01 vs polluting main context)
+   - Clear DELEGATE/DO NOT delegate rules with specific task categories
+   - Concrete examples of good and bad delegation
+   - Guidance for parallel sub-agent spawning
+6. **Enabled by default** — `SubAgentsEnabled: true` in `config-base.json`
+7. **Tests** — 6 new tests: config parsing (3), directive content validation (3)
+
+### Phase 2b — Observability and persistence (2-3 days)
+
+8. **Metrics aggregation** — sub-agent token usage and cost rolled up to parent session
+9. **Channel integration** — emit sub-agent progress events through parent's AgentChannel (tool_started/completed plus optional streaming)
+10. **Memory tracking** — log sub-agent runs in events table (parent session, type, prompt, result summary, cost)
+11. **Turn limit and timeout tuning** — based on real usage data from Phase 2a
 
 ### Phase 3 — Async sub-agents via broker (3-5 days)
 

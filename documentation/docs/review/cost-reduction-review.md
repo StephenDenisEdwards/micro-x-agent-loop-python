@@ -121,13 +121,13 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 
 | Attribute | Detail |
 |-----------|--------|
-| **Status** | ⚠️ Partial |
-| **Review finding** | Architecture fully implemented: `SubAgentRunner`, `spawn_subagent` pseudo-tool, configurable sub-agent model and limits. Disabled by default (`SubAgentsEnabled: false`). No default task routing policy — agent doesn't automatically delegate. |
-| **Code location** | `src/micro_x_agent_loop/sub_agent.py`; `src/micro_x_agent_loop/agent.py` lines 94–108 |
-| **Config** | `SubAgentsEnabled`, `SubAgentModel`, `SubAgentTimeout: 30`, `SubAgentMaxTurns: 15`, `SubAgentMaxTokens: 32768` |
+| **Status** | ✅ Done |
+| **Review finding** | Architecture fully implemented: `SubAgentRunner`, `spawn_subagent` pseudo-tool, configurable sub-agent model and limits. Now enabled by default with comprehensive routing directive. |
+| **Code location** | `src/micro_x_agent_loop/sub_agent.py`; `src/micro_x_agent_loop/agent.py` lines 94–108; `src/micro_x_agent_loop/system_prompt.py` (`_SUBAGENT_DIRECTIVE`) |
+| **Config** | `SubAgentsEnabled: true`, `SubAgentModel`, `SubAgentTimeout: 120`, `SubAgentMaxTurns: 15`, `SubAgentMaxTokens: 4096` |
 | **Estimated impact** | 40–70% cost reduction for delegated sub-tasks. |
-| **Residual gaps** | No guidance for when the LLM should use `spawn_subagent`. No default policy routing simple exploration tasks to sub-agents. Needs system prompt directive and evaluation of task types that benefit from delegation. |
-| **Action taken** | — |
+| **Residual gaps** | Observability (metrics aggregation, memory tracking) not yet implemented (Phase 2b). No formal evaluation of delegation quality with real usage data. |
+| **Action taken** | Enabled by default in `config-base.json`. `_SUBAGENT_DIRECTIVE` rewritten with explicit routing policy, cost motivation, DELEGATE/DO NOT rules, and concrete examples (2026-03-12). |
 
 ---
 
@@ -246,7 +246,7 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | 4 | Cost tracking and visibility | ⚠️ Partial | **High** — REPL display + budget caps are quick wins on existing infrastructure | — |
 | 5 | Tool result size reduction | ⚠️ Partial | Medium — blocked on ADR-014 for real fix; hard truncation is active | — |
 | 6 | Tool result data format (ADR-014) | 🔲 Planned | **High** — blocks strategies 5, 11 | — |
-| 7 | Sub-agent delegation | ⚠️ Partial | Medium — architecture done; needs routing policy and system prompt guidance | — |
+| 7 | Sub-agent delegation | ✅ Done | Enabled by default, routing directive with examples | Routing policy + enabled (2026-03-12) |
 | 8 | Per-turn model routing | 🔲 Planned | **High** — architecture ready; 50–80% saving on simple turns | Stage2Model → Haiku done |
 | 9 | Output token reduction | ✅ Done | Low — `ConciseOutputEnabled` enabled in config-base.json | Enabled |
 | 10 | On-demand tool discovery | ⚠️ Partial | Low (Anthropic) / Medium (OpenAI) — provider-dependent | — |
