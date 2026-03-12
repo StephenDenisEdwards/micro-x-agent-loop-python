@@ -83,6 +83,7 @@ class AppConfig:
     sub_agent_max_tokens: int
     # Display
     markdown_rendering_enabled: bool
+    status_bar_enabled: bool
 
 
 def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
@@ -251,6 +252,7 @@ def parse_app_config(config: dict) -> AppConfig:
         sub_agent_max_turns=int(config.get("SubAgentMaxTurns", DEFAULT_SUBAGENT_MAX_TURNS)),
         sub_agent_max_tokens=int(config.get("SubAgentMaxTokens", DEFAULT_SUBAGENT_MAX_TOKENS)),
         markdown_rendering_enabled=_to_bool(config.get("MarkdownRenderingEnabled", True), default=True),
+        status_bar_enabled=_to_bool(config.get("StatusBarEnabled", True), default=True),
     )
 
 

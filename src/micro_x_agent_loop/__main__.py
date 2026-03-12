@@ -199,7 +199,7 @@ def _print_startup_banner() -> None:
     print()
 
 
-def _create_prompt_session():
+def _create_prompt_session(toolbar_fn=None):
     """Build the interactive prompt_toolkit session."""
     from prompt_toolkit import PromptSession
     from prompt_toolkit.formatted_text import HTML
@@ -217,12 +217,21 @@ def _create_prompt_session():
         """Alt+Enter inserts a newline."""
         event.current_buffer.insert_text("\n")
 
-    return PromptSession(
-        message=HTML("<b>you&gt; </b>"),
-        multiline=True,
-        key_bindings=bindings,
-        prompt_continuation=".... ",
-    )
+    kwargs: dict = {
+        "message": HTML("<b>you&gt; </b>"),
+        "multiline": True,
+        "key_bindings": bindings,
+        "prompt_continuation": ".... ",
+    }
+    if toolbar_fn is not None:
+        from prompt_toolkit.styles import Style
+
+        kwargs["bottom_toolbar"] = toolbar_fn
+        kwargs["style"] = Style.from_dict({
+            "bottom-toolbar": "bg:#333333 #aaaaaa",
+        })
+
+    return PromptSession(**kwargs)
 
 
 async def _shutdown_runtime(runtime) -> None:
@@ -411,10 +420,25 @@ async def main() -> None:
     # ESC key listener for task interruption.
     _esc_watcher = _EscWatcher()
 
+    # Build toolbar function if status bar is enabled.
+    toolbar_fn = None
+    if app.status_bar_enabled:
+        accumulator = agent.session_accumulator
+
+        def toolbar_fn():
+            from prompt_toolkit.formatted_text import HTML
+
+            text = accumulator.format_toolbar()
+            # Escape angle brackets for HTML formatting
+            text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            return HTML(f" <b>{text}</b>")
+
     session = None
     try:
         logger.info("Creating prompt_toolkit session...")
-        session = await asyncio.wait_for(asyncio.to_thread(_create_prompt_session), timeout=5.0)
+        session = await asyncio.wait_for(
+            asyncio.to_thread(_create_prompt_session, toolbar_fn), timeout=5.0
+        )
         logger.info("PromptSession created, entering REPL loop...")
     except TimeoutError:
         logger.warning("prompt_toolkit setup timed out; falling back to basic console input")
@@ -449,6 +473,11 @@ async def main() -> None:
                     print("\nassistant> [Interrupted]")
                 finally:
                     _esc_watcher.stop()
+                # Fallback: print cost line when no status bar (no prompt_toolkit)
+                if session is None and app.status_bar_enabled:
+                    toolbar_text = agent.session_accumulator.format_toolbar()
+                    if toolbar_text:
+                        print(f"  [{toolbar_text}]")
                 print("\n")
             except Exception as ex:
                 logger.error(f"Unhandled error: {ex}")

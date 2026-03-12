@@ -581,6 +581,10 @@ class Agent:
     def active_session_id(self) -> str | None:
         return self._memory.active_session_id
 
+    @property
+    def session_accumulator(self) -> SessionAccumulator:
+        return self._session_accumulator
+
     # Backward-compatible wrappers for existing tests.
     async def _handle_session_command(self, command: str) -> None:
         await self._command_handler.handle_session(command)

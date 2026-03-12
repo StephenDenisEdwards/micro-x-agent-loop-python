@@ -591,5 +591,20 @@ class AllNewConfigFieldsTests(unittest.TestCase):
         self.assertTrue(config.concise_output_enabled)
 
 
+# ---------------------------------------------------------------------------
+# Feature 6: CLI Status Bar
+# ---------------------------------------------------------------------------
+
+
+class StatusBarConfigTests(unittest.TestCase):
+    def test_default_enabled(self) -> None:
+        config = parse_app_config({})
+        self.assertTrue(config.status_bar_enabled)
+
+    def test_disabled(self) -> None:
+        config = parse_app_config({"StatusBarEnabled": False})
+        self.assertFalse(config.status_bar_enabled)
+
+
 if __name__ == "__main__":
     unittest.main()

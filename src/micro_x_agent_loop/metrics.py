@@ -258,3 +258,31 @@ class SessionAccumulator:
                     f"{cache_str}  ${c['cost_usd']:.4f}"
                 )
         return "\n".join(lines)
+
+    def format_toolbar(self) -> str:
+        """One-line cost summary for the CLI status bar."""
+        parts = [f"${self.total_cost_usd:.3f}"]
+        parts.append(f"T{self.total_turns}")
+        parts.append(f"{self.total_input_tokens:,} in")
+        parts.append(f"{self.total_output_tokens:,} out")
+
+        total_input = self.total_input_tokens + self.total_cache_read_tokens
+        if total_input > 0 and self.total_cache_read_tokens > 0:
+            hit_rate = self.total_cache_read_tokens / total_input * 100
+            parts.append(f"cache {hit_rate:.0f}%")
+
+        if self.model:
+            parts.append(_short_model_name(self.model))
+
+        return " \u2502 ".join(parts)
+
+
+def _short_model_name(model: str) -> str:
+    """Shorten model ID for toolbar display."""
+    for prefix in ("claude-", "anthropic/"):
+        if model.startswith(prefix):
+            model = model[len(prefix):]
+    # Strip date suffix (-YYYYMMDD)
+    if len(model) > 9 and model[-8:].isdigit() and model[-9] == "-":
+        model = model[:-9]
+    return model

@@ -2,6 +2,7 @@ import unittest
 
 from micro_x_agent_loop.metrics import (
     SessionAccumulator,
+    _short_model_name,
     build_api_call_metric,
     build_compaction_metric,
     build_session_summary_metric,
@@ -127,6 +128,66 @@ class SessionAccumulatorTests(unittest.TestCase):
         self.assertEqual(1, metric["total_api_calls"])
         self.assertEqual(1, metric["total_tool_calls"])
         self.assertIn("read_file", metric["tool_call_counts"])
+
+
+class FormatToolbarTests(unittest.TestCase):
+    def test_basic(self) -> None:
+        acc = SessionAccumulator(session_id="s1")
+        acc.total_turns = 3
+        usage = UsageResult(
+            input_tokens=2450,
+            output_tokens=1200,
+            cache_read_input_tokens=1800,
+            duration_ms=3000.0,
+            model="claude-sonnet-4-20250514",
+            provider="anthropic",
+        )
+        acc.add_api_call(usage)
+        toolbar = acc.format_toolbar()
+        self.assertIn("T3", toolbar)
+        self.assertIn("2,450 in", toolbar)
+        self.assertIn("1,200 out", toolbar)
+        self.assertIn("cache ", toolbar)
+        self.assertIn("sonnet-4", toolbar)
+        self.assertIn("$", toolbar)
+
+    def test_no_cache(self) -> None:
+        acc = SessionAccumulator(session_id="s1")
+        acc.total_turns = 1
+        usage = UsageResult(
+            input_tokens=100,
+            output_tokens=50,
+            duration_ms=500.0,
+            model="gpt-4.1-mini",
+            provider="openai",
+        )
+        acc.add_api_call(usage)
+        toolbar = acc.format_toolbar()
+        self.assertNotIn("cache", toolbar)
+        self.assertIn("gpt-4.1-mini", toolbar)
+
+    def test_zero_turns(self) -> None:
+        acc = SessionAccumulator(session_id="s1")
+        toolbar = acc.format_toolbar()
+        self.assertIn("$0.000", toolbar)
+        self.assertIn("T0", toolbar)
+        self.assertIn("0 in", toolbar)
+        self.assertIn("0 out", toolbar)
+        self.assertNotIn("cache", toolbar)
+
+
+class ShortModelNameTests(unittest.TestCase):
+    def test_anthropic_sonnet(self) -> None:
+        self.assertEqual("sonnet-4", _short_model_name("claude-sonnet-4-20250514"))
+
+    def test_anthropic_haiku(self) -> None:
+        self.assertEqual("haiku-4-5", _short_model_name("claude-haiku-4-5-20251001"))
+
+    def test_openai_passthrough(self) -> None:
+        self.assertEqual("gpt-4.1-mini", _short_model_name("gpt-4.1-mini"))
+
+    def test_anthropic_prefix_no_date(self) -> None:
+        self.assertEqual("sonnet-4", _short_model_name("claude-sonnet-4"))
 
 
 if __name__ == "__main__":
