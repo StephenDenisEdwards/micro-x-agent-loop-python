@@ -2,7 +2,7 @@
 
 ## Status
 
-**Phase 1 & 2 Completed** — Phases 1 (prompt caching, cheap compaction model) and 2 (tool result summarization, smart compaction trigger, concise output) implemented. Phase 3 (architecture) remains Planning.
+**Phase 1 & 2 Completed** — Phases 1 (prompt caching, cheap compaction model) and 2 (tool result summarization, smart compaction trigger, concise output) implemented. Phase 3a (ADR-014) and 3b (per-turn routing) completed. Phase 3c (Batch API) dropped — incompatible with multi-turn agentic loops.
 
 **Review:** [`cost-reduction-review.md`](../review/cost-reduction-review.md) — comprehensive 14-strategy review completed 2026-03-12 mapping all cost reduction strategies against current implementation. Identified 6 top unaddressed opportunities below.
 
@@ -337,13 +337,13 @@ These items were identified by the [cost reduction review](../review/cost-reduct
 
 ---
 
-#### 3c. Batch API for Broker Jobs
+#### ~~3c. Batch API for Broker Jobs~~ — Dropped (2026-03-12)
 
-**Impact:** Anthropic Batch API charges 50% of standard pricing for async requests. Broker `--run` jobs are non-interactive and naturally compatible.
+**Original idea:** Anthropic Batch API charges 50% of standard pricing for async requests. Broker `--run` jobs were assumed to be "naturally compatible."
 
-**Mechanism:** (a) `AnthropicProvider` batch submission path, (b) async result polling in broker dispatcher, (c) config to opt broker jobs into batch mode.
+**Why dropped:** Batch API submits a single LLM request and returns one response asynchronously. Broker `--run` jobs execute full multi-turn agentic loops (LLM → tool execution → feed results back → LLM → repeat). The agent needs tool results from turn N to construct turn N+1 — Batch API cannot participate in this feedback loop. Chaining batch submissions between tool calls would turn a 6-second job into a multi-hour job with high implementation complexity for modest savings.
 
-**Effort:** Medium-high — new provider path + broker integration.
+**Conclusion:** Batch API is architecturally incompatible with agentic execution. Cost reduction for broker jobs is better served by the existing levers (prompt caching, per-turn routing, sub-agent delegation, cheap compaction).
 
 ---
 
@@ -357,7 +357,7 @@ Ordered by effort-adjusted impact:
 4. **2.5a: Session budget caps** — low-medium effort on existing infrastructure
 5. **3a: ADR-014 decision** — unblocks 3 downstream strategies
 6. **3b: Per-turn model routing** — highest long-term savings, highest effort
-7. **3c: Batch API for broker** — 50% savings on all scheduled jobs
+7. ~~**3c: Batch API for broker**~~ — Dropped (incompatible with multi-turn agentic loops)
 
 ---
 

@@ -197,15 +197,15 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 
 ## Strategy 12 — Batch API for Autonomous Jobs
 
-**Principle:** The Anthropic Batch API charges 50% of standard pricing for asynchronous requests. Scheduled `--run` jobs (broker mode) are natural candidates.
+**Principle:** The Anthropic Batch API charges 50% of standard pricing for asynchronous requests. Scheduled `--run` jobs (broker mode) were assumed to be natural candidates.
 
 | Attribute | Detail |
 |-----------|--------|
-| **Status** | ❌ Gap |
-| **Review finding** | Not implemented and not in any planning document. The broker's `--run` mode is non-interactive and therefore compatible with async batch processing. No architectural support exists for accumulating requests or polling batch results. |
+| **Status** | ❌ Dropped |
+| **Review finding** | **Architecturally incompatible.** Batch API submits a single LLM request and returns one response asynchronously — it cannot participate in multi-turn agentic loops. Broker `--run` jobs execute full agent loops (LLM → tool execution → feed results → LLM → repeat), requiring tool results from turn N to construct turn N+1. Chaining batch submissions between tool calls would turn a 6-second job into a multi-hour job with high complexity for modest savings. |
 | **Code location** | `src/micro_x_agent_loop/broker/` |
-| **Residual gaps** | Requires: (a) `AnthropicProvider` batch submission path, (b) async result polling in broker dispatcher, (c) config to opt broker jobs into batch mode. Medium-to-high architectural effort. |
-| **Action taken** | — |
+| **Residual gaps** | None — dropped as infeasible. |
+| **Action taken** | Dropped (2026-03-12). Batch API is incompatible with agentic execution. Cost reduction for broker jobs served by existing levers (prompt caching, per-turn routing, sub-agent delegation). |
 
 ---
 
@@ -252,7 +252,7 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | 9 | Output token reduction | ✅ Done | Low — `ConciseOutputEnabled` enabled in config-base.json | Enabled |
 | 10 | On-demand tool discovery | ⚠️ Partial | Low (Anthropic) / Medium (OpenAI) — provider-dependent | — |
 | 11 | Compiled mode / batch execution | 🔲 Planned | Low — Phase 4+, ADR-014 blocker resolved | ADR-014 resolved (2026-03-12) |
-| 12 | Batch API for broker jobs | ❌ Gap | Medium — 50% discount, natural fit for `--run` mode | — |
+| 12 | Batch API for broker jobs | ❌ Dropped | — | Dropped (2026-03-12) — incompatible with multi-turn agentic loops |
 | 13 | Provider and model arbitrage | ⚠️ Partial | Low — OpenAI exists; no benchmarking or auto-switching | — |
 | 14 | Retry cost reduction | ❌ Gap | Low — worst-case only, low practical impact | — |
 
@@ -262,5 +262,5 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 2. ~~**Session budget caps**~~ — ✅ Done (2026-03-12). `SessionBudgetUSD` with warn at 80%, hard stop at 100%.
 3. ~~**ADR-014 decision**~~ — ✅ Done (2026-03-12). Option C accepted; structured tool results implemented (`ToolResult.structured`, `ToolResultFormatter`). Strategies 5 and 11 unblocked.
 4. ~~**Per-turn model routing**~~ — ✅ Done (2026-03-12). Heuristic classifier routes tool-result continuations and short messages to cheap model.
-5. **Batch API for broker** — 50% cost reduction for all scheduled `--run` jobs, no quality tradeoff.
+5. ~~**Batch API for broker**~~ — Dropped (2026-03-12). Incompatible with multi-turn agentic loops.
 6. ~~**`Stage2Model` → Haiku**~~ — ✅ Done (2026-03-12). Changed to `claude-haiku-4-5-20251001` in `config-base.json`.
