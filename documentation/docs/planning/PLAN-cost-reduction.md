@@ -301,15 +301,17 @@ These items were identified by the [cost reduction review](../review/cost-reduct
 
 ---
 
-### Phase 2.5: Cost Visibility & Budget Enforcement
+### Phase 2.5: Cost Visibility & Budget Enforcement ✅ Completed (2026-03-12)
 
 #### 2.5a. Session Budget Caps
 
 **Impact:** `SessionBudgetUSD` with warn/hard-stop logic on the existing `SessionAccumulator`. Prevents runaway sessions.
 
-**Mechanism:** Add `SessionBudgetUSD` config. At each turn, check accumulated cost against budget. Warn at 80%, hard-stop at 100%. Uses existing `SessionAccumulator` in `metrics.py`.
+**Mechanism:** `SessionBudgetUSD` config (default 0.0 = no limit). Warn at 80%, hard-stop at 100%. Status bar shows budget percentage. Warning flag resets on session reset.
 
-**Effort:** Low-medium — builds directly on existing metrics infrastructure.
+**Code:** `agent.py` (`_is_budget_exceeded`, `_check_budget_warning`), `metrics.py` (`format_toolbar` budget display), `__main__.py` (toolbar wiring).
+
+**Tests:** 12 tests: config parsing (2), toolbar display (2), budget logic (8 — exceeded/not-exceeded/warn/warn-once/reset).
 
 ---
 

@@ -606,5 +606,107 @@ class StatusBarConfigTests(unittest.TestCase):
         self.assertFalse(config.status_bar_enabled)
 
 
+# ---------------------------------------------------------------------------
+# Feature 7: Session Budget Caps
+# ---------------------------------------------------------------------------
+
+
+class SessionBudgetConfigTests(unittest.TestCase):
+    def test_default_zero(self) -> None:
+        config = parse_app_config({})
+        self.assertEqual(0.0, config.session_budget_usd)
+
+    def test_custom_budget(self) -> None:
+        config = parse_app_config({"SessionBudgetUSD": 1.50})
+        self.assertEqual(1.50, config.session_budget_usd)
+
+
+class SessionBudgetToolbarTests(unittest.TestCase):
+    def test_toolbar_no_budget(self) -> None:
+        from micro_x_agent_loop.metrics import SessionAccumulator
+        acc = SessionAccumulator()
+        acc.total_cost_usd = 0.05
+        acc.total_turns = 3
+        text = acc.format_toolbar()
+        self.assertIn("$0.050", text)
+        self.assertNotIn("/", text.split("│")[0])  # No budget fraction
+
+    def test_toolbar_with_budget(self) -> None:
+        from micro_x_agent_loop.metrics import SessionAccumulator
+        acc = SessionAccumulator()
+        acc.total_cost_usd = 0.80
+        acc.total_turns = 5
+        text = acc.format_toolbar(budget_usd=1.00)
+        self.assertIn("$0.800/$1.00", text)
+        self.assertIn("80%", text)
+
+
+class SessionBudgetAgentTests(unittest.TestCase):
+    """Tests for budget warn/stop logic in Agent."""
+
+    def _make_agent(self, budget: float = 0.0) -> "Agent":
+        from micro_x_agent_loop.agent import Agent
+        from micro_x_agent_loop.agent_config import AgentConfig
+        return Agent(AgentConfig(
+            api_key="test",
+            session_budget_usd=budget,
+            metrics_enabled=True,
+        ))
+
+    def test_no_budget_never_exceeded(self) -> None:
+        agent = self._make_agent(budget=0.0)
+        agent._session_accumulator.total_cost_usd = 999.0
+        self.assertFalse(agent._is_budget_exceeded())
+
+    def test_budget_not_exceeded_below(self) -> None:
+        agent = self._make_agent(budget=1.0)
+        agent._session_accumulator.total_cost_usd = 0.50
+        self.assertFalse(agent._is_budget_exceeded())
+
+    def test_budget_exceeded_at_limit(self) -> None:
+        agent = self._make_agent(budget=1.0)
+        agent._session_accumulator.total_cost_usd = 1.0
+        self.assertTrue(agent._is_budget_exceeded())
+
+    def test_budget_exceeded_over_limit(self) -> None:
+        agent = self._make_agent(budget=1.0)
+        agent._session_accumulator.total_cost_usd = 1.50
+        self.assertTrue(agent._is_budget_exceeded())
+
+    def test_warning_emitted_at_threshold(self) -> None:
+        agent = self._make_agent(budget=1.0)
+        agent._session_accumulator.total_cost_usd = 0.85
+        messages: list[str] = []
+        agent._system_print = lambda msg: messages.append(msg)
+        agent._check_budget_warning()
+        self.assertEqual(len(messages), 1)
+        self.assertIn("Budget", messages[0])
+        self.assertTrue(agent._budget_warning_emitted)
+
+    def test_warning_not_emitted_below_threshold(self) -> None:
+        agent = self._make_agent(budget=1.0)
+        agent._session_accumulator.total_cost_usd = 0.50
+        messages: list[str] = []
+        agent._system_print = lambda msg: messages.append(msg)
+        agent._check_budget_warning()
+        self.assertEqual(len(messages), 0)
+        self.assertFalse(agent._budget_warning_emitted)
+
+    def test_warning_emitted_only_once(self) -> None:
+        agent = self._make_agent(budget=1.0)
+        agent._session_accumulator.total_cost_usd = 0.85
+        messages: list[str] = []
+        agent._system_print = lambda msg: messages.append(msg)
+        agent._check_budget_warning()
+        agent._check_budget_warning()  # Second call
+        self.assertEqual(len(messages), 1)  # Only one warning
+
+    def test_warning_reset_on_session_reset(self) -> None:
+        agent = self._make_agent(budget=1.0)
+        agent._budget_warning_emitted = True
+        agent._on_session_reset("new-session", [])
+        self.assertFalse(agent._budget_warning_emitted)
+
+
 if __name__ == "__main__":
     unittest.main()

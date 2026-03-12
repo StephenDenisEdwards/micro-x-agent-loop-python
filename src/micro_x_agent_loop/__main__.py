@@ -436,7 +436,7 @@ async def main() -> None:
         def toolbar_fn():
             from prompt_toolkit.formatted_text import HTML
 
-            text = accumulator.format_toolbar()
+            text = accumulator.format_toolbar(budget_usd=app.session_budget_usd)
             # Escape angle brackets for HTML formatting
             text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             return HTML(f" <b>{text}</b>")
@@ -483,7 +483,7 @@ async def main() -> None:
                     _esc_watcher.stop()
                 # Fallback: print cost line when no status bar (no prompt_toolkit)
                 if session is None and app.status_bar_enabled:
-                    toolbar_text = agent.session_accumulator.format_toolbar()
+                    toolbar_text = agent.session_accumulator.format_toolbar(budget_usd=app.session_budget_usd)
                     if toolbar_text:
                         print(f"  [{toolbar_text}]")
                 print("\n")

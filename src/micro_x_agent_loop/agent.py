@@ -7,6 +7,7 @@ from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
+from micro_x_agent_loop.constants import SESSION_BUDGET_WARN_THRESHOLD
 from micro_x_agent_loop.commands.command_handler import CommandHandler
 from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.commands.router import CommandRouter
@@ -146,6 +147,10 @@ class Agent:
         self._session_accumulator = SessionAccumulator(
             session_id=config.session_id or "",
         )
+
+        # Session budget
+        self._session_budget_usd = config.session_budget_usd
+        self._budget_warning_emitted = False
 
         # Wire compaction callback if metrics enabled
         if self._metrics_enabled and isinstance(self._compaction_strategy, SummarizeCompactionStrategy):
@@ -318,6 +323,17 @@ class Agent:
             else:
                 print(format_analysis(analysis))
 
+        # Budget check — refuse to start a new turn if budget is exhausted
+        if self._is_budget_exceeded():
+            budget = self._session_budget_usd
+            spent = self._session_accumulator.total_cost_usd
+            self._system_print(
+                f"{self._line_prefix}Session budget exhausted "
+                f"(${spent:.4f} / ${budget:.2f}). "
+                f"Use /cost for details. Start a new session or increase SessionBudgetUSD."
+            )
+            return
+
         self._turn_number += 1
         self._session_accumulator.total_turns = self._turn_number
 
@@ -440,6 +456,9 @@ class Agent:
         if not self._metrics_enabled:
             return
         self._session_accumulator.add_api_call(usage, call_type=call_type, turn_number=self._turn_number)
+
+        # Budget warning at threshold (once per session)
+        self._check_budget_warning()
         metric = build_api_call_metric(
             usage,
             session_id=self._memory.active_session_id or "",
@@ -557,6 +576,7 @@ class Agent:
         self._messages = new_messages
         self._session_accumulator.reset(session_id=session_id)
         self._turn_number = 0
+        self._budget_warning_emitted = False
 
     def _on_tools_deleted(self, tool_names: list[str]) -> None:
         if not tool_names:
@@ -599,6 +619,28 @@ class Agent:
     @property
     def session_accumulator(self) -> SessionAccumulator:
         return self._session_accumulator
+
+    # -- Budget helpers --
+
+    def _is_budget_exceeded(self) -> bool:
+        """Return True if a session budget is set and spending has reached or exceeded it."""
+        if self._session_budget_usd <= 0:
+            return False
+        return self._session_accumulator.total_cost_usd >= self._session_budget_usd
+
+    def _check_budget_warning(self) -> None:
+        """Emit a one-time warning when spending crosses the warn threshold."""
+        if self._session_budget_usd <= 0 or self._budget_warning_emitted:
+            return
+        spent = self._session_accumulator.total_cost_usd
+        warn_at = self._session_budget_usd * SESSION_BUDGET_WARN_THRESHOLD
+        if spent >= warn_at:
+            self._budget_warning_emitted = True
+            pct = spent / self._session_budget_usd * 100
+            self._system_print(
+                f"{self._line_prefix}[Budget] {pct:.0f}% of session budget used "
+                f"(${spent:.4f} / ${self._session_budget_usd:.2f})"
+            )
 
     # Backward-compatible wrappers for existing tests.
     async def _handle_session_command(self, command: str) -> None:

@@ -44,6 +44,7 @@
   "SubAgentTimeout": 120,
   "SubAgentMaxTurns": 15,
   "SubAgentMaxTokens": 4096,
+  "SessionBudgetUSD": 0.0,
   "BrokerDatabase": ".micro_x/broker.db",
   "BrokerPollIntervalSeconds": 5,
   "BrokerMaxConcurrentRuns": 2,

@@ -58,6 +58,12 @@ DEFAULT_SUBAGENT_MAX_TOKENS = 4096
 DEFAULT_SUBAGENT_MODEL = ""  # empty = inherit from parent
 
 # ---------------------------------------------------------------------------
+# Budget
+# ---------------------------------------------------------------------------
+DEFAULT_SESSION_BUDGET_USD = 0.0  # 0 = no budget limit
+SESSION_BUDGET_WARN_THRESHOLD = 0.8  # Warn at 80% of budget
+
+# ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------
 CHARS_TO_TOKENS_DIVISOR = 4

@@ -8,6 +8,7 @@ from micro_x_agent_loop.constants import (
     DEFAULT_MAX_CONVERSATION_MESSAGES,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_TOOL_RESULT_CHARS,
+    DEFAULT_SESSION_BUDGET_USD,
     DEFAULT_SUBAGENT_MAX_TOKENS,
     DEFAULT_SUBAGENT_MAX_TURNS,
     DEFAULT_SUBAGENT_TIMEOUT,
@@ -62,6 +63,8 @@ class AgentConfig:
     sub_agent_timeout: int = DEFAULT_SUBAGENT_TIMEOUT
     sub_agent_max_turns: int = DEFAULT_SUBAGENT_MAX_TURNS
     sub_agent_max_tokens: int = DEFAULT_SUBAGENT_MAX_TOKENS
+    # Budget
+    session_budget_usd: float = DEFAULT_SESSION_BUDGET_USD
     # Display
     markdown_rendering_enabled: bool = True
     # AgentChannel for bidirectional client communication

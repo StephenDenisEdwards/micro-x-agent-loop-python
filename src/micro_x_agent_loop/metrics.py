@@ -263,9 +263,13 @@ class SessionAccumulator:
                 )
         return "\n".join(lines)
 
-    def format_toolbar(self) -> str:
+    def format_toolbar(self, *, budget_usd: float = 0.0) -> str:
         """One-line cost summary for the CLI status bar."""
-        parts = [f"${self.total_cost_usd:.3f}"]
+        if budget_usd > 0:
+            pct = self.total_cost_usd / budget_usd * 100
+            parts = [f"${self.total_cost_usd:.3f}/${budget_usd:.2f} ({pct:.0f}%)"]
+        else:
+            parts = [f"${self.total_cost_usd:.3f}"]
         parts.append(f"T{self.total_turns}")
         parts.append(f"{self.total_input_tokens:,} in")
         parts.append(f"{self.total_output_tokens:,} out")

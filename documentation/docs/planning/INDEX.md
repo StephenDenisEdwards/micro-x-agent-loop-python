@@ -16,7 +16,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | **6** | [Cost Reduction](PLAN-cost-reduction.md) - QW-1: Stage2Model → Haiku | **Completed** | [stage2-haiku](../testing/MANUAL-TEST-stage2-model-haiku.md) | 🔴 | `config-base.json` → `claude-haiku-4-5-20251001` |
 | **7** | [Cost Reduction](PLAN-cost-reduction.md) - QW-2: ConciseOutputEnabled | **Completed** | [concise-output](../testing/MANUAL-TEST-concise-output.md) | 🔴 | Already enabled in `config-base.json` |
 | **8** | [Sub-Agents](PLAN-sub-agents.md) - Phase 2a (routing policy, enabled) | **Completed** | [sub-agents](../testing/MANUAL-TEST-sub-agents.md) | 🔴 | Routing directive rewritten, enabled by default. Delivers QW-3 |
-| **9** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 2.5a: Session budget caps | Planned | — | — | `SessionBudgetUSD` warn/stop on `SessionAccumulator` |
+| **9** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 2.5a: Session budget caps | **Completed** | [session-budget](../testing/MANUAL-TEST-session-budget.md) | 🔴 | `SessionBudgetUSD` warn at 80%, hard stop at 100% |
 | **10** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3a: ADR-014 decision | Planned | — | — | Unblocks 3 strategies |
 | **11** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3b: Per-turn model routing | Planning | — | — | 50–80% savings on simple turns |
 | **12** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3c: Batch API for broker | Planning | — | — | 50% discount on scheduled `--run` jobs |
@@ -56,7 +56,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 
 | Status | Count |
 |--------|-------|
-| Completed | 32 |
+| Completed | 33 |
 | Phase 2a Completed (remaining phases pending) | 1 |
 | Blocked | 1 |
 | Superseded | 1 |

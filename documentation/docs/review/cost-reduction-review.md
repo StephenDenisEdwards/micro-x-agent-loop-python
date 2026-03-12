@@ -76,12 +76,12 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 
 | Attribute | Detail |
 |-----------|--------|
-| **Status** | ⚠️ Partial |
-| **Review finding** | **Tracking: Done.** Comprehensive structured metrics: per-call, per-tool, per-compaction, per-session. `SessionAccumulator` in `metrics.py`. Cache-aware cost calculation. JSON output to `metrics.jsonl`. **Visibility: Not done.** Metrics write to file only — not surfaced in the REPL after each turn. **Budget enforcement: Not done.** No `SessionBudgetUSD` config, no warnings, no hard stops. |
-| **Code location** | `src/micro_x_agent_loop/metrics.py`; `src/micro_x_agent_loop/usage.py` |
-| **Plan** | [`PLAN-cost-metrics-logging.md`](../planning/PLAN-cost-metrics-logging.md) — completed. [`PLAN-cli-status-bar.md`](../planning/PLAN-cli-status-bar.md) — planned, addresses REPL cost visibility via prompt_toolkit `bottom_toolbar`. |
-| **Residual gaps** | (a) Per-turn cost summary not shown in REPL — addressed by `PLAN-cli-status-bar.md`. (b) No `SessionBudgetUSD` with warn/stop logic — separate plan needed. |
-| **Action taken** | Plan created for CLI status bar |
+| **Status** | ✅ Done |
+| **Review finding** | **Tracking: Done.** Comprehensive structured metrics. **Visibility: Done.** CLI status bar shows per-turn cost/tokens. **Budget enforcement: Done.** `SessionBudgetUSD` with warn at 80%, hard stop at 100%. |
+| **Code location** | `src/micro_x_agent_loop/metrics.py`; `src/micro_x_agent_loop/usage.py`; `src/micro_x_agent_loop/agent.py` |
+| **Plan** | [`PLAN-cost-metrics-logging.md`](../planning/PLAN-cost-metrics-logging.md) — completed. [`PLAN-cli-status-bar.md`](../planning/PLAN-cli-status-bar.md) — completed. |
+| **Residual gaps** | None — all three components (tracking, visibility, budget enforcement) implemented. |
+| **Action taken** | CLI status bar completed. `SessionBudgetUSD` with warn/stop implemented (2026-03-12). Status bar shows budget percentage when set. |
 
 ---
 
@@ -243,7 +243,7 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | 1 | Prompt caching | ✅ Done | — | — |
 | 2 | Cheap model for compaction | ✅ Done | — | — |
 | 3 | Conversation history summarisation | ✅ Done | — | — |
-| 4 | Cost tracking and visibility | ⚠️ Partial | **High** — REPL display + budget caps are quick wins on existing infrastructure | — |
+| 4 | Cost tracking and visibility | ✅ Done | Tracking, CLI visibility, and budget caps all implemented | Session budget caps (2026-03-12) |
 | 5 | Tool result size reduction | ⚠️ Partial | Medium — blocked on ADR-014 for real fix; hard truncation is active | — |
 | 6 | Tool result data format (ADR-014) | 🔲 Planned | **High** — blocks strategies 5, 11 | — |
 | 7 | Sub-agent delegation | ✅ Done | Enabled by default, routing directive with examples | Routing policy + enabled (2026-03-12) |
@@ -258,7 +258,7 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 ### Top Unaddressed Opportunities
 
 1. ~~**Per-turn cost display in REPL**~~ — ✅ Done ([CLI Status Bar](../planning/PLAN-cli-status-bar.md)).
-2. **Session budget caps** — `SessionBudgetUSD` with warn/hard-stop on existing `SessionAccumulator`.
+2. ~~**Session budget caps**~~ — ✅ Done (2026-03-12). `SessionBudgetUSD` with warn at 80%, hard stop at 100%.
 3. **ADR-014 decision** — resolves the blocker for strategies 5, 6, 11.
 4. **Per-turn model routing** — connect Stage 2 classification output to actual model selection in `TurnEngine`.
 5. **Batch API for broker** — 50% cost reduction for all scheduled `--run` jobs, no quality tradeoff.

@@ -195,6 +195,7 @@ async def bootstrap_runtime(
             sub_agent_timeout=app.sub_agent_timeout,
             sub_agent_max_turns=app.sub_agent_max_turns,
             sub_agent_max_tokens=app.sub_agent_max_tokens,
+            session_budget_usd=app.session_budget_usd,
             channel=channel,
         )
     )

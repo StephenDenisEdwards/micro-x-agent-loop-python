@@ -16,6 +16,7 @@ from micro_x_agent_loop.constants import (
     DEFAULT_MEMORY_MAX_SESSIONS,
     DEFAULT_MEMORY_RETENTION_DAYS,
     DEFAULT_PROTECTED_TAIL_MESSAGES,
+    DEFAULT_SESSION_BUDGET_USD,
     DEFAULT_SUBAGENT_MAX_TOKENS,
     DEFAULT_SUBAGENT_MAX_TURNS,
     DEFAULT_SUBAGENT_TIMEOUT,
@@ -84,6 +85,8 @@ class AppConfig:
     sub_agent_timeout: int
     sub_agent_max_turns: int
     sub_agent_max_tokens: int
+    # Budget
+    session_budget_usd: float
     # Display
     markdown_rendering_enabled: bool
     status_bar_enabled: bool
@@ -287,6 +290,7 @@ def parse_app_config(config: dict) -> AppConfig:
         sub_agent_timeout=int(config.get("SubAgentTimeout", DEFAULT_SUBAGENT_TIMEOUT)),
         sub_agent_max_turns=int(config.get("SubAgentMaxTurns", DEFAULT_SUBAGENT_MAX_TURNS)),
         sub_agent_max_tokens=int(config.get("SubAgentMaxTokens", DEFAULT_SUBAGENT_MAX_TOKENS)),
+        session_budget_usd=float(config.get("SessionBudgetUSD", DEFAULT_SESSION_BUDGET_USD)),
         markdown_rendering_enabled=_to_bool(config.get("MarkdownRenderingEnabled", True), default=True),
         status_bar_enabled=_to_bool(config.get("StatusBarEnabled", True), default=True),
     )
