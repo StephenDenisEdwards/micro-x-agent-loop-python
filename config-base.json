@@ -57,6 +57,7 @@
   "LogConsumers": [
     { "type": "console" },
     { "type": "file", "path": "C:\\Users\\steph\\source\\repos\\resources\\micro-x-agent-loop-logs\\agent.log" },
+    { "type": "metrics", "path": "C:\\Users\\steph\\source\\repos\\resources\\micro-x-agent-loop-logs\\metrics.jsonl" },
     { "type": "api_payload", "path": "C:\\Users\\steph\\source\\repos\\resources\\micro-x-agent-loop-logs\\api_payloads.jsonl" }
   ],
   "ToolFormatting": {
@@ -160,7 +161,7 @@
     "openai/gpt-4.1-nano": { "input": 0.10, "output": 0.40, "cache_read": 0.025, "cache_create": 0.0 },
     "openai/o3": { "input": 2.0, "output": 8.0, "cache_read": 0.50, "cache_create": 0.0 },
     "openai/o3-mini": { "input": 1.10, "output": 4.40, "cache_read": 0.55, "cache_create": 0.0 },
-    "openai/o4-mini": { "input": 1.10, "output": 4.40, "cache_read": 0.275, "cache_create": 0.0 }
+    "openai/o4-mini": { "input": 0.55, "output": 2.20, "cache_read": 0.275, "cache_create": 0.0 }
   },
   "DefaultFormat": { "format": "json" },
   "McpServers": {

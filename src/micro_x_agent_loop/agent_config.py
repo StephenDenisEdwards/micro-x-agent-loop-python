@@ -17,6 +17,7 @@ from micro_x_agent_loop.constants import (
 from micro_x_agent_loop.memory.checkpoints import CheckpointManager
 from micro_x_agent_loop.memory.events import EventEmitter
 from micro_x_agent_loop.memory.session_manager import SessionManager
+from micro_x_agent_loop.memory.store import MemoryStore
 from micro_x_agent_loop.tool import Tool
 
 
@@ -34,6 +35,7 @@ class AgentConfig:
     compaction_strategy: CompactionStrategy = field(default_factory=NoneCompactionStrategy)
     memory_enabled: bool = False
     session_id: str | None = None
+    memory_store: MemoryStore | None = None
     session_manager: SessionManager | None = None
     checkpoint_manager: CheckpointManager | None = None
     event_emitter: EventEmitter | None = None

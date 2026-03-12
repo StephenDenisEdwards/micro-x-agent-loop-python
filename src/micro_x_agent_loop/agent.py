@@ -126,6 +126,7 @@ class Agent:
                 checkpoint_manager=config.checkpoint_manager,
                 event_emitter=config.event_emitter,
                 active_session_id=config.session_id,
+                store=config.memory_store,
             )
         else:
             self._memory = NullMemoryFacade()
@@ -466,6 +467,7 @@ class Agent:
             call_type=call_type,
         )
         emit_metric(metric)
+        self._memory.emit_event("metric.api_call", metric)
 
     def on_tool_executed(
         self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool,
@@ -498,6 +500,7 @@ class Agent:
             turn_number=self._turn_number,
         )
         emit_metric(metric)
+        self._memory.emit_event("metric.compaction", metric)
 
     # -- TurnEvents protocol: core callbacks --
 
@@ -608,7 +611,9 @@ class Agent:
 
     async def shutdown(self) -> None:
         if self._metrics_enabled:
-            emit_metric(build_session_summary_metric(self._session_accumulator))
+            summary = build_session_summary_metric(self._session_accumulator)
+            emit_metric(summary)
+            self._memory.emit_event("metric.session_summary", summary)
         if self._voice_runtime:
             await self._voice_runtime.shutdown()
 

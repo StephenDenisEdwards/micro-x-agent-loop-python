@@ -187,6 +187,56 @@ Features:
 - Side-by-side session comparison with delta calculation
 - CSV output for spreadsheet import
 
+### SQLite Event Persistence
+
+In addition to the loguru metrics sink, all cost metrics are dual-written to the SQLite events table via the `MemoryFacade.emit_event()` method. This ensures metrics survive log rotation and are queryable for reconciliation.
+
+Three event types are persisted:
+
+| Event Type | When Emitted | Key Payload Fields |
+|---|---|---|
+| `metric.api_call` | After every LLM API call | model, input/output tokens, cache tokens, estimated_cost_usd |
+| `metric.compaction` | After conversation compaction | tokens_before/after, tokens_freed, compaction_cost_usd |
+| `metric.session_summary` | On agent shutdown | total_turns, total_cost_usd, model_subtotals |
+
+The `ActiveMemoryFacade` stores a reference to the `MemoryStore` (exposed via the `store` property) so that downstream consumers like cost reconciliation can query events directly.
+
+**Data flow:**
+
+```
+Agent callback (on_api_call_completed / on_compaction_completed / shutdown)
+  │
+  ├─► emit_metric() ──► loguru sink ──► metrics.jsonl
+  │
+  └─► memory.emit_event() ──► EventEmitter ──► SQLite events table
+```
+
+### Cost Reconciliation (`cost_reconciliation.py`)
+
+Compares locally estimated costs (from `metric.api_call` events in SQLite) against actual billed costs from the Anthropic billing API.
+
+**Components:**
+
+| Function | Purpose |
+|---|---|
+| `_load_local_costs(store, start, end)` | Queries `metric.api_call` events, groups by date and model |
+| `_parse_anthropic_cost_response(text)` | Parses the Anthropic cost report JSON into `{date: {model: cost}}` |
+| `reconcile_costs(tool_map, store, days)` | Orchestrates: loads local data, calls Anthropic API, builds comparison |
+
+**Invocation:** `/cost reconcile [days]` (default: 1 day lookback).
+
+The reconciliation uses the `anthropic-admin__anthropic_usage` MCP tool with:
+- `action: "cost"` — queries the `/v1/organizations/cost_report` endpoint
+- `bucket_width: "1d"` — daily granularity
+- `group_by: ["model"]` — per-model breakdown
+
+A divergence threshold of 5% is used to flag mismatches. The output is a formatted table showing per-model/date comparison with OK/MISMATCH status.
+
+**Prerequisites:**
+- `MemoryEnabled=true` (for local event data)
+- `anthropic-admin` MCP server running with `ANTHROPIC_ADMIN_API_KEY`
+- At least one session with `metric.api_call` events in the lookback period
+
 ## What This Enables
 
 - **Baseline cost per session** — measure before optimisation
@@ -203,6 +253,7 @@ Features:
 |------|--------|
 | `src/micro_x_agent_loop/usage.py` | **Created** — UsageResult, PRICING, estimate_cost |
 | `src/micro_x_agent_loop/metrics.py` | **Created** — emit_metric, builders, SessionAccumulator |
+| `src/micro_x_agent_loop/cost_reconciliation.py` | **Created** — reconcile local vs Anthropic billed costs |
 | `src/micro_x_agent_loop/analyze_costs.py` | **Created** — CLI analysis module |
 | `src/micro_x_agent_loop/logging_config.py` | Modified — MetricsLogConsumer |
 | `src/micro_x_agent_loop/provider.py` | Modified — updated return types |
@@ -210,12 +261,14 @@ Features:
 | `src/micro_x_agent_loop/providers/openai_provider.py` | Modified — stream_options, usage chunks, timing, UsageResult |
 | `src/micro_x_agent_loop/compaction.py` | Modified — tuple return, compaction callback |
 | `src/micro_x_agent_loop/turn_engine.py` | Modified — new callbacks, tool timing |
+| `src/micro_x_agent_loop/commands/command_handler.py` | Modified — /cost reconcile subcommand |
 | `src/micro_x_agent_loop/commands/router.py` | Modified — /cost dispatch |
-| `src/micro_x_agent_loop/agent_config.py` | Modified — metrics_enabled field |
+| `src/micro_x_agent_loop/agent_config.py` | Modified — metrics_enabled, memory_store fields |
 | `src/micro_x_agent_loop/app_config.py` | Modified — MetricsEnabled parsing |
-| `src/micro_x_agent_loop/bootstrap.py` | Modified — passes metrics_enabled |
-| `src/micro_x_agent_loop/agent.py` | Modified — accumulator, callbacks, /cost, shutdown emit |
-| `tests/test_usage.py` | **Created** |
+| `src/micro_x_agent_loop/bootstrap.py` | Modified — passes metrics_enabled, memory_store |
+| `src/micro_x_agent_loop/agent.py` | Modified — accumulator, callbacks, /cost, shutdown emit, event persistence |
+| `src/micro_x_agent_loop/memory/facade.py` | Modified — store property, emit_event method |
+| `tests/test_usage.py` | **Created** — 38 tests including per-model coverage |
 | `tests/test_metrics.py` | **Created** |
 | `tests/providers/test_anthropic_provider.py` | Modified — 4-tuple, UsageResult assertions |
 | `tests/providers/test_openai_provider.py` | Modified — usage chunks, 4-tuple |

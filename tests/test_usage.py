@@ -170,5 +170,158 @@ class UnknownModelWarningTests(unittest.TestCase):
         self.assertNotIn("", _warned_models)
 
 
+class EstimateCostAllModelsTests(unittest.TestCase):
+    """Verify estimate_cost() produces the correct result for every model in the pricing table."""
+
+    # Standard token counts used across all model tests.
+    INPUT = 10_000
+    OUTPUT = 5_000
+    CACHE_READ = 50_000
+    CACHE_CREATE = 2_000
+
+    # All models from config-base.json Pricing section with their expected costs.
+    # Expected cost = (INPUT*inp + OUTPUT*out + CACHE_READ*cr + CACHE_CREATE*cc) / 1_000_000
+    MODELS: dict[str, tuple[str, str, float]] = {
+        # key: (provider, model, expected_cost)
+        "anthropic/claude-opus-4-6-20260204": ("anthropic", "claude-opus-4-6-20260204", 0.212500),
+        "anthropic/claude-opus-4-5-20250918": ("anthropic", "claude-opus-4-5-20250918", 0.212500),
+        "anthropic/claude-opus-4-1-20250527": ("anthropic", "claude-opus-4-1-20250527", 0.637500),
+        "anthropic/claude-opus-4-20250514": ("anthropic", "claude-opus-4-20250514", 0.637500),
+        "anthropic/claude-sonnet-4-6-20260204": ("anthropic", "claude-sonnet-4-6-20260204", 0.127500),
+        "anthropic/claude-sonnet-4-5-20250929": ("anthropic", "claude-sonnet-4-5-20250929", 0.127500),
+        "anthropic/claude-sonnet-4-5-20250514": ("anthropic", "claude-sonnet-4-5-20250514", 0.127500),
+        "anthropic/claude-sonnet-4-20250514": ("anthropic", "claude-sonnet-4-20250514", 0.127500),
+        "anthropic/claude-haiku-4-5-20251001": ("anthropic", "claude-haiku-4-5-20251001", 0.042500),
+        "anthropic/claude-haiku-3-5-20241022": ("anthropic", "claude-haiku-3-5-20241022", 0.034000),
+        "openai/gpt-4o": ("openai", "gpt-4o", 0.137500),
+        "openai/gpt-4o-mini": ("openai", "gpt-4o-mini", 0.008250),
+        "openai/gpt-4.1": ("openai", "gpt-4.1", 0.085000),
+        "openai/gpt-4.1-mini": ("openai", "gpt-4.1-mini", 0.017000),
+        "openai/gpt-4.1-nano": ("openai", "gpt-4.1-nano", 0.004250),
+        "openai/o3": ("openai", "o3", 0.085000),
+        "openai/o3-mini": ("openai", "o3-mini", 0.060500),
+        "openai/o4-mini": ("openai", "o4-mini", 0.030250),
+    }
+
+    def setUp(self) -> None:
+        """Ensure PRICING is loaded from config-base.json before each test."""
+        import json
+        import os
+
+        self._saved = dict(PRICING)
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "config-base.json",
+        )
+        with open(config_path, encoding="utf-8") as f:
+            config = json.load(f)
+        PRICING.clear()
+        load_pricing_overrides(config["Pricing"])
+
+    def tearDown(self) -> None:
+        PRICING.clear()
+        PRICING.update(self._saved)
+
+    # --- Individual model tests ---
+
+    def test_anthropic_claude_opus_4_6(self) -> None:
+        self._assert_model_cost("anthropic/claude-opus-4-6-20260204")
+
+    def test_anthropic_claude_opus_4_5(self) -> None:
+        self._assert_model_cost("anthropic/claude-opus-4-5-20250918")
+
+    def test_anthropic_claude_opus_4_1(self) -> None:
+        self._assert_model_cost("anthropic/claude-opus-4-1-20250527")
+
+    def test_anthropic_claude_opus_4(self) -> None:
+        self._assert_model_cost("anthropic/claude-opus-4-20250514")
+
+    def test_anthropic_claude_sonnet_4_6(self) -> None:
+        self._assert_model_cost("anthropic/claude-sonnet-4-6-20260204")
+
+    def test_anthropic_claude_sonnet_4_5_20250929(self) -> None:
+        self._assert_model_cost("anthropic/claude-sonnet-4-5-20250929")
+
+    def test_anthropic_claude_sonnet_4_5_20250514(self) -> None:
+        self._assert_model_cost("anthropic/claude-sonnet-4-5-20250514")
+
+    def test_anthropic_claude_sonnet_4(self) -> None:
+        self._assert_model_cost("anthropic/claude-sonnet-4-20250514")
+
+    def test_anthropic_claude_haiku_4_5(self) -> None:
+        self._assert_model_cost("anthropic/claude-haiku-4-5-20251001")
+
+    def test_anthropic_claude_haiku_3_5(self) -> None:
+        self._assert_model_cost("anthropic/claude-haiku-3-5-20241022")
+
+    def test_openai_gpt_4o(self) -> None:
+        self._assert_model_cost("openai/gpt-4o")
+
+    def test_openai_gpt_4o_mini(self) -> None:
+        self._assert_model_cost("openai/gpt-4o-mini")
+
+    def test_openai_gpt_4_1(self) -> None:
+        self._assert_model_cost("openai/gpt-4.1")
+
+    def test_openai_gpt_4_1_mini(self) -> None:
+        self._assert_model_cost("openai/gpt-4.1-mini")
+
+    def test_openai_gpt_4_1_nano(self) -> None:
+        self._assert_model_cost("openai/gpt-4.1-nano")
+
+    def test_openai_o3(self) -> None:
+        self._assert_model_cost("openai/o3")
+
+    def test_openai_o3_mini(self) -> None:
+        self._assert_model_cost("openai/o3-mini")
+
+    def test_openai_o4_mini(self) -> None:
+        self._assert_model_cost("openai/o4-mini")
+
+    # --- Completeness guard ---
+
+    def test_every_config_model_has_a_test(self) -> None:
+        """Fail if a model exists in config-base.json Pricing but has no corresponding test."""
+        config_keys = set(PRICING.keys())
+        tested_keys = set(self.MODELS.keys())
+        missing = config_keys - tested_keys
+        self.assertEqual(
+            set(),
+            missing,
+            f"Models in config Pricing section without a corresponding test: {missing}",
+        )
+
+    def test_no_extra_test_models(self) -> None:
+        """Fail if a test references a model not present in the config Pricing section."""
+        config_keys = set(PRICING.keys())
+        tested_keys = set(self.MODELS.keys())
+        extra = tested_keys - config_keys
+        self.assertEqual(
+            set(),
+            extra,
+            f"Test references models not in config Pricing section: {extra}",
+        )
+
+    # --- Helper ---
+
+    def _assert_model_cost(self, key: str) -> None:
+        provider, model, expected = self.MODELS[key]
+        usage = UsageResult(
+            input_tokens=self.INPUT,
+            output_tokens=self.OUTPUT,
+            cache_read_input_tokens=self.CACHE_READ,
+            cache_creation_input_tokens=self.CACHE_CREATE,
+            provider=provider,
+            model=model,
+        )
+        cost = estimate_cost(usage)
+        self.assertAlmostEqual(
+            expected,
+            cost,
+            places=6,
+            msg=f"Cost mismatch for {key}: expected {expected}, got {cost}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

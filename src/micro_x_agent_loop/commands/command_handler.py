@@ -75,6 +75,7 @@ class CommandHandler:
         self._print(f"{p}- /command")
         self._print(f"{p}- /command <name> [arguments]")
         self._print(f"{p}- /cost")
+        self._print(f"{p}- /cost reconcile [days] [--start YYYY-MM-DD] [--end YYYY-MM-DD]")
         self._print(
             f"{p}- /voice start [microphone|loopback] "
             "[--mic-device-id <id>] [--mic-device-name <name>] "
@@ -170,7 +171,48 @@ class CommandHandler:
     # -- /cost --
 
     async def handle_cost(self, command: str) -> None:
+        parts = command.split()
+        if len(parts) >= 2 and parts[1] == "reconcile":
+            await self._handle_cost_reconcile(parts)
+            return
         self._print(f"{self._p}{self._session_accumulator.format_summary()}")
+
+    async def _handle_cost_reconcile(self, parts: list[str]) -> None:
+        from micro_x_agent_loop.cost_reconciliation import reconcile_costs
+
+        days = 1
+        start: str | None = None
+        end: str | None = None
+
+        # Parse args: positional days, or --start/--end flags
+        i = 2
+        while i < len(parts):
+            arg = parts[i]
+            if arg in ("--start", "--from") and i + 1 < len(parts):
+                start = parts[i + 1]
+                i += 2
+            elif arg in ("--end", "--to") and i + 1 < len(parts):
+                end = parts[i + 1]
+                i += 2
+            else:
+                try:
+                    days = int(arg)
+                except ValueError:
+                    self._print(
+                        f"{self._p}Usage: /cost reconcile [days] [--start YYYY-MM-DD] [--end YYYY-MM-DD]"
+                    )
+                    return
+                i += 1
+
+        store = self._memory.store
+        try:
+            lines = await reconcile_costs(self._tool_map, store, days=days, start=start, end=end)
+        except ValueError as ex:
+            self._print(f"{self._p}Invalid date format: {ex}")
+            self._print(f"{self._p}Use YYYY-MM-DD (e.g. 2026-03-01)")
+            return
+        for line in lines:
+            self._print(f"{self._p}{line}")
 
     # -- /memory --
 

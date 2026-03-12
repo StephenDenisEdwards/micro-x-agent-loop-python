@@ -170,6 +170,7 @@ async def bootstrap_runtime(
             max_conversation_messages=app.max_conversation_messages,
             compaction_strategy=compaction_strategy,
             memory_enabled=app.memory_enabled,
+            memory_store=memory_store,
             session_id=active_session_id,
             session_manager=session_manager,
             checkpoint_manager=checkpoint_manager,

@@ -18,6 +18,9 @@ _MUTATING_TOOL_NAMES = {"write_file", "append_file", "filesystem__write_file", "
 @runtime_checkable
 class MemoryFacade(Protocol):
     @property
+    def store(self) -> Any: ...
+
+    @property
     def session_manager(self) -> Any: ...
 
     @property
@@ -59,11 +62,17 @@ class MemoryFacade(Protocol):
 
     def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None: ...
 
+    def emit_event(self, event_type: str, payload: dict) -> None: ...
+
     def load_messages(self, session_id: str) -> list[dict]: ...
 
 
 class NullMemoryFacade:
     """No-op implementation for when memory is disabled."""
+
+    @property
+    def store(self) -> None:
+        return None
 
     @property
     def session_manager(self) -> None:
@@ -120,6 +129,9 @@ class NullMemoryFacade:
     def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
         return
 
+    def emit_event(self, event_type: str, payload: dict) -> None:
+        return
+
     def load_messages(self, session_id: str) -> list[dict]:
         return []
 
@@ -133,11 +145,17 @@ class ActiveMemoryFacade:
         checkpoint_manager: Any | None,
         event_emitter: Any | None,
         active_session_id: str | None,
+        store: Any | None = None,
     ) -> None:
         self._session_manager = session_manager
         self._checkpoint_manager = checkpoint_manager
         self._event_emitter = event_emitter
         self._active_session_id = active_session_id
+        self._store = store
+
+    @property
+    def store(self) -> Any:
+        return self._store
 
     @property
     def session_manager(self) -> Any:
@@ -264,6 +282,10 @@ class ActiveMemoryFacade:
                 "tool.completed",
                 {"tool_use_id": tool_use_id, "tool_name": tool_name, "is_error": is_error},
             )
+
+    def emit_event(self, event_type: str, payload: dict) -> None:
+        if self._event_emitter is not None and self._active_session_id is not None:
+            self._event_emitter.emit(self._active_session_id, event_type, payload)
 
     def load_messages(self, session_id: str) -> list[dict]:
         return self._session_manager.load_messages(session_id)

@@ -208,6 +208,20 @@ Run `/cost`.
 
 ## 6. Metrics Log File
 
+### Test 5.3: Unit test coverage for all models
+
+Run the pricing unit tests:
+
+```bash
+python -m pytest tests/test_usage.py::EstimateCostAllModelsTests -v
+```
+
+**Expected:**
+- One test per model in the `Pricing` section of `config-base.json` (18 models as of March 2026)
+- `test_every_config_model_has_a_test` passes — every config model has test coverage
+- `test_no_extra_test_models` passes — no test references a removed model
+- Each model test uses standard token counts (10k input, 5k output, 50k cache read, 2k cache create) and asserts the expected cost to 6 decimal places
+
 ### Test 6.1: metrics.jsonl is written
 
 After running any of the tests above, check for a `metrics.jsonl` file in the project root (or the configured log output location).
@@ -293,3 +307,10 @@ Send another prompt, then run `/cost`.
 - Accumulator starts fresh on resume (cost tracks the current run, not historical)
 - Only shows API calls made since the agent started
 - This is expected behaviour — the accumulator is in-memory, not persisted
+
+---
+
+## Related
+
+- [Manual Test: Cost Reconciliation](MANUAL-TEST-cost-reconciliation.md) — tests for `/cost reconcile` and metrics persistence to SQLite
+- [Metrics and Cost Tracking Guide](../operations/metrics-and-costs.md)
