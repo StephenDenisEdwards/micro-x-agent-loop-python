@@ -155,11 +155,14 @@ class SessionAccumulator:
 
     def _record_model(self, usage: UsageResult) -> None:
         cost = estimate_cost(usage)
+        provider = usage.provider or "unknown"
         model = usage.model or "unknown"
-        sub = self.model_subtotals.get(model)
+        key = f"{provider}/{model}"
+        sub = self.model_subtotals.get(key)
         if sub is None:
-            sub = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
-            self.model_subtotals[model] = sub
+            sub = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
+                   "provider": provider, "model": model}
+            self.model_subtotals[key] = sub
         sub["calls"] += 1
         sub["input_tokens"] += usage.input_tokens
         sub["output_tokens"] += usage.output_tokens
@@ -182,6 +185,7 @@ class SessionAccumulator:
             "call_number": self.total_api_calls,
             "turn": turn_number,
             "call_type": call_type,
+            "provider": usage.provider or "unknown",
             "model": usage.model or "unknown",
             "input_tokens": usage.input_tokens,
             "output_tokens": usage.output_tokens,
@@ -208,7 +212,7 @@ class SessionAccumulator:
             "--------------------",
             f"Provider/Model:     {self.provider or '—'} / {self.model or '—'}",
         ]
-        prices = _lookup_pricing(self.model) if self.model else None
+        prices = _lookup_pricing(self.provider, self.model) if self.model else None
         if prices:
             inp, out, cr, cw = prices
             lines.append(f"Pricing (per MTok):  in=${inp} out=${out} cache_read=${cr} cache_write=${cw}")
@@ -228,13 +232,13 @@ class SessionAccumulator:
         ]
         if len(self.model_subtotals) > 1:
             lines.append("Model breakdown:")
-            for model, sub in sorted(self.model_subtotals.items(), key=lambda x: -x[1]["cost_usd"]):
-                prices = _lookup_pricing(model)
+            for key, sub in sorted(self.model_subtotals.items(), key=lambda x: -x[1]["cost_usd"]):
+                prices = _lookup_pricing(sub.get("provider", ""), sub.get("model", ""))
                 pricing_str = (
                     f" (in=${prices[0]} out=${prices[1]})" if prices else ""
                 )
                 lines.append(
-                    f"  {model}{pricing_str}: {sub['calls']} calls, "
+                    f"  {key}{pricing_str}: {sub['calls']} calls, "
                     f"{sub['input_tokens']:,} in / {sub['output_tokens']:,} out, "
                     f"${sub['cost_usd']:.6f}"
                 )
