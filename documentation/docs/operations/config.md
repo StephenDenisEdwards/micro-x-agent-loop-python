@@ -3,7 +3,7 @@
 Configuration is split into two files:
 
 - **`.env`** — secrets (API keys), loaded by python-dotenv
-- **`config.json`** — application settings, loaded as JSON with `dict.get()` defaults
+- **`config.json`** — application settings, loaded as JSON (all settings defined in `config-base.json`)
 
 ## Config File Indirection
 
@@ -49,6 +49,27 @@ The agent prints which config file is active at startup:
 Config: config-standard.json
 ```
 
+## Config Self-References
+
+String values can reference other keys in the same config using the `#KeyName` syntax. This avoids duplicating values and makes the config self-documenting.
+
+```json
+{
+  "Model": "claude-sonnet-4-5-20250929",
+  "SubAgentModel": "#Model",
+  "Stage2Model": "#Model",
+  "ToolResultSummarizationModel": "#Model"
+}
+```
+
+After resolution, `SubAgentModel`, `Stage2Model`, and `ToolResultSummarizationModel` all equal `"claude-sonnet-4-5-20250929"`.
+
+Rules:
+- Single-level only — the referenced key must not itself be a `#` reference
+- The `#` must be the entire value (after whitespace trimming) — `#` appearing mid-string is not treated as a reference
+- Raises an error if the referenced key does not exist in the config
+- Resolved before `${ENV_VAR}` expansion
+
 ## Secrets (`.env`)
 
 | Variable | Required | Description |
@@ -89,12 +110,23 @@ The required API key depends on the configured `Provider`. Service-specific cred
 | `MemoryRetentionDays` | int | `30` | Time-based retention window for persisted memory |
 | `MetricsEnabled` | bool | `true` | Enables structured cost metrics collection and emission |
 | `PromptCachingEnabled` | bool | `true` | Enables Anthropic prompt caching for system prompt and tool schemas |
-| `CompactionModel` | string | `""` | Model for compaction summarization; empty = use main `Model` |
+| `CompactionModel` | string | `""` | Model for compaction summarization; empty = use main `Model`. Use `#Model` to explicitly inherit |
 | `ToolResultSummarizationEnabled` | bool | `false` | Summarize large tool results before feeding back to the main model |
-| `ToolResultSummarizationModel` | string | `""` | Model for tool result summarization; empty = use main `Model` |
+| `ToolResultSummarizationModel` | string | `"#Model"` | Model for tool result summarization; `#Model` = use main Model |
 | `ToolResultSummarizationThreshold` | int | `4000` | Minimum tool result chars before summarization is attempted |
 | `SmartCompactionTriggerEnabled` | bool | `true` | Use actual API token counts instead of estimates for compaction trigger |
 | `ConciseOutputEnabled` | bool | `false` | Adds a system prompt directive to minimize output token spend |
+| `ModeAnalysisEnabled` | bool | `true` | Enable Stage 1 pattern-matching mode analysis on user prompts |
+| `Stage2ClassificationEnabled` | bool | `true` | Enable Stage 2 LLM classification when Stage 1 is ambiguous |
+| `Stage2Model` | string | `"#Model"` | Model for Stage 2 classification; `#Model` = use main Model |
+| `ToolSearchEnabled` | string | `"false"` | Enable on-demand tool discovery for large tool sets |
+| `SubAgentsEnabled` | bool | `false` | Enable sub-agent delegation for complex tasks |
+| `SubAgentModel` | string | `"#Model"` | Model for sub-agents; `#Model` = use main Model |
+| `SubAgentTimeout` | int | `120` | Sub-agent execution timeout in seconds |
+| `SubAgentMaxTurns` | int | `15` | Maximum turns per sub-agent run |
+| `SubAgentMaxTokens` | int | `4096` | Maximum tokens per sub-agent API response |
+| `MarkdownRenderingEnabled` | bool | `true` | Enable progressive markdown rendering in CLI output |
+| `StatusBarEnabled` | bool | `true` | Enable bottom toolbar with live cost/token metrics in CLI |
 | `ToolFormatting` | object | `{}` | Per-tool format rules for structured result formatting (see [Tool System Design](../design/DESIGN-tool-system.md#tool-result-formatting)) |
 | `DefaultFormat` | object | `{"format": "json"}` | Default format when no per-tool rule matches |
 | `LogLevel` | string | `"INFO"` | Minimum log level for console and file consumers |
@@ -106,7 +138,12 @@ The required API key depends on the configured `Provider`. Service-specific cred
 | `BrokerDatabase` | string | `".micro_x/broker.db"` | SQLite path for broker job and run persistence |
 | `BrokerPollIntervalSeconds` | int | `5` | How often the broker checks for due jobs (seconds) |
 | `BrokerMaxConcurrentRuns` | int | `2` | Maximum agent runs the broker will execute simultaneously |
+| `BrokerWebhookEnabled` | bool | `false` | Enable the broker's webhook HTTP listener |
+| `BrokerHost` | string | `"127.0.0.1"` | Host address for the broker webhook server and API server |
+| `BrokerPort` | int | `8321` | Port for the broker webhook server and API server |
+| `BrokerChannels` | object | `{}` | Channel adapter configs for response routing (HTTP, Telegram, WhatsApp) |
 | `BrokerRecoveryPolicy` | string | `"skip"` | What to do with missed jobs after broker restart: `"skip"` or `"run_once_on_recovery"` |
+| `BrokerApiSecret` | string | _(none)_ | Optional shared secret for broker API authentication |
 
 ### Example
 
@@ -133,9 +170,9 @@ The required API key depends on the configured `Provider`. Service-specific cred
   "MemoryRetentionDays": 30,
   "MetricsEnabled": true,
   "PromptCachingEnabled": true,
-  "CompactionModel": "",
+  "CompactionModel": "claude-haiku-4-5-20251001",
   "ToolResultSummarizationEnabled": false,
-  "ToolResultSummarizationModel": "claude-haiku-4-5-20251001",
+  "ToolResultSummarizationModel": "#Model",
   "ToolResultSummarizationThreshold": 4000,
   "SmartCompactionTriggerEnabled": true,
   "ConciseOutputEnabled": false,
@@ -153,7 +190,7 @@ The required API key depends on the configured `Provider`. Service-specific cred
 }
 ```
 
-All settings are optional — sensible defaults are used when a setting is missing.
+All configuration settings are defined in `config-base.json`. There are no hardcoded fallback defaults in the source code.
 
 ## Setting Details
 

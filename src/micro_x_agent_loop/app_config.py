@@ -95,8 +95,9 @@ def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
     3. ``./config.json`` itself (backward compatible)
 
     After loading, if the config contains a ``Base`` key, the base config is loaded
-    and merged (base values first, then variant overrides). Environment variables in
-    the form ``${VAR}`` are expanded recursively in all string values.
+    and merged (base values first, then variant overrides).  Config self-references
+    in the form ``#KeyName`` are resolved first, then environment variables in the
+    form ``${VAR}`` are expanded recursively in all string values.
 
     Returns:
         A ``(config_dict, resolved_path)`` tuple.
@@ -108,6 +109,7 @@ def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
         with open(p) as f:
             data = json.load(f)
         data = _resolve_config_with_base(data, p.parent)
+        data = _expand_config_refs(data)
         data = _expand_env_vars(data)
         return data, str(p)
 
@@ -129,10 +131,12 @@ def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
         with open(target) as f:
             data = json.load(f)
         data = _resolve_config_with_base(data, target.parent)
+        data = _expand_config_refs(data)
         data = _expand_env_vars(data)
         return data, str(config_file)
 
     data = _resolve_config_with_base(data, default_path.parent)
+    data = _expand_config_refs(data)
     data = _expand_env_vars(data)
     return data, "config.json"
 
@@ -175,6 +179,32 @@ def _resolve_config_with_base(data: dict, config_dir: Path) -> dict:
 
 
 _ENV_VAR_RE = re.compile(r"\$\{([^}]+)\}")
+
+_CONFIG_REF_RE = re.compile(r"^#(\w+)$")
+
+
+def _expand_config_refs(data: dict) -> dict:
+    """Expand ``#KeyName`` references in top-level string values.
+
+    A value like ``"#Model"`` resolves to the value of the ``Model`` key in the
+    same config dict.  Only single-level, top-level references are supported —
+    the referenced key must exist and must not itself be a ``#`` reference.
+    """
+    resolved: dict = {}
+    for key, value in data.items():
+        if isinstance(value, str):
+            m = _CONFIG_REF_RE.match(value.strip())
+            if m:
+                ref_key = m.group(1)
+                if ref_key not in data:
+                    raise KeyError(
+                        f"Config key {key!r} references #{ref_key} "
+                        f"but {ref_key!r} is not defined in the config"
+                    )
+                resolved[key] = data[ref_key]
+                continue
+        resolved[key] = value
+    return resolved
 
 
 def _expand_env_vars(data: object) -> object:

@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from micro_x_agent_loop.app_config import (
+    _expand_config_refs,
     _expand_env_vars,
     _resolve_config_with_base,
     _to_bool,
@@ -76,6 +77,53 @@ class ExpandEnvVarsTests(unittest.TestCase):
         self.assertEqual(_expand_env_vars(42), 42)
         self.assertIs(_expand_env_vars(True), True)
         self.assertIsNone(_expand_env_vars(None))
+
+
+class ExpandConfigRefsTests(unittest.TestCase):
+    """Tests for _expand_config_refs (#KeyName self-references)."""
+
+    def test_resolves_ref_to_same_config_key(self) -> None:
+        data = {"Model": "claude-sonnet-4-5-20250929", "SubAgentModel": "#Model"}
+        result = _expand_config_refs(data)
+        self.assertEqual(result["SubAgentModel"], "claude-sonnet-4-5-20250929")
+
+    def test_non_ref_strings_unchanged(self) -> None:
+        data = {"Model": "claude-sonnet-4-5-20250929", "Provider": "anthropic"}
+        result = _expand_config_refs(data)
+        self.assertEqual(result["Provider"], "anthropic")
+
+    def test_non_string_values_unchanged(self) -> None:
+        data = {"MaxTokens": 8192, "Model": "claude", "Enabled": True}
+        result = _expand_config_refs(data)
+        self.assertEqual(result["MaxTokens"], 8192)
+        self.assertIs(result["Enabled"], True)
+
+    def test_missing_ref_key_raises(self) -> None:
+        data = {"SubAgentModel": "#NonExistentKey"}
+        with self.assertRaises(KeyError):
+            _expand_config_refs(data)
+
+    def test_multiple_refs_to_same_key(self) -> None:
+        data = {
+            "Model": "claude-sonnet-4-5-20250929",
+            "Stage2Model": "#Model",
+            "SubAgentModel": "#Model",
+            "ToolResultSummarizationModel": "#Model",
+        }
+        result = _expand_config_refs(data)
+        self.assertEqual(result["Stage2Model"], "claude-sonnet-4-5-20250929")
+        self.assertEqual(result["SubAgentModel"], "claude-sonnet-4-5-20250929")
+        self.assertEqual(result["ToolResultSummarizationModel"], "claude-sonnet-4-5-20250929")
+
+    def test_ref_with_whitespace_trimmed(self) -> None:
+        data = {"Model": "claude", "SubAgentModel": " #Model "}
+        result = _expand_config_refs(data)
+        self.assertEqual(result["SubAgentModel"], "claude")
+
+    def test_hash_in_middle_of_string_not_treated_as_ref(self) -> None:
+        data = {"Description": "Use #Model for details", "Model": "claude"}
+        result = _expand_config_refs(data)
+        self.assertEqual(result["Description"], "Use #Model for details")
 
 
 class ResolveConfigWithBaseTests(unittest.TestCase):
