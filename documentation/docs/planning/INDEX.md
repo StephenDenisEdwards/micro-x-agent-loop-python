@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-03-11
+Last updated: 2026-03-12
 
 ## Priority Queue
 
@@ -21,7 +21,7 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | ~~11~~ | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | Replaced by Trigger Broker below - retained as reference for full gateway capabilities |
 | **11** | [Trigger Broker](PLAN-trigger-broker.md) | **Completed** | Always-on run dispatcher for cron, webhooks, messaging channels, HITL, retries |
 | **12** | [Agent API Server](PLAN-agent-api-server.md) | **Completed** | HTTP/WebSocket API, broker convergence, CLI client, Python SDK, examples |
-| **13** | [Sub-Agents](PLAN-sub-agents.md) | **Phase 1 Completed** | In-process sub-agent delegation for context protection, task isolation, parallelism, and cost reduction |
+| **13** | [Sub-Agents](PLAN-sub-agents.md) | **Phase 1 Completed — Phase 2+ remaining** | Phase 1 done (architecture, runner, pseudo-tool). Gaps: disabled by default, no routing policy, no observability/async phases |
 | **14** | [Markdown Rendering](PLAN-markdown-rendering.md) | **Completed** | Progressive markdown rendering in CLI using rich - buffer-and-rerender pattern matching ChatGPT/Claude Code |
 | **15** | [Test Coverage 90%](PLAN-test-coverage-90.md) | **Completed** | Raised test coverage from 59% to 85% (acceptable threshold) |
 | **16** | [TypeScript Codegen Template](PLAN-typescript-codegen-template.md) | **Completed** | Migrate codegen template from Python to TypeScript - fixes Windows subprocess/venv issues |
@@ -42,8 +42,8 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 
 | Status | Count |
 |--------|-------|
-| Completed | 27 |
-| Phase 1 Completed | 1 |
+| Completed | 28 |
+| Phase 1 Completed (remaining phases pending) | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
@@ -71,7 +71,7 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Superseded | Replaced by [Trigger Broker](PLAN-trigger-broker.md) - retained as reference for full gateway capabilities |
 | [Trigger Broker](PLAN-trigger-broker.md) | Completed | Always-on run dispatcher with cron, webhooks, messaging channels, HITL, retries, missed-run recovery, auth |
 | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | Lane-based routing preserving prefix caching. See [DESIGN](../design/DESIGN-cache-preserving-tool-routing.md) |
-| [Sub-Agents](PLAN-sub-agents.md) | Phase 1 Completed | In-process sub-agent delegation: context protection, task isolation, parallelism, cost reduction |
+| [Sub-Agents](PLAN-sub-agents.md) | Phase 1 Completed — Phase 2+ remaining | Phase 1 done (runner, pseudo-tool, types, tests). Remaining: routing policy, observability, async via broker, custom types |
 | [Codegen Prompt Discipline](PLAN-codegen-prompt-discipline.md) | Completed | Tightened codegen prompt, added infra file deny, compact output format |
 | [LinkedIn Publishing MCP](PLAN-linkedin-publishing-mcp.md) | Completed | Draft-post, draft-article, publish-draft tools |
 | [Dev.to Publishing MCP](PLAN-devto-publishing-mcp.md) | Completed | Long-form blog publishing via Forem API. Completed 2026-03-06 |
@@ -89,4 +89,5 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | [TypeScript Codegen Template](PLAN-typescript-codegen-template.md) | Completed | Migrate codegen template from Python to TypeScript to fix Windows subprocess/venv issues |
 | [Codegen Parameterisation](PLAN-codegen-parameterisation.md) | Completed | Typed MCP server generation, manifest registration, and on-demand tool discovery. Completed 2026-03-11 |
 | [Codegen Hardening](PLAN-codegen-hardening.md) | Completed | Follow-up robustness and correctness fixes for the codegen server. Completed 2026-03-11 |
+| [CLI Status Bar](PLAN-cli-status-bar.md) | Completed | Per-turn cost/token visibility via prompt_toolkit bottom_toolbar. Completed 2026-03-12 |
 | [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | Planning | Extract hardcoded PRICING dict to config.json; user-overridable model pricing |

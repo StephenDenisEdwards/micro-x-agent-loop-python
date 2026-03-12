@@ -1,7 +1,15 @@
 # Plan: Sub-Agent Architecture
 
-**Status:** Phase 1 Completed
+**Status:** Phase 1 Completed — Phase 2+ remaining
 **Date:** 2026-03-09
+
+### Remaining Gaps
+
+- **No default task routing policy** — the LLM has the `spawn_subagent` tool but no guidance on when to prefer it over direct tool use. Needs system prompt examples or heuristic triggers.
+- **Disabled by default** — `SubAgentsEnabled: false`. No evaluation data to justify enabling.
+- **Phase 2 (Observability)** — metrics aggregation, memory tracking, and turn limit tuning not started.
+- **Phase 3 (Async)** — `spawn_background_task` via broker not implemented.
+- **Phase 4 (Advanced)** — custom agent types, mode selector integration, resume not started.
 **Goal:** Enable the main agent to delegate focused tasks to lightweight, disposable sub-agents with isolated contexts, restricted tools, and optionally cheaper models.
 
 ---
