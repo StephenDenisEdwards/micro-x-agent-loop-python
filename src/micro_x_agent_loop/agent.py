@@ -623,17 +623,17 @@ class Agent:
         print(f"\n{self._USER_PROMPT}", end="", flush=True)
 
     def _resolve_file(self, filename: str) -> Path | None:
-        """Resolve a filename to a Path, checking CWD then working directory."""
+        """Resolve a filename to a Path, checking working directory then CWD."""
         path = Path(filename)
         if path.is_absolute():
             return path if path.is_file() else None
-        candidate = Path.cwd() / path
-        if candidate.is_file():
-            return candidate
         if self._working_directory:
             candidate = Path(self._working_directory) / path
             if candidate.is_file():
                 return candidate
+        candidate = Path.cwd() / path
+        if candidate.is_file():
+            return candidate
         return None
 
     async def shutdown(self) -> None:
