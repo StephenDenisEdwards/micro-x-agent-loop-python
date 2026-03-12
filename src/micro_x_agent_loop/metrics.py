@@ -22,8 +22,11 @@ def build_api_call_metric(
     session_id: str,
     turn_number: int,
     call_type: str,
+    *,
+    routing_rule: str = "",
+    routing_reason: str = "",
 ) -> dict:
-    return {
+    metric: dict = {
         "type": "api_call",
         "timestamp": time.time(),
         "session_id": session_id,
@@ -42,6 +45,10 @@ def build_api_call_metric(
         "time_to_first_token_ms": usage.time_to_first_token_ms,
         "estimated_cost_usd": estimate_cost(usage),
     }
+    if routing_rule:
+        metric["routing_rule"] = routing_rule
+        metric["routing_reason"] = routing_reason
+    return metric
 
 
 def build_tool_execution_metric(

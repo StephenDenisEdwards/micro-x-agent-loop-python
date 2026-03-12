@@ -8,6 +8,7 @@ from loguru import logger
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
 from micro_x_agent_loop.constants import SESSION_BUDGET_WARN_THRESHOLD
+from functools import partial
 from micro_x_agent_loop.commands.command_handler import CommandHandler
 from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.commands.router import CommandRouter
@@ -198,6 +199,29 @@ class Agent:
 
         self._api_payload_store = ApiPayloadStore()
 
+        # Per-turn routing
+        turn_classifier = None
+        routing_model = ""
+        self._per_turn_routing_enabled = config.per_turn_routing_enabled
+        if config.per_turn_routing_enabled:
+            if not config.per_turn_routing_model:
+                raise ValueError("PerTurnRoutingModel must be set in config when PerTurnRoutingEnabled is true")
+            if not config.per_turn_routing_provider:
+                raise ValueError("PerTurnRoutingProvider must be set in config when PerTurnRoutingEnabled is true")
+            from micro_x_agent_loop.turn_classifier import classify_turn
+            keywords = [kw.strip() for kw in config.per_turn_routing_complexity_keywords.split(",") if kw.strip()]
+            turn_classifier = partial(
+                classify_turn,
+                max_user_chars=config.per_turn_routing_max_user_chars,
+                short_followup_chars=config.per_turn_routing_short_followup_chars,
+                complexity_keywords=keywords,
+            )
+            routing_model = config.per_turn_routing_model
+            logger.info(
+                "Per-turn routing enabled: cheap model={model}",
+                model=routing_model,
+            )
+
         self._turn_engine = TurnEngine(
             provider=self._provider,
             model=self._model,
@@ -218,6 +242,8 @@ class Agent:
             api_payload_store=self._api_payload_store,
             tool_search_manager=self._tool_search_manager,
             sub_agent_runner=self._sub_agent_runner,
+            turn_classifier=turn_classifier,
+            routing_model=routing_model,
         )
 
         commands_dir = Path(self._working_directory or ".") / ".commands"
@@ -348,6 +374,7 @@ class Agent:
             current_user_message_id, last_assistant_message_id = await self._turn_engine.run(
                 messages=self._messages,
                 user_message=user_message,
+                turn_number=self._turn_number,
             )
         finally:
             if self._channel is not None and hasattr(self._channel, "end_streaming"):

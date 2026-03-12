@@ -138,13 +138,13 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 
 | Attribute | Detail |
 |-----------|--------|
-| **Status** | 🔲 Planned (Phase 3) |
-| **Review finding** | Multi-provider factory exists (ADR-010) and per-session model config works. Stage 2 classification detects task type signals. But: no per-turn routing logic exists — every call goes to the configured main model. Classification results are diagnostic only and don't influence model selection. |
-| **Code location** | `src/micro_x_agent_loop/mode_selector.py`; `src/micro_x_agent_loop/providers/` |
-| **Plan** | Listed as Tier 2 Lever #5 in `PLAN-cost-reduction.md`. No dedicated plan document. |
+| **Status** | ✅ Done |
+| **Review finding** | Per-turn model routing implemented via heuristic classifier (`turn_classifier.py`). Routes tool-result continuations, short conversational messages, and short follow-ups to a cheap model. Complexity keywords guard ensures complex turns stay on the main model. Opt-in via `PerTurnRoutingEnabled`. |
+| **Code location** | `src/micro_x_agent_loop/turn_classifier.py`; `src/micro_x_agent_loop/turn_engine.py`; `src/micro_x_agent_loop/agent.py` |
+| **Config** | `PerTurnRoutingEnabled: false`, `PerTurnRoutingModel`, `PerTurnRoutingProvider`, `PerTurnRoutingMaxUserChars: 200`, `PerTurnRoutingShortFollowupChars: 50`, `PerTurnRoutingComplexityKeywords` |
 | **Estimated impact** | 50–80% cost reduction for turns that don't need Sonnet capability. |
-| **Residual gaps** | (a) No classification scheme for turn complexity. (b) No per-turn model selection logic in `TurnEngine`. (c) Quality degradation risk not evaluated. |
-| **Action taken** | `Stage2Model` changed from `#Model` to `claude-haiku-4-5-20251001` in `config-base.json` (2026-03-12). Classification call no longer uses the expensive main model. |
+| **Residual gaps** | Quality evaluation with real usage data not yet done. Classifier is conservative (errs toward main model). No automatic fallback if cheap model produces poor results. |
+| **Action taken** | Implemented (2026-03-12). `Stage2Model` → Haiku. Per-turn routing with heuristic classifier. |
 
 ---
 
@@ -248,7 +248,7 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | 5 | Tool result size reduction | ⚠️ Partial | Medium — structured pipeline in place; per-tool formatting tuning remains | ADR-014 resolved (2026-03-12) |
 | 6 | Tool result data format (ADR-014) | ✅ Done | — | Option C accepted, implemented incrementally (2026-03-12) |
 | 7 | Sub-agent delegation | ✅ Done | Enabled by default, routing directive with examples | Routing policy + enabled (2026-03-12) |
-| 8 | Per-turn model routing | 🔲 Planned | **High** — architecture ready; 50–80% saving on simple turns | Stage2Model → Haiku done |
+| 8 | Per-turn model routing | ✅ Done | Heuristic classifier, opt-in, conservative defaults | Implemented (2026-03-12) |
 | 9 | Output token reduction | ✅ Done | Low — `ConciseOutputEnabled` enabled in config-base.json | Enabled |
 | 10 | On-demand tool discovery | ⚠️ Partial | Low (Anthropic) / Medium (OpenAI) — provider-dependent | — |
 | 11 | Compiled mode / batch execution | 🔲 Planned | Low — Phase 4+, ADR-014 blocker resolved | ADR-014 resolved (2026-03-12) |
@@ -261,6 +261,6 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 1. ~~**Per-turn cost display in REPL**~~ — ✅ Done ([CLI Status Bar](../planning/PLAN-cli-status-bar.md)).
 2. ~~**Session budget caps**~~ — ✅ Done (2026-03-12). `SessionBudgetUSD` with warn at 80%, hard stop at 100%.
 3. ~~**ADR-014 decision**~~ — ✅ Done (2026-03-12). Option C accepted; structured tool results implemented (`ToolResult.structured`, `ToolResultFormatter`). Strategies 5 and 11 unblocked.
-4. **Per-turn model routing** — connect Stage 2 classification output to actual model selection in `TurnEngine`.
+4. ~~**Per-turn model routing**~~ — ✅ Done (2026-03-12). Heuristic classifier routes tool-result continuations and short messages to cheap model.
 5. **Batch API for broker** — 50% cost reduction for all scheduled `--run` jobs, no quality tradeoff.
 6. ~~**`Stage2Model` → Haiku**~~ — ✅ Done (2026-03-12). Changed to `claude-haiku-4-5-20251001` in `config-base.json`.

@@ -325,13 +325,15 @@ These items were identified by the [cost reduction review](../review/cost-reduct
 
 ---
 
-#### 3b. Per-Turn Model Routing
+#### 3b. Per-Turn Model Routing ✅ Completed (2026-03-12)
 
-**Impact:** 50–80% cost reduction for turns that don't need Sonnet capability. Connect Stage 2 classification output to actual model selection in `TurnEngine`.
+**Impact:** 50–80% cost reduction for turns that don't need Sonnet capability.
 
-**Mechanism:** Classification scheme for turn complexity → per-turn model selection logic → quality evaluation.
+**Mechanism:** Pure-function heuristic classifier (`turn_classifier.py`) decides per-LLM-call whether to use the cheap model. Rules (first match wins, complexity guard overrides all): (1) tool-result continuation → cheap, (2) short conversational (no tools, < 200 chars) → cheap, (3) short follow-up (turn > 1, < 50 chars) → cheap, (4) complexity keywords → main, (5) default → main.
 
-**Effort:** High — requires classification, routing logic, and quality benchmarking.
+**Code:** `turn_classifier.py` (classifier), `turn_engine.py` (dynamic model per `stream_chat` call, iteration counter), `agent.py` (wiring via `functools.partial`). Config: `PerTurnRoutingEnabled`, `PerTurnRoutingModel`, `PerTurnRoutingProvider`, `PerTurnRoutingMaxUserChars`, `PerTurnRoutingShortFollowupChars`, `PerTurnRoutingComplexityKeywords`.
+
+**Tests:** 22 classifier tests + 7 integration/config tests. Manual test plan: [per-turn-routing](../testing/MANUAL-TEST-per-turn-routing.md).
 
 ---
 

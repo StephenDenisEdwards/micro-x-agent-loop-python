@@ -10,6 +10,7 @@ from loguru import logger
 from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
 from micro_x_agent_loop.sub_agent import SPAWN_SUBAGENT_SCHEMA, SubAgentRunner, SubAgentType
+from micro_x_agent_loop.turn_classifier import TurnClassification
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
 
 if TYPE_CHECKING:
@@ -44,6 +45,8 @@ class TurnEngine:
         api_payload_store: ApiPayloadStore | None = None,
         tool_search_manager: ToolSearchManager | None = None,
         sub_agent_runner: SubAgentRunner | None = None,
+        turn_classifier: Any | None = None,
+        routing_model: str = "",
     ) -> None:
         self._provider = provider
         self._model = model
@@ -64,12 +67,15 @@ class TurnEngine:
         self._api_payload_store = api_payload_store
         self._tool_search_manager = tool_search_manager
         self._sub_agent_runner = sub_agent_runner
+        self._turn_classifier = turn_classifier
+        self._routing_model = routing_model
 
     async def run(
         self,
         *,
         messages: list[dict],
         user_message: str,
+        turn_number: int = 0,
     ) -> tuple[str | None, str | None]:
         last_assistant_message_id: str | None = None
         current_user_message_id = self._events.on_append_message("user", user_message)
@@ -80,6 +86,7 @@ class TurnEngine:
             self._tool_search_manager.begin_turn()
 
         max_tokens_attempts = 0
+        turn_iteration = 0
 
         while True:
             system_prompt = resolve_system_prompt(self._system_prompt_template)
@@ -95,8 +102,27 @@ class TurnEngine:
             if self._channel is not None:
                 api_tools.append(ASK_USER_SCHEMA)
 
+            # Per-turn model routing
+            effective_model = self._model
+            classification: TurnClassification | None = None
+            if self._turn_classifier is not None:
+                classification = self._turn_classifier(
+                    user_message=user_message,
+                    has_tools=bool(api_tools),
+                    turn_iteration=turn_iteration,
+                    turn_number=turn_number,
+                )
+                if classification.use_cheap_model and self._routing_model:
+                    effective_model = self._routing_model
+                logger.info(
+                    "Turn routing: model={model} rule={rule} reason={reason}",
+                    model=effective_model,
+                    rule=classification.rule,
+                    reason=classification.reason,
+                )
+
             message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
-                self._model,
+                effective_model,
                 self._max_tokens,
                 self._temperature,
                 system_prompt,
@@ -105,12 +131,16 @@ class TurnEngine:
                 channel=self._channel,
             )
 
-            self._events.on_api_call_completed(usage, "main")
+            call_type = "main"
+            if classification is not None and classification.use_cheap_model:
+                call_type = "main:routed"
+            self._events.on_api_call_completed(usage, call_type)
 
             if self._api_payload_store is not None:
                 self._record_api_payload(
                     system_prompt, messages, message, stop_reason, usage,
                     tools_count=len(api_tools),
+                    effective_model=effective_model,
                 )
 
             last_assistant_message_id = self._events.on_append_message("assistant", message["content"])
@@ -133,6 +163,7 @@ class TurnEngine:
                         "break it into smaller sections or shorten the content."
                     ),
                 )
+                turn_iteration += 1
                 continue
 
             max_tokens_attempts = 0
@@ -189,6 +220,7 @@ class TurnEngine:
             # If only pseudo-tool calls (no regular tools), append results and continue
             if not regular_blocks:
                 self._events.on_append_message("user", inline_results)
+                turn_iteration += 1
                 continue
 
             # Execute regular tool calls
@@ -215,6 +247,7 @@ class TurnEngine:
 
             self._events.on_append_message("user", all_results)
             await self._events.on_maybe_compact()
+            turn_iteration += 1
 
     @staticmethod
     def _merge_tool_results(
@@ -434,10 +467,11 @@ class TurnEngine:
         usage: Any,
         *,
         tools_count: int | None = None,
+        effective_model: str | None = None,
     ) -> None:
         payload = ApiPayload(
             timestamp=time.time(),
-            model=self._model,
+            model=effective_model or self._model,
             system_prompt=system_prompt,
             messages=list(messages),
             tools_count=tools_count if tools_count is not None else len(self._converted_tools),

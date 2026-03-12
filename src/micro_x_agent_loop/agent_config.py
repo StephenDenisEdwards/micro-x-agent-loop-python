@@ -8,6 +8,9 @@ from micro_x_agent_loop.constants import (
     DEFAULT_MAX_CONVERSATION_MESSAGES,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_TOOL_RESULT_CHARS,
+    DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS,
+    DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS,
+    DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS,
     DEFAULT_SESSION_BUDGET_USD,
     DEFAULT_SUBAGENT_MAX_TOKENS,
     DEFAULT_SUBAGENT_MAX_TURNS,
@@ -65,6 +68,13 @@ class AgentConfig:
     sub_agent_timeout: int = DEFAULT_SUBAGENT_TIMEOUT
     sub_agent_max_turns: int = DEFAULT_SUBAGENT_MAX_TURNS
     sub_agent_max_tokens: int = DEFAULT_SUBAGENT_MAX_TOKENS
+    # Per-turn routing
+    per_turn_routing_enabled: bool = False
+    per_turn_routing_model: str = ""
+    per_turn_routing_provider: str = ""
+    per_turn_routing_max_user_chars: int = DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS
+    per_turn_routing_short_followup_chars: int = DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS
+    per_turn_routing_complexity_keywords: str = DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS
     # Budget
     session_budget_usd: float = DEFAULT_SESSION_BUDGET_USD
     # Display

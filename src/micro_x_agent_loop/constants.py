@@ -64,6 +64,17 @@ DEFAULT_SESSION_BUDGET_USD = 0.0  # 0 = no budget limit
 SESSION_BUDGET_WARN_THRESHOLD = 0.8  # Warn at 80% of budget
 
 # ---------------------------------------------------------------------------
+# Per-turn routing
+# ---------------------------------------------------------------------------
+DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS = 200
+DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS = 50
+DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS = (
+    "design,architect,analyze,analyse,explain why,compare,evaluate,"
+    "debug,refactor,plan,implement,trade-off,tradeoff,optimise,optimize,"
+    "review,critique,suggest improvements"
+)
+
+# ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------
 CHARS_TO_TOKENS_DIVISOR = 4

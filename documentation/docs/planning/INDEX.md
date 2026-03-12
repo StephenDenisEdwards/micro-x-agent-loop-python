@@ -18,7 +18,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | **8** | [Sub-Agents](PLAN-sub-agents.md) - Phase 2a (routing policy, enabled) | **Completed** | [sub-agents](../testing/MANUAL-TEST-sub-agents.md) | 🔴 | Routing directive rewritten, enabled by default. Delivers QW-3 |
 | **9** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 2.5a: Session budget caps | **Completed** | [session-budget](../testing/MANUAL-TEST-session-budget.md) | 🔴 | `SessionBudgetUSD` warn at 80%, hard stop at 100% |
 | **10** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3a: ADR-014 decision | **Completed** | — | — | Option C accepted; already implemented (`ToolResult.structured`, `ToolResultFormatter`) |
-| **11** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3b: Per-turn model routing | Planning | — | — | 50–80% savings on simple turns |
+| **11** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3b: Per-turn model routing | **Completed** | [per-turn-routing](../testing/MANUAL-TEST-per-turn-routing.md) | 🔴 | Heuristic classifier, opt-in via `PerTurnRoutingEnabled` |
 | **12** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3c: Batch API for broker | Planning | — | — | 50% discount on scheduled `--run` jobs |
 | **13** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Planned | — | — | Provider-dependent priority (low Anthropic, high OpenAI) |
 | **14** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | — | — | Frictionless onboarding |
@@ -75,7 +75,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | [Interview Assist MCP](PLAN-interview-assist-mcp.md) | Completed | Phase 1 + STT extension, updated 2026-02-19 |
 | [Memory System](PLAN-claude-style-memory.md) | Completed | All phases done. MCP mutation tracking extracted to [own plan](PLAN-mcp-mutation-tracking.md) |
 | [Continuous Voice Agent](PLAN-continuous-voice-agent.md) | Completed | Phases 1-4 done. Optional future hardening: debounce, noise filters, crash recovery, confidence gating |
-| [Cost Reduction](PLAN-cost-reduction.md) | Phases 1, 2, QW, 2.5, 3a Completed — Phase 3b/3c next | 14 strategies reviewed ([cost-reduction-review.md](../review/cost-reduction-review.md)). QW-1/2/3, session budgets, ADR-014 done. Next: per-turn model routing (3b), batch API (3c) |
+| [Cost Reduction](PLAN-cost-reduction.md) | Phases 1–3b Completed — Phase 3c next | 14 strategies reviewed ([cost-reduction-review.md](../review/cost-reduction-review.md)). QW-1/2/3, session budgets, ADR-014, per-turn routing done. Next: batch API (3c) |
 | [Cost Metrics Logging](PLAN-cost-metrics-logging.md) | Completed | Structured metrics for cost analysis - prerequisite for cost reduction. See [DESIGN-cost-metrics.md](../design/DESIGN-cost-metrics.md) |
 | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
 | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | |

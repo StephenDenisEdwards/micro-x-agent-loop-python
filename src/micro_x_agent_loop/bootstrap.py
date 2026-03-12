@@ -196,6 +196,12 @@ async def bootstrap_runtime(
             sub_agent_timeout=app.sub_agent_timeout,
             sub_agent_max_turns=app.sub_agent_max_turns,
             sub_agent_max_tokens=app.sub_agent_max_tokens,
+            per_turn_routing_enabled=app.per_turn_routing_enabled,
+            per_turn_routing_model=app.per_turn_routing_model,
+            per_turn_routing_provider=app.per_turn_routing_provider,
+            per_turn_routing_max_user_chars=app.per_turn_routing_max_user_chars,
+            per_turn_routing_short_followup_chars=app.per_turn_routing_short_followup_chars,
+            per_turn_routing_complexity_keywords=app.per_turn_routing_complexity_keywords,
             session_budget_usd=app.session_budget_usd,
             channel=channel,
         )
