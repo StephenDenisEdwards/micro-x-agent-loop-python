@@ -8,7 +8,7 @@ from typing import Any
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_channel import BrokerChannel, BufferedChannel, TerminalChannel
 from micro_x_agent_loop.agent_config import AgentConfig
-from micro_x_agent_loop.app_config import AppConfig, RuntimeEnv
+from micro_x_agent_loop.app_config import AppConfig, RuntimeEnv, resolve_runtime_env
 from micro_x_agent_loop.compaction import NoneCompactionStrategy, SummarizeCompactionStrategy
 from micro_x_agent_loop.logging_config import setup_logging
 from micro_x_agent_loop.manifest import load_manifest
@@ -66,8 +66,10 @@ async def bootstrap_runtime(
 
     if app.compaction_strategy_name == "summarize":
         compaction_model = app.compaction_model or app.model
+        compaction_provider_name = app.compaction_provider or app.provider_name
+        compaction_env = resolve_runtime_env(compaction_provider_name) if compaction_provider_name != app.provider_name else env
         compaction_strategy = SummarizeCompactionStrategy(
-            provider=create_provider(app.provider_name, env.provider_api_key),
+            provider=create_provider(compaction_provider_name, compaction_env.provider_api_key),
             model=compaction_model,
             threshold_tokens=app.compaction_threshold_tokens,
             protected_tail_messages=app.protected_tail_messages,
