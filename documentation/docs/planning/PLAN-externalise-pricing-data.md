@@ -2,7 +2,7 @@
 
 ## Status
 
-Planning
+**Completed** — Implemented 2026-03-12. Option A (config.json `Pricing` key).
 
 ## Problem
 

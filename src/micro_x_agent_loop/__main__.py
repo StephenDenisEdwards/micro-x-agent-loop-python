@@ -361,6 +361,14 @@ async def main() -> None:
         return
 
     app = parse_app_config(raw_config)
+
+    # Load user-supplied pricing overrides before any cost estimation.
+    pricing_overrides = raw_config.get("Pricing", {})
+    if pricing_overrides:
+        from micro_x_agent_loop.usage import load_pricing_overrides
+
+        load_pricing_overrides(pricing_overrides)
+
     env = resolve_runtime_env(app.provider_name)
     if not env.provider_api_key:
         logger.error(f"{env.provider_env_var} environment variable is required.")

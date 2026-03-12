@@ -33,7 +33,7 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | **22** | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
 | **23** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | Nice-to-have, not promotional |
 | **24** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | Opt-in checkpoint tracking for MCP tools; internal plumbing |
-| **25** | [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | Planning | Extract hardcoded PRICING dict to config; user-overridable, unknown-model warnings |
+| **25** | [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | **Completed** | Config.json Pricing key overlays hardcoded defaults; unknown-model warnings |
 
 
 ---
@@ -42,12 +42,12 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 
 | Status | Count |
 |--------|-------|
-| Completed | 28 |
+| Completed | 29 |
 | Phase 1 Completed (remaining phases pending) | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
-| Planning | 2 |
+| Planning | 1 |
 | Planned | 3 |
 
 ## All Plans
@@ -90,4 +90,4 @@ What to work on next, in order. Rationale: promotional publishing channels (now 
 | [Codegen Parameterisation](PLAN-codegen-parameterisation.md) | Completed | Typed MCP server generation, manifest registration, and on-demand tool discovery. Completed 2026-03-11 |
 | [Codegen Hardening](PLAN-codegen-hardening.md) | Completed | Follow-up robustness and correctness fixes for the codegen server. Completed 2026-03-11 |
 | [CLI Status Bar](PLAN-cli-status-bar.md) | Completed | Per-turn cost/token visibility via prompt_toolkit bottom_toolbar. Completed 2026-03-12 |
-| [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | Planning | Extract hardcoded PRICING dict to config.json; user-overridable model pricing |
+| [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | Completed | Config.json Pricing key overlays hardcoded defaults; unknown-model warnings. Completed 2026-03-12 |

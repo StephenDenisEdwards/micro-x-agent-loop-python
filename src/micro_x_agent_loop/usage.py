@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from loguru import logger
+
 
 @dataclass(frozen=True)
 class UsageResult:
@@ -19,29 +21,26 @@ class UsageResult:
 
 
 # Pricing per million tokens (USD).
-# Keys: (input, output, cache_read, cache_create)
-PRICING: dict[str, tuple[float, float, float, float]] = {
-    # Anthropic — (input, output, cache_read, cache_write) per MTok
-    "claude-opus-4-6-20260204": (5.0, 25.0, 0.50, 6.25),
-    "claude-opus-4-5-20250918": (5.0, 25.0, 0.50, 6.25),
-    "claude-opus-4-1-20250527": (15.0, 75.0, 1.50, 18.75),
-    "claude-opus-4-20250514": (15.0, 75.0, 1.50, 18.75),
-    "claude-sonnet-4-6-20260204": (3.0, 15.0, 0.30, 3.75),
-    "claude-sonnet-4-5-20250929": (3.0, 15.0, 0.30, 3.75),
-    "claude-sonnet-4-5-20250514": (3.0, 15.0, 0.30, 3.75),
-    "claude-sonnet-4-20250514": (3.0, 15.0, 0.30, 3.75),
-    "claude-haiku-4-5-20251001": (1.0, 5.0, 0.10, 1.25),
-    "claude-haiku-3-5-20241022": (0.80, 4.0, 0.08, 1.0),
-    # OpenAI
-    "gpt-4o": (2.50, 10.0, 1.25, 0.0),
-    "gpt-4o-mini": (0.15, 0.60, 0.075, 0.0),
-    "gpt-4.1": (2.0, 8.0, 0.50, 0.0),
-    "gpt-4.1-mini": (0.40, 1.60, 0.10, 0.0),
-    "gpt-4.1-nano": (0.10, 0.40, 0.025, 0.0),
-    "o3": (2.0, 8.0, 0.50, 0.0),
-    "o3-mini": (1.10, 4.40, 0.55, 0.0),
-    "o4-mini": (1.10, 4.40, 0.275, 0.0),
-}
+# Loaded at startup from config.json "Pricing" key via load_pricing_overrides().
+# Format: model_id → (input, output, cache_read, cache_create)
+PRICING: dict[str, tuple[float, float, float, float]] = {}
+
+
+def load_pricing_overrides(overrides: dict[str, dict]) -> None:
+    """Load pricing data into the lookup table.
+
+    Called once at startup from __main__.py with the config.json "Pricing" section.
+    Each entry: {"input": float, "output": float, "cache_read": float, "cache_create": float}
+    """
+    for model, prices in overrides.items():
+        PRICING[model] = (
+            float(prices["input"]),
+            float(prices["output"]),
+            float(prices.get("cache_read", 0.0)),
+            float(prices.get("cache_create", 0.0)),
+        )
+    if PRICING:
+        logger.info(f"Loaded pricing data for {len(PRICING)} model(s)")
 
 
 def _lookup_pricing(model: str) -> tuple[float, float, float, float] | None:
@@ -56,10 +55,19 @@ def _lookup_pricing(model: str) -> tuple[float, float, float, float] | None:
     return None
 
 
+_warned_models: set[str] = set()
+
+
 def estimate_cost(usage: UsageResult) -> float:
     """Calculate estimated cost in USD from a UsageResult."""
     prices = _lookup_pricing(usage.model)
     if prices is None:
+        if usage.model and usage.model not in _warned_models:
+            _warned_models.add(usage.model)
+            logger.warning(
+                f"No pricing data for model '{usage.model}' — cost will be reported as $0. "
+                f"Add it to the Pricing section in config.json."
+            )
         return 0.0
 
     input_price, output_price, cache_read_price, cache_create_price = prices

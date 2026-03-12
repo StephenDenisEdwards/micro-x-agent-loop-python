@@ -43,6 +43,13 @@ def create_app(
         # -- Startup --
         raw_config, _ = load_json_config(config_path)
         app_config = parse_app_config(raw_config)
+
+        pricing_overrides = raw_config.get("Pricing", {})
+        if pricing_overrides:
+            from micro_x_agent_loop.usage import load_pricing_overrides
+
+            load_pricing_overrides(pricing_overrides)
+
         env = resolve_runtime_env(app_config.provider_name)
         setup_logging(level=app_config.log_level, consumers=app_config.log_consumers)
 
