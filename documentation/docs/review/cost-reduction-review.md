@@ -79,9 +79,9 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | **Status** | ⚠️ Partial |
 | **Review finding** | **Tracking: Done.** Comprehensive structured metrics: per-call, per-tool, per-compaction, per-session. `SessionAccumulator` in `metrics.py`. Cache-aware cost calculation. JSON output to `metrics.jsonl`. **Visibility: Not done.** Metrics write to file only — not surfaced in the REPL after each turn. **Budget enforcement: Not done.** No `SessionBudgetUSD` config, no warnings, no hard stops. |
 | **Code location** | `src/micro_x_agent_loop/metrics.py`; `src/micro_x_agent_loop/usage.py` |
-| **Plan** | [`PLAN-cost-metrics-logging.md`](../planning/PLAN-cost-metrics-logging.md) — completed. REPL display and budget enforcement are listed as remaining gaps in that plan. |
-| **Residual gaps** | (a) Per-turn cost summary not shown in REPL. (b) No `SessionBudgetUSD` with warn/stop logic. Both are straightforward additions on top of existing metrics infrastructure. |
-| **Action taken** | — |
+| **Plan** | [`PLAN-cost-metrics-logging.md`](../planning/PLAN-cost-metrics-logging.md) — completed. [`PLAN-cli-status-bar.md`](../planning/PLAN-cli-status-bar.md) — planned, addresses REPL cost visibility via prompt_toolkit `bottom_toolbar`. |
+| **Residual gaps** | (a) Per-turn cost summary not shown in REPL — addressed by `PLAN-cli-status-bar.md`. (b) No `SessionBudgetUSD` with warn/stop logic — separate plan needed. |
+| **Action taken** | Plan created for CLI status bar |
 
 ---
 
