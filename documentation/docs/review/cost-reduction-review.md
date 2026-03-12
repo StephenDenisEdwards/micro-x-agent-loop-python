@@ -11,7 +11,8 @@
 
 This document maps a cost reduction strategy analysis against the current implementation and roadmap of micro-x-agent-loop-python. For each strategy, it records what is implemented, what is planned, what is missing, and what action (if any) has been taken since the review.
 
-Primary reference plan: [`documentation/docs/planning/PLAN-cost-reduction.md`](../documentation/docs/planning/PLAN-cost-reduction.md)
+Primary reference plan: [`PLAN-cost-reduction.md`](../planning/PLAN-cost-reduction.md)
+Research source: [`cost-reduction-research-report.md`](../research/cost-reduction-research-report.md)
 
 ---
 
@@ -72,7 +73,7 @@ Primary reference plan: [`documentation/docs/planning/PLAN-cost-reduction.md`](.
 | **Status** | ⚠️ Partial |
 | **Review finding** | **Tracking: Done.** Comprehensive structured metrics: per-call, per-tool, per-compaction, per-session. `SessionAccumulator` in `metrics.py`. Cache-aware cost calculation. JSON output to `metrics.jsonl`. **Visibility: Not done.** Metrics write to file only — not surfaced in the REPL after each turn. **Budget enforcement: Not done.** No `SessionBudgetUSD` config, no warnings, no hard stops. |
 | **Code location** | `src/micro_x_agent_loop/metrics.py`; `src/micro_x_agent_loop/usage.py` |
-| **Plan** | [`PLAN-cost-metrics-logging.md`](../documentation/docs/planning/PLAN-cost-metrics-logging.md) — completed. REPL display and budget enforcement are listed as remaining gaps in that plan. |
+| **Plan** | [`PLAN-cost-metrics-logging.md`](../planning/PLAN-cost-metrics-logging.md) — completed. REPL display and budget enforcement are listed as remaining gaps in that plan. |
 | **Residual gaps** | (a) Per-turn cost summary not shown in REPL. (b) No `SessionBudgetUSD` with warn/stop logic. Both are straightforward additions on top of existing metrics infrastructure. |
 | **Action taken** | — |
 
@@ -88,7 +89,7 @@ Primary reference plan: [`documentation/docs/planning/PLAN-cost-reduction.md`](.
 | **Review finding** | **Hard truncation: Done.** `_truncate_tool_result` caps at `MaxToolResultChars: 40000`. **Semantic extraction: Not done.** No per-tool structured extraction — tools return raw API/HTML-derived text. **Summarisation: Implemented but deprecated.** `ToolResultSummarizationEnabled` (default: `false`) — ADR-013 documents that lossy summarisation drops data the main model needs. Formally deprecated and not recommended. |
 | **Code location** | `src/micro_x_agent_loop/turn_engine.py` lines 360–391 |
 | **Config** | `MaxToolResultChars: 40000`, `ToolResultSummarizationEnabled: false` |
-| **ADR** | [ADR-013](../documentation/docs/architecture/decisions/) — tool result summarisation unreliable; root cause is unstructured results with no schema to guide extraction |
+| **ADR** | [ADR-013](../architecture/decisions/) — tool result summarisation unreliable; root cause is unstructured results with no schema to guide extraction |
 | **Residual gaps** | Real fix requires tools to return structured JSON (ADR-014 decision outstanding). Until then, no reliable per-tool extraction is possible. |
 | **Action taken** | — |
 
@@ -102,7 +103,7 @@ Primary reference plan: [`documentation/docs/planning/PLAN-cost-reduction.md`](.
 |-----------|--------|
 | **Status** | 🔲 Planned (decision pending) |
 | **Review finding** | ADR-014 identifies the constraint: MCP tool results are currently unstructured text. Three options documented: (A) own tools return JSON, (B) LLM extracts from text, (C) hybrid. Decision deferred — blocks Strategy 5 (structured extraction) and Strategy 11 (compiled mode). |
-| **ADR** | [ADR-014](../documentation/docs/architecture/decisions/) — open decision |
+| **ADR** | [ADR-014](../architecture/decisions/) — open decision |
 | **Residual gaps** | No decision made. Recommended path: Option C (JSON from our own tools, LLM fallback for third-party MCP servers). |
 | **Action taken** | — |
 
@@ -165,7 +166,7 @@ Primary reference plan: [`documentation/docs/planning/PLAN-cost-reduction.md`](.
 | **Review finding** | Fully implemented: `tool_search` pseudo-tool with on-demand discovery, triggers at >50 tools. Disabled by default (`ToolSearchEnabled: "false"`). Static tool groups and vector-DB semantic routing not implemented. Provider-aware filtering (more aggressive for OpenAI) not implemented. |
 | **Code location** | `src/micro_x_agent_loop/tool_search.py` |
 | **Config** | `ToolSearchEnabled: "false"` (options: `"auto"`, `"true"`, `"false"`) |
-| **Research** | [`kv-cache-and-mcp-tool-routing.md`](../documentation/docs/research/kv-cache-and-mcp-tool-routing.md) — full cost modelling. Key insight: Anthropic's 90% cache discount makes full-set schema caching cheap (~$0.001/turn); OpenAI's 50–75% discount makes routing worthwhile even at ~60 tools. |
+| **Research** | [`kv-cache-and-mcp-tool-routing.md`](../research/kv-cache-and-mcp-tool-routing.md) — full cost modelling. Key insight: Anthropic's 90% cache discount makes full-set schema caching cheap (~$0.001/turn); OpenAI's 50–75% discount makes routing worthwhile even at ~60 tools. |
 | **Residual gaps** | No static tool group config. No vector routing. No provider-aware policy. Effort-benefit depends heavily on provider — low priority for Anthropic, higher for OpenAI. |
 | **Action taken** | — |
 
