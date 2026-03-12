@@ -83,9 +83,9 @@ The LLM writes a program, but programs against a known set of capabilities expos
 - MCP servers must be callable from generated code, not just from the agent loop. This may require an SDK or client library accessible from the sandbox.
 - Error handling in generated code may be naive — network failures, rate limits, malformed responses.
 - Sandboxing must be robust enough to run generated code that makes real external calls (Gmail, LinkedIn).
-- **Tool results are unstructured text, not structured JSON.** The description above assumes the generated code can "fetch data via MCP, transform/score/validate in code" — but our tools currently flatten API/MCP responses into human-readable text before returning. The code cannot reliably parse this into structured data without per-item LLM interpretation. This is a design choice in our tool implementations, not a protocol limitation — MCP is a JSON-RPC protocol and supports structured JSON in content blocks. See [ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).
+- **Tool result format: Resolved.** [ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) accepted (Option C, 2026-03-12). Tools now return structured data via `ToolResult.structured` and `McpToolProxy` preserves `structuredContent` from MCP responses. `ToolResultFormatter` provides config-driven per-tool formatting (json/table/text/key_value). All tools are TypeScript MCP servers.
 
-**Verdict:** The most promising direction. Combines general-purpose flexibility with meaningful guardrails from the MCP server contracts. However, the tool result format issue ([ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md)) — our tools returning unstructured text instead of structured JSON — must be resolved before this model can deliver fully deterministic execution.
+**Verdict:** The most promising direction. Combines general-purpose flexibility with meaningful guardrails from the MCP server contracts. The tool result format issue ([ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md)) has been resolved — structured data is now available for programmatic processing.
 
 ---
 

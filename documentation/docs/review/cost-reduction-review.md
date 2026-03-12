@@ -92,12 +92,12 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | Attribute | Detail |
 |-----------|--------|
 | **Status** | ⚠️ Partial |
-| **Review finding** | **Hard truncation: Done.** `_truncate_tool_result` caps at `MaxToolResultChars: 40000`. **Semantic extraction: Not done.** No per-tool structured extraction — tools return raw API/HTML-derived text. **Summarisation: Implemented but deprecated.** `ToolResultSummarizationEnabled` (default: `false`) — ADR-013 documents that lossy summarisation drops data the main model needs. Formally deprecated and not recommended. |
-| **Code location** | `src/micro_x_agent_loop/turn_engine.py` lines 360–391 |
-| **Config** | `MaxToolResultChars: 40000`, `ToolResultSummarizationEnabled: false` |
-| **ADR** | [ADR-013](../architecture/decisions/) — tool result summarisation unreliable; root cause is unstructured results with no schema to guide extraction |
-| **Residual gaps** | Real fix requires tools to return structured JSON (ADR-014 decision outstanding). Until then, no reliable per-tool extraction is possible. |
-| **Action taken** | — |
+| **Review finding** | **Hard truncation: Done.** `_truncate_tool_result` caps at `MaxToolResultChars: 40000`. **Structured data pipeline: Done.** `ToolResult.structured` + `ToolResultFormatter` with per-tool config (json/table/text/key_value). **Summarisation: Implemented but deprecated.** `ToolResultSummarizationEnabled` (default: `false`) — ADR-013 documents that lossy summarisation drops data the main model needs. |
+| **Code location** | `src/micro_x_agent_loop/turn_engine.py`; `src/micro_x_agent_loop/tool_result_formatter.py` |
+| **Config** | `MaxToolResultChars: 40000`, `ToolResultSummarizationEnabled: false`, `ToolFormatting` (per-tool format config) |
+| **ADR** | [ADR-013](../architecture/decisions/) — tool result summarisation unreliable. [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) — accepted (Option C), structured results now available. |
+| **Residual gaps** | Per-tool extraction is now possible via `ToolResult.structured` and `ToolResultFormatter`. Remaining: not all MCP servers may populate `structuredContent` — tuning per-tool formatting config for optimal token reduction. |
+| **Action taken** | ADR-014 accepted (2026-03-12). Structured data pipeline (`ToolResult.structured`, `McpToolProxy` `structuredContent` extraction, `ToolResultFormatter`) already implemented. |
 
 ---
 
@@ -107,11 +107,12 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 
 | Attribute | Detail |
 |-----------|--------|
-| **Status** | 🔲 Planned (decision pending) |
-| **Review finding** | ADR-014 identifies the constraint: MCP tool results are currently unstructured text. Three options documented: (A) own tools return JSON, (B) LLM extracts from text, (C) hybrid. Decision deferred — blocks Strategy 5 (structured extraction) and Strategy 11 (compiled mode). |
-| **ADR** | [ADR-014](../architecture/decisions/) — open decision |
-| **Residual gaps** | No decision made. Recommended path: Option C (JSON from our own tools, LLM fallback for third-party MCP servers). |
-| **Action taken** | — |
+| **Status** | ✅ Done |
+| **Review finding** | ADR-014 accepted (Option C). The codebase has implemented structured tool results incrementally: `ToolResult` dataclass carries both `text` and `structured` fields, `McpToolProxy` preserves `structuredContent` from MCP responses, and `ToolResultFormatter` provides config-driven per-tool formatting (json/table/text/key_value). All tools are now TypeScript MCP servers — no Python built-in tools remain. |
+| **ADR** | [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) — accepted (v3, 2026-03-12) |
+| **Code location** | `src/micro_x_agent_loop/tool.py` (`ToolResult`); `src/micro_x_agent_loop/mcp/mcp_tool_proxy.py` (`structuredContent`); `src/micro_x_agent_loop/tool_result_formatter.py` |
+| **Residual gaps** | LLM extraction fallback (Option B) for third-party MCP servers not implemented — not needed yet as all production tools are our own. |
+| **Action taken** | ADR-014 accepted as Option C (2026-03-12). Implementation already in place. No longer blocks strategies 5 or 11. |
 
 ---
 
@@ -184,13 +185,13 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 
 | Attribute | Detail |
 |-----------|--------|
-| **Status** | 🔲 Planned (Phase 4+, blocked) |
+| **Status** | 🔲 Planned (Phase 4+) |
 | **Review finding** | Stage 1 (pattern matching) and Stage 2 (LLM classification) both detect batch/scoring/structured-output signals. Detection is diagnostic only — no compiled execution path exists. Mode analysis is disabled by default (`ModeAnalysisEnabled: false`). |
 | **Code location** | `src/micro_x_agent_loop/mode_selector.py` |
 | **Config** | `ModeAnalysisEnabled: false`, `Stage2ClassificationEnabled: true` |
-| **Blockers** | ADR-014 (tool data format decision) must be resolved first. Compiled mode requires structured tool outputs. |
+| **Blockers** | ~~ADR-014 (tool data format decision)~~ — resolved (2026-03-12). Structured tool outputs now available via `ToolResult.structured`. Remaining blocker: no execution path or plan document for compiled mode. |
 | **Residual gaps** | No execution path. No plan document for compiled mode beyond detection. Significant architectural work required. |
-| **Action taken** | — |
+| **Action taken** | ADR-014 blocker resolved (2026-03-12). |
 
 ---
 
@@ -244,13 +245,13 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | 2 | Cheap model for compaction | ✅ Done | — | — |
 | 3 | Conversation history summarisation | ✅ Done | — | — |
 | 4 | Cost tracking and visibility | ✅ Done | Tracking, CLI visibility, and budget caps all implemented | Session budget caps (2026-03-12) |
-| 5 | Tool result size reduction | ⚠️ Partial | Medium — blocked on ADR-014 for real fix; hard truncation is active | — |
-| 6 | Tool result data format (ADR-014) | 🔲 Planned | **High** — blocks strategies 5, 11 | — |
+| 5 | Tool result size reduction | ⚠️ Partial | Medium — structured pipeline in place; per-tool formatting tuning remains | ADR-014 resolved (2026-03-12) |
+| 6 | Tool result data format (ADR-014) | ✅ Done | — | Option C accepted, implemented incrementally (2026-03-12) |
 | 7 | Sub-agent delegation | ✅ Done | Enabled by default, routing directive with examples | Routing policy + enabled (2026-03-12) |
 | 8 | Per-turn model routing | 🔲 Planned | **High** — architecture ready; 50–80% saving on simple turns | Stage2Model → Haiku done |
 | 9 | Output token reduction | ✅ Done | Low — `ConciseOutputEnabled` enabled in config-base.json | Enabled |
 | 10 | On-demand tool discovery | ⚠️ Partial | Low (Anthropic) / Medium (OpenAI) — provider-dependent | — |
-| 11 | Compiled mode / batch execution | 🔲 Planned | Low — Phase 4+, blocked on ADR-014 | — |
+| 11 | Compiled mode / batch execution | 🔲 Planned | Low — Phase 4+, ADR-014 blocker resolved | ADR-014 resolved (2026-03-12) |
 | 12 | Batch API for broker jobs | ❌ Gap | Medium — 50% discount, natural fit for `--run` mode | — |
 | 13 | Provider and model arbitrage | ⚠️ Partial | Low — OpenAI exists; no benchmarking or auto-switching | — |
 | 14 | Retry cost reduction | ❌ Gap | Low — worst-case only, low practical impact | — |
@@ -259,7 +260,7 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 
 1. ~~**Per-turn cost display in REPL**~~ — ✅ Done ([CLI Status Bar](../planning/PLAN-cli-status-bar.md)).
 2. ~~**Session budget caps**~~ — ✅ Done (2026-03-12). `SessionBudgetUSD` with warn at 80%, hard stop at 100%.
-3. **ADR-014 decision** — resolves the blocker for strategies 5, 6, 11.
+3. ~~**ADR-014 decision**~~ — ✅ Done (2026-03-12). Option C accepted; structured tool results implemented (`ToolResult.structured`, `ToolResultFormatter`). Strategies 5 and 11 unblocked.
 4. **Per-turn model routing** — connect Stage 2 classification output to actual model selection in `TurnEngine`.
 5. **Batch API for broker** — 50% cost reduction for all scheduled `--run` jobs, no quality tradeoff.
 6. ~~**`Stage2Model` → Haiku**~~ — ✅ Done (2026-03-12). Changed to `claude-haiku-4-5-20251001` in `config-base.json`.

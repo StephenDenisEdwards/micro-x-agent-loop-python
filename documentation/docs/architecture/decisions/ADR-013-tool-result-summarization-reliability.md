@@ -69,7 +69,7 @@ The honest architecture for a general assistant is: **reliable tools for reliabl
 
 **Related:**
 
-- [ADR-014](ADR-014-mcp-unstructured-data-constraint.md) — our tools return human-readable text instead of structured JSON (a design choice, not an MCP protocol limitation). Changing tools to return JSON would make structured processing tractable and reduce the need for summarization.
+- [ADR-014](ADR-014-mcp-unstructured-data-constraint.md) — accepted (Option C, 2026-03-12). Tools now return structured JSON via `ToolResult.structured`, with `ToolResultFormatter` providing config-driven per-tool formatting. This makes structured extraction tractable and reduces the need for lossy summarization.
 
 **Open questions:**
 

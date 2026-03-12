@@ -287,7 +287,7 @@ This approach introduces trade-offs:
 - DSL design may introduce brittleness.
 - System complexity increases.
 - Mode selection policy must remain simple and deterministic.
-- **Tool result format:** Tools currently return human-readable text rather than structured JSON. This is a design choice in the tool implementations — MCP is a JSON-RPC protocol and supports structured JSON in content blocks. Our tools and MCP servers can be changed to return JSON for compiled mode. Third-party MCP servers that return prose may need per-item LLM extraction as a fallback. See [ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md).
+- **Tool result format: Resolved.** [ADR-014](../../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) accepted (Option C, 2026-03-12). Tools now return structured data via `ToolResult.structured` with `ToolResultFormatter` providing config-driven per-tool formatting. All production tools are TypeScript MCP servers returning `structuredContent`.
 
 However, these risks are engineering challenges, not conceptual flaws.
 

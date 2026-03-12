@@ -8,7 +8,7 @@ Accepted
 
 The agent loop had 29 built-in Python tools loaded via `tool_registry.py` plus 3 MCP servers (interview-assist, whatsapp, system-info). This split architecture created several problems:
 
-1. **No structured data flow.** Built-in tools returned plain text strings. The LLM received unstructured output, and the orchestrator had no machine-parseable data for metrics, validation, or programmatic use (see ADR-014 for the problem statement).
+1. **No structured data flow.** Built-in tools returned plain text strings. The LLM received unstructured output, and the orchestrator had no machine-parseable data for metrics, validation, or programmatic use (see ADR-014 for the original problem statement — now resolved with `ToolResult.structured` and `ToolResultFormatter`).
 
 2. **No output validation.** Tools had no `outputSchema`, so there was no way to verify tool responses matched an expected shape.
 

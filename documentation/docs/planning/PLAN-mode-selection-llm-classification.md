@@ -21,7 +21,7 @@ Like Phase 1, this is **diagnostic output only** — it prints the recommendatio
 | 1 — Mode selection CLI output | Structural pattern matching, diagnostic output only | **Complete** |
 | **2 — LLM classification** | **Cheap LLM call for ambiguous cases, diagnostic output** | **Complete** |
 | 3 — `agent_mcp` client library | Bridge library for generated code to call MCP servers | Future |
-| 4 — Code generation and sandbox execution | LLM writes programs against MCP servers, sandbox runs them | Future — tools must return JSON first, see [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) |
+| 4 — Code generation and sandbox execution | LLM writes programs against MCP servers, sandbox runs them | Future — structured tool results now available ([ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) accepted) |
 | 5 — Narrative callback | LLM returns for prose from compact results | Future |
 
 ## Implementation Plan

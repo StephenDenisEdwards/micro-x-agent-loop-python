@@ -120,7 +120,7 @@ Each instance is independent: separate API client, separate retry state, no shar
 
 **Related:**
 
-- [ADR-014](ADR-014-mcp-unstructured-data-constraint.md) — our tools currently return human-readable text instead of structured JSON. This is a design choice (not an MCP protocol limitation) that affects both tool result processing (this ADR's Layer 3) and the compiled mode execution model.
+- [ADR-014](ADR-014-mcp-unstructured-data-constraint.md) — accepted (Option C, 2026-03-12). Tools now return structured data via `ToolResult.structured` and `McpToolProxy` preserves `structuredContent`. `ToolResultFormatter` provides config-driven per-tool formatting. This unblocks Layer 3 structured extraction and compiled mode.
 
 **Future layers (Phase 3):**
 

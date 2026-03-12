@@ -2,7 +2,7 @@
 
 ## Status
 
-**Resolved** — ADR-014 rewritten and all 11 cross-references corrected in `4ebb728`.
+**Resolved** — ADR-014 rewritten and all 11 cross-references corrected in `4ebb728`. ADR-014 further updated to v3 (2026-03-12) reflecting that Option C has been implemented incrementally — see ADR-014 revision history.
 
 ## Summary
 

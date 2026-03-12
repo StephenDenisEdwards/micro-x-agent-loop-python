@@ -45,7 +45,7 @@ Guidelines:
 
 ### Output Design
 
-Tool results are **unstructured text** that the LLM interprets (see ADR-014). Return human-readable text, optionally with structured data:
+Tool results include **human-readable text** for the LLM and optionally **structured data** for programmatic use (see ADR-014). Return both when possible:
 
 ```typescript
 // Good: clear, parseable text
@@ -140,4 +140,4 @@ class MyToolTests(unittest.TestCase):
 
 - [Tool System Design](../design/DESIGN-tool-system.md)
 - [Adding an MCP Server](adding-an-mcp-server.md)
-- [ADR-014: Tool Results are Unstructured Text](../architecture/decisions/ADR-014-tool-results-unstructured-text.md)
+- [ADR-014: Structured Tool Results with Configurable LLM Formatting](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md)

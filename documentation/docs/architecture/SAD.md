@@ -391,7 +391,7 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-011](decisions/ADR-011-continuous-voice-mode-via-stt-mcp-sessions.md) | Continuous voice mode via STT MCP sessions | Accepted |
 | [ADR-012](decisions/ADR-012-layered-cost-reduction.md) | Layered cost reduction architecture | Accepted |
 | [ADR-013](decisions/ADR-013-tool-result-summarization-reliability.md) | Tool result summarization is fundamentally unreliable | Accepted |
-| [ADR-014](decisions/ADR-014-mcp-unstructured-data-constraint.md) | Tool results are unstructured text — design choice affecting compiled mode | Open |
+| [ADR-014](decisions/ADR-014-mcp-unstructured-data-constraint.md) | Structured tool results with configurable LLM formatting | Accepted |
 | [ADR-015](decisions/ADR-015-all-tools-as-typescript-mcp-servers.md) | All tools as TypeScript MCP servers | Accepted |
 | [ADR-016](decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md) | Retry/resilience for MCP servers and transport | Accepted |
 | [ADR-017](decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md) | Ask user pseudo-tool for human-in-the-loop questioning | Accepted |

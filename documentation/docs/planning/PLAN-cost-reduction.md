@@ -317,11 +317,11 @@ These items were identified by the [cost reduction review](../review/cost-reduct
 
 ### Phase 3: Architecture
 
-#### 3a. ADR-014 Decision (Tool Result Data Format)
+#### 3a. ADR-014 Decision (Tool Result Data Format) ✅ Completed (2026-03-12)
 
-**Impact:** Resolves the blocker for strategies 5 (structured extraction), 6 (tool data format), and 11 (compiled mode). Recommended path: Option C (JSON from own tools, LLM fallback for third-party MCP servers).
+**Impact:** Resolves the blocker for strategies 5 (structured extraction), 6 (tool data format), and 11 (compiled mode).
 
-**Effort:** Decision + incremental migration of own tools to return structured JSON.
+**Outcome:** Option C accepted — implemented incrementally. `ToolResult` carries both `text` and `structured` fields. `McpToolProxy` preserves `structuredContent`. `ToolResultFormatter` provides config-driven per-tool formatting (json/table/text/key_value). All tools are now TypeScript MCP servers. See [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) v3.
 
 ---
 
