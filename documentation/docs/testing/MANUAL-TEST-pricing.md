@@ -101,8 +101,12 @@ Run `/cost`.
 
 **Expected:**
 - "Pricing (per MTok): (unknown model — cost estimated as $0)" message appears
+- A one-time warning is logged: `No pricing data for model '<name>' — cost will be reported as $0. Add it to the Pricing section in config.json.`
+- The warning only appears once per model per session (subsequent calls for the same model are silent)
 - Total cost remains $0.000000
 - Token counts are still tracked correctly (just cost is zero)
+
+**Fix:** Add the model to the `Pricing` section in `config.json` (or `config-base.json`) with its per-million-token rates.
 
 ---
 

@@ -101,6 +101,7 @@ The required API key depends on the configured `Provider`. Service-specific cred
 | `LogConsumers` | array | console + file | Log sink configuration (see [below](#logconsumers)) |
 | `UserMemoryEnabled` | bool | `false` | Enables persistent user memory (MEMORY.md files) |
 | `UserMemoryDir` | string | _(none)_ | Directory for user memory files (requires `UserMemoryEnabled=true`) |
+| `Pricing` | object | `{}` | Per-model token pricing in USD per million tokens (see [below](#pricing)) |
 | `McpServers` | object | _(none)_ | MCP server configurations (see [below](#mcpservers)) |
 | `BrokerDatabase` | string | `".micro_x/broker.db"` | SQLite path for broker job and run persistence |
 | `BrokerPollIntervalSeconds` | int | `5` | How often the broker checks for due jobs (seconds) |
@@ -138,6 +139,10 @@ The required API key depends on the configured `Provider`. Service-specific cred
   "ToolResultSummarizationThreshold": 4000,
   "SmartCompactionTriggerEnabled": true,
   "ConciseOutputEnabled": false,
+  "Pricing": {
+    "claude-sonnet-4-5-20250929": { "input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_create": 3.75 },
+    "claude-haiku-4-5-20251001": { "input": 1.0, "output": 5.0, "cache_read": 0.10, "cache_create": 1.25 }
+  },
   "McpServers": {
     "system-info": {
       "transport": "stdio",
@@ -434,6 +439,26 @@ All estimates assume Sonnet ($3/$15 per MTok input/output) as the main model and
 **Combined estimate:** ~40-50% reduction in total session cost (from ~$2.00-2.50 to ~$1.00-1.50 for a typical session).
 
 Features enabled by default (prompt caching, smart trigger) are pure wins with no quality tradeoff. Opt-in features (tool summarization, concise output) trade some fidelity for cost. The cheapest single change is setting `CompactionModel` to Haiku — a ~91% reduction per compaction event with negligible quality impact.
+
+### Pricing
+
+Maps model IDs to per-million-token costs in USD. This is the **sole source** of pricing data — there are no hardcoded defaults. If a model is not listed here, its cost will be reported as $0.00 and a one-time warning is logged.
+
+Each entry requires `input` and `output` rates. The `cache_read` and `cache_create` fields default to `0.0` if omitted.
+
+```json
+{
+  "Pricing": {
+    "claude-sonnet-4-5-20250929": { "input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_create": 3.75 },
+    "claude-haiku-4-5-20251001": { "input": 1.0, "output": 5.0, "cache_read": 0.10, "cache_create": 1.25 },
+    "gpt-4o": { "input": 2.50, "output": 10.0, "cache_read": 1.25, "cache_create": 0.0 }
+  }
+}
+```
+
+Pricing lookup uses exact match first, then prefix match (e.g. `claude-sonnet-4-5` matches `claude-sonnet-4-5-20250929`). This allows short model aliases to resolve to dated model entries.
+
+See `config-base.json` for the full set of pre-configured models (Anthropic Claude and OpenAI GPT families).
 
 ### McpServers
 

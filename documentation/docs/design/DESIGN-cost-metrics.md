@@ -52,9 +52,9 @@ Frozen dataclass normalising token usage across providers:
 | `tool_schema_count` | int | Number of tool schemas in the request |
 | `stop_reason` | str | Why the response ended |
 
-**PRICING dict** — maps model IDs to per-million-token costs as `(input, output, cache_read, cache_create)` tuples. Covers Claude Sonnet/Haiku/Opus and GPT-4o/4o-mini/4.1/o3/o4-mini.
+**PRICING dict** — maps model IDs to per-million-token costs as `(input, output, cache_read, cache_create)` tuples. Loaded at startup from the `Pricing` section of `config.json` via `load_pricing_overrides()`. No hardcoded defaults — all pricing data lives in config.
 
-**`estimate_cost(usage)`** — calculates USD from a `UsageResult`. Returns `0.0` for unknown models.
+**`estimate_cost(usage)`** — calculates USD from a `UsageResult`. Returns `0.0` for unknown models (with a one-time warning logged per model).
 
 ### Metrics Emission (`metrics.py`)
 

@@ -141,6 +141,7 @@ When a user submits a prompt:
 - Supports `Base` key for inheritance (variant overrides base)
 - Supports `ConfigFile` key for indirection (pointer to actual config)
 - `${ENV_VAR}` expanded recursively in all string values
+- `Pricing` key: per-model token pricing (input/output/cache_read/cache_create per MTok USD) — no hardcoded defaults
 - Profiles: `config-standard.json`, `config-standard-no-summarization.json`, `config-baseline.json`
 
 ### Memory System
