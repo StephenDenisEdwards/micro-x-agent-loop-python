@@ -65,12 +65,14 @@ async def bootstrap_runtime(
     tools.extend(manifest_tools)
 
     if app.compaction_strategy_name == "summarize":
-        compaction_model = app.compaction_model or app.model
-        compaction_provider_name = app.compaction_provider or app.provider_name
-        compaction_env = resolve_runtime_env(compaction_provider_name) if compaction_provider_name != app.provider_name else env
+        if not app.compaction_provider:
+            raise ValueError("CompactionProvider must be set in config when CompactionStrategy is 'summarize'")
+        if not app.compaction_model:
+            raise ValueError("CompactionModel must be set in config when CompactionStrategy is 'summarize'")
+        compaction_env = resolve_runtime_env(app.compaction_provider) if app.compaction_provider != app.provider_name else env
         compaction_strategy = SummarizeCompactionStrategy(
-            provider=create_provider(compaction_provider_name, compaction_env.provider_api_key),
-            model=compaction_model,
+            provider=create_provider(app.compaction_provider, compaction_env.provider_api_key),
+            model=app.compaction_model,
             threshold_tokens=app.compaction_threshold_tokens,
             protected_tail_messages=app.protected_tail_messages,
             smart_trigger_enabled=app.smart_compaction_trigger_enabled,
