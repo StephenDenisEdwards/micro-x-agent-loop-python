@@ -30,6 +30,7 @@ from micro_x_agent_loop.mode_selector import (
     format_analysis,
     parse_stage2_response,
 )
+from micro_x_agent_loop.app_config import resolve_runtime_env
 from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
@@ -93,6 +94,8 @@ class Agent:
         # Sub-agents
         self._sub_agent_runner: SubAgentRunner | None = None
         if config.sub_agents_enabled:
+            if not config.sub_agent_provider:
+                raise ValueError("SubAgentProvider must be set in config when SubAgentsEnabled is true")
             if not config.sub_agent_model:
                 raise ValueError("SubAgentModel must be set in config when SubAgentsEnabled is true")
             from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
@@ -102,6 +105,7 @@ class Agent:
                 provider_name=config.provider,
                 api_key=config.api_key,
                 parent_model=config.model,
+                sub_agent_provider=config.sub_agent_provider,
                 sub_agent_model=config.sub_agent_model,
                 timeout=config.sub_agent_timeout,
                 max_turns=config.sub_agent_max_turns,
@@ -162,9 +166,16 @@ class Agent:
         # Mode analysis
         self._mode_analysis_enabled = config.mode_analysis_enabled
         self._stage2_classification_enabled = config.stage2_classification_enabled
-        if config.stage2_classification_enabled and not config.stage2_model:
-            raise ValueError("Stage2Model must be set in config when Stage2ClassificationEnabled is true")
+        if config.stage2_classification_enabled:
+            if not config.stage2_provider:
+                raise ValueError("Stage2Provider must be set in config when Stage2ClassificationEnabled is true")
+            if not config.stage2_model:
+                raise ValueError("Stage2Model must be set in config when Stage2ClassificationEnabled is true")
         self._stage2_model = config.stage2_model
+        self._stage2_provider = (
+            create_provider(config.stage2_provider, resolve_runtime_env(config.stage2_provider).provider_api_key)
+            if config.stage2_classification_enabled else None
+        )
         self._working_directory = config.working_directory
 
         # Tool result summarization
@@ -413,7 +424,7 @@ class Agent:
     async def _classify_ambiguous(self, user_message: str, stage1: ModeAnalysis) -> Stage2Result:
         """Call the LLM to classify an ambiguous prompt as PROMPT or COMPILED."""
         prompt = build_stage2_prompt(user_message, stage1)
-        response_text, usage = await self._provider.create_message(
+        response_text, usage = await self._stage2_provider.create_message(
             self._stage2_model, 300, 0.0, [{"role": "user", "content": prompt}]
         )
         self.on_api_call_completed(usage, call_type="stage2_classification")

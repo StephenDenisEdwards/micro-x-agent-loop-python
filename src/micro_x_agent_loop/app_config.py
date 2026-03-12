@@ -71,6 +71,7 @@ class AppConfig:
     concise_output_enabled: bool
     mode_analysis_enabled: bool
     stage2_classification_enabled: bool
+    stage2_provider: str
     stage2_model: str
     tool_search_enabled: str
     # Tool result formatting
@@ -78,6 +79,7 @@ class AppConfig:
     default_format: dict
     # Sub-agents
     sub_agents_enabled: bool
+    sub_agent_provider: str
     sub_agent_model: str
     sub_agent_timeout: int
     sub_agent_max_turns: int
@@ -274,11 +276,13 @@ def parse_app_config(config: dict) -> AppConfig:
         concise_output_enabled=_to_bool(config.get("ConciseOutputEnabled", False), default=False),
         mode_analysis_enabled=_to_bool(config.get("ModeAnalysisEnabled", True), default=True),
         stage2_classification_enabled=_to_bool(config.get("Stage2ClassificationEnabled", True), default=True),
+        stage2_provider=str(config.get("Stage2Provider", "")).strip().lower(),
         stage2_model=str(config.get("Stage2Model", "")).strip(),
         tool_search_enabled=str(config.get("ToolSearchEnabled", "false")).strip().lower(),
         tool_formatting=config.get("ToolFormatting", {}),
         default_format=config.get("DefaultFormat", {"format": "json"}),
         sub_agents_enabled=_to_bool(config.get("SubAgentsEnabled", False), default=False),
+        sub_agent_provider=str(config.get("SubAgentProvider", "")).strip().lower(),
         sub_agent_model=str(config.get("SubAgentModel", "")).strip(),
         sub_agent_timeout=int(config.get("SubAgentTimeout", DEFAULT_SUBAGENT_TIMEOUT)),
         sub_agent_max_turns=int(config.get("SubAgentMaxTurns", DEFAULT_SUBAGENT_MAX_TURNS)),

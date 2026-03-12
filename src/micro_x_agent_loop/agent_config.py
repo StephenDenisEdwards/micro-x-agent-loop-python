@@ -46,7 +46,8 @@ class AgentConfig:
     tool_result_summarization_threshold: int = DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD
     mode_analysis_enabled: bool = False
     stage2_classification_enabled: bool = False
-    stage2_model: str = ""  # empty = use main model
+    stage2_provider: str = ""
+    stage2_model: str = ""
     tool_search_enabled: str = "false"
     working_directory: str | None = None
     # Tool result formatting
@@ -56,7 +57,8 @@ class AgentConfig:
     autonomous: bool = False
     # Sub-agents
     sub_agents_enabled: bool = False
-    sub_agent_model: str = ""  # empty = inherit from parent
+    sub_agent_provider: str = ""
+    sub_agent_model: str = ""
     sub_agent_timeout: int = DEFAULT_SUBAGENT_TIMEOUT
     sub_agent_max_turns: int = DEFAULT_SUBAGENT_MAX_TURNS
     sub_agent_max_tokens: int = DEFAULT_SUBAGENT_MAX_TOKENS

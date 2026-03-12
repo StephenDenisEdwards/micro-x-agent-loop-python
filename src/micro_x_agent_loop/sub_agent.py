@@ -15,6 +15,7 @@ from typing import Any
 from loguru import logger
 
 from micro_x_agent_loop.agent_channel import BufferedChannel
+from micro_x_agent_loop.app_config import resolve_runtime_env
 from micro_x_agent_loop.constants import (
     DEFAULT_SUBAGENT_MAX_TOKENS,
     DEFAULT_SUBAGENT_MAX_TURNS,
@@ -205,6 +206,7 @@ class SubAgentRunner:
         provider_name: str,
         api_key: str,
         parent_model: str,
+        sub_agent_provider: str = "",
         sub_agent_model: str = "",
         timeout: int = DEFAULT_SUBAGENT_TIMEOUT,
         max_turns: int = DEFAULT_SUBAGENT_MAX_TURNS,
@@ -215,6 +217,7 @@ class SubAgentRunner:
         self._provider_name = provider_name
         self._api_key = api_key
         self._parent_model = parent_model
+        self._sub_agent_provider = sub_agent_provider
         self._sub_agent_model = sub_agent_model
         self._timeout = timeout
         self._max_turns = max_turns
@@ -237,7 +240,12 @@ class SubAgentRunner:
         tools = _filter_tools(self._parent_tools, type_config)
 
         # Create provider (no prompt caching for sub-agents — short-lived)
-        provider = create_provider(self._provider_name, self._api_key)
+        if agent_type == SubAgentType.GENERAL:
+            sa_provider_name, sa_api_key = self._provider_name, self._api_key
+        else:
+            sa_provider_name = self._sub_agent_provider
+            sa_api_key = resolve_runtime_env(sa_provider_name).provider_api_key
+        provider = create_provider(sa_provider_name, sa_api_key)
         converted_tools = provider.convert_tools(tools)
         tool_map = {t.name: t for t in tools}
 
