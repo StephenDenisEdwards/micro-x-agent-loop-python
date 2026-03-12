@@ -74,6 +74,53 @@ class TestShouldActivateToolSearch(unittest.TestCase):
         # "auto:abc" doesn't match the regex, treated as unknown
         self.assertFalse(should_activate_tool_search("auto:abc", [], "gpt-4o"))
 
+    # -- Provider-aware auto tests --
+
+    def test_auto_anthropic_always_inactive(self) -> None:
+        """On Anthropic, auto should always return False (cache-preserving)."""
+        tools = _convert_tools(_make_tools())
+        self.assertFalse(
+            should_activate_tool_search("auto:0", tools, "claude-sonnet-4-5", provider="anthropic")
+        )
+
+    def test_auto_anthropic_case_insensitive(self) -> None:
+        tools = _convert_tools(_make_tools())
+        self.assertFalse(
+            should_activate_tool_search("auto:0", tools, "claude-sonnet-4-5", provider="Anthropic")
+        )
+
+    def test_auto_openai_applies_threshold(self) -> None:
+        """On OpenAI, auto should apply the token threshold heuristic."""
+        tools = _convert_tools(_make_tools())
+        # With threshold 0%, any tools should activate
+        self.assertTrue(
+            should_activate_tool_search("auto:0", tools, "gpt-4o", provider="openai")
+        )
+
+    def test_auto_openai_below_threshold_inactive(self) -> None:
+        """On OpenAI, auto with default threshold should be inactive for few tools."""
+        tools = _convert_tools(_make_tools())
+        self.assertFalse(
+            should_activate_tool_search("auto", tools, "gpt-4o", provider="openai")
+        )
+
+    def test_true_overrides_anthropic(self) -> None:
+        """Explicit 'true' should override provider-aware logic."""
+        self.assertTrue(
+            should_activate_tool_search("true", [], "claude-sonnet-4-5", provider="anthropic")
+        )
+
+    def test_false_overrides_openai(self) -> None:
+        """Explicit 'false' should override provider-aware logic."""
+        self.assertFalse(
+            should_activate_tool_search("false", [], "gpt-4o", provider="openai")
+        )
+
+    def test_auto_no_provider_falls_through(self) -> None:
+        """When no provider is specified, auto uses threshold logic (backward compat)."""
+        tools = _convert_tools(_make_tools())
+        self.assertTrue(should_activate_tool_search("auto:0", tools, "gpt-4o"))
+
 
 # ---------------------------------------------------------------------------
 # Token estimation tests

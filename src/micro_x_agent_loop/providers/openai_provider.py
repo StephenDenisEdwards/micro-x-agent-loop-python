@@ -9,7 +9,7 @@ from loguru import logger
 from tenacity import retry
 
 from micro_x_agent_loop.providers.common import default_retry_kwargs
-from micro_x_agent_loop.tool import Tool
+from micro_x_agent_loop.tool import Tool, canonicalise_tools
 from micro_x_agent_loop.usage import UsageResult
 
 if TYPE_CHECKING:
@@ -123,14 +123,7 @@ class OpenAIProvider:
         self._client = openai.AsyncOpenAI(api_key=api_key)
 
     def convert_tools(self, tools: list[Tool]) -> list[dict]:
-        return [
-            {
-                "name": t.name,
-                "description": t.description,
-                "input_schema": t.input_schema,
-            }
-            for t in tools
-        ]
+        return canonicalise_tools(tools)
 
     @retry(**default_retry_kwargs((
         openai.RateLimitError,

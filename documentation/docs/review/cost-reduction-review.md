@@ -169,13 +169,13 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 
 | Attribute | Detail |
 |-----------|--------|
-| **Status** | ⚠️ Partial |
-| **Review finding** | Fully implemented: `tool_search` pseudo-tool with on-demand discovery, triggers at >50 tools. Disabled by default (`ToolSearchEnabled: "false"`). Static tool groups and vector-DB semantic routing not implemented. Provider-aware filtering (more aggressive for OpenAI) not implemented. |
-| **Code location** | `src/micro_x_agent_loop/tool_search.py` |
-| **Config** | `ToolSearchEnabled: "false"` (options: `"auto"`, `"true"`, `"false"`) |
+| **Status** | ⚠️ Partial → ✅ Done (provider-aware) |
+| **Review finding** | Fully implemented: `tool_search` pseudo-tool with on-demand discovery, triggers at >50 tools. Now **provider-aware** (`ToolSearchEnabled: "auto"`): Anthropic auto-disables tool search to preserve cache; OpenAI uses token-threshold heuristic. Both providers use **canonical tool serialisation** for byte-stable cache prefixes. Static tool groups (lane routing) shelved — marginal savings don't justify config complexity. |
+| **Code location** | `src/micro_x_agent_loop/tool_search.py`; `src/micro_x_agent_loop/tool.py` (`canonicalise_tools`) |
+| **Config** | `ToolSearchEnabled: "auto"` (options: `"auto"`, `"true"`, `"false"`) |
 | **Research** | [`kv-cache-and-mcp-tool-routing.md`](../research/kv-cache-and-mcp-tool-routing.md) — full cost modelling. Key insight: Anthropic's 90% cache discount makes full-set schema caching cheap (~$0.001/turn); OpenAI's 50–75% discount makes routing worthwhile even at ~60 tools. |
-| **Residual gaps** | No static tool group config. No vector routing. No provider-aware policy. Effort-benefit depends heavily on provider — low priority for Anthropic, higher for OpenAI. |
-| **Action taken** | — |
+| **Residual gaps** | Static tool groups (lane routing) shelved. Vector-DB semantic routing not implemented (not needed at current scale). |
+| **Action taken** | Provider-aware `should_activate_tool_search()` + canonical tool serialisation implemented (2026-03-12). `config-base.json` changed to `"auto"`. |
 
 ---
 
@@ -250,7 +250,7 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | 7 | Sub-agent delegation | ✅ Done | Enabled by default, routing directive with examples | Routing policy + enabled (2026-03-12) |
 | 8 | Per-turn model routing | ✅ Done | Heuristic classifier, opt-in, conservative defaults | Implemented (2026-03-12) |
 | 9 | Output token reduction | ✅ Done | Low — `ConciseOutputEnabled` enabled in config-base.json | Enabled |
-| 10 | On-demand tool discovery | ⚠️ Partial | Low (Anthropic) / Medium (OpenAI) — provider-dependent | — |
+| 10 | On-demand tool discovery | ✅ Done | Provider-aware auto + canonical serialisation | Implemented (2026-03-12) |
 | 11 | Compiled mode / batch execution | 🔲 Planned | Low — Phase 4+, ADR-014 blocker resolved | ADR-014 resolved (2026-03-12) |
 | 12 | Batch API for broker jobs | ❌ Dropped | — | Dropped (2026-03-12) — incompatible with multi-turn agentic loops |
 | 13 | Provider and model arbitrage | ⚠️ Partial | Low — OpenAI exists; no benchmarking or auto-switching | — |

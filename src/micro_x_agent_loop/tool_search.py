@@ -63,8 +63,19 @@ def should_activate_tool_search(
     converted_tools: list[dict],
     model: str,
     threshold_percent: int = TOOL_SEARCH_DEFAULT_THRESHOLD_PERCENT,
+    *,
+    provider: str = "",
 ) -> bool:
-    """Determine whether tool search should be active for this session."""
+    """Determine whether tool search should be active for this session.
+
+    When *setting* is ``"auto"``, behaviour is provider-dependent:
+    - **Anthropic:** return ``False`` — Anthropic's 90% cache discount makes
+      sending all tools cached cheaper than breaking the cache with tool search.
+    - **OpenAI / other:** apply the token-threshold heuristic (activate if tool
+      schemas exceed *threshold_percent* of the model's context window).
+
+    Explicit ``"true"`` / ``"false"`` override regardless of provider.
+    """
     if setting == "false":
         return False
     if setting == "true":
@@ -73,6 +84,12 @@ def should_activate_tool_search(
     match = re.match(r"auto(?::(\d+))?$", setting)
     if not match:
         logger.warning(f"Unknown ToolSearchEnabled value: {setting!r}, treating as false")
+        return False
+
+    # Provider-aware auto: Anthropic should never use tool search — it breaks
+    # the prompt cache and the 90% cache discount makes full-set caching cheap.
+    if provider.strip().lower() == "anthropic":
+        logger.info("Tool search: auto + Anthropic provider — inactive (cache-preserving)")
         return False
 
     if match.group(1):

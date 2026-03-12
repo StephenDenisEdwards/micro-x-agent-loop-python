@@ -70,6 +70,7 @@ class Agent:
             config.tool_search_enabled,
             self._converted_tools,
             config.model,
+            provider=config.provider,
         )
         self._tool_search_manager: ToolSearchManager | None = None
         if self._tool_search_active:
