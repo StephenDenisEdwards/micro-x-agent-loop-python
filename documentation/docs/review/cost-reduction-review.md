@@ -28,6 +28,8 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | **Config** | `PromptCachingEnabled` (default: `true`) |
 | **Measured impact** | 82% savings for short sessions (4 calls); 26.6% for 8-call sessions as history grows beyond cached prefix. Source: `documentation/docs/operations/prompt-caching-cost-analysis.md` |
 | **Residual gap** | Savings diminish as conversation history grows — caching alone is insufficient for long sessions. Other levers (compaction, output control) must pick up the slack. |
+| **Manual test plan** | [MANUAL-TEST-prompt-caching.md](../testing/MANUAL-TEST-prompt-caching.md) |
+| **Unit tests** | `tests/test_cost_reduction.py`: `PromptCachingConfigTests` (2 tests — default enabled, disabled via config), `PromptCachingProviderTests` (4 tests — stores flag, adds cache_control when enabled, no cache_control when disabled, no-tools edge case), `CreateProviderCachingTests` (2 tests — factory passes flag, factory default). `tests/test_usage.py`: `UsageResultTests.test_defaults`, `UsageResultTests.test_construction` (cache token fields), `EstimateCostTests.test_cache_tokens` (cache pricing). `tests/test_analyze_costs.py`: `AggregateTests.test_api_call_record` (cache token aggregation). `tests/providers/test_anthropic_provider.py`: `test_stream_chat_text_and_tool_use`, `test_stream_chat_text_only` (streaming with caching flag). |
 | **Action taken** | — |
 
 ---
@@ -44,6 +46,8 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | **Config** | `CompactionStrategy: "summarize"`, `CompactionModel: "claude-haiku-4-5-20251001"`, `CompactionThresholdTokens: 80000` |
 | **Estimated impact** | 70–90% reduction in compaction call cost (compaction call processes ~100K chars of history and outputs ~4K token summary). |
 | **Residual gap** | No quality benchmark comparing Haiku vs Sonnet compaction faithfulness. Anecdotally working well but not formally evaluated. |
+| **Manual test plan** | [MANUAL-TEST-compaction-model.md](../testing/MANUAL-TEST-compaction-model.md) |
+| **Unit tests** | `tests/test_cost_reduction.py`: `CompactionModelConfigTests` (2 tests — default empty, custom model), `CompactionModelUsageTests.test_compaction_uses_specified_model` (verifies cheap model is used for summarisation). `tests/test_compaction_strategy.py`: `test_summarize_calls_provider_create_message` (compaction invokes provider), `test_compaction_callback_invoked` (callback with usage). `tests/test_metrics.py`: `BuildCompactionMetricTests.test_structure`, `SessionAccumulatorTests.test_add_compaction` (compaction cost tracking). |
 | **Action taken** | — |
 
 ---
@@ -60,6 +64,8 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | **Config** | `CompactionStrategy`, `CompactionThresholdTokens`, `SmartCompactionTriggerEnabled` (default: `true`) |
 | **Estimated impact** | Prevents unbounded input token growth across long sessions. Smart trigger corrects 10–20% estimation errors from char-based counting. |
 | **Residual gap** | No cost-optimal threshold analysis — break-even between carrying history cost vs compaction call cost not formally modelled. |
+| **Manual test plan** | [MANUAL-TEST-compaction-strategy.md](../testing/MANUAL-TEST-compaction-strategy.md) |
+| **Unit tests** | `tests/test_compaction_strategy.py`: `test_maybe_compact_returns_original_below_threshold`, `test_maybe_compact_summarizes_when_over_threshold`, `test_maybe_compact_falls_back_on_summary_error`, `test_compaction_callback_invoked`, `test_format_for_summarization_includes_tool_blocks`. `tests/test_compaction_and_llm_utils.py`: `EstimateTokensExtraTests` (3 tests — token counting), `FormatForSummarizationTests` (6 tests — message formatting), `AdjustBoundaryExtraTests` (4 tests — tool_use/result pair protection), `RebuildMessagesListContentTests` (2 tests — role alternation). `tests/test_cost_reduction.py`: `SmartCompactionConfigTests` (2 tests — default enabled, disabled), `SmartCompactionTriggerTests` (3 tests — actual tokens, fallback to estimate). |
 | **Action taken** | — |
 
 ---

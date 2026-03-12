@@ -8,6 +8,14 @@ This folder contains code review documents for micro-x-agent-loop-python. Each r
 |----------|-------|------|------------|
 | [cost-reduction-review.md](cost-reduction-review.md) | Cost reduction strategies across all LLM API spend levers | 2026-03-12 | 6 high-priority items unaddressed (see summary table) |
 
+### Manual Test Plans
+
+| Document | Strategy | Scope |
+|----------|----------|-------|
+| [MANUAL-TEST-prompt-caching.md](../testing/MANUAL-TEST-prompt-caching.md) | Strategy 1 — Prompt Caching | 5 tests: cache headers, cache reads, disabled config, no-tools edge case, cost savings |
+| [MANUAL-TEST-compaction-model.md](../testing/MANUAL-TEST-compaction-model.md) | Strategy 2 — Cheap Model for Compaction | 4 tests: cheap model used, fallback to main model, metrics, summary quality |
+| [MANUAL-TEST-compaction-strategy.md](../testing/MANUAL-TEST-compaction-strategy.md) | Strategy 3 — Conversation History Summarisation | 8 tests: threshold trigger, below threshold, smart trigger, boundary pairs, context preservation, error fallback, none strategy, role alternation |
+
 ## How to Use This Index
 
 - **Open items** — items in a review where `Action taken` is blank and status is not `✅ Done`.
