@@ -2,7 +2,7 @@
 
 ## Status
 
-**Planned** — Addresses Strategy 4 gaps in [cost-reduction-review.md](../review/cost-reduction-review.md).
+**Completed** (2026-03-12) — Per-turn cost/token visibility via prompt_toolkit bottom_toolbar.
 
 ## Problem
 

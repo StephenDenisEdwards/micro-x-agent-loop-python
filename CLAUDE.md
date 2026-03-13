@@ -155,6 +155,13 @@ When a user submits a prompt:
 - Checkpoint rewind restores files to pre-mutation state
 - Pruning: time-based, per-session message cap, global session cap
 
+### Planning Index Hygiene
+
+After completing any feature work or committing changes:
+- Update the corresponding `PLAN-*.md` status field to match reality
+- Ensure `INDEX.md` status, counts, and notes are consistent with plan files
+- If a plan moves to Completed, add it to the "Completed priorities" collapsible section
+
 ## What NOT to Do
 
 - Do not create new Python tool files — tools are TypeScript MCP servers

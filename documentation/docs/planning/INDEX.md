@@ -21,7 +21,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | **11** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3b: Per-turn model routing | **Completed** | [per-turn-routing](../testing/MANUAL-TEST-per-turn-routing.md) | 🔴 | Heuristic classifier, opt-in via `PerTurnRoutingEnabled` |
 | ~~12~~ | ~~[Cost Reduction](PLAN-cost-reduction.md) - Phase 3c: Batch API for broker~~ | **Dropped** | — | — | Incompatible with multi-turn agentic loops |
 | **13** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | **Phase 1 Completed** | [tool-search-and-canonicalisation](../testing/MANUAL-TEST-tool-search-and-canonicalisation.md) | 🔴 | Canonical serialisation + provider-aware tool search. Lanes shelved |
-| **14** | [Multi-Provider Support](PLAN-multi-provider.md) | Planned | — | — | Gemini + DeepSeek providers |
+| **14** | [Multi-Provider Support](PLAN-multi-provider.md) | **Completed** | — | — | Gemini + DeepSeek providers |
 | **15** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | — | — | Frictionless onboarding |
 | **16** | [Browser Automation](PLAN-browser-automation.md) | Planned | — | — | Phase 3 of web tooling |
 | **17** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | — | — | Nice-to-have |
@@ -57,14 +57,13 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 
 | Status | Count |
 |--------|-------|
-| Completed | 33 |
+| Completed | 34 |
 | Phase 2a Completed (remaining phases pending) | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
-| Planning | 1 |
 | Dropped | 1 |
-| Planned | 5 |
+| Planned | 4 |
 
 ## All Plans
 
@@ -107,4 +106,4 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | [Codegen Hardening](PLAN-codegen-hardening.md) | Completed | Follow-up robustness and correctness fixes for the codegen server. Completed 2026-03-11 |
 | [CLI Status Bar](PLAN-cli-status-bar.md) | Completed | Per-turn cost/token visibility via prompt_toolkit bottom_toolbar. Completed 2026-03-12 |
 | [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | Completed | Config.json Pricing key overlays hardcoded defaults; unknown-model warnings. Completed 2026-03-12 |
-| [Multi-Provider Support](PLAN-multi-provider.md) | Planned | Gemini + DeepSeek providers |
+| [Multi-Provider Support](PLAN-multi-provider.md) | Completed | Gemini + DeepSeek providers. Completed 2026-03-13 |

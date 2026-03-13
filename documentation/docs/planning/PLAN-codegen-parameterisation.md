@@ -1,6 +1,6 @@
 # Plan: Codegen — Parameterised MCP Server Generation
 
-**Status: Steps 1–3 Complete** (2026-03-11)
+**Status: Completed** (2026-03-11)
 
 ## Context
 

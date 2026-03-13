@@ -1,6 +1,6 @@
 # Plan: Multi-Provider Support (Gemini + DeepSeek)
 
-**Status:** Planned
+**Status:** Completed
 **Date:** 2026-03-13
 
 **Goal:** Add Google Gemini and DeepSeek as first-class LLM providers alongside the existing Anthropic and OpenAI providers, enabling users to switch models via config without code changes.
