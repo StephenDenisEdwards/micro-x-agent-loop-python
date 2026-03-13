@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "tools" / "template"
+TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "tools" / "template-py"
 
 
 def _load_module(name: str, file_path: Path):

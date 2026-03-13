@@ -27,12 +27,49 @@ Calls `GET /v1/organizations/cost_report`. Returns cost breakdown in USD (amount
 
 Calls `GET /v1/organizations/usage_report/claude_code`. Returns per-user, per-day records including sessions, LOC added/removed, commits, PRs, tool acceptance rates, token usage by model, and estimated cost. Data freshness ~1 hour.
 
+## Response Format
+
+The tool returns both **structured content** and **text content**.
+
+**Structured content** (`structuredContent`): `{ report_type: string, data: <raw API response> }`
+
+**Text content**: A label prefix (e.g. `"Cost Report:\n"`) followed by pretty-printed JSON of the raw API response.
+
+The Anthropic Admin API returns a nested time-bucket structure:
+
+```json
+{
+  "data": [
+    {
+      "starting_at": "2026-03-10T00:00:00Z",
+      "ending_at": "2026-03-11T00:00:00Z",
+      "results": [ ... ]
+    }
+  ]
+}
+```
+
+**Cost report results** contain `amount_usd`, `currency`, `model` (null for aggregate), `workspace_id`, etc.
+
+**Usage report results** contain token fields with names that differ from inference API responses:
+
+| Field | Description |
+|---|---|
+| `uncached_input_tokens` | Non-cached input tokens (NOT `input_tokens`) |
+| `cache_creation.ephemeral_5m_input_tokens` | Short-lived cache writes (nested object, NOT a flat field) |
+| `cache_creation.ephemeral_1h_input_tokens` | Long-lived cache writes |
+| `cache_read_input_tokens` | Tokens read from cache |
+| `output_tokens` | Output tokens |
+| `model` | Model ID (e.g. `claude-sonnet-4-5-20250929`) |
+| `server_tool_use.web_search_requests` | Server-side tool use counts |
+
 ## Behavior
 
-- Uses `httpx.AsyncClient` for async HTTP requests
+- Uses `fetch` for HTTP requests
 - Authenticates with `x-api-key` header and `anthropic-version: 2023-06-01`
 - Builds query params from input, handling `group_by` as repeated `group_by[]` params
-- Returns pretty-printed JSON prefixed with a report type header
+- Cost report amounts are converted from cents to USD via `convertCostAmounts()`
+- Declares `outputSchema` for MCP structured content support
 - Returns error strings on HTTP failures (never raises)
 - **Availability:** Requires `ANTHROPIC_ADMIN_API_KEY` in the `anthropic-admin` MCP server's `env` config
 

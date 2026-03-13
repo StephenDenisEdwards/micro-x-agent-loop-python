@@ -220,15 +220,50 @@ Compares locally estimated costs (from `metric.api_call` events in SQLite) again
 | Function | Purpose |
 |---|---|
 | `_load_local_costs(store, start, end)` | Queries `metric.api_call` events, groups by date and model |
-| `_parse_anthropic_cost_response(text)` | Parses the Anthropic cost report JSON into `{date: {model: cost}}` |
+| `_get_api_data(result)` | Extracts the top-level `data` array (time buckets) from a `ToolResult`, preferring structured content over text parsing |
+| `_flatten_buckets(buckets)` | Flattens nested time-bucket/results structure into `(date, record)` pairs |
+| `_parse_cost_report(result)` | Parses cost report into `{date: total_cost_usd}` |
+| `_parse_usage_report_to_costs(result)` | Parses usage report into `{date: {model: estimated_cost_usd}}`, mapping API field names to internal format |
 | `reconcile_costs(tool_map, store, days)` | Orchestrates: loads local data, calls Anthropic API, builds comparison |
 
 **Invocation:** `/cost reconcile [days]` (default: 1 day lookback).
 
-The reconciliation uses the `anthropic-admin__anthropic_usage` MCP tool with:
-- `action: "cost"` — queries the `/v1/organizations/cost_report` endpoint
-- `bucket_width: "1d"` — daily granularity
-- `group_by: ["model"]` — per-model breakdown
+The reconciliation uses the `anthropic-admin__anthropic_usage` MCP tool with two calls:
+1. `action: "cost"` — queries `/v1/organizations/cost_report` for aggregate daily costs in USD
+2. `action: "usage"` with `group_by: ["model"]` — queries `/v1/organizations/usage_report/messages` for per-model token breakdowns
+
+Both use `bucket_width: "1d"` for daily granularity.
+
+**API Response Format:**
+
+The Anthropic Admin API returns a nested structure of time buckets with results arrays:
+
+```json
+{
+  "data": [
+    {
+      "starting_at": "2026-03-10T00:00:00Z",
+      "ending_at": "2026-03-11T00:00:00Z",
+      "results": [
+        { "amount_usd": 2.61, "model": null, ... }
+      ]
+    }
+  ]
+}
+```
+
+For usage reports, result records use field names that differ from the internal `UsageResult` format:
+
+| API field | Internal field |
+|---|---|
+| `uncached_input_tokens` | `input_tokens` |
+| `cache_creation.ephemeral_5m_input_tokens` + `ephemeral_1h_input_tokens` | `cache_creation_input_tokens` |
+| `cache_read_input_tokens` | `cache_read_input_tokens` (same) |
+| `output_tokens` | `output_tokens` (same) |
+
+**MCP Structured Content:**
+
+The `anthropic-admin` MCP server returns both `structuredContent` (a dict with `report_type` and `data` keys) and text content (a label prefix like `"Cost Report:\n"` followed by pretty-printed JSON). The reconciliation code prefers structured content when available, falling back to text parsing with prefix stripping.
 
 A divergence threshold of 5% is used to flag mismatches. The output is a formatted table showing per-model/date comparison with OK/MISMATCH status.
 

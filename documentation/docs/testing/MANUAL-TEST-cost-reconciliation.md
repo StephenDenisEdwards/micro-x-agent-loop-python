@@ -221,10 +221,11 @@ sqlite3 .micro_x/memory.db "SELECT COUNT(*), SUM(json_extract(payload_json, '$.e
 1. Start the agent: `python -m micro_x_agent_loop`
 2. Run: `/cost reconcile`
 
-**Expected output structure:**
+**Expected output structure (per-model view — when usage report succeeds):**
 ```
 Cost Reconciliation: YYYY-MM-DD to YYYY-MM-DD
 ------------------------------------------------------------
+Querying Anthropic billing API...
 
 Date         Model                               Ours    Anthropic     Diff Status
 ------------------------------------------------------------
@@ -236,11 +237,29 @@ Overall divergence: Z.Z% — OK
 All costs within threshold. Pricing table appears accurate.
 ```
 
+**Expected output structure (daily aggregate view — when per-model data unavailable):**
+```
+Cost Reconciliation: YYYY-MM-DD to YYYY-MM-DD
+------------------------------------------------------------
+Querying Anthropic billing API...
+
+(Per-model Anthropic data unavailable — showing daily aggregates)
+
+Date            Ours    Anthropic     Diff Status
+-------------------------------------------------
+YYYY-MM-DD   $X.XXXX   $Y.YYYY    Z.Z%  OK
+-------------------------------------------------
+TOTAL        $X.XXXX   $Y.YYYY
+
+Local per-model breakdown:
+  sonnet-4-5-20250929                      $   X.XXXX
+```
+
 **Verify:**
 - The header shows yesterday's date to today's date
 - "Querying Anthropic billing API..." message appears before the table
 - The "Ours" column values are > $0 (from local events)
-- The "Anthropic" column values are >= $0 (from the billing API)
+- The "Anthropic" column values are > $0 (from the billing API) — if they show $0, check that the API response is being parsed correctly (the API uses a nested time-bucket/results structure)
 - Each row has a percentage in the "Diff" column
 - Rows within 5% show "OK", rows beyond 5% show "MISMATCH"
 - A TOTAL row sums both columns

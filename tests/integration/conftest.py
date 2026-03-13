@@ -12,7 +12,7 @@ import pytest
 import pytest_asyncio
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE_DIR = REPO_ROOT / "tools" / "template"
+TEMPLATE_DIR = REPO_ROOT / "tools" / "template-py"
 GITHUB_SERVER_JS = REPO_ROOT / "mcp_servers" / "ts" / "packages" / "github" / "dist" / "index.js"
 
 
