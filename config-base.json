@@ -167,7 +167,12 @@
     "openai/gpt-4.1-nano": { "input": 0.10, "output": 0.40, "cache_read": 0.025, "cache_create": 0.0 },
     "openai/o3": { "input": 2.0, "output": 8.0, "cache_read": 0.50, "cache_create": 0.0 },
     "openai/o3-mini": { "input": 1.10, "output": 4.40, "cache_read": 0.55, "cache_create": 0.0 },
-    "openai/o4-mini": { "input": 0.55, "output": 2.20, "cache_read": 0.275, "cache_create": 0.0 }
+    "openai/o4-mini": { "input": 0.55, "output": 2.20, "cache_read": 0.275, "cache_create": 0.0 },
+    "deepseek/deepseek-chat": { "input": 0.27, "output": 1.10, "cache_read": 0.07, "cache_create": 0.0 },
+    "deepseek/deepseek-reasoner": { "input": 0.55, "output": 2.19, "cache_read": 0.14, "cache_create": 0.0 },
+    "gemini/gemini-2.0-flash": { "input": 0.10, "output": 0.40, "cache_read": 0.025, "cache_create": 0.0 },
+    "gemini/gemini-2.0-flash-thinking-exp": { "input": 0.10, "output": 0.40, "cache_read": 0.025, "cache_create": 0.0 },
+    "gemini/gemini-2.5-pro-preview-03-25": { "input": 1.25, "output": 10.00, "cache_read": 0.31, "cache_create": 0.0 }
   },
   "DefaultFormat": { "format": "json" },
   "McpServers": {

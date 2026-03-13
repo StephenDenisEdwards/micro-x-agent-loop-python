@@ -316,6 +316,12 @@ def resolve_runtime_env(provider_name: str) -> RuntimeEnv:
     if provider_name == "openai":
         provider_api_key = os.environ.get("OPENAI_API_KEY", "")
         provider_env_var = "OPENAI_API_KEY"
+    elif provider_name == "deepseek":
+        provider_api_key = os.environ.get("DEEPSEEK_API_KEY", "")
+        provider_env_var = "DEEPSEEK_API_KEY"
+    elif provider_name == "gemini":
+        provider_api_key = os.environ.get("GEMINI_API_KEY", "")
+        provider_env_var = "GEMINI_API_KEY"
     else:
         provider_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         provider_env_var = "ANTHROPIC_API_KEY"

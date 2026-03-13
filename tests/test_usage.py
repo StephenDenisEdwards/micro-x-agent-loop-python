@@ -201,6 +201,11 @@ class EstimateCostAllModelsTests(unittest.TestCase):
         "openai/o3": ("openai", "o3", 0.085000),
         "openai/o3-mini": ("openai", "o3-mini", 0.060500),
         "openai/o4-mini": ("openai", "o4-mini", 0.030250),
+        "deepseek/deepseek-chat": ("deepseek", "deepseek-chat", 0.011700),
+        "deepseek/deepseek-reasoner": ("deepseek", "deepseek-reasoner", 0.023450),
+        "gemini/gemini-2.0-flash": ("gemini", "gemini-2.0-flash", 0.004250),
+        "gemini/gemini-2.0-flash-thinking-exp": ("gemini", "gemini-2.0-flash-thinking-exp", 0.004250),
+        "gemini/gemini-2.5-pro-preview-03-25": ("gemini", "gemini-2.5-pro-preview-03-25", 0.078000),
     }
 
     def setUp(self) -> None:
@@ -277,6 +282,21 @@ class EstimateCostAllModelsTests(unittest.TestCase):
 
     def test_openai_o4_mini(self) -> None:
         self._assert_model_cost("openai/o4-mini")
+
+    def test_deepseek_chat(self) -> None:
+        self._assert_model_cost("deepseek/deepseek-chat")
+
+    def test_deepseek_reasoner(self) -> None:
+        self._assert_model_cost("deepseek/deepseek-reasoner")
+
+    def test_gemini_2_0_flash(self) -> None:
+        self._assert_model_cost("gemini/gemini-2.0-flash")
+
+    def test_gemini_2_0_flash_thinking_exp(self) -> None:
+        self._assert_model_cost("gemini/gemini-2.0-flash-thinking-exp")
+
+    def test_gemini_2_5_pro_preview(self) -> None:
+        self._assert_model_cost("gemini/gemini-2.5-pro-preview-03-25")
 
     # --- Completeness guard ---
 

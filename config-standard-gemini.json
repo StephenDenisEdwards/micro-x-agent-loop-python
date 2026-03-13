@@ -1,0 +1,14 @@
+{
+  "Base": "config-base.json",
+  "Provider": "gemini",
+  "Model": "gemini-2.0-flash",
+  "SubAgentProvider": "gemini",
+  "SubAgentModel": "gemini-2.0-flash",
+  "CompactionProvider": "gemini",
+  "CompactionModel": "gemini-2.0-flash",
+  "Stage2Provider": "gemini",
+  "Stage2Model": "gemini-2.0-flash",
+  "PerTurnRoutingProvider": "gemini",
+  "PerTurnRoutingModel": "gemini-2.0-flash",
+  "PromptCachingEnabled": false
+}

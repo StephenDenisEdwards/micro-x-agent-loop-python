@@ -56,4 +56,10 @@ def create_provider(
     if name == "openai":
         from micro_x_agent_loop.providers.openai_provider import OpenAIProvider
         return OpenAIProvider(api_key)
-    raise ValueError(f"Unknown provider: {provider_name!r}. Supported: 'anthropic', 'openai'")
+    if name == "deepseek":
+        from micro_x_agent_loop.providers.deepseek_provider import DeepSeekProvider
+        return DeepSeekProvider(api_key)
+    if name == "gemini":
+        from micro_x_agent_loop.providers.gemini_provider import GeminiProvider
+        return GeminiProvider(api_key)
+    raise ValueError(f"Unknown provider: {provider_name!r}. Supported: 'anthropic', 'openai', 'deepseek', 'gemini'")

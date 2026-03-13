@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import openai
 from loguru import logger
@@ -119,8 +119,16 @@ def _to_openai_tools(tools: list[dict]) -> list[dict]:
 
 
 class OpenAIProvider:
-    def __init__(self, api_key: str):
-        self._client = openai.AsyncOpenAI(api_key=api_key)
+    def __init__(self, api_key: str, *, base_url: str | None = None, provider_name: str = "openai"):
+        self._client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
+        self._provider_name = provider_name
+
+    def _extract_cached_tokens(self, usage: Any) -> int:
+        """Extract cache-hit token count from a usage object. Override in subclasses."""
+        details = getattr(usage, "prompt_tokens_details", None)
+        if details is not None:
+            return getattr(details, "cached_tokens", 0) or 0
+        return 0
 
     def convert_tools(self, tools: list[Tool]) -> list[dict]:
         return canonicalise_tools(tools)
@@ -186,9 +194,7 @@ class OpenAIProvider:
                 if chunk.usage is not None:
                     prompt_tokens = chunk.usage.prompt_tokens
                     completion_tokens = chunk.usage.completion_tokens
-                    details = getattr(chunk.usage, "prompt_tokens_details", None)
-                    if details is not None:
-                        cached_tokens = getattr(details, "cached_tokens", 0) or 0
+                    cached_tokens = self._extract_cached_tokens(chunk.usage)
 
                 choice = chunk.choices[0] if chunk.choices else None
                 if choice is None:
@@ -273,7 +279,7 @@ class OpenAIProvider:
             cache_read_input_tokens=cached_tokens,
             duration_ms=(t_end - t_start) * 1000,
             time_to_first_token_ms=((t_first_token - t_start) * 1000) if t_first_token else 0.0,
-            provider="openai",
+            provider=self._provider_name,
             model=model,
             message_count=len(messages),
             tool_schema_count=len(tools),
@@ -310,11 +316,7 @@ class OpenAIProvider:
         resp_usage = response.usage
         p_tokens = resp_usage.prompt_tokens if resp_usage else 0
         c_tokens = resp_usage.completion_tokens if resp_usage else 0
-        c_cached = 0
-        if resp_usage:
-            details = getattr(resp_usage, "prompt_tokens_details", None)
-            if details is not None:
-                c_cached = getattr(details, "cached_tokens", 0) or 0
+        c_cached = self._extract_cached_tokens(resp_usage) if resp_usage else 0
 
         logger.debug(f"Compaction API response: len={len(text)}")
 
@@ -323,7 +325,7 @@ class OpenAIProvider:
             output_tokens=c_tokens,
             cache_read_input_tokens=c_cached,
             duration_ms=(t_end - t_start) * 1000,
-            provider="openai",
+            provider=self._provider_name,
             model=model,
             message_count=len(messages),
         )

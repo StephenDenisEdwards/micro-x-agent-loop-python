@@ -1,0 +1,14 @@
+{
+  "Base": "config-base.json",
+  "Provider": "deepseek",
+  "Model": "deepseek-chat",
+  "SubAgentProvider": "deepseek",
+  "SubAgentModel": "deepseek-chat",
+  "CompactionProvider": "deepseek",
+  "CompactionModel": "deepseek-chat",
+  "Stage2Provider": "deepseek",
+  "Stage2Model": "deepseek-chat",
+  "PerTurnRoutingProvider": "deepseek",
+  "PerTurnRoutingModel": "deepseek-chat",
+  "PromptCachingEnabled": false
+}

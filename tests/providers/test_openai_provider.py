@@ -208,6 +208,7 @@ class OpenAIProviderStreamTests(unittest.TestCase):
                 self.chat = _FakeChat(chunks)
 
         provider._client = _FakeClient(chunks)
+        provider._provider_name = "openai"
         return provider
 
     def _usage_chunk(self, prompt_tokens=10, completion_tokens=5):
