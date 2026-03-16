@@ -2,7 +2,7 @@ import asyncio
 import unittest
 from unittest.mock import patch
 
-from micro_x_agent_loop.compaction import SummarizeCompactionStrategy, _format_for_summarization
+from micro_x_agent_loop.compaction import NoneCompactionStrategy, SummarizeCompactionStrategy, _format_for_summarization
 from micro_x_agent_loop.usage import UsageResult
 from tests.fakes import FakeProvider
 
@@ -86,6 +86,23 @@ class CompactionStrategyTests(unittest.TestCase):
         self.assertIsInstance(usage, UsageResult)
         self.assertGreater(tokens_before, 0)
         self.assertEqual(1, messages_compacted)
+
+
+class NoneCompactionStrategyTests(unittest.TestCase):
+    def test_returns_messages_unchanged(self) -> None:
+        strategy = NoneCompactionStrategy()
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+        ]
+        out = asyncio.run(strategy.maybe_compact(messages))
+        self.assertIs(out, messages)
+
+    def test_returns_empty_list_unchanged(self) -> None:
+        strategy = NoneCompactionStrategy()
+        messages: list[dict] = []
+        out = asyncio.run(strategy.maybe_compact(messages))
+        self.assertIs(out, messages)
 
 
 if __name__ == "__main__":

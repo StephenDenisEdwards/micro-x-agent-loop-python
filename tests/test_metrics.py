@@ -130,6 +130,84 @@ class SessionAccumulatorTests(unittest.TestCase):
         self.assertIn("read_file", metric["tool_call_counts"])
 
 
+    def test_reset_clears_all_counters(self) -> None:
+        acc = SessionAccumulator(session_id="s1")
+        usage = UsageResult(
+            input_tokens=100, output_tokens=50,
+            cache_read_input_tokens=20, cache_creation_input_tokens=10,
+            duration_ms=500.0, provider="anthropic", model="claude-sonnet-4-5-20250929",
+        )
+        acc.add_api_call(usage)
+        acc.add_tool_call("read_file", False)
+        acc.add_compaction(usage)
+        acc.total_turns = 5
+
+        acc.reset("s2")
+
+        self.assertEqual("s2", acc.session_id)
+        self.assertEqual(0, acc.total_api_calls)
+        self.assertEqual(0, acc.total_input_tokens)
+        self.assertEqual(0, acc.total_output_tokens)
+        self.assertEqual(0, acc.total_cache_read_tokens)
+        self.assertEqual(0, acc.total_cache_creation_tokens)
+        self.assertEqual(0.0, acc.total_cost_usd)
+        self.assertEqual(0, acc.total_tool_calls)
+        self.assertEqual(0, acc.total_tool_errors)
+        self.assertEqual(0, acc.total_compaction_events)
+        self.assertEqual(0, acc.total_turns)
+        self.assertEqual(0.0, acc.total_duration_ms)
+        self.assertEqual({}, acc.tool_call_counts)
+        self.assertEqual({}, acc.model_subtotals)
+        self.assertEqual([], acc.api_call_log)
+
+    def test_model_subtotals_tracks_multiple_models(self) -> None:
+        acc = SessionAccumulator(session_id="s1")
+        usage_main = UsageResult(
+            input_tokens=1000, output_tokens=500,
+            provider="anthropic", model="claude-sonnet-4-5-20250929",
+        )
+        usage_cheap = UsageResult(
+            input_tokens=200, output_tokens=100,
+            provider="anthropic", model="claude-haiku-4-5-20251001",
+        )
+        acc.add_api_call(usage_main, call_type="main", turn_number=1)
+        acc.add_api_call(usage_cheap, call_type="stage2_classification", turn_number=1)
+        acc.add_api_call(usage_main, call_type="main", turn_number=2)
+
+        self.assertEqual(2, len(acc.model_subtotals))
+
+        sonnet_key = "anthropic/claude-sonnet-4-5-20250929"
+        haiku_key = "anthropic/claude-haiku-4-5-20251001"
+
+        self.assertIn(sonnet_key, acc.model_subtotals)
+        self.assertIn(haiku_key, acc.model_subtotals)
+        self.assertEqual(2, acc.model_subtotals[sonnet_key]["calls"])
+        self.assertEqual(1, acc.model_subtotals[haiku_key]["calls"])
+        self.assertEqual(2000, acc.model_subtotals[sonnet_key]["input_tokens"])
+        self.assertEqual(200, acc.model_subtotals[haiku_key]["input_tokens"])
+        self.assertGreater(
+            acc.model_subtotals[sonnet_key]["cost_usd"],
+            acc.model_subtotals[haiku_key]["cost_usd"],
+        )
+
+    def test_api_call_log_tracks_call_type(self) -> None:
+        acc = SessionAccumulator(session_id="s1")
+        usage_main = UsageResult(
+            input_tokens=1000, output_tokens=500,
+            provider="anthropic", model="claude-sonnet-4-5-20250929",
+        )
+        usage_stage2 = UsageResult(
+            input_tokens=300, output_tokens=50,
+            provider="anthropic", model="claude-haiku-4-5-20251001",
+        )
+        acc.add_api_call(usage_main, call_type="main", turn_number=1)
+        acc.add_api_call(usage_stage2, call_type="stage2_classification", turn_number=1)
+
+        stage2_entries = [c for c in acc.api_call_log if c["call_type"] == "stage2_classification"]
+        self.assertEqual(1, len(stage2_entries))
+        self.assertEqual("claude-haiku-4-5-20251001", stage2_entries[0]["model"])
+
+
 class FormatToolbarTests(unittest.TestCase):
     def test_basic(self) -> None:
         acc = SessionAccumulator(session_id="s1")

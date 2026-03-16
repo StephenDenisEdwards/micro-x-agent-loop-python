@@ -75,14 +75,14 @@ class WebhookServer:
         async def list_jobs() -> list[dict[str, Any]]:
             return self._store.list_jobs()
 
-        @app.get("/api/runs/{run_id}")
+        @app.get("/api/runs/{run_id}", response_model=None)
         async def get_run(run_id: str) -> dict[str, Any] | Response:
             run = self._store.get_run(run_id)
             if run is None:
                 return Response(status_code=404, content='{"error": "Run not found"}', media_type="application/json")
             return run
 
-        @app.post("/api/runs/{run_id}/questions")
+        @app.post("/api/runs/{run_id}/questions", response_model=None)
         async def post_question(run_id: str, request: Request) -> dict[str, Any] | Response:
             """Agent subprocess posts a question for async human-in-the-loop."""
             run = self._store.get_run(run_id)
@@ -140,7 +140,7 @@ class WebhookServer:
             logger.info(f"HITL question created: qid={qid[:8]}, run={run_id[:8]}, timeout={timeout}s")
             return {"question_id": qid, "timeout_seconds": timeout}
 
-        @app.get("/api/runs/{run_id}/questions/{question_id}")
+        @app.get("/api/runs/{run_id}/questions/{question_id}", response_model=None)
         async def get_question(run_id: str, question_id: str) -> dict[str, Any] | Response:
             """Agent subprocess polls for answer."""
             q = self._store.get_question(question_id)
@@ -152,7 +152,7 @@ class WebhookServer:
                 )
             return q
 
-        @app.post("/api/runs/{run_id}/questions/{question_id}/answer")
+        @app.post("/api/runs/{run_id}/questions/{question_id}/answer", response_model=None)
         async def answer_question(run_id: str, question_id: str, request: Request) -> dict[str, Any] | Response:
             """External client or channel adapter posts an answer."""
             q = self._store.get_question(question_id)
@@ -198,7 +198,7 @@ class WebhookServer:
             logger.info(f"HITL answer received: qid={question_id[:8]}, run={run_id[:8]}")
             return {"status": "answered"}
 
-        @app.get("/api/runs/{run_id}/questions")
+        @app.get("/api/runs/{run_id}/questions", response_model=None)
         async def list_questions(run_id: str) -> dict[str, Any] | Response:
             """List pending questions for a run."""
             q = self._store.get_pending_question(run_id)
@@ -225,7 +225,7 @@ class WebhookServer:
 
             return Response(status_code=403, content='{"error": "Verification failed"}', media_type="application/json")
 
-        @app.post("/api/trigger/{channel}")
+        @app.post("/api/trigger/{channel}", response_model=None)
         async def trigger(channel: str, request: Request) -> dict[str, Any] | Response:
             adapter = self._adapters.get(channel)
             if adapter is None:
