@@ -360,30 +360,33 @@ This ensures the entire system prompt + tools prefix is cached. The conversation
 
 ## Provider-Specific Guidance
 
-### Anthropic (90% cache discount)
+### Anthropic, Gemini, DeepSeek (90% cache discount)
 
-- Prompt caching is **extremely** effective — cached tokens cost 0.1x
-- Cache misses are **expensive** — 1.25x write premium
-- **Default to sending all tools** with caching unless tool count exceeds ~150
-- Lane routing is beneficial only for very large tool sets or when tool schemas are large (>15K tokens)
-- Always use `cache_control` markers on system prompt and last tool
+All three providers offer 90% cache read discounts, making full-set caching nearly free:
+
+- **Anthropic:** 1.25x write surcharge, semi-automatic (requires `cache_control` markers)
+- **Gemini:** No write surcharge, automatic implicit caching (no API changes needed)
+- **DeepSeek:** No write surcharge, fully automatic (prefix-based, min 64 tokens)
+
+For all three: send all tools in canonical order, rely on caching. Tool search is disabled in `auto` mode.
 
 ### OpenAI (50-75% cache discount)
 
 - Cache discount is weaker — even cached tokens are relatively expensive
 - No write premium — cache misses are less punishing
-- **Lane routing is beneficial at ~40+ tools** because fewer tools means fewer (cheaper) tokens
-- Routing wins even with cache misses when it significantly reduces token count
+- Tool search is enabled in `auto` mode — dynamically reduces schemas when threshold exceeded
 - Caching is automatic — no markers needed, but prefix must still be byte-stable
 
-### Decision Matrix
+### Decision Matrix (current implementation)
 
-| Tool Count | Anthropic | OpenAI |
-|------------|-----------|--------|
-| <20 | All tools, no routing | All tools, no routing |
-| 20-60 | All tools + caching (current approach) | Consider lane routing |
-| 60-150 | Lane routing with 3-5 broad lanes | Lane routing with 3-5 lanes |
-| 150+ | Lane routing required | Lane routing required |
+| Provider | Cache Discount | Strategy | Rationale |
+|----------|---------------|----------|-----------|
+| Anthropic | 90% | Send all tools + caching | Deep discount makes full-set caching nearly free |
+| Gemini | 90% | Send all tools + caching | Same discount as Anthropic, no write surcharge |
+| DeepSeek | 90% | Send all tools + caching | Same discount, fully automatic |
+| OpenAI / other | 50-75% | Provider-aware tool search (`auto` mode) | Weaker discount makes full-set expensive; tool search reduces per-turn cost |
+
+> **Note:** Lane routing (static tool groups) was evaluated and shelved. Tool search achieves the same token reduction without manual group configuration or false-negative risk from miscategorised tools. Tool search scales with tool count — its effectiveness depends on tool naming quality (distinctive names and descriptions), not on the number of tools.
 
 ## Relationship to Existing System
 

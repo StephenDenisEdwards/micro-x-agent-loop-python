@@ -76,15 +76,15 @@ Request 2:  [system + tools + msg1 + response1 + msg2]
             -> Cost: cache_read_input_tokens at discounted rate + fresh input at full rate
 ```
 
-### Anthropic vs. OpenAI caching
+### Cross-provider caching comparison
 
-| Aspect | Anthropic | OpenAI |
-|--------|-----------|--------|
-| Opt-in mechanism | Explicit `cache_control: {"type": "ephemeral"}` markers | Automatic (no markers needed) |
-| Cache write premium | 1.25x input rate | None (no write surcharge) |
-| Cache read discount | **90% off** (0.1x input rate) | **50-75% off** (varies by model) |
-| TTL | ~5 minutes | ~5-10 minutes |
-| Match type | Prefix-based, exact byte match | Prefix-based, exact byte match |
+| Aspect | Anthropic | OpenAI | Gemini | DeepSeek |
+|--------|-----------|--------|--------|----------|
+| Opt-in mechanism | Explicit `cache_control` markers | Automatic | Automatic (implicit) | Fully automatic |
+| Cache write premium | 1.25x input rate | None | None | None |
+| Cache read discount | **90% off** | **50-75% off** | **90% off** | **90% off** |
+| TTL | ~5 minutes | ~5-10 minutes | ~1 hour (configurable) | Hours to days |
+| Match type | Prefix-based, exact byte match | Prefix-based, exact byte match | Prefix-based | Prefix-based (min 64 tokens) |
 
 ### Cache discount comparison by model
 
@@ -93,13 +93,17 @@ Request 2:  [system + tools + msg1 + response1 + msg2]
 | **Anthropic Haiku 4.5** | $1.00 | $0.10 | **90% off** |
 | **Anthropic Sonnet 4.6** | $3.00 | $0.30 | **90% off** |
 | **Anthropic Opus 4.6** | $5.00 | $0.50 | **90% off** |
+| **Gemini 2.5 Pro** | $1.25 | $0.125 | **90% off** |
+| **Gemini 2.5 Flash** | $0.30 | $0.03 | **90% off** |
+| **DeepSeek V3 (chat)** | $0.28 | $0.028 | **90% off** |
+| **DeepSeek R1 (reasoner)** | $0.55 | $0.055 | **90% off** |
 | **OpenAI gpt-4.1** | $2.00 | $0.50 | **75% off** |
 | **OpenAI gpt-4.1-mini** | $0.40 | $0.10 | **75% off** |
 | **OpenAI gpt-4o** | $2.50 | $1.25 | **50% off** |
 | **OpenAI gpt-4o-mini** | $0.15 | $0.075 | **50% off** |
 | **OpenAI o4-mini** | $1.10 | $0.275 | **75% off** |
 
-The difference is dramatic: Anthropic's cached tokens cost 10% of full price, while OpenAI's cost 25-50%. This fundamentally changes the routing calculus per provider.
+Three of four supported providers (Anthropic, Gemini, DeepSeek) offer 90% cache discounts, making full-set caching nearly free. Only OpenAI has weaker discounts (50-75%), where tool search provides meaningful savings. This fundamentally changes the routing calculus per provider.
 
 ### Cache match is prefix-based and exact
 
@@ -198,7 +202,6 @@ These overheads are small compared to the potential savings, especially on OpenA
 | Multi-turn, stable tool needs | Caching wins | Routing wins |
 | Multi-turn, varying tool needs | Break-even | Routing wins |
 | Single-turn / stateless | Routing wins | Routing wins |
-| Very large tool sets (200+) | Routing wins | Routing wins |
 | Small tool sets (<20) | Caching wins | Caching wins |
 
 ### The false-negative problem
@@ -288,7 +291,7 @@ Embed tool descriptions at startup, query with user message per turn, return top
 
 The routing decision is **provider-dependent**, not one-size-fits-all:
 
-**Anthropic (90% cache discount):** At the current scale (~60-100 tools, multi-turn conversations), prompt caching is likely more cost-effective than routing. The cached prefix costs ~$0.001/turn after the first, and there's zero risk of excluding the right tool. Routing only makes sense at 200+ tools or single-turn scenarios.
+**Anthropic (90% cache discount):** At the current scale (~60-100 tools, multi-turn conversations), prompt caching is more cost-effective than routing. The cached prefix costs ~$0.001/turn after the first, and there's zero risk of excluding the right tool. Tool search is disabled for Anthropic in `auto` mode to preserve the cache.
 
 **OpenAI (50-75% cache discount):** Routing wins at the current scale. Even with perfect cache hits, OpenAI's weak discount means cached tool schemas remain a significant cost. The real-world example (61 tools, 3 calls, trivial work) demonstrated this — most of the cost was tool schema overhead despite caching. Routing from 60 to 15 tools saves $0.06-0.13 per 10-turn session, even in worst-case cache-miss scenarios.
 
@@ -306,11 +309,13 @@ The routing decision is **provider-dependent**, not one-size-fits-all:
 
 For a **multi-provider agent** that supports both Anthropic and OpenAI:
 
-1. **Start with static tool groups** — simplest implementation, no new dependencies, works well when task types are predictable. Configure in `config.json`, select per session.
-2. **Consider Claude Code's Tool Search pattern** — if tool counts grow large (100+), implement a search-based lazy-loading mechanism. No external dependencies, low false-negative risk, cache-friendly. Good fit when context window is the binding constraint.
-3. **If groups prove too rigid, add vector similarity routing** — embed tool descriptions at startup, query per turn with user message, return top-k. Use an always-include list for high-frequency tools (filesystem, bash). Best fit when per-token cost is the binding constraint (OpenAI).
-4. **Make routing provider-aware** — more aggressive filtering for OpenAI (top-15), less aggressive for Anthropic (top-30 or off entirely), since the cost/benefit ratio differs dramatically.
-5. **Use higher k values** to minimize false negatives, accepting reduced savings. Correctness matters more than cost optimization.
+1. **Make routing provider-aware** — disable tool search for providers with 90% cache discounts (Anthropic, Gemini, DeepSeek), enable for OpenAI/others where weaker discounts (50-75%) make cached schemas expensive. **Implemented:** `ToolSearchEnabled: "auto"` in config, with `_cache_preserving_providers` set in `tool_search.py`.
+2. **Use LLM-driven tool search** (Claude Code pattern) — the LLM searches for tools by keyword and only matched schemas are loaded. No external dependencies, low false-negative risk, cache-friendly (the `tool_search` tool itself is a stable prefix). **Implemented:** `ToolSearchManager` in `tool_search.py`.
+3. **Ensure canonical tool ordering** — sort tools by name and schema keys to prevent cache breaks from non-deterministic MCP discovery order. **Implemented:** `canonicalise_tools()` in `tool.py`.
+
+> **Note on tool search scalability:** Tool search uses keyword matching against tool names and descriptions. Its effectiveness depends on **tool naming quality** (distinctive, descriptive names), not tool count. A well-named set of 500 tools will search better than a poorly-named set of 50. The original analysis suggested lane routing would be needed at 200+ tools — this was incorrect; tool search scales fine as long as tools are well-named.
+
+Static tool groups and vector DB routing were evaluated but shelved — tool search achieves the same token reduction without manual configuration or embedding dependencies. See [PLAN: Cache-Preserving Tool Routing](../planning/PLAN-cache-preserving-tool-routing.md) for the full rationale.
 
 ## Related
 

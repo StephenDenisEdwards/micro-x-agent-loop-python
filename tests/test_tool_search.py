@@ -89,6 +89,44 @@ class TestShouldActivateToolSearch(unittest.TestCase):
             should_activate_tool_search("auto:0", tools, "claude-sonnet-4-5", provider="Anthropic")
         )
 
+    def test_auto_gemini_always_inactive(self) -> None:
+        """On Gemini (90% cache discount), auto should return False."""
+        tools = _convert_tools(_make_tools())
+        self.assertFalse(
+            should_activate_tool_search("auto:0", tools, "gemini-2.5-pro", provider="gemini")
+        )
+
+    def test_auto_gemini_case_insensitive(self) -> None:
+        tools = _convert_tools(_make_tools())
+        self.assertFalse(
+            should_activate_tool_search("auto:0", tools, "gemini-2.5-flash", provider="Gemini")
+        )
+
+    def test_auto_deepseek_always_inactive(self) -> None:
+        """On DeepSeek (90% cache discount), auto should return False."""
+        tools = _convert_tools(_make_tools())
+        self.assertFalse(
+            should_activate_tool_search("auto:0", tools, "deepseek-chat", provider="deepseek")
+        )
+
+    def test_auto_deepseek_case_insensitive(self) -> None:
+        tools = _convert_tools(_make_tools())
+        self.assertFalse(
+            should_activate_tool_search("auto:0", tools, "deepseek-reasoner", provider="DeepSeek")
+        )
+
+    def test_true_overrides_gemini(self) -> None:
+        """Explicit 'true' should override Gemini's cache-preserving logic."""
+        self.assertTrue(
+            should_activate_tool_search("true", [], "gemini-2.5-pro", provider="gemini")
+        )
+
+    def test_true_overrides_deepseek(self) -> None:
+        """Explicit 'true' should override DeepSeek's cache-preserving logic."""
+        self.assertTrue(
+            should_activate_tool_search("true", [], "deepseek-chat", provider="deepseek")
+        )
+
     def test_auto_openai_applies_threshold(self) -> None:
         """On OpenAI, auto should apply the token threshold heuristic."""
         tools = _convert_tools(_make_tools())

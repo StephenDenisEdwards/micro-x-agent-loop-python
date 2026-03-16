@@ -69,8 +69,9 @@ def should_activate_tool_search(
     """Determine whether tool search should be active for this session.
 
     When *setting* is ``"auto"``, behaviour is provider-dependent:
-    - **Anthropic:** return ``False`` — Anthropic's 90% cache discount makes
-      sending all tools cached cheaper than breaking the cache with tool search.
+    - **Anthropic, Gemini, DeepSeek:** return ``False`` — these providers offer
+      a 90% cache read discount, making full-set caching nearly free.  Tool
+      search would break the cache prefix for minimal benefit.
     - **OpenAI / other:** apply the token-threshold heuristic (activate if tool
       schemas exceed *threshold_percent* of the model's context window).
 
@@ -86,10 +87,17 @@ def should_activate_tool_search(
         logger.warning(f"Unknown ToolSearchEnabled value: {setting!r}, treating as false")
         return False
 
-    # Provider-aware auto: Anthropic should never use tool search — it breaks
-    # the prompt cache and the 90% cache discount makes full-set caching cheap.
-    if provider.strip().lower() == "anthropic":
-        logger.info("Tool search: auto + Anthropic provider — inactive (cache-preserving)")
+    # Provider-aware auto: providers with >=90% cache read discounts should
+    # not use tool search — it breaks the prompt cache prefix and the deep
+    # discount makes sending all tools cached nearly free.
+    # - Anthropic: 90% off, 1.25x write surcharge, semi-automatic
+    # - Gemini:    90% off, no write surcharge, automatic (implicit)
+    # - DeepSeek:  90% off, no write surcharge, fully automatic
+    _cache_preserving_providers = {"anthropic", "gemini", "deepseek"}
+    if provider.strip().lower() in _cache_preserving_providers:
+        logger.info(
+            f"Tool search: auto + {provider} provider — inactive (cache-preserving, >=90% discount)"
+        )
         return False
 
     if match.group(1):

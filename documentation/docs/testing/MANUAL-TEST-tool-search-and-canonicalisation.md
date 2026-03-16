@@ -1,7 +1,7 @@
 # Manual Test Plan — Provider-Aware Tool Search + Canonical Tool Serialisation
 
 **Related plan:** [PLAN-cache-preserving-tool-routing.md](../planning/PLAN-cache-preserving-tool-routing.md) — Phase 1
-**Code under test:** `src/micro_x_agent_loop/tool.py` (`canonicalise_tools`), `src/micro_x_agent_loop/tool_search.py` (`should_activate_tool_search`), `src/micro_x_agent_loop/providers/anthropic_provider.py`, `src/micro_x_agent_loop/providers/openai_provider.py`
+**Code under test:** `src/micro_x_agent_loop/tool.py` (`canonicalise_tools`), `src/micro_x_agent_loop/tool_search.py` (`should_activate_tool_search`), provider modules (`anthropic_provider.py`, `openai_provider.py`, `gemini_provider.py`, `deepseek_provider.py`)
 
 ---
 
@@ -31,7 +31,7 @@
 3. Check startup logs
 
 **Expected:**
-- Log shows: `Tool search: auto + Anthropic provider — inactive (cache-preserving)`
+- Log shows: `Tool search: auto + anthropic provider — inactive (cache-preserving, >=90% discount)`
 - No `tool_search` pseudo-tool in the tool list (all real tools sent directly)
 - On turn 2+, `cache_read_input_tokens > 0` in debug logs (cache hit)
 
@@ -166,13 +166,136 @@
 2. Start the agent
 
 **Expected:**
-- Log shows: `Tool search: auto + Anthropic provider — inactive (cache-preserving)`
+- Log shows: `Tool search: auto + anthropic provider — inactive (cache-preserving, >=90% discount)`
 - Tool search NOT activated despite 0% threshold
 - All tools sent to the LLM directly
 
 ---
 
-## Test 8 — Tool search works end-to-end on OpenAI
+## Test 8 — Auto + Gemini: tool search inactive (cache-preserving)
+
+**Goal:** Verify that with `ToolSearchEnabled: "auto"` and Gemini provider, tool search is disabled (Gemini has 90% cache discount, no write surcharge, automatic implicit caching).
+
+**Steps:**
+
+1. Configure:
+   ```json
+   {
+     "Provider": "gemini",
+     "Model": "gemini-2.5-flash",
+     "ToolSearchEnabled": "auto"
+   }
+   ```
+2. Start the agent
+3. Check startup logs
+
+**Expected:**
+- Log shows: `Tool search: auto + gemini provider — inactive (cache-preserving, >=90% discount)`
+- No `tool_search` pseudo-tool in the tool list
+- All real tools sent directly to the LLM
+
+---
+
+## Test 9 — Auto + DeepSeek: tool search inactive (cache-preserving)
+
+**Goal:** Verify that with `ToolSearchEnabled: "auto"` and DeepSeek provider, tool search is disabled (DeepSeek has 90% cache discount, no write surcharge, fully automatic caching).
+
+**Steps:**
+
+1. Configure:
+   ```json
+   {
+     "Provider": "deepseek",
+     "Model": "deepseek-chat",
+     "ToolSearchEnabled": "auto"
+   }
+   ```
+2. Start the agent
+3. Check startup logs
+
+**Expected:**
+- Log shows: `Tool search: auto + deepseek provider — inactive (cache-preserving, >=90% discount)`
+- No `tool_search` pseudo-tool in the tool list
+- All real tools sent directly to the LLM
+
+---
+
+## Test 10 — Auto:0 still respects Gemini override
+
+**Goal:** Verify that even with `auto:0` (threshold 0%), Gemini provider still disables tool search.
+
+**Steps:**
+
+1. Configure:
+   ```json
+   {
+     "Provider": "gemini",
+     "Model": "gemini-2.5-flash",
+     "ToolSearchEnabled": "auto:0"
+   }
+   ```
+2. Start the agent
+
+**Expected:**
+- Log shows: `Tool search: auto + gemini provider — inactive (cache-preserving, >=90% discount)`
+- Tool search NOT activated despite 0% threshold
+
+---
+
+## Test 11 — Auto:0 still respects DeepSeek override
+
+**Goal:** Verify that even with `auto:0` (threshold 0%), DeepSeek provider still disables tool search.
+
+**Steps:**
+
+1. Configure:
+   ```json
+   {
+     "Provider": "deepseek",
+     "Model": "deepseek-chat",
+     "ToolSearchEnabled": "auto:0"
+   }
+   ```
+2. Start the agent
+
+**Expected:**
+- Log shows: `Tool search: auto + deepseek provider — inactive (cache-preserving, >=90% discount)`
+- Tool search NOT activated despite 0% threshold
+
+---
+
+## Test 12 — Explicit "true" overrides Gemini and DeepSeek
+
+**Goal:** Verify that `ToolSearchEnabled: "true"` forces tool search on for cache-preserving providers.
+
+**Steps:**
+
+1. Configure with Gemini:
+   ```json
+   {
+     "Provider": "gemini",
+     "Model": "gemini-2.5-flash",
+     "ToolSearchEnabled": "true"
+   }
+   ```
+2. Start the agent, verify tool_search pseudo-tool is active
+3. Repeat with DeepSeek:
+   ```json
+   {
+     "Provider": "deepseek",
+     "Model": "deepseek-chat",
+     "ToolSearchEnabled": "true"
+   }
+   ```
+4. Start the agent, verify tool_search pseudo-tool is active
+
+**Expected:**
+- Both providers show tool search active despite being cache-preserving providers
+- LLM sees `tool_search` pseudo-tool
+
+---
+
+## Test 13 — Tool search works end-to-end on OpenAI (unchanged)
 
 **Goal:** Verify that when tool search is active on OpenAI, the LLM can discover and use tools.
 

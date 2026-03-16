@@ -156,7 +156,7 @@ With `claude-sonnet-4-5-20250929` at $3/$15 per MTok (input/output):
 
 **Routing approaches (from research):**
 - **Static tool groups** — configure groups per task type in config.json; simplest, no dependencies, no false-negative risk within group
-- **Vector DB routing** — embed tool descriptions at startup, query per turn; scales to large tool sets but risks excluding the right tool (false negatives)
+- **Vector DB routing** — embed tool descriptions at startup, query per turn; adds dependency (embedding model + store) and risks excluding the right tool (false negatives). Shelved — tool search achieves the same result without external dependencies
 - **Always-include list** — high-frequency tools (filesystem, bash) bypass routing regardless of approach
 - **Provider-aware routing** — more aggressive filtering for OpenAI (top-15), less for Anthropic (top-30 or off entirely)
 

@@ -46,6 +46,11 @@ TOOL_SEARCH_CONTEXT_WINDOWS: dict[str, int] = {
     "gpt-4.1": 1_000_000,
     "o3": 200_000,
     "o4": 200_000,
+    "gemini-2.5": 1_000_000,
+    "gemini-2.0": 1_000_000,
+    "gemini-3": 1_000_000,
+    "deepseek-chat": 128_000,
+    "deepseek-reasoner": 128_000,
 }
 TOOL_SEARCH_DEFAULT_CONTEXT_WINDOW = 200_000
 

@@ -20,7 +20,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | **10** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3a: ADR-014 decision | **Completed** | — | — | Option C accepted; already implemented (`ToolResult.structured`, `ToolResultFormatter`) |
 | **11** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3b: Per-turn model routing | **Completed** | [per-turn-routing](../testing/MANUAL-TEST-per-turn-routing.md) | 🔴 | Heuristic classifier, opt-in via `PerTurnRoutingEnabled` |
 | ~~12~~ | ~~[Cost Reduction](PLAN-cost-reduction.md) - Phase 3c: Batch API for broker~~ | **Dropped** | — | — | Incompatible with multi-turn agentic loops |
-| **13** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | **Phase 1 Completed** | [tool-search-and-canonicalisation](../testing/MANUAL-TEST-tool-search-and-canonicalisation.md) | 🔴 | Canonical serialisation + provider-aware tool search. Lanes shelved |
+| **13** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | **Completed** | [tool-search-and-canonicalisation](../testing/MANUAL-TEST-tool-search-and-canonicalisation.md) | 🔴 | Canonical serialisation + provider-aware tool search. Lanes permanently shelved |
 | **14** | [Multi-Provider Support](PLAN-multi-provider.md) | **Completed** | — | — | Gemini + DeepSeek providers |
 | **15** | [End-User Deployment](PLAN-end-user-deployment.md) | Draft | — | — | Frictionless onboarding |
 | **16** | [Browser Automation](PLAN-browser-automation.md) | Planned | — | — | Phase 3 of web tooling |
@@ -57,8 +57,8 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 
 | Status | Count |
 |--------|-------|
-| Completed | 34 |
-| Phase 2a Completed (remaining phases pending) | 1 |
+| Completed | 35 |
+| Phase 2b Completed (remaining phases pending) | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
@@ -85,7 +85,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | [Mode Selection - LLM Classification](PLAN-mode-selection-llm-classification.md) | Completed | Phase 2 complete. Phase 4 requires tools to return JSON - see [ADR-014](../architecture/decisions/ADR-014-mcp-unstructured-data-constraint.md) |
 | [OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md) | Superseded | Replaced by [Trigger Broker](PLAN-trigger-broker.md) - retained as reference for full gateway capabilities |
 | [Trigger Broker](PLAN-trigger-broker.md) | Completed | Always-on run dispatcher with cron, webhooks, messaging channels, HITL, retries, missed-run recovery, auth |
-| [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Phase 1 Completed | Canonical serialisation + provider-aware tool search. Lane routing shelved |
+| [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | Completed | Canonical serialisation + provider-aware tool search. Lanes permanently shelved (see plan for reasoning) |
 | [Sub-Agents](PLAN-sub-agents.md) | Phase 2b Completed — Phase 3+ remaining | Phases 1–2b done: architecture, routing policy, enabled by default, memory tracking. Remaining: async via broker, custom types |
 | [Codegen Prompt Discipline](PLAN-codegen-prompt-discipline.md) | Completed | Tightened codegen prompt, added infra file deny, compact output format |
 | [LinkedIn Publishing MCP](PLAN-linkedin-publishing-mcp.md) | Completed | Draft-post, draft-article, publish-draft tools |
