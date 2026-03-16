@@ -100,3 +100,8 @@
 - Cache read tokens grow with each turn
 - Total input cost is materially lower than `input_tokens × full_input_price`
 - Reference: [prompt-caching-cost-analysis.md](../operations/prompt-caching-cost-analysis.md)
+
+---
+## Notebook Tests
+Automated notebook coverage for selected tests in this plan:
+- `notebooks/test_tier2_live_api.ipynb` — Cell 2.2 (cache read on turn 2)

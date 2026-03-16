@@ -68,3 +68,8 @@
 - Tool calls should be made correctly with proper arguments
 - Final response should contain the requested information, just in fewer words
 - No skipped steps or incomplete tool arguments
+
+---
+## Notebook Tests
+Automated notebook coverage for selected tests in this plan:
+- `notebooks/test_tier1_config_and_logic.ipynb` — Cell 1.12 (concise output directive)

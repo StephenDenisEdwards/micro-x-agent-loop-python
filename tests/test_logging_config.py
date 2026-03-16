@@ -44,11 +44,14 @@ class ConsoleLogConsumerTests(unittest.TestCase):
 
 class FileLogConsumerTests(unittest.TestCase):
     def test_register_creates_file(self) -> None:
+        from loguru import logger as _logger
         with tempfile.TemporaryDirectory() as tmp:
             log_path = str(Path(tmp) / "subdir" / "test.log")
             consumer = FileLogConsumer(path=log_path)
             consumer.register("DEBUG")
             self.assertTrue(Path(log_path).parent.exists())
+            # Remove loguru handlers so file handles are released before cleanup
+            _logger.remove()
 
     def test_describe(self) -> None:
         consumer = FileLogConsumer(path="test.log")
@@ -58,10 +61,12 @@ class FileLogConsumerTests(unittest.TestCase):
 
 class MetricsLogConsumerTests(unittest.TestCase):
     def test_register(self) -> None:
+        from loguru import logger as _logger
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / "metrics.jsonl")
             consumer = MetricsLogConsumer(path=path)
             consumer.register("INFO")
+            _logger.remove()
 
     def test_describe(self) -> None:
         consumer = MetricsLogConsumer(path="metrics.jsonl")
@@ -71,10 +76,12 @@ class MetricsLogConsumerTests(unittest.TestCase):
 
 class ApiPayloadLogConsumerTests(unittest.TestCase):
     def test_register(self) -> None:
+        from loguru import logger as _logger
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / "payloads.jsonl")
             consumer = ApiPayloadLogConsumer(path=path)
             consumer.register("DEBUG")
+            _logger.remove()
 
     def test_describe(self) -> None:
         consumer = ApiPayloadLogConsumer(path="payloads.jsonl")
@@ -91,11 +98,13 @@ class SetupLoggingTests(unittest.TestCase):
             self.assertIn("console", descs[0])
 
     def test_file_consumer(self) -> None:
+        from loguru import logger as _logger
         with tempfile.TemporaryDirectory() as tmp:
             log_path = str(Path(tmp) / "test.log")
             consumers = [{"type": "file", "path": log_path}]
             descs = setup_logging("DEBUG", consumers=consumers)
             self.assertEqual(1, len(descs))
+            _logger.remove()
 
     def test_unknown_consumer_skipped(self) -> None:
         descs = setup_logging("INFO", consumers=[{"type": "unknown"}])

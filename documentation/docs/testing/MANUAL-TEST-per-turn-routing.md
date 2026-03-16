@@ -145,3 +145,8 @@
 **Expected:**
 - "design a system" is NOT blocked (not in custom keywords) — may route to cheap model if other rules match
 - "foo the thing" IS blocked by complexity guard
+
+---
+## Notebook Tests
+Automated notebook coverage for selected tests in this plan:
+- `notebooks/test_tier1_config_and_logic.ipynb` — Cells 1.6 (classify_turn rules), 1.7 (config validation)

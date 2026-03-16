@@ -147,3 +147,9 @@
 - An assistant acknowledgment message (`"Understood. Continuing with the current task."`) is inserted if needed
 - No API error about consecutive same-role messages
 - Conversation continues normally
+
+---
+## Notebook Tests
+Automated notebook coverage for selected tests in this plan:
+- `notebooks/test_tier1_config_and_logic.ipynb` — Cells 1.8 (none strategy), 1.9 (summarize trigger), 1.10 (role alternation)
+- `notebooks/test_tier2_live_api.ipynb` — Cell 2.4 (fact recall after summarization)

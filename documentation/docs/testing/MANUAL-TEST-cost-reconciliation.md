@@ -551,3 +551,8 @@ python -m pytest tests/test_command_handler.py -v
 
 **Expected:**
 - All tests pass, including existing `/cost` test
+
+---
+## Notebook Tests
+Automated notebook coverage for selected tests in this plan:
+- `notebooks/test_tier1_config_and_logic.ipynb` — Cell 1.14 (build_api_call_metric required fields)

@@ -71,3 +71,8 @@
 **Expected:**
 - Classification calls should show Haiku pricing ($1/$5 per MTok) not Sonnet pricing ($3/$15 per MTok)
 - Status bar should reflect the lower cost for these calls
+
+---
+## Notebook Tests
+Automated notebook coverage for selected tests in this plan:
+- `notebooks/test_tier1_config_and_logic.ipynb` — Cell 1.13 (metrics separation)

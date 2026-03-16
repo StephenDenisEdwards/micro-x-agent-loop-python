@@ -319,3 +319,8 @@
 - LLM then calls the discovered `filesystem__read_file` tool
 - File contents returned successfully
 - `/cost` shows multiple API calls (search + tool call + response)
+
+---
+## Notebook Tests
+Automated notebook coverage for selected tests in this plan:
+- `notebooks/test_tier1_config_and_logic.ipynb` — Cell 1.5 (activation logic for all providers)

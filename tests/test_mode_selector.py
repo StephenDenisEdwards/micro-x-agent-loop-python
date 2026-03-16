@@ -391,6 +391,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
                 tools=[FakeTool()],
                 mode_analysis_enabled=True,
                 stage2_classification_enabled=stage2_enabled,
+                stage2_provider="anthropic",
                 stage2_model="test-model",
             ))
 
@@ -510,6 +511,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
                 tools=[FakeTool()],
                 mode_analysis_enabled=True,
                 stage2_classification_enabled=True,
+                stage2_provider="anthropic",
                 stage2_model="test-model",
             ))
         mock_choice = AsyncMock(return_value=RecommendedMode.COMPILED)

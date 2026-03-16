@@ -101,3 +101,9 @@
 - The budget counter resets — the new session starts at $0
 - The warning flag resets — a new 80% warning can be emitted
 - The turn executes normally
+
+---
+## Notebook Tests
+Automated notebook coverage for selected tests in this plan:
+- `notebooks/test_tier1_config_and_logic.ipynb` — Cell 1.11 (no budget configured)
+- `notebooks/test_tier2_live_api.ipynb` — Cell 2.3 (budget exhaustion)

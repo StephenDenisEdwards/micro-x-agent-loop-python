@@ -314,3 +314,9 @@ Send another prompt, then run `/cost`.
 
 - [Manual Test: Cost Reconciliation](MANUAL-TEST-cost-reconciliation.md) — tests for `/cost reconcile` and metrics persistence to SQLite
 - [Metrics and Cost Tracking Guide](../operations/metrics-and-costs.md)
+
+---
+## Notebook Tests
+Automated notebook coverage for selected tests in this plan:
+- `notebooks/test_tier1_config_and_logic.ipynb` — Cells 1.1 (pricing lookup), 1.2 (accumulator counters), 1.3 (tool tracking), 1.4 (model subtotals)
+- `notebooks/test_tier2_live_api.ipynb` — Cell 2.1 (live accumulator fields)
