@@ -1,0 +1,178 @@
+JOB SEARCH CRITERIA - STEPHEN EDWARDS
+==========================================
+
+PROFILE SUMMARY
+---------------
+Senior Software Architect & Engineer with 25+ years experience
+Specialization: .NET Core, Azure, AI/ML, Blazor, Microservices
+Available: Contract roles in London or fully remote UK
+Sectors: Healthcare, Finance, Legal, Industrial, Energy
+
+CORE TECHNICAL SKILLS
+---------------------
+
+PRIMARY LANGUAGES & FRAMEWORKS:
+- C# (.NET Core, .NET 6-10, ASP.NET Core)
+- Python (AI/ML, automation)
+- TypeScript/JavaScript (Angular, React)
+- C/C++ (embedded, native development)
+
+CLOUD & AZURE (STRONG FOCUS):
+- Azure Services: IoT Hub, Service Bus, Cosmos DB, Functions, Durable Functions, Container Instances, Batch, SignalR, Azure AD, Event Grid, APIM, Azure AI Search
+- Cloud Patterns: Microservices, Serverless, Event-Driven Architecture
+- DevOps: Azure DevOps (pipelines, CI/CD), Docker, Containers, Git, GitHub Copilot
+
+AI & MACHINE LEARNING (RECENT FOCUS):
+- Frameworks: LangChain, TensorFlow, PyTorch, OpenCV
+- Models & APIs: GPT-4/5, Azure OpenAI, Google Gemini, Whisper
+- Techniques: RAG (Retrieval-Augmented Generation), Vector DBs (FAISS), CNN, RNN
+- Use Cases: Real-time transcription, semantic detection, image processing, NLP
+
+FRONTEND DEVELOPMENT:
+- Blazor (Server-side), ASP.NET Core MVC
+- WPF (MVVM), MAUI
+- Angular (v6-10), React
+- Legacy: WinForms, Silverlight
+
+BACKEND & DATA:
+- Entity Framework Core (Cosmos & SQL providers)
+- MS SQL Server, MongoDB, Cosmos DB (SQL API)
+- RESTful APIs, Web API, gRPC, SignalR, WebSockets
+- Message Queues: MQTT (MQTTNet, Mosquitto), Azure Service Bus, MSMQ, NServiceBus
+
+IOT & EMBEDDED:
+- MQTT, Azure IoT Hub, Azure IoT Edge
+- ARM Cortex-M (C/C++, Assembler)
+- STM32CubeIDE, SEGGER Embedded Studio
+- UWB, BLE, Certificate Management (EST Server)
+
+ARCHITECTURE & PATTERNS:
+- Clean Architecture, DDD (Domain-Driven Design), CQRS, Event Sourcing
+- Microservices, SOA, N-Tier, Monolithic
+- TDD (Test-Driven Development), SOLID principles
+- TOGAF, SAFe, Agile/Scrum
+
+TESTING & QUALITY:
+- TDD approach with MOQ, xUnit, NUnit, MS Test, MS Fakes
+- SpecFlow, Selenium, CppUTest, Google Test/Mock
+- Automated testing pipelines
+
+HEALTHCARE & REGULATORY:
+- GDPR, DPIA, data residency, physical data segregation
+- HL7 v2, FHIR R4, DICOM
+- Medical device software (verification/validation)
+- Healthcare data exchange, consent enforcement
+
+INTEGRATION & INTEROPERABILITY:
+- OAuth2, OpenID Connect, IdentityServer4
+- SOAP, WCF, REST, JSON, XML
+- Salesforce API (SOQL)
+- InterSystems IRIS/Ensemble
+- AsyncAPI, Swagger/OpenAPI
+
+LEADERSHIP & COLLABORATION:
+- Cross-functional team leadership (distributed, multi-timezone)
+- Architecture definition and documentation (ADR, SAD, PAD)
+- Mentoring developers in TDD, clean architecture, integration patterns
+- Stakeholder engagement, requirements gathering
+- Developer productivity and tooling advocacy
+
+RECENT PROJECT KEYWORDS
+-----------------------
+- AI-powered medical sales call enablement (RAG, real-time transcription, semantic detection)
+- Health data exchange systems (GDPR, HL7/FHIR, InterSystems, Azure)
+- IoT telemetry & remote device management (MQTT, Azure IoT, edge computing)
+- Automated cell line manufacturing (CNN image processing, lab robotics, Azure orchestration)
+- Legal tech database extensibility (EF Core, Roslyn, source generators)
+- Contact tracing wearables (UWB, BLE, embedded ARM)
+- GE Healthcare diagnostic platforms (CQRS, Event Sourcing, Microservices)
+- CTRM risk management (Silverlight, WCF, SQL Server)
+- Commercial investment platforms (WPF, PRISM, MVVM, SAP integration)
+
+JOB MATCH CRITERIA
+------------------
+
+IDEAL ROLES:
+- Senior Software Architect
+- Senior Software Engineer
+- Solution Architect
+- Technical Lead
+- Principal Engineer
+- Staff Engineer
+- AI/ML Engineer (with strong engineering background)
+
+PREFERRED TECHNOLOGIES (MUST INCLUDE AT LEAST 2-3):
+- .NET Core / .NET 6+ / C#
+- Azure (any core services: Functions, Service Bus, Cosmos DB, IoT Hub, etc.)
+- Microservices / Event-Driven Architecture
+- AI/ML integration (LangChain, OpenAI, Azure AI, RAG, vector DBs)
+- Blazor or modern web frameworks (React, Angular)
+- Python (for AI/ML or automation)
+- Docker / Containers
+- Azure DevOps / CI/CD
+
+LOCATION:
+- London (hybrid or on-site)
+- Fully remote UK
+- Occasional European travel acceptable
+
+CONTRACT TYPE:
+- Contract (preferred)
+- Day rates: £500-£700+ per day
+- Outside IR35 preferred, Inside IR35 acceptable
+- 3-12 month contracts
+
+SECTORS OF INTEREST:
+- Healthcare / MedTech / BioTech
+- Finance / FinTech
+- Legal Tech
+- Industrial / Manufacturing
+- Energy
+- Enterprise SaaS
+- RegTech
+
+AVOID/EXCLUDE:
+- Junior roles
+- Graduate positions
+- Purely frontend-only roles (unless Blazor-focused)
+- Roles focused solely on legacy technologies (VB6, Classic ASP, etc.)
+- Roles requiring permanent relocation outside UK/Europe
+- Roles with no technical depth (pure management, non-technical BA)
+
+STRONG INDICATORS:
+- Architecture or design leadership mentioned
+- AI/ML integration or innovation
+- Cloud-native applications
+- Healthcare domain knowledge valued
+- Cross-functional team collaboration
+- Modern engineering practices (TDD, Clean Architecture, DDD)
+- DevOps culture
+- Regulatory/compliance experience (GDPR, medical devices, HL7/FHIR)
+
+SEARCH KEYWORDS (FOR JOB BOARDS):
+----------------------------------
+Primary: "Senior Software Architect", "Senior .NET Developer", "Solution Architect", "Technical Lead", "Staff Engineer", ".NET Core", "Azure", "C#", "Microservices"
+
+Secondary: "AI Engineer", "ML Engineer", "Blazor", "Python", "Azure IoT", "Healthcare", "FHIR", "HL7", "Event-Driven", "CQRS", "Clean Architecture", "DDD"
+
+Tertiary: "RAG", "LangChain", "OpenAI", "Azure Functions", "Service Bus", "Cosmos DB", "Docker", "DevOps", "TDD", "FinTech", "MedTech", "RegTech"
+
+NEGATIVE KEYWORDS (EXCLUDE):
+"Junior", "Graduate", "Intern", "Entry Level", "VB6", "Classic ASP", "SharePoint Administrator", "Permanent only"
+
+CONTRACT PREFERENCES:
+- Rate: £500-£700+ per day
+- Duration: 3-12 months
+- IR35: Outside IR35 preferred
+- Start: ASAP or within 4 weeks
+- Notice: Currently available
+
+NOTES:
+------
+- Strong track record in healthcare/medical device software
+- Recent AI/ML project experience (PoC and production)
+- Proven ability to work with distributed teams across timezones
+- Experience with regulated environments (GDPR, medical devices)
+- Comfortable with both greenfield and brownfield projects
+- Strong emphasis on clean code, testing, and architecture
+- Can operate independently as solo architect/engineer or lead teams

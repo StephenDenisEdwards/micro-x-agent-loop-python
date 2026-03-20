@@ -1,0 +1,93 @@
+C:\Users\steph\source\repos\resources\documents\claude-agent-sdk-python
+C:\Users\steph\source\repos\resources\documents\cv-latest-update.md
+C:\Users\steph\source\repos\resources\documents\cv_recommended_updates.md
+C:\Users\steph\source\repos\resources\documents\github_repositories.md
+C:\Users\steph\source\repos\resources\documents\job-search-criteria.txt
+C:\Users\steph\source\repos\resources\documents\job-search-prompt-variants.txt
+C:\Users\steph\source\repos\resources\documents\job-search-prompt.txt
+C:\Users\steph\source\repos\resources\documents\myFiles.txt
+C:\Users\steph\source\repos\resources\documents\openclaw
+C:\Users\steph\source\repos\resources\documents\quick-summary-2026-02-16.md
+C:\Users\steph\source\repos\resources\documents\repos_technologies.md
+C:\Users\steph\source\repos\resources\documents\skills_and_implementations_analysis.md
+C:\Users\steph\source\repos\resources\documents\Stephen Edwards CV December 2025.docx
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-16 - Copy.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-16-v1.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-16.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-16.v2.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-17.v1.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-17.v2.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-17.v3.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-18.v1.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-18.v2.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-26-baseline-config.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-26-standard-config-01.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-26-standard-config.md
+C:\Users\steph\source\repos\resources\documents\todays-jobs-2026-02-26-standard-no-summarization-config.md
+C:\Users\steph\source\repos\resources\documents\todays_emails.md
+C:\Users\steph\source\repos\resources\documents\~
+C:\Users\steph\source\repos\resources\documents\claude-agent-sdk-python\claude-agent-sdk-python-memory-system.md
+C:\Users\steph\source\repos\resources\documents\claude-agent-sdk-python\claude-agent-sdk-python-overview.md
+C:\Users\steph\source\repos\resources\documents\openclaw\agent-loop-architecture.md
+C:\Users\steph\source\repos\resources\documents\openclaw\project-overview.md
+C:\Users\steph\source\repos\resources\documents\~\documents
+C:\Users\steph\source\repos\resources\documents\~\documents\repository-overview-summary.md
+
+
+
+Write a Python console app that does the same output as you (this agent) would given the prompt contained in the job-search-prompt.txt file. Place the app in the tools/job_search_2/ directory. The app should: - Connect to any MCP servers that you also have access directly via stdio as are needed. - Avoid, where possible, calls to the LLM. The objective is to save on LLM costs
+
+- use the same configuration as you do
+- no documentation
+C:\Users\steph\source\repos\micro-x-agent-loop-python
+
+
+
+C:\Users\steph\source\repos\micro-x-agent-loop-python\tools\ADAPT-PROMPT.md
+
+C:\Users\steph\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe: No module named tools.adapted_job_search.__main__; 'tools.adapted_job_search' is a package and cannot be directly executed
+
+
+todays-jobs-2026-03-02.md
+
+Generate an email summarisation app. It should read last 100 emails and produce .md file with a summary of each email and a link to the original email and email it to stephen.denis.edwards@googlemail.com.
+
+
+
+
+Generate a job search app using the prompt in job-search-prompt-v2.txt
+
+Generate a repo summary app that will create a markdown report listing all the repos along with a summary composed from the README.md. Then email that markdown file to me at stephen.denis.edwards@googlemail.com as an attachment.
+
+Generate a repo listing app that will create a markdown report call my-repos.md listing all the repos in my repo
+
+Allowed files from prompt: X.X, e.g, job-search-criteria.txt, todays-jobs-2026-02-16-v1.md, todays-jobs-2026-02-16.md, todays-jobs-YYYY-MM-DD.md
+
+
+Prompts that invite questioning: 
+
+Build me an authentication system
+
+Generate a job search app using the prompt in C:\Users\steph\source\repos\resources\documents
+
+
+
+
+
+
+
+**Links:**
+- [Job Spec](https://www.jobserve.com/jslinkj.aspx?alertid=I-pr5xc-h0a1kz&jid=7F4100AE71ABB1F9B3&src=D4C01DF1DAFBC22C9635&pf=92B919746BFC9DA12B79&utm_source=00001&utm_medium=Email2017&utm_campaign=InstantJob2])
+
+https://www.jobserve.com/gb/en/Job-Search/
+
+
+
+https://www.jobserve.com/jslinkj.aspx?alertid=I-pr5xc-h0bvqc&jid=EF0FEC88195E956053&src=D4C01DF1DAFBC22C9635&pf=92B919746BFC9DA12B79&utm_source=00001&utm_medium=Email2017&utm_campaign=InstantJob2
+
+https://www.jobserve.com/gb/en/JobLanding.aspx?jid=EF0FEC88195E956053&src=D4C01DF1DAFBC22C9635&pf=92B919746BFC9DA12B79&utm_source=00001&utm_medium=Email2017&utm_campaign=InstantJob2
+
+
+
+
+

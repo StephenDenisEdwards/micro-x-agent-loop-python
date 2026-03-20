@@ -1,0 +1,24 @@
+SEARCH PROMPT VARIANTS
+======================
+See 'job-search-prompt-compact.txt' for the main prompt and report format.
+
+QUICK:
+"Use 'job-search-criteria.txt' to find and rank today's jobs (1-10). Get JobServe emails (24h) and LinkedIn matches. Create 'todays-jobs-YYYY-MM-DD.md' using the compact report format. Exclude sub-5/10."
+
+WEEKLY:
+"Use 'job-search-criteria.txt', search last 7 days JobServe + LinkedIn. Create 'weekly-jobs-YYYY-MM-DD.md'. Score 5+/10 only."
+
+FOCUSED:
+"Use 'job-search-criteria.txt', prioritize [AI/ML | Healthcare | Azure | FinTech]. Last 24h JobServe + LinkedIn. Create 'todays-jobs-YYYY-MM-DD.md'."
+
+HIGH-VALUE:
+"Use 'job-search-criteria.txt', only 7+/10 and £600+/day. Create 'premium-jobs-YYYY-MM-DD.md'."
+
+REMOTE ONLY:
+"Use 'job-search-criteria.txt', fully remote UK only. Create 'remote-jobs-YYYY-MM-DD.md'."
+
+MODIFIERS (append to any prompt):
+- "Highlight AI/ML, Healthcare, or FHIR/HL7 roles"
+- "Only contracts 6+ months"
+- "Exclude roles requiring security clearance"
+- "Group Top 10 by sector"

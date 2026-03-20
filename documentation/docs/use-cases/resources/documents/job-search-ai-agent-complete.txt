@@ -1,0 +1,44 @@
+Search Gmail for all JobServe emails from the past week. Read each email's full content. Then search LinkedIn for matching UK contract roles and get full details of promising jobs.
+
+CANDIDATE PROFILE:
+Senior Software Architect & AI/LLM Engineer, 25+ years. Currently building production agent systems (agentic loops, tool orchestration, multi-provider LLM integration, MCP servers). Strong .NET/Azure/Python foundation with recent pivot to AI agent architecture. Available for contract, London or fully remote UK.
+
+PRIMARY SKILLS (AI/LLM — current focus):
+- LLM Integration: Anthropic Claude API (streaming, tool use, prompt caching), OpenAI API (function calling), multi-provider abstraction
+- Agent Architecture: Agentic loops, turn engines, context window management, conversation compaction, token budgeting, model routing
+- Tool Orchestration: MCP server development (stdio/HTTP), tool discovery, structured content, input/output schemas
+- Prompt Engineering: System prompt design, prompt caching optimisation, cost-aware prompt compression
+- AI/ML: LangChain, TensorFlow, PyTorch, OpenCV, RAG, Vector DBs (FAISS), GPT-4/5, Azure OpenAI, Whisper, NLP, CNN
+- Cost Engineering: Token economics, per-turn cost tracking, model selection/routing, context compaction strategies
+- Voice/Realtime: Speech-to-text (Whisper), real-time audio ingress, voice-driven agent interfaces
+
+ENGINEERING FOUNDATION:
+- Python (asyncio), C# (.NET Core/.NET 6-10), TypeScript/Node.js, C/C++ (embedded)
+- Azure (IoT Hub, Service Bus, Cosmos DB, Functions, SignalR, Azure AI Search)
+- Backend (EF Core, SQL Server, MongoDB, REST, gRPC, MQTT), Frontend (Blazor, WPF, Angular, React)
+- Architecture (Clean Architecture, DDD, CQRS, Event Sourcing, Microservices, TDD)
+- Healthcare (HL7 v2, FHIR R4, DICOM, GDPR, medical device software)
+- DevOps (Azure DevOps, Docker, CI/CD, Git)
+
+Score each job 1-10 using the FULL job content:
+- AI/LLM tech match (agent frameworks, LLM APIs, MCP/function calling, Python, prompt engineering — weighted highest)
+- Also match on: Azure + AI, .NET + AI integration, Healthcare + AI crossover
+- Seniority (Senior/Lead/Architect/Staff/Principal)
+- Rate (£550-800+/day preferred)
+- Sector (AI/ML startups, Enterprise AI, Developer tooling, Healthcare AI, FinTech AI, SaaS, RegTech)
+- Location (London or Remote UK)
+- IR35 (Outside IR35 = bonus)
+
+Scoring: 9-10 = AI/agent-focused role, 3+ primary skill matches, £650+, preferred sector. 7-8 = Strong AI component, 2+ primary matches, £550+. 5-6 = Some AI/ML element or strong .NET/Azure + AI crossover, acceptable rate. Below 5 = exclude.
+
+STRONG INDICATORS (score boost): Building agent systems (not just using them), multi-model architectures, tool use/function calling at scale, production LLM systems, MCP or similar protocols, cost optimisation for LLM workloads, healthcare + AI.
+EXCLUDE: Junior/graduate, prompt-only (no engineering), no-code AI platforms only, legacy-only, non-technical management.
+
+Output: 'todays-jobs-YYYY-MM-DD.md' (today's date, no suffixes). Write in stages: write_file for first section, append_file for each subsequent section.
+
+REPORT SECTIONS:
+1. Title: "# Today's Job Opportunities - [date]"
+2. Top 10: Numbered by score (highest first). Each entry: linked title with anchor, score, one-line summary (rate, location, duration, key tech, constraints). Use <a id="anchor"> tags for links.
+3. JobServe Jobs: Per job — anchor tag, title, score, location, rate, duration, IR35, agency/ref, one-paragraph summary, links (job spec + apply), one-paragraph score rationale. Separated by ---.
+4. LinkedIn Jobs: Per job — anchor tag, company + title, score, company, location, type/working pattern, sector, posted date, one-paragraph summary, link, one-paragraph score rationale (bold major constraints like **Permanent role**). Separated by ---.
+5. Summary Stats: Total jobs (JobServe + LinkedIn breakdown), jobs scoring 5+, average score, top 8 technologies, sectors, contract/permanent split, location distribution, IR35 breakdown, 5-7 market observations, 5-6 prioritised recommendations, report date + search criteria summary.

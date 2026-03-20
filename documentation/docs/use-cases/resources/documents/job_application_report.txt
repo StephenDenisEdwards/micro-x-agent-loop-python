@@ -1,0 +1,186 @@
+======================================================================
+JOBSERVE APPLICATION AUTOMATION
+Started: 2026-03-05 11:07:12
+======================================================================
+
+Target URL : https://www.jobserve.com/gb/en/FastTrackJobApplication.aspx?jobid=55DBF9330740BA9CD5
+CV path    : "Stephen
+Cover text : Please find attached my CV for your consideration....
+
+--- STEP 1: Fetching application page ---
+Page fetched successfully (8916 chars).
+
+--- STEP 2: Parsing form structure ---
+WARNING: No form fields detected in the page.
+Raw page excerpt (first 2000 chars):
+Skip to content
+
+  
+
+  
+  
+  
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+   
+  
+  
+
+  
+
+  
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  You are currently only able to use a limited number of features of this website. 
+  Find out how to enable the full power of JobServe /gb/en/content/help/browser-information.htm.
+  
+
+  
+
+  
+
+  
+
+  
+
+  This website works best using cookies which are currently disabled.Cookie policy /gb/en/PolicyView.aspx?t=cp 
+  Allow essential cookies http://www.jobserve.com/gb/en/EnableCookiePolicy.aspx?a=D2211828DABC157C6AE044BDE6EFBAB7076165EBC26B51DC91A871CF801C222B70068D211BA2444219AB41A8A9706420711D82405D086F4450794402&ect=ec
+  Allow all cookies http://www.jobserve.com/gb/en/EnableCookiePolicy.aspx?a=D2211828DABC157C6AE044BDE6EFBAB7076165EBC26B51DC91A871CF801C222B70068D211BA2444219AB41A8A9706420711D82405D086F4450794402&ect=ac
+  
+
+  
+
+  
+  JobServe /gb/en/Job-Search/
+  
+  
+
+  
+
+  
+
+  
+  
+
+  Contact JobServe:
+  
+
+  +44 (0)1621 817335 /gb/en/Content/Help/Contact-Us.htm
+  
+
+  
+  
+  
+  
+- Home /gb/en/Job-Search/
+  
+  
+- Job Search /gb/en/JobSearch.aspx
+  
+  
+- Job Seekers /gb/en/jobseekers
+  
+  
+- Employers /gb/en/employers
+  
+  
+  
+  
+- Why Choose JobServe? /gb/en/employers
+  
+  
+- Our Products /gb/en/employers/products
+  
+  
+  
+  
+- Recruiters /gb/en/recruiters
+  
+  
+  
+  
+- Why Choose JobServe? /gb/en/recruiters
+  
+  
+- Our Products /gb/en/recruiters/products
+  
+  
+  
+  
+- Listings /gb/en/DirectoriesLanding.aspx
+  
+  
+  
+  
+- Current Advertisers /gb/en/Listings/Advertisers/
+  
+  
+  
+  
+- Help /gb/en/content/help/contact-us.htm
+  
+  
+  
+  
+- About /gb/en/content/about/the-company.htm
+  
+  
+- Job Seeker FAQ /gb/en/content/help/faqs/candidate.htm
+  
+  
+- Advertiser FAQ /gb/en/content/help/faqs/advertiser.htm
+  
+  
+- Job Search Help /gb/en/content/help-for-job-search-interface.htm
+  
+  
+- Scam Awareness /gb/en/content/help/job-seeker-communications.htm
+  
+  
+- Contact Us /gb/en/content/help/contact-us.htm
+  
+  
+  
+  
+  
+
+  
+  
+  
+- 
+  Sign In/Register
+  
+  
+- Job Seekers 
+
+The form structure was unexpected. Saving raw HTML for manual inspection.
+
+Final status : FAILED_NO_FIELDS
+Completed    : 2026-03-05 11:07:15

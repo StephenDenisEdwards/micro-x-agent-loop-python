@@ -1,0 +1,191 @@
+{
+  "emailSources": [
+    {
+      "source": "JobServe",
+      "query": "from:jobserve newer_than:1d"
+    },
+    {
+      "source": "Indeed",
+      "query": "from:indeed newer_than:1d"
+    },
+    {
+      "source": "CWJobs",
+      "query": "from:cwjobs newer_than:1d"
+    },
+    {
+      "source": "JobLeads",
+      "query": "from:jobleads newer_than:1d"
+    },
+    {
+      "source": "LinkedIn",
+      "query": "from:linkedin newer_than:1d (job OR opportunity OR role OR hiring)"
+    }
+  ],
+  "linkedinSearches": [
+    "Senior Software Architect .NET Azure",
+    "AI/ML Engineer Python",
+    "Technical Lead C#",
+    "Solution Architect .NET",
+    "Principal Engineer Azure"
+  ],
+  "linkedinFilters": {
+    "location": "United Kingdom",
+    "jobType": "contract",
+    "experienceLevel": "senior",
+    "remoteFilter": "remote"
+  },
+  "candidateProfile": {
+    "summary": "Senior Software Architect/Engineer, 25+ years. Contract only, London or remote UK.",
+    "coreStack": "C#/.NET Core, Azure, Python, AI/ML, Microservices, Blazor, React",
+    "targetRoles": [
+      "Senior Architect",
+      "Solution Architect",
+      "Technical Lead",
+      "Principal Engineer",
+      "Staff Engineer",
+      "AI/ML Engineer",
+      "Senior Software Engineer"
+    ],
+    "sectors": [
+      "Healthcare",
+      "Finance",
+      "Legal",
+      "Industrial",
+      "Energy",
+      "RegTech"
+    ],
+    "rate": "£500-700+/day",
+    "ir35Preference": "Outside IR35 preferred",
+    "duration": "3-12 month contracts"
+  },
+  "skillsToMatch": {
+    "dotnet": [
+      ".NET Core",
+      ".NET 6",
+      ".NET 7",
+      ".NET 8",
+      ".NET 9",
+      ".NET 10",
+      "C#",
+      "ASP.NET Core",
+      "Entity Framework Core"
+    ],
+    "azure": [
+      "Azure Functions",
+      "Azure Service Bus",
+      "Cosmos DB",
+      "Azure IoT Hub",
+      "Azure AI Search",
+      "Azure DevOps",
+      "Azure APIM",
+      "Azure Container Instances"
+    ],
+    "python": [
+      "Python",
+      "AI/ML",
+      "LangChain",
+      "RAG",
+      "Vector DBs",
+      "OpenAI",
+      "GPT",
+      "TensorFlow",
+      "PyTorch"
+    ],
+    "architecture": [
+      "Microservices",
+      "Event-Driven",
+      "CQRS",
+      "DDD",
+      "Domain-Driven Design",
+      "Clean Architecture",
+      "Event Sourcing"
+    ],
+    "devops": [
+      "Docker",
+      "CI/CD",
+      "Azure DevOps",
+      "GitHub Actions",
+      "Kubernetes"
+    ],
+    "healthcare": [
+      "FHIR",
+      "HL7",
+      "GDPR",
+      "Medical Devices",
+      "Healthcare"
+    ],
+    "frontend": [
+      "Blazor",
+      "React",
+      "Angular",
+      "WPF"
+    ]
+  },
+  "exclusionRules": [
+    {
+      "pattern": "junior|graduate|entry level",
+      "reason": "Junior/Graduate roles"
+    },
+    {
+      "pattern": "frontend only",
+      "reason": "Purely frontend-only (unless Blazor)"
+    },
+    {
+      "pattern": "VB6|Classic ASP|VB\\.NET",
+      "reason": "Legacy-only technologies"
+    },
+    {
+      "pattern": "engineering manager|head of|director",
+      "reason": "Pure management roles"
+    },
+    {
+      "pattern": "relocate to|based in (?!UK|United Kingdom|London|Remote|Czech Republic)",
+      "reason": "Permanent relocation outside UK or Czech Republic"
+    }
+  ],
+  "highValueKeywords": [
+    "AI agents",
+    "agentic systems",
+    "LLM orchestration",
+    "tool use",
+    "MCP",
+    "Claude",
+    "Anthropic",
+    "prompt engineering",
+    "agent frameworks",
+    "LangChain",
+    "LangGraph",
+    "autonomous agents",
+    "multi-agent",
+    "function calling"
+  ],
+  "scoringCriteria": {
+    "9-10": {
+      "description": "Excellent match",
+      "requirements": [
+        "4+ tech match",
+        "Senior/Architect level",
+        "£600+/day",
+        "Preferred sector",
+        "Outside IR35",
+        "AI agent/LLM work"
+      ]
+    },
+    "7-8": {
+      "description": "Strong match",
+      "requirements": [
+        "3+ tech match",
+        "Senior level",
+        "£500+/day",
+        "Good sector"
+      ]
+    },
+    "5-6": {
+      "description": "Worth considering",
+      "requirements": [
+        "2+ tech match",
+        "Acceptable rate"
+      ]
+    }
+  }
+}
