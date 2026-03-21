@@ -10,6 +10,9 @@ from loguru import logger
 from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
 from micro_x_agent_loop.sub_agent import SPAWN_SUBAGENT_SCHEMA, SubAgentRunner, SubAgentType
+from micro_x_agent_loop.provider_pool import ProviderPool, RoutingTarget
+from micro_x_agent_loop.semantic_classifier import TaskClassification
+from micro_x_agent_loop.task_taxonomy import TaskType
 from micro_x_agent_loop.turn_classifier import TurnClassification
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
 
@@ -47,6 +50,13 @@ class TurnEngine:
         sub_agent_runner: SubAgentRunner | None = None,
         turn_classifier: Any | None = None,
         routing_model: str = "",
+        # Semantic routing (Phase 1–4)
+        provider_pool: ProviderPool | None = None,
+        semantic_classifier: Any | None = None,
+        routing_policies: dict[str, dict] | None = None,
+        routing_fallback_provider: str = "",
+        routing_fallback_model: str = "",
+        routing_feedback_callback: Any | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -69,6 +79,13 @@ class TurnEngine:
         self._sub_agent_runner = sub_agent_runner
         self._turn_classifier = turn_classifier
         self._routing_model = routing_model
+        # Semantic routing
+        self._provider_pool = provider_pool
+        self._semantic_classifier = semantic_classifier
+        self._routing_policies = routing_policies or {}
+        self._routing_fallback_provider = routing_fallback_provider
+        self._routing_fallback_model = routing_fallback_model
+        self._routing_feedback_callback = routing_feedback_callback
 
     async def run(
         self,
@@ -102,10 +119,39 @@ class TurnEngine:
             if self._channel is not None:
                 api_tools.append(ASK_USER_SCHEMA)
 
-            # Per-turn model routing
+            # Model routing: semantic (if enabled) → per-turn heuristic → default
             effective_model = self._model
+            effective_provider = None  # None = use self._provider
             classification: TurnClassification | None = None
-            if self._turn_classifier is not None:
+            task_classification: TaskClassification | None = None
+            call_type = "main"
+
+            if self._semantic_classifier is not None and self._provider_pool is not None:
+                # Semantic routing (Phase 1–4)
+                task_classification = self._semantic_classifier(
+                    user_message=user_message,
+                    has_tools=bool(api_tools),
+                    turn_iteration=turn_iteration,
+                    turn_number=turn_number,
+                )
+                target = self._resolve_routing_target(task_classification)
+                if target is not None:
+                    effective_provider = self._provider_pool
+                    effective_model = target.model
+                    call_type = f"semantic:{task_classification.task_type.value}"
+                logger.info(
+                    "Semantic routing: task_type={task_type} stage={stage} "
+                    "confidence={confidence:.2f} provider={provider} model={model} reason={reason}",
+                    task_type=task_classification.task_type.value,
+                    stage=task_classification.stage,
+                    confidence=task_classification.confidence,
+                    provider=target.provider if target else "default",
+                    model=effective_model,
+                    reason=task_classification.reason,
+                )
+
+            elif self._turn_classifier is not None:
+                # Legacy per-turn routing
                 classification = self._turn_classifier(
                     user_message=user_message,
                     has_tools=bool(api_tools),
@@ -114,6 +160,7 @@ class TurnEngine:
                 )
                 if classification.use_cheap_model and self._routing_model:
                     effective_model = self._routing_model
+                    call_type = "main:routed"
                 logger.info(
                     "Turn routing: model={model} rule={rule} reason={reason}",
                     model=effective_model,
@@ -121,20 +168,41 @@ class TurnEngine:
                     reason=classification.reason,
                 )
 
-            message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
-                effective_model,
-                self._max_tokens,
-                self._temperature,
-                system_prompt,
-                messages,
-                api_tools,
-                channel=self._channel,
-            )
+            # Dispatch to provider
+            if effective_provider is not None and isinstance(effective_provider, ProviderPool):
+                target = self._resolve_routing_target(task_classification) or RoutingTarget(
+                    provider=self._routing_fallback_provider,
+                    model=effective_model,
+                )
+                message, tool_use_blocks, stop_reason, usage = await effective_provider.stream_chat(
+                    target,
+                    self._max_tokens,
+                    self._temperature,
+                    system_prompt,
+                    messages,
+                    api_tools,
+                    channel=self._channel,
+                )
+            else:
+                message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
+                    effective_model,
+                    self._max_tokens,
+                    self._temperature,
+                    system_prompt,
+                    messages,
+                    api_tools,
+                    channel=self._channel,
+                )
 
-            call_type = "main"
-            if classification is not None and classification.use_cheap_model:
-                call_type = "main:routed"
             self._events.on_api_call_completed(usage, call_type)
+
+            # Routing feedback callback
+            if self._routing_feedback_callback and task_classification is not None:
+                self._routing_feedback_callback(
+                    task_classification=task_classification,
+                    usage=usage,
+                    call_type=call_type,
+                )
 
             if self._api_payload_store is not None:
                 self._record_api_payload(
@@ -248,6 +316,43 @@ class TurnEngine:
             self._events.on_append_message("user", all_results)
             await self._events.on_maybe_compact()
             turn_iteration += 1
+
+    def _resolve_routing_target(
+        self, classification: TaskClassification | None,
+    ) -> RoutingTarget | None:
+        """Map a task classification to a provider/model routing target."""
+        if classification is None or not self._routing_policies:
+            return None
+
+        task_type = classification.task_type.value
+        policy = self._routing_policies.get(task_type)
+        if policy is None:
+            # Fall back to default
+            if self._routing_fallback_provider and self._routing_fallback_model:
+                return RoutingTarget(
+                    provider=self._routing_fallback_provider,
+                    model=self._routing_fallback_model,
+                )
+            return None
+
+        provider = policy.get("provider", self._routing_fallback_provider)
+        model = policy.get("model", self._routing_fallback_model)
+        if not provider or not model:
+            return None
+
+        # Cache-awareness: check if switching is worth it
+        if self._provider_pool is not None:
+            if not self._provider_pool.should_switch_provider(
+                provider,
+                expected_savings_tokens=1000,  # Rough estimate
+                input_price_per_mtok=3.0,      # Default Sonnet pricing
+            ):
+                return RoutingTarget(
+                    provider=self._provider_pool.active_cache_provider,
+                    model=self._routing_fallback_model or self._model,
+                )
+
+        return RoutingTarget(provider=provider, model=model)
 
     @staticmethod
     def _merge_tool_results(

@@ -26,6 +26,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | **16** | [Browser Automation](PLAN-browser-automation.md) | Planned | — | — | Phase 3 of web tooling |
 | **17** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | — | — | Nice-to-have |
 | **18** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | — | — | Opt-in checkpoint tracking |
+| **19** | [Semantic Model Routing](PLAN-semantic-model-routing.md) | **Completed** | [semantic-routing](../testing/MANUAL-TEST-semantic-routing.md) | 🔴 | Cross-provider semantic routing: rule→keywords→LLM classifier, provider pool, cache-aware dispatch, feedback loop |
 | — | [Reddit MCP](PLAN-reddit-mcp.md) | **Blocked** | — | — | Reddit dev registration inaccessible |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
@@ -57,7 +58,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 
 | Status | Count |
 |--------|-------|
-| Completed | 35 |
+| Completed | 36 |
 | Phase 2b Completed (remaining phases pending) | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
@@ -107,3 +108,4 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | [CLI Status Bar](PLAN-cli-status-bar.md) | Completed | Per-turn cost/token visibility via prompt_toolkit bottom_toolbar. Completed 2026-03-12 |
 | [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | Completed | Config.json Pricing key overlays hardcoded defaults; unknown-model warnings. Completed 2026-03-12 |
 | [Multi-Provider Support](PLAN-multi-provider.md) | Completed | Gemini + DeepSeek providers. Completed 2026-03-13 |
+| [Semantic Model Routing](PLAN-semantic-model-routing.md) | Completed | Cross-provider semantic routing with 3-stage classifier, provider pool, cache-aware dispatch, feedback loop. Completed 2026-03-21 |

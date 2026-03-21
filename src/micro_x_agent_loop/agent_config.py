@@ -75,6 +75,14 @@ class AgentConfig:
     per_turn_routing_max_user_chars: int = DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS
     per_turn_routing_short_followup_chars: int = DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS
     per_turn_routing_complexity_keywords: str = DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS
+    # Semantic routing
+    semantic_routing_enabled: bool = False
+    semantic_routing_strategy: str = "rules+keywords"
+    routing_policies: dict = field(default_factory=dict)
+    routing_fallback_provider: str = ""
+    routing_fallback_model: str = ""
+    routing_feedback_enabled: bool = False
+    routing_feedback_db_path: str = ".micro_x/routing.db"
     # Budget
     session_budget_usd: float = DEFAULT_SESSION_BUDGET_USD
     # Display

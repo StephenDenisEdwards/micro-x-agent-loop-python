@@ -41,7 +41,7 @@ from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
 from micro_x_agent_loop.tool_search import ToolSearchManager, should_activate_tool_search
 from micro_x_agent_loop.turn_engine import TurnEngine
-from micro_x_agent_loop.usage import UsageResult
+from micro_x_agent_loop.usage import UsageResult, estimate_cost
 from micro_x_agent_loop.voice_runtime import VoiceRuntime
 
 
@@ -200,11 +200,84 @@ class Agent:
 
         self._api_payload_store = ApiPayloadStore()
 
-        # Per-turn routing
+        # Per-turn routing (legacy) and semantic routing
         turn_classifier = None
         routing_model = ""
         self._per_turn_routing_enabled = config.per_turn_routing_enabled
-        if config.per_turn_routing_enabled:
+        provider_pool = None
+        semantic_classifier = None
+        routing_feedback_callback = None
+        self._routing_feedback_store = None
+        self._semantic_routing_enabled = config.semantic_routing_enabled
+
+        if config.semantic_routing_enabled:
+            # Phase 1: Build provider pool
+            from micro_x_agent_loop.provider_pool import ProviderPool
+            from micro_x_agent_loop.semantic_classifier import classify_task
+
+            pool_providers: dict[str, object] = {config.provider: self._provider}
+            # Add providers referenced in routing policies
+            for policy in config.routing_policies.values():
+                p_name = policy.get("provider", "")
+                if p_name and p_name not in pool_providers:
+                    try:
+                        p_env = resolve_runtime_env(p_name)
+                        pool_providers[p_name] = create_provider(
+                            p_name, p_env.provider_api_key,
+                            prompt_caching_enabled=config.prompt_caching_enabled,
+                        )
+                    except Exception as ex:
+                        logger.warning(f"Failed to create provider {p_name!r} for routing: {ex}")
+
+            provider_pool = ProviderPool(
+                pool_providers,
+                fallback_provider=config.routing_fallback_provider or config.provider,
+            )
+
+            # Phase 2: Build semantic classifier
+            keywords = [kw.strip() for kw in config.per_turn_routing_complexity_keywords.split(",") if kw.strip()]
+            semantic_classifier = partial(
+                classify_task,
+                complexity_keywords=keywords,
+                strategy=config.semantic_routing_strategy,
+            )
+
+            # Phase 4: Routing feedback
+            if config.routing_feedback_enabled:
+                from micro_x_agent_loop.routing_feedback import RoutingFeedbackStore, RoutingOutcome
+                db_path = Path(config.routing_feedback_db_path)
+                if not db_path.is_absolute():
+                    db_path = Path.cwd() / db_path
+                self._routing_feedback_store = RoutingFeedbackStore(str(db_path))
+
+                def _on_routing_feedback(
+                    *, task_classification: object, usage: UsageResult, call_type: str
+                ) -> None:
+                    from micro_x_agent_loop.semantic_classifier import TaskClassification as TC
+                    if not isinstance(task_classification, TC):
+                        return
+                    self._routing_feedback_store.record(RoutingOutcome(
+                        session_id=self._memory.active_session_id or "",
+                        turn_number=self._turn_number,
+                        task_type=task_classification.task_type.value,
+                        provider=usage.provider,
+                        model=usage.model,
+                        cost_usd=estimate_cost(usage),
+                        latency_ms=usage.duration_ms,
+                        stage=task_classification.stage,
+                        confidence=task_classification.confidence,
+                    ))
+
+                routing_feedback_callback = _on_routing_feedback
+
+            logger.info(
+                "Semantic routing enabled: strategy={strategy} providers={providers} policies={policies}",
+                strategy=config.semantic_routing_strategy,
+                providers=list(pool_providers.keys()),
+                policies=list(config.routing_policies.keys()),
+            )
+
+        elif config.per_turn_routing_enabled:
             if not config.per_turn_routing_model:
                 raise ValueError("PerTurnRoutingModel must be set in config when PerTurnRoutingEnabled is true")
             if not config.per_turn_routing_provider:
@@ -245,6 +318,12 @@ class Agent:
             sub_agent_runner=self._sub_agent_runner,
             turn_classifier=turn_classifier,
             routing_model=routing_model,
+            provider_pool=provider_pool,
+            semantic_classifier=semantic_classifier,
+            routing_policies=config.routing_policies,
+            routing_fallback_provider=config.routing_fallback_provider or config.provider,
+            routing_fallback_model=config.routing_fallback_model or config.model,
+            routing_feedback_callback=routing_feedback_callback,
         )
 
         commands_dir = Path(self._working_directory or ".") / ".commands"
@@ -267,6 +346,7 @@ class Agent:
             on_session_reset=self._on_session_reset,
             on_tools_deleted=self._on_tools_deleted,
             output=self._channel.emit_system_message if self._channel is not None else print,
+            routing_feedback_store=self._routing_feedback_store,
         )
 
         self._command_router = CommandRouter(
@@ -282,6 +362,7 @@ class Agent:
             on_tool=self._command_handler.handle_tool,
             on_console_log_level=self._command_handler.handle_console_log_level,
             on_debug=self._command_handler.handle_debug,
+            on_routing=self._command_handler.handle_routing,
             on_unknown=self._command_handler.on_unknown_command,
         )
 
@@ -663,6 +744,8 @@ class Agent:
             summary = build_session_summary_metric(self._session_accumulator)
             emit_metric(summary)
             self._memory.emit_event("metric.session_summary", summary)
+        if self._routing_feedback_store is not None:
+            self._routing_feedback_store.close()
         if self._voice_runtime:
             await self._voice_runtime.shutdown()
 

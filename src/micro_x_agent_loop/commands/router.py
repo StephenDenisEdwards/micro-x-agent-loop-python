@@ -19,6 +19,7 @@ class CommandRouter:
         on_command: Callable[[str], Awaitable[str | None]],
         on_console_log_level: Callable[[str], Awaitable[None]],
         on_debug: Callable[[str], Awaitable[None]],
+        on_routing: Callable[[str], Awaitable[None]],
         on_unknown: Callable[[str], None],
     ) -> None:
         self._on_help = on_help
@@ -33,6 +34,7 @@ class CommandRouter:
         self._on_command = on_command
         self._on_console_log_level = on_console_log_level
         self._on_debug = on_debug
+        self._on_routing = on_routing
         self._on_unknown = on_unknown
 
     async def try_handle(self, user_message: str) -> bool | str:
@@ -82,6 +84,9 @@ class CommandRouter:
             return True
         if trimmed.startswith("/debug"):
             await self._on_debug(trimmed)
+            return True
+        if trimmed.startswith("/routing"):
+            await self._on_routing(trimmed)
             return True
 
         self._on_unknown(trimmed)

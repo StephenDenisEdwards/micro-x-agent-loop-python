@@ -124,6 +124,8 @@ Each instance is independent: separate API client, separate retry state, no shar
 
 **Future layers (Phase 3):**
 
-- Per-turn model routing — route simple turns to Haiku
-- Sub-agent delegation — spawn cheaper sub-agents for research tasks
+- ~~Per-turn model routing — route simple turns to Haiku~~ ✅ Implemented (PLAN-cost-reduction Phase 3b)
+- ~~Sub-agent delegation — spawn cheaper sub-agents for research tasks~~ ✅ Implemented (PLAN-sub-agents)
 - Tool schema optimization — reduce per-turn schema token overhead
+
+**Extension:** [ADR-020](ADR-020-semantic-model-routing.md) — Semantic model routing across providers. Supersedes per-turn routing with a three-stage classifier (rules → keywords → LLM), multi-provider dispatch pool, and adaptive feedback loop. Accepted 2026-03-21.

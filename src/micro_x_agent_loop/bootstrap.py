@@ -149,6 +149,9 @@ async def bootstrap_runtime(
     else:
         channel = TerminalChannel(markdown=app.markdown_rendering_enabled)
 
+    # Build routing policies dict with resolved provider/model references
+    routing_policies = dict(app.routing_policies) if app.routing_policies else {}
+
     agent = Agent(
         AgentConfig(
             model=app.model,
@@ -202,6 +205,13 @@ async def bootstrap_runtime(
             per_turn_routing_max_user_chars=app.per_turn_routing_max_user_chars,
             per_turn_routing_short_followup_chars=app.per_turn_routing_short_followup_chars,
             per_turn_routing_complexity_keywords=app.per_turn_routing_complexity_keywords,
+            semantic_routing_enabled=app.semantic_routing_enabled,
+            semantic_routing_strategy=app.semantic_routing_strategy,
+            routing_policies=routing_policies,
+            routing_fallback_provider=app.routing_fallback_provider or app.provider_name,
+            routing_fallback_model=app.routing_fallback_model or app.model,
+            routing_feedback_enabled=app.routing_feedback_enabled,
+            routing_feedback_db_path=app.routing_feedback_db_path,
             session_budget_usd=app.session_budget_usd,
             channel=channel,
         )

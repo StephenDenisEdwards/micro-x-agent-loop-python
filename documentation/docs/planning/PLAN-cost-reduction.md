@@ -2,7 +2,7 @@
 
 ## Status
 
-**Phase 1 & 2 Completed** — Phases 1 (prompt caching, cheap compaction model) and 2 (tool result summarization, smart compaction trigger, concise output) implemented. Phase 3a (ADR-014) and 3b (per-turn routing) completed. Phase 3c (Batch API) dropped — incompatible with multi-turn agentic loops.
+**Phase 1 & 2 Completed** — Phases 1 (prompt caching, cheap compaction model) and 2 (tool result summarization, smart compaction trigger, concise output) implemented. Phase 3a (ADR-014) and 3b (per-turn routing) completed. Phase 3c (Batch API) dropped — incompatible with multi-turn agentic loops. **Phase 4: Semantic model routing** completed 2026-03-21 — see [PLAN-semantic-model-routing.md](PLAN-semantic-model-routing.md) and [ADR-020](../architecture/decisions/ADR-020-semantic-model-routing.md).
 
 **Review:** [`cost-reduction-review.md`](../review/cost-reduction-review.md) — comprehensive 14-strategy review completed 2026-03-12 mapping all cost reduction strategies against current implementation. Identified 6 top unaddressed opportunities below.
 

@@ -53,10 +53,13 @@ mypy src/
 __main__.py → app_config → bootstrap_runtime → Agent → REPL loop
                                                   ↓
                                             TurnEngine
-                                          ↙         ↘
-                                   Provider        Tool dispatch     SubAgentRunner
-                                 (Anthropic/       (MCP servers)     (spawn_subagent
-                                   OpenAI)                            pseudo-tool)
+                                          ↙    ↓       ↘
+                                   Provider  Semantic    Tool dispatch     SubAgentRunner
+                                 (Anthropic/ Classifier  (MCP servers)     (spawn_subagent
+                                   OpenAI)   ↓                             pseudo-tool)
+                                          ProviderPool
+                                        (multi-provider
+                                          dispatch)
 
 Trigger Broker (always-on daemon):
   broker/service.py → scheduler.py ──→ dispatcher.py → runner.py (subprocess: --run)
@@ -79,11 +82,15 @@ API Server (--server start):
 | `turn_engine.py` | Single turn: LLM call → tool execution → response |
 | `mode_selector.py` | Stage 1 pattern matching + Stage 2 LLM classification |
 | `provider.py` | Factory for LLM providers |
+| `provider_pool.py` | Multi-provider dispatch pool, health tracking, cache-aware switching |
+| `task_taxonomy.py` | TaskType enum (9 types), cost tier classification |
+| `semantic_classifier.py` | Three-stage classifier: rules → keywords → LLM for task-type routing |
+| `routing_feedback.py` | SQLite-backed routing outcome recording, adaptive thresholds |
 | `providers/anthropic_provider.py` | Anthropic streaming + prompt caching |
 | `providers/openai_provider.py` | OpenAI streaming |
 | `providers/ollama_provider.py` | Ollama local LLM (OpenAI-compatible) |
 | `app_config.py` | Config loading, base inheritance, env var expansion |
-| `agent_config.py` | Runtime config dataclass (48 fields) |
+| `agent_config.py` | Runtime config dataclass (55 fields) |
 | `bootstrap.py` | Wires up memory, MCP servers, event sinks |
 | `compaction.py` | Conversation compaction strategies (none/summarize) |
 | `agent_channel.py` | AgentChannel protocol + implementations (Terminal, Buffered, Broker channels) |

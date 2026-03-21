@@ -95,6 +95,14 @@ class AppConfig:
     per_turn_routing_max_user_chars: int
     per_turn_routing_short_followup_chars: int
     per_turn_routing_complexity_keywords: str
+    # Semantic routing
+    semantic_routing_enabled: bool
+    semantic_routing_strategy: str
+    routing_policies: dict
+    routing_fallback_provider: str
+    routing_fallback_model: str
+    routing_feedback_enabled: bool
+    routing_feedback_db_path: str
     # Budget
     session_budget_usd: float
     # Display
@@ -306,6 +314,13 @@ def parse_app_config(config: dict) -> AppConfig:
         per_turn_routing_max_user_chars=int(config.get("PerTurnRoutingMaxUserChars", DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS)),
         per_turn_routing_short_followup_chars=int(config.get("PerTurnRoutingShortFollowupChars", DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS)),
         per_turn_routing_complexity_keywords=str(config.get("PerTurnRoutingComplexityKeywords", DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS)),
+        semantic_routing_enabled=_to_bool(config.get("SemanticRoutingEnabled", False), default=False),
+        semantic_routing_strategy=str(config.get("SemanticRoutingStrategy", "rules+keywords")).strip().lower(),
+        routing_policies=config.get("RoutingPolicies", {}),
+        routing_fallback_provider=str(config.get("RoutingFallbackProvider", "")).strip().lower(),
+        routing_fallback_model=str(config.get("RoutingFallbackModel", "")).strip(),
+        routing_feedback_enabled=_to_bool(config.get("RoutingFeedbackEnabled", False), default=False),
+        routing_feedback_db_path=str(config.get("RoutingFeedbackDbPath", ".micro_x/routing.db")),
         session_budget_usd=float(config.get("SessionBudgetUSD", DEFAULT_SESSION_BUDGET_USD)),
         markdown_rendering_enabled=_to_bool(config.get("MarkdownRenderingEnabled", True), default=True),
         status_bar_enabled=_to_bool(config.get("StatusBarEnabled", True), default=True),
