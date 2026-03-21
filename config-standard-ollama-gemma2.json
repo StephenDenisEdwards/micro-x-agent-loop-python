@@ -1,0 +1,14 @@
+{
+  "Base": "config-base.json",
+  "Provider": "ollama",
+  "Model": "gemma2:2b",
+  "ApiKey": "unused",
+  "MaxTokens": 4096,
+  "PromptCachingEnabled": false,
+  "CompactionStrategy": "none",
+  "SubAgentsEnabled": false,
+  "ModeAnalysisEnabled": false,
+  "Stage2ClassificationEnabled": false,
+  "ToolSearchEnabled": "false",
+  "ToolResultSummarizationEnabled": false
+}
