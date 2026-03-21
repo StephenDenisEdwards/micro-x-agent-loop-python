@@ -76,18 +76,20 @@ Rules:
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | When `Provider` = `anthropic` | Anthropic API key for Claude |
 | `OPENAI_API_KEY` | When `Provider` = `openai` | OpenAI API key for GPT models |
+| `DEEPSEEK_API_KEY` | When `Provider` = `deepseek` | DeepSeek API key |
+| `GEMINI_API_KEY` | When `Provider` = `gemini` | Google Gemini API key |
 | `GOOGLE_CLIENT_ID` | No | Google OAuth client ID for Gmail and Calendar tools |
 | `GOOGLE_CLIENT_SECRET` | No | Google OAuth client secret for Gmail and Calendar tools |
 | `ANTHROPIC_ADMIN_API_KEY` | No | Anthropic Admin API key (`sk-ant-admin...`) for usage/cost reporting |
 
-The required API key depends on the configured `Provider`. Service-specific credentials (Google, Brave, GitHub, Anthropic Admin) are passed to MCP servers via `env` blocks in `McpServers` config — they no longer need to be in `.env`.
+The required API key depends on the configured `Provider`. The `ollama` provider does not require an API key (it runs locally). Service-specific credentials (Google, Brave, GitHub, Anthropic Admin) are passed to MCP servers via `env` blocks in `McpServers` config — they no longer need to be in `.env`.
 
 ## App Settings (`config.json`)
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `ConfigFile` | string | _(none)_ | Path to the actual config file (see [Config File Indirection](#config-file-indirection)) |
-| `Provider` | string | `"anthropic"` | LLM provider: `"anthropic"` or `"openai"` |
+| `Provider` | string | `"anthropic"` | LLM provider: `"anthropic"`, `"openai"`, `"deepseek"`, `"gemini"`, or `"ollama"` |
 | `Model` | string | `"claude-sonnet-4-5-20250929"` | Model ID to use (provider-specific) |
 | `MaxTokens` | int | `8192` | Maximum tokens per API response |
 | `Temperature` | float | `0.7` | Sampling temperature — tuned for agentic tool-use reliability (see [Temperature](#temperature)) |
@@ -202,8 +204,11 @@ Selects the LLM backend. The agent routes the API key and message format automat
 |-------|-----------------|-------------|
 | `"anthropic"` | `ANTHROPIC_API_KEY` | Anthropic Claude models (default) |
 | `"openai"` | `OPENAI_API_KEY` | OpenAI GPT models |
+| `"deepseek"` | `DEEPSEEK_API_KEY` | DeepSeek models |
+| `"gemini"` | `GEMINI_API_KEY` | Google Gemini models |
+| `"ollama"` | _(none — local)_ | Local models via Ollama (see [Local LLM with Ollama](local-llm-ollama.md)) |
 
-The internal message format remains Anthropic-style regardless of provider. The OpenAI provider translates at the API boundary. See [ADR-010](../architecture/decisions/ADR-010-multi-provider-llm-support.md).
+The internal message format remains Anthropic-style regardless of provider. Non-Anthropic providers translate at the API boundary. See [ADR-010](../architecture/decisions/ADR-010-multi-provider-llm-support.md).
 
 ### Model
 
@@ -225,6 +230,31 @@ The model ID to use. The value is provider-specific.
 | `gpt-4o-mini` | Faster, lower cost |
 | `o1` | Reasoning model |
 | `o3` | Latest reasoning model |
+
+**DeepSeek models:**
+
+| Model | Description |
+|-------|-------------|
+| `deepseek-chat` | General purpose chat |
+| `deepseek-reasoner` | Reasoning model |
+
+**Gemini models:**
+
+| Model | Description |
+|-------|-------------|
+| `gemini-2.0-flash` | Fast, low cost |
+| `gemini-2.5-pro-preview-03-25` | Most capable Gemini |
+
+**Ollama models (local):**
+
+| Model | Description |
+|-------|-------------|
+| `phi3:mini` | General purpose, ~2.3GB |
+| `llama3.2:3b` | Meta's small model, ~2GB |
+| `mistral:7b` | Good quality, ~4GB (Q4 quantized) |
+| `gemma2:2b` | Google's small model, ~1.6GB |
+
+See [Local LLM with Ollama](local-llm-ollama.md) for setup and config profiles.
 
 ### MaxTokens
 
@@ -495,7 +525,7 @@ Each entry requires `input` and `output` rates. The `cache_read` and `cache_crea
 
 Pricing lookup uses exact match first, then prefix match (e.g. `claude-sonnet-4-5` matches `claude-sonnet-4-5-20250929`). This allows short model aliases to resolve to dated model entries.
 
-See `config-base.json` for the full set of pre-configured models (Anthropic Claude and OpenAI GPT families).
+See `config-base.json` for the full set of pre-configured models (Anthropic Claude, OpenAI GPT, DeepSeek, Gemini, and Ollama families).
 
 ### McpServers
 

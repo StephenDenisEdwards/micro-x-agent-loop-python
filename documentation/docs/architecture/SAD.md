@@ -6,7 +6,7 @@
 
 ## 1. Introduction and Goals
 
-Micro-X Agent is a general-purpose, cost-aware AI agent built with Python and a pluggable LLM backend (Anthropic Claude or OpenAI GPT). It provides a REPL interface where users type natural-language prompts (or use voice mode) and the agent autonomously orchestrates tools via the Model Context Protocol (MCP) to accomplish tasks.
+Micro-X Agent is a general-purpose, cost-aware AI agent built with Python and a pluggable LLM backend (Anthropic Claude, OpenAI GPT, DeepSeek, Gemini, or Ollama for local inference). It provides a REPL interface where users type natural-language prompts (or use voice mode) and the agent autonomously orchestrates tools via the Model Context Protocol (MCP) to accomplish tasks.
 
 ### Key Goals
 
@@ -30,7 +30,7 @@ Micro-X Agent is a general-purpose, cost-aware AI agent built with Python and a 
 | Constraint | Rationale |
 |-----------|-----------|
 | Python 3.11+ | Minimum version for `typing.Protocol` features and modern syntax |
-| Anthropic or OpenAI API | LLM provider for reasoning and tool dispatch (config-driven) |
+| LLM provider API | LLM provider for reasoning and tool dispatch — Anthropic, OpenAI, DeepSeek, Gemini, or Ollama (config-driven) |
 | Console application | Simplicity; no web UI overhead |
 | OAuth2 for Gmail | Required by Google API |
 
@@ -61,6 +61,9 @@ The agent sits between the user and external services. The user provides natural
 |-----------|----------|---------|
 | Anthropic API | HTTPS / SSE | LLM reasoning and tool dispatch (default provider) |
 | OpenAI API | HTTPS / SSE | LLM reasoning and tool dispatch (alternative provider) |
+| DeepSeek API | HTTPS / SSE | LLM reasoning and tool dispatch (OpenAI-compatible) |
+| Gemini API | HTTPS / SSE | LLM reasoning and tool dispatch (OpenAI-compatible) |
+| Ollama API | HTTP (local) | Local LLM inference via Docker (OpenAI-compatible at localhost:11434) |
 | Gmail API | HTTPS / OAuth2 | Email search, read, send |
 | Google Contacts API | HTTPS / OAuth2 | Contact search, create, update, delete |
 | Google Calendar API | HTTPS / OAuth2 | Event listing, creation, retrieval |
@@ -148,6 +151,9 @@ graph TD
 
     Provider --> AnthropicProv["AnthropicProvider"]
     Provider --> OpenAIProv["OpenAIProvider"]
+    Provider --> DeepSeekProv["DeepSeekProvider"]
+    Provider --> GeminiProv["GeminiProvider"]
+    Provider --> OllamaProv["OllamaProvider"]
     AnthropicProv --> Anthropic["anthropic SDK"]
     OpenAIProv --> OpenAISDK["openai SDK"]
     AnthropicProv --> Tenacity["tenacity<br/>Retry on 429"]

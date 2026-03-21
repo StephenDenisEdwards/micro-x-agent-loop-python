@@ -81,6 +81,7 @@ API Server (--server start):
 | `provider.py` | Factory for LLM providers |
 | `providers/anthropic_provider.py` | Anthropic streaming + prompt caching |
 | `providers/openai_provider.py` | OpenAI streaming |
+| `providers/ollama_provider.py` | Ollama local LLM (OpenAI-compatible) |
 | `app_config.py` | Config loading, base inheritance, env var expansion |
 | `agent_config.py` | Runtime config dataclass (48 fields) |
 | `bootstrap.py` | Wires up memory, MCP servers, event sinks |

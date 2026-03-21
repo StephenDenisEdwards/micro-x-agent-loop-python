@@ -8,7 +8,10 @@ Get Micro-X Agent running in 2 minutes.
 - [Node.js 18+](https://nodejs.org/) — required for TypeScript MCP tool servers (auto-built on first run)
 - A model provider API key:
   - [Anthropic API key](https://console.anthropic.com/) when `Provider=anthropic` (default), or
-  - OpenAI API key when `Provider=openai`
+  - OpenAI API key when `Provider=openai`, or
+  - DeepSeek API key when `Provider=deepseek`, or
+  - Gemini API key when `Provider=gemini`, or
+  - No API key needed when `Provider=ollama` (local inference — see [Local LLM with Ollama](documentation/docs/operations/local-llm-ollama.md))
 
 ### Optional prerequisites
 
@@ -46,6 +49,9 @@ All other keys are optional and enable additional tool sets. Add them later as n
 |-----|----------|----------|
 | `ANTHROPIC_API_KEY` | Yes when `Provider=anthropic` | Main LLM provider |
 | `OPENAI_API_KEY` | Yes when `Provider=openai` | Main LLM provider |
+| `DEEPSEEK_API_KEY` | Yes when `Provider=deepseek` | Main LLM provider |
+| `GEMINI_API_KEY` | Yes when `Provider=gemini` | Main LLM provider |
+| _(none)_ | — | `Provider=ollama` runs locally, no API key needed |
 | `GOOGLE_CLIENT_ID` | No | Gmail, Calendar, Contacts tools (with secret) |
 | `GOOGLE_CLIENT_SECRET` | No | Gmail, Calendar, Contacts tools (with client id) |
 | `ANTHROPIC_ADMIN_API_KEY` | No | `anthropic_usage` tool |

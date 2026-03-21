@@ -2,7 +2,7 @@
 
 A general-purpose AI agent that turns natural language into action. Type what you want — Micro-X orchestrates tools, APIs, and services to get it done.
 
-Built in Python on top of the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/), Micro-X is an interactive REPL that streams LLM responses in real time, executes tools in parallel, and keeps API costs under control with a multi-layer cost reduction architecture. It supports Anthropic Claude and OpenAI GPT as providers, runs on Windows, macOS, and Linux, and can be extended with any MCP-compatible server — no code changes needed.
+Built in Python on top of the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/), Micro-X is an interactive REPL that streams LLM responses in real time, executes tools in parallel, and keeps API costs under control with a multi-layer cost reduction architecture. It supports Anthropic Claude, OpenAI GPT, DeepSeek, Gemini, and Ollama (local) as providers, runs on Windows, macOS, and Linux, and can be extended with any MCP-compatible server — no code changes needed.
 
 > **[Get started in 2 minutes &rarr; QUICKSTART.md](QUICKSTART.md)**
 
@@ -34,7 +34,7 @@ The agent figures out which tools to call, in what order, and streams results ba
 - **Streaming responses** — text appears word-by-word as the LLM generates it
 - **Parallel tool execution** — multiple tool calls in a single turn run concurrently via `asyncio.gather`
 - **Human-in-the-loop** — the LLM pauses to ask clarifying questions when your request is ambiguous, presents structured choices, and continues after you answer ([ADR-017](documentation/docs/architecture/decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md))
-- **Multi-provider LLM support** — pluggable provider architecture supporting Anthropic Claude and OpenAI GPT, switchable via config
+- **Multi-provider LLM support** — pluggable provider architecture supporting Anthropic Claude, OpenAI GPT, DeepSeek, Gemini, and Ollama (local), switchable via config
 - **Automatic retry and resilience** — exponential backoff on API rate limits and transient errors ([ADR-016](documentation/docs/architecture/decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md))
 
 ### Cost Reduction — Built In, Not Bolted On
@@ -154,6 +154,9 @@ graph TD
 
     Provider --> AnthropicProv["AnthropicProvider"]
     Provider --> OpenAIProv["OpenAIProvider"]
+    Provider --> DeepSeekProv["DeepSeekProvider"]
+    Provider --> GeminiProv["GeminiProvider"]
+    Provider --> OllamaProv["OllamaProvider"]
 
     McpMgr --> McpSDK["mcp SDK"]
     McpMgr --> McpTools
@@ -295,6 +298,9 @@ src/micro_x_agent_loop/
   providers/
     anthropic_provider.py  -- Anthropic SDK implementation of LLMProvider
     openai_provider.py     -- OpenAI SDK implementation of LLMProvider
+    deepseek_provider.py   -- DeepSeek provider (OpenAI-compatible)
+    gemini_provider.py     -- Gemini provider (OpenAI-compatible)
+    ollama_provider.py     -- Ollama local LLM provider (OpenAI-compatible)
     common.py              -- Shared provider utilities
   commands/
     router.py              -- CommandRouter: /help, /session, /checkpoint, /voice

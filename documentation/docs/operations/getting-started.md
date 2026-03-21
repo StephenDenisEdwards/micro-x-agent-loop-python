@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - [Python 3.11](https://www.python.org/downloads/) or later
-- An [Anthropic API key](https://console.anthropic.com/)
+- An LLM provider API key: [Anthropic](https://console.anthropic.com/), [OpenAI](https://platform.openai.com/), [DeepSeek](https://platform.deepseek.com/), or [Gemini](https://aistudio.google.com/) — or use [Ollama](local-llm-ollama.md) for free local inference (no API key needed)
 - [Node.js 18+](https://nodejs.org/) — required for TypeScript MCP tool servers
 - (Optional) Google OAuth credentials for Gmail and Calendar tools
 - (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download) for the system-info MCP server (in the shared [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo)
