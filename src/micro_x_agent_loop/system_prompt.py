@@ -227,7 +227,15 @@ def get_system_prompt(
     working_directory: str | None = None,
     autonomous: bool = False,
     hitl_enabled: bool = False,
+    compact: bool = False,
 ) -> str:
+    """Build the system prompt.
+
+    When *compact* is ``True`` the prompt is stripped to essentials — just
+    enough for a small model (e.g. Mistral 7B via Ollama) to understand
+    tool calling.  Verbose directives (codegen, sub-agent examples, user-
+    memory guidance) are omitted to stay within tight context windows.
+    """
     is_windows = sys.platform == "win32"
     if is_windows:
         platform_line = (
@@ -263,11 +271,12 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
         prompt += "specifying a path, use this directory as the default."
     if user_memory:
         prompt += f"\n\n# User Memory\n\n{user_memory}"
-    if user_memory_enabled:
+    if user_memory_enabled and not compact:
         prompt += _USER_MEMORY_GUIDANCE
     if tool_search_active:
         prompt += _TOOL_SEARCH_DIRECTIVE
-    prompt += _CODEGEN_DIRECTIVE
+    if not compact:
+        prompt += _CODEGEN_DIRECTIVE
     if concise_output_enabled:
         prompt += _CONCISE_OUTPUT_DIRECTIVE
     if autonomous and hitl_enabled:

@@ -167,6 +167,7 @@ async def bootstrap_runtime(
                 working_directory=app.working_directory,
                 autonomous=autonomous,
                 hitl_enabled=hitl_enabled,
+                compact=app.provider_name == "ollama",
             ),
             autonomous=autonomous,
             max_tool_result_chars=app.max_tool_result_chars,

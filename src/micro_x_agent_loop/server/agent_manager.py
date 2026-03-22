@@ -149,6 +149,7 @@ class AgentManager:
         system_prompt = get_system_prompt(
             concise_output_enabled=app.concise_output_enabled,
             working_directory=app.working_directory,
+            compact=app.provider_name == "ollama",
         )
 
         summarization_provider = None

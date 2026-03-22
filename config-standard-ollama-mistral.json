@@ -5,10 +5,17 @@
   "ApiKey": "unused",
   "MaxTokens": 4096,
   "PromptCachingEnabled": false,
-  "CompactionStrategy": "none",
-  "SubAgentsEnabled": false,
-  "ModeAnalysisEnabled": false,
-  "Stage2ClassificationEnabled": false,
-  "ToolSearchEnabled": "false",
-  "ToolResultSummarizationEnabled": false
+  "CompactionStrategy": "summarize",
+  "CompactionProvider": "anthropic",
+  "CompactionModel": "claude-haiku-4-5-20251001",
+  "SubAgentsEnabled": true,
+  "SubAgentProvider": "anthropic",
+  "SubAgentModel": "claude-haiku-4-5-20251001",
+  "ModeAnalysisEnabled": true,
+  "Stage2ClassificationEnabled": true,
+  "Stage2Provider": "anthropic",
+  "Stage2Model": "claude-haiku-4-5-20251001",
+  "ToolSearchEnabled": "auto",
+  "ToolResultSummarizationEnabled": true,
+  "ToolResultSummarizationModel": "claude-haiku-4-5-20251001"
 }

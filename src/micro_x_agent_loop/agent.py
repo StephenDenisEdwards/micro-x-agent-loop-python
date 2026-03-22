@@ -90,7 +90,8 @@ class Agent:
         self._line_prefix = self._LINE_PREFIX_AUTONOMOUS if config.autonomous else self._LINE_PREFIX
 
         # Enable ask_user directive when a channel is available
-        if self._channel is not None:
+        _compact = config.provider == "ollama"
+        if self._channel is not None and not _compact:
             from micro_x_agent_loop.system_prompt import _ASK_USER_DIRECTIVE
             self._system_prompt += _ASK_USER_DIRECTIVE
 
@@ -101,8 +102,9 @@ class Agent:
                 raise ValueError("SubAgentProvider must be set in config when SubAgentsEnabled is true")
             if not config.sub_agent_model:
                 raise ValueError("SubAgentModel must be set in config when SubAgentsEnabled is true")
-            from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
-            self._system_prompt += _SUBAGENT_DIRECTIVE
+            if not _compact:
+                from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
+                self._system_prompt += _SUBAGENT_DIRECTIVE
             self._sub_agent_runner = SubAgentRunner(
                 parent_tools=config.tools,
                 provider_name=config.provider,

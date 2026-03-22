@@ -51,6 +51,12 @@ TOOL_SEARCH_CONTEXT_WINDOWS: dict[str, int] = {
     "gemini-3": 1_000_000,
     "deepseek-chat": 128_000,
     "deepseek-reasoner": 128_000,
+    # Ollama local models
+    "mistral": 32_000,
+    "llama3": 128_000,
+    "llama3.2": 128_000,
+    "phi3": 128_000,
+    "gemma2": 8_000,
 }
 TOOL_SEARCH_DEFAULT_CONTEXT_WINDOW = 200_000
 

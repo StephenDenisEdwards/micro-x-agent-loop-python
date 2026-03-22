@@ -133,6 +133,31 @@ class OpenAIProvider:
     def convert_tools(self, tools: list[Tool]) -> list[dict]:
         return canonicalise_tools(tools)
 
+    def _build_stream_kwargs(
+        self,
+        model: str,
+        max_tokens: int,
+        temperature: float,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> dict:
+        """Build kwargs for the streaming chat completions call.
+
+        Subclasses can override to adjust parameters for provider-specific
+        compatibility (e.g. removing ``stream_options`` for Ollama).
+        """
+        kwargs: dict = dict(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=messages,
+            stream=True,
+            stream_options={"include_usage": True},
+        )
+        if tools:
+            kwargs["tools"] = tools
+        return kwargs
+
     @retry(**default_retry_kwargs((
         openai.RateLimitError,
         openai.APIConnectionError,
@@ -176,16 +201,9 @@ class OpenAIProvider:
                 f"API request: model={model}, max_tokens={max_tokens}, "
                 f"messages={len(oai_messages)}, tools={len(oai_tools)}"
             )
-            kwargs: dict = dict(
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                messages=oai_messages,
-                stream=True,
-                stream_options={"include_usage": True},
+            kwargs = self._build_stream_kwargs(
+                model, max_tokens, temperature, oai_messages, oai_tools,
             )
-            if oai_tools:
-                kwargs["tools"] = oai_tools
 
             stream = await self._client.chat.completions.create(**kwargs)
 
