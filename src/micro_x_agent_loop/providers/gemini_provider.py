@@ -126,6 +126,10 @@ def _to_gemini_tools(tools: list[dict]) -> list[Any] | None:
 
 
 class GeminiProvider:
+    @property
+    def family(self) -> str:
+        return "gemini"
+
     """Google Gemini provider using the google-genai SDK."""
 
     def __init__(self, api_key: str) -> None:

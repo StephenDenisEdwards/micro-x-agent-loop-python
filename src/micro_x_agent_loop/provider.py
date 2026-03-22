@@ -11,6 +11,15 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class LLMProvider(Protocol):
+    @property
+    def family(self) -> str:
+        """Provider family for format-compatible fallback grouping.
+
+        Providers in the same family share message/tool wire formats.
+        Values: 'anthropic', 'openai', 'gemini'.
+        """
+        ...
+
     async def stream_chat(
         self,
         model: str,

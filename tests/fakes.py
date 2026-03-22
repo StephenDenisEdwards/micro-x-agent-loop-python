@@ -145,6 +145,10 @@ class FakeProvider:
         self._summary_text = summary_text
         self._model = model
 
+    @property
+    def family(self) -> str:
+        return "openai"
+
     async def create_message(self, model, max_tokens, temperature, messages):
         self.calls.append({
             "model": model,
@@ -161,6 +165,10 @@ class FakeStreamProvider:
     def __init__(self, responses: list[tuple] | None = None) -> None:
         self.responses: list[tuple] = list(responses or [])
         self.stream_calls: list[dict] = []
+
+    @property
+    def family(self) -> str:
+        return "openai"
 
     def queue(
         self,

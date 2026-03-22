@@ -20,6 +20,10 @@ class AnthropicProvider:
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
         self._prompt_caching_enabled = prompt_caching_enabled
 
+    @property
+    def family(self) -> str:
+        return "anthropic"
+
     def convert_tools(self, tools: list[Tool]) -> list[dict]:
         return canonicalise_tools(tools)
 

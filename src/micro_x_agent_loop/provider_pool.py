@@ -95,6 +95,11 @@ class ProviderPool:
         self._fallback_provider = fallback_provider or next(iter(providers), "")
         self._active_cache_provider: str = ""
         self._cache_switch_penalty_tokens = cache_switch_penalty_tokens
+        # Extract family from each provider for same-family fallback gating
+        self._families: dict[str, str] = {
+            name: getattr(provider, "family", name)
+            for name, provider in providers.items()
+        }
 
     @property
     def active_cache_provider(self) -> str:
@@ -115,43 +120,60 @@ class ProviderPool:
             return False
         return status.is_available()
 
+    def _same_family(self, name_a: str, name_b: str) -> bool:
+        """Check if two providers belong to the same format family."""
+        return self._families.get(name_a, name_a) == self._families.get(name_b, name_b)
+
     def resolve_target(
         self,
         target: RoutingTarget,
     ) -> tuple[Any, str]:
         """Resolve a routing target to a (provider_instance, model) tuple.
 
-        Falls back to the default provider if the target provider is unavailable.
+        Falls back to a same-family provider if the target is unavailable.
+        Cross-family fallback is not attempted because message/tool formats
+        are incompatible between families.
 
         Returns:
             (provider_instance, model_name)
 
         Raises:
-            ValueError: If no provider is available.
+            ValueError: If no same-family provider is available.
         """
         # Try the requested provider
         if target.provider in self._providers and self.is_available(target.provider):
             return self._providers[target.provider], target.model
 
-        # Fallback
-        if self._fallback_provider and self._fallback_provider in self._providers:
-            if self.is_available(self._fallback_provider):
-                logger.warning(
-                    f"Provider {target.provider!r} unavailable, "
-                    f"falling back to {self._fallback_provider!r}"
-                )
-                return self._providers[self._fallback_provider], target.model
+        target_family = self._families.get(target.provider, target.provider)
 
-        # Try any available provider
+        # Fallback — only if same family
+        if (
+            self._fallback_provider
+            and self._fallback_provider in self._providers
+            and self.is_available(self._fallback_provider)
+            and self._families.get(self._fallback_provider) == target_family
+        ):
+            logger.warning(
+                f"Provider {target.provider!r} unavailable, "
+                f"falling back to {self._fallback_provider!r} (family: {target_family})"
+            )
+            return self._providers[self._fallback_provider], target.model
+
+        # Try any available provider in the same family
         for name, provider in self._providers.items():
-            if self.is_available(name):
+            if name == target.provider:
+                continue
+            if self.is_available(name) and self._families.get(name) == target_family:
                 logger.warning(
-                    f"Fallback provider also unavailable, "
-                    f"using first available: {name!r}"
+                    f"Using first available same-family provider: {name!r} "
+                    f"(family: {target_family})"
                 )
                 return provider, target.model
 
-        raise ValueError("No LLM providers are currently available")
+        raise ValueError(
+            f"No same-family ({target_family}) providers available "
+            f"for {target.provider!r}"
+        )
 
     async def stream_chat(
         self,
@@ -182,8 +204,11 @@ class ProviderPool:
             return result
         except Exception as ex:
             self._mark_error(provider_name)
-            # Try fallback if different from the target
-            if provider_name != self._fallback_provider:
+            # Try fallback if different from the target AND same family
+            if (
+                provider_name != self._fallback_provider
+                and self._same_family(provider_name, self._fallback_provider)
+            ):
                 try:
                     fb_provider, fb_model = self.resolve_target(
                         RoutingTarget(provider=self._fallback_provider, model=model)

@@ -216,7 +216,7 @@ graph TD
 | `ToolSearchManager` | On-demand tool discovery pseudo-tool. Replaces large schema payloads with a single search tool when schema size exceeds a threshold. Uses `tiktoken` for token counting. |
 | `SemanticClassifier` | Three-stage task classification pipeline (rules → keywords → LLM) that maps user messages to one of 9 `TaskType` values. Pure functions, < 1ms for stages 1–2. Used by `TurnEngine` to select provider/model per LLM call. |
 | `TurnClassifier` | Legacy per-turn binary classifier: decides cheap model vs main model using heuristics (message length, turn iteration, complexity keywords). Superseded by semantic classifier when both are enabled. |
-| `ProviderPool` | Manages multiple `LLMProvider` instances for cross-provider routing. Dispatches by name, tracks health (exponential-backoff cooldown), handles fallback, and evaluates cache-switch penalty before switching providers. |
+| `ProviderPool` | Manages multiple `LLMProvider` instances for cross-provider routing. Dispatches by name, tracks health (exponential-backoff cooldown), handles same-family fallback (providers tagged by `family`: `"anthropic"`, `"openai"`, `"gemini"`), and evaluates cache-switch penalty before switching providers. |
 | `TaskTaxonomy` | `TaskType` enum (9 types: trivial, conversational, factual_lookup, summarization, code_generation, code_review, analysis, tool_continuation, creative) with `CHEAP_TASK_TYPES` / `MAIN_TASK_TYPES` frozen sets. |
 | `RoutingFeedback` | SQLite-backed outcome recording (`routing_outcomes` table). Tracks cost, latency, and quality signals per task type. Computes adaptive confidence thresholds. Exposed via `/routing` command. |
 | `ModeSelector` | Stage 1 structural pattern matching + Stage 2 LLM classification for routing prompts to compiled vs prompt mode. Pure computation, no async. |
@@ -383,7 +383,7 @@ The agent supports two model routing strategies, configured in `config.json`. Wh
 | 2. Keywords | Cosine similarity to keyword centroids | < 1ms | ~25-30% |
 | 3. LLM | Cheapest model classifies via JSON prompt | ~200ms | < 5% |
 
-Each task type maps to a `(provider, model)` pair via routing policies in config. The `ProviderPool` dispatches to the target provider, with health tracking (exponential backoff 5–60s), automatic fallback, and cache-aware switching (penalty-based decision to avoid losing prompt prefix cache). An optional feedback loop (`RoutingFeedbackEnabled`) records outcomes to SQLite and computes adaptive confidence thresholds.
+Each task type maps to a `(provider, model)` pair via routing policies in config. The `ProviderPool` dispatches to the target provider, with health tracking (exponential backoff 5–60s), same-family fallback, and cache-aware switching (penalty-based decision to avoid losing prompt prefix cache). Each provider declares a `family` property (`"anthropic"`, `"openai"`, or `"gemini"`) — fallback is restricted to providers in the same family because message/tool wire formats are incompatible across families ([ADR-021](decisions/ADR-021-same-family-provider-fallback.md)). An optional feedback loop (`RoutingFeedbackEnabled`) records outcomes to SQLite and computes adaptive confidence thresholds.
 
 See [ADR-020](decisions/ADR-020-semantic-model-routing.md) and [DESIGN-semantic-model-routing](../design/DESIGN-semantic-model-routing.md).
 

@@ -44,3 +44,4 @@ What becomes easier or more difficult to do because of this change?
 | [ADR-018](ADR-018-trigger-broker-subprocess-dispatch.md) | Trigger broker with subprocess dispatch | Accepted |
 | [ADR-019](ADR-019-typescript-codegen-template.md) | TypeScript codegen template | Proposed |
 | [ADR-020](ADR-020-semantic-model-routing.md) | Semantic model routing across providers | Accepted |
+| [ADR-021](ADR-021-same-family-provider-fallback.md) | Same-family provider fallback | Accepted |

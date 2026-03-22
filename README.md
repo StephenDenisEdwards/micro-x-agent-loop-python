@@ -34,7 +34,9 @@ The agent figures out which tools to call, in what order, and streams results ba
 - **Streaming responses** — text appears word-by-word as the LLM generates it
 - **Parallel tool execution** — multiple tool calls in a single turn run concurrently via `asyncio.gather`
 - **Human-in-the-loop** — the LLM pauses to ask clarifying questions when your request is ambiguous, presents structured choices, and continues after you answer ([ADR-017](documentation/docs/architecture/decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md))
-- **Multi-provider LLM support** — pluggable provider architecture supporting Anthropic Claude, OpenAI GPT, DeepSeek, Gemini, and Ollama (local), switchable via config
+- **Multi-provider LLM support** — pluggable provider architecture supporting Anthropic Claude, OpenAI GPT, DeepSeek, Gemini, and Ollama (local), with a provider pool for health tracking and same-family fallback
+- **Semantic model routing** — three-stage classifier routes each turn to the most cost-effective provider/model pair ([ADR-020](documentation/docs/architecture/decisions/ADR-020-semantic-model-routing.md))
+- **Sub-agents** — spawn parallel sub-agents for exploration, summarization, or general reasoning without polluting the main context
 - **Automatic retry and resilience** — exponential backoff on API rate limits and transient errors ([ADR-016](documentation/docs/architecture/decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md))
 
 ### Cost Reduction — Built In, Not Bolted On
@@ -48,6 +50,17 @@ Running an agent loop against a frontier LLM gets expensive fast. Micro-X ships 
 | Conversation compaction | LLM-based summarization of older messages | Keeps long sessions in bounds |
 | Compiled mode _(experimental)_ | Routes batch tasks to code generation | 4-20x cost reduction |
 | Concise output formatting | Structured, compact tool results | Less token waste |
+| Semantic model routing | Routes tasks by type to cheap/local models | 30-50% additional savings |
+
+### Semantic Model Routing
+
+A three-stage classifier ([ADR-020](documentation/docs/architecture/decisions/ADR-020-semantic-model-routing.md)) analyses each prompt and routes it to the most cost-effective provider and model:
+
+1. **Rules** — regex patterns and turn context signals (zero latency, handles ~60-70% of turns)
+2. **Keywords** — cosine similarity against keyword centroids (< 1ms, handles ~25-30%)
+3. **LLM** — cheapest model classifies ambiguous cases (< 5% of turns)
+
+Nine task types (`trivial`, `conversational`, `factual_lookup`, `summarization`, `code_generation`, `code_review`, `analysis`, `tool_continuation`, `creative`) map to `(provider, model)` pairs via config-driven routing policies. A `ProviderPool` dispatches to the target provider with health tracking, same-family fallback ([ADR-021](documentation/docs/architecture/decisions/ADR-021-same-family-provider-fallback.md)), and cache-aware switching. An optional feedback loop records outcomes and adjusts confidence thresholds adaptively.
 
 ### Session Memory
 
@@ -71,6 +84,31 @@ python -m micro_x_agent_loop --broker start
 ```
 
 The broker spawns each run as an isolated subprocess using `--run`, with autonomous mode enabled (no `ask_user`, no interactive prompts). Overlap policies prevent duplicate runs, and all results are tracked in SQLite.
+
+### API Server (HTTP & WebSocket)
+
+A FastAPI-based server that exposes the agent over HTTP and WebSocket for web, desktop, and mobile clients:
+
+```bash
+python -m micro_x_agent_loop --server start              # Start server
+python -m micro_x_agent_loop --server start --broker      # Start server with broker
+python -m micro_x_agent_loop --server http://host:port    # Connect CLI to remote server
+```
+
+- **REST endpoints** — `POST /api/chat`, `GET /api/sessions`, `GET /api/health`
+- **WebSocket** — `ws://host:port/api/ws/{session_id}` for real-time streaming via `WebSocketChannel`
+- **Per-session agents** — `AgentManager` creates, caches, and evicts Agent instances per session
+- **Broker integration** — optional broker routes for jobs, runs, HITL, and webhooks via `APIRouter`
+
+### Sub-Agents
+
+The agent can spawn sub-agents for parallel research and exploration via the `spawn_subagent` pseudo-tool. Sub-agents run as independent agent instances with their own context window, configured for specific tasks:
+
+- **explore** — fast codebase exploration and search
+- **summarize** — document or content summarization
+- **general** — general-purpose multi-step reasoning
+
+Sub-agents protect the main context window from excessive intermediate results and enable parallel independent queries.
 
 ### Voice Mode
 
@@ -145,18 +183,23 @@ graph TD
     Agent --> AskUser["AskUserHandler<br/>Human-in-the-Loop"]
     Agent --> ToolSearch["ToolSearchManager<br/>On-Demand Discovery"]
     Agent --> ModeSelect["ModeSelector<br/>Prompt vs Compiled"]
+    Agent --> SubAgent["SubAgentRunner<br/>Parallel Sub-Agents"]
 
-    TurnEngine --> Provider["LLMProvider<br/>Protocol"]
+    TurnEngine --> Classifier["SemanticClassifier<br/>Rules → Keywords → LLM"]
+    TurnEngine --> ProvPool["ProviderPool<br/>Multi-Provider Dispatch"]
     TurnEngine --> McpTools["MCP Tool Proxies"]
     TurnEngine --> Events["TurnEvents<br/>Lifecycle Callbacks"]
 
+    Classifier --> ProvPool
+    ProvPool --> Provider["LLMProvider<br/>Protocol"]
+
     Agent --> Memory
 
-    Provider --> AnthropicProv["AnthropicProvider"]
-    Provider --> OpenAIProv["OpenAIProvider"]
-    Provider --> DeepSeekProv["DeepSeekProvider"]
-    Provider --> GeminiProv["GeminiProvider"]
-    Provider --> OllamaProv["OllamaProvider"]
+    Provider --> AnthropicProv["AnthropicProvider<br/>family: anthropic"]
+    Provider --> OpenAIProv["OpenAIProvider<br/>family: openai"]
+    Provider --> DeepSeekProv["DeepSeekProvider<br/>family: openai"]
+    Provider --> GeminiProv["GeminiProvider<br/>family: gemini"]
+    Provider --> OllamaProv["OllamaProvider<br/>family: openai"]
 
     McpMgr --> McpSDK["mcp SDK"]
     McpMgr --> McpTools
@@ -168,6 +211,28 @@ graph TD
         CheckpointMgr["CheckpointManager"]
         Facade["MemoryFacade"]
     end
+
+    subgraph Broker["broker/ (Trigger Broker)"]
+        direction TB
+        Scheduler["scheduler.py<br/>Cron Scheduling"]
+        Dispatcher["dispatcher.py<br/>Job Dispatch"]
+        Runner["runner.py<br/>Subprocess --run"]
+        BrokerStore["store.py<br/>SQLite: jobs, runs"]
+        Channels["channels.py<br/>Response Adapters"]
+        Webhook["webhook_server.py<br/>HTTP Triggers"]
+    end
+
+    subgraph Server["server/ (API Server)"]
+        direction TB
+        App["app.py<br/>FastAPI + Lifespan"]
+        AgentMgr["agent_manager.py<br/>Per-Session Agents"]
+        WsChan["ws_channel.py<br/>WebSocket Streaming"]
+        BrokerRoutes["broker_routes.py<br/>Broker API"]
+    end
+
+    Main --> Broker
+    Main --> Server
+    Server --> Agent
 
     subgraph McpServers["MCP Servers"]
         direction TB
@@ -273,21 +338,31 @@ sequenceDiagram
 src/micro_x_agent_loop/
   __main__.py              -- Entry point: loads config, displays logo, starts REPL
   agent.py                 -- Agent orchestrator: conversation state, commands, turn delegation
-  agent_config.py          -- Configuration dataclass
+  agent_channel.py         -- AgentChannel protocol + implementations (Terminal, Buffered, Broker)
+  agent_config.py          -- Configuration dataclass (~55 fields)
   app_config.py            -- Config file parsing (config.json → AppConfig)
   bootstrap.py             -- Runtime factory: wires MCP, memory, provider into AppRuntime
   constants.py             -- Centralised magic numbers and defaults
   turn_engine.py           -- LLM turn loop: three-way block classification, parallel tool dispatch
   turn_events.py           -- TurnEvents Protocol + BaseTurnEvents (lifecycle callbacks)
   ask_user.py              -- AskUserHandler: human-in-the-loop pseudo-tool (questionary UI)
-  tool_search.py           -- ToolSearchManager: on-demand tool discovery pseudo-tool
+  tool_search.py           -- ToolSearchManager: on-demand tool discovery (keyword + semantic)
   mode_selector.py         -- Mode selection: structural pattern matching + LLM classification
   tool.py                  -- Tool Protocol + ToolResult dataclass
   tool_result_formatter.py -- Structured → text formatting (json, table, text, key_value)
   system_prompt.py         -- System prompt text with conditional directives
   compaction.py            -- Conversation compaction strategies (none, summarize)
   llm_client.py            -- Shared utilities (Spinner, retry callback)
-  provider.py              -- LLMProvider Protocol definition
+  provider.py              -- LLMProvider Protocol definition (includes family property)
+  provider_pool.py         -- Multi-provider dispatch, health tracking, same-family fallback
+  semantic_classifier.py   -- Three-stage classifier: rules → keywords → LLM
+  task_taxonomy.py         -- TaskType enum (9 types), cost tier classification
+  turn_classifier.py       -- Legacy per-turn binary classifier (superseded by semantic routing)
+  routing_feedback.py      -- SQLite-backed routing outcome recording, adaptive thresholds
+  embedding.py             -- Ollama embedding client, vector index, cosine similarity
+  sub_agent.py             -- SubAgentRunner: agent types (explore/summarize/general)
+  cost_reconciliation.py   -- Cost reconciliation utilities
+  manifest.py              -- Build manifest
   metrics.py               -- Structured metrics emission (cost tracking, API call analysis)
   usage.py                 -- UsageResult dataclass and pricing lookup
   api_payload_store.py     -- In-memory ring buffer for API request/response payloads
@@ -296,15 +371,16 @@ src/micro_x_agent_loop/
   voice_runtime.py         -- Voice mode: continuous STT via MCP sessions
   voice_ingress.py         -- VoiceIngress Protocol + PollingVoiceIngress
   providers/
-    anthropic_provider.py  -- Anthropic SDK implementation of LLMProvider
-    openai_provider.py     -- OpenAI SDK implementation of LLMProvider
-    deepseek_provider.py   -- DeepSeek provider (OpenAI-compatible)
-    gemini_provider.py     -- Gemini provider (OpenAI-compatible)
-    ollama_provider.py     -- Ollama local LLM provider (OpenAI-compatible)
-    common.py              -- Shared provider utilities
+    anthropic_provider.py  -- Anthropic SDK (family: "anthropic")
+    openai_provider.py     -- OpenAI SDK (family: "openai")
+    deepseek_provider.py   -- DeepSeek provider (inherits family: "openai")
+    gemini_provider.py     -- Gemini provider (family: "gemini")
+    ollama_provider.py     -- Ollama local LLM (inherits family: "openai")
+    common.py              -- Shared provider utilities (retry config)
   commands/
     router.py              -- CommandRouter: /help, /session, /checkpoint, /voice
     command_handler.py     -- CommandHandler base class
+    prompt_commands.py     -- Prompt-related commands
     voice_command.py       -- /voice command handler
   services/
     session_controller.py  -- Session list/summary formatting service
@@ -321,6 +397,24 @@ src/micro_x_agent_loop/
     facade.py              -- MemoryFacade Protocol (Active + Null implementations)
     pruning.py             -- Time/count-based retention enforcement
     models.py              -- SessionRecord, MessageRecord dataclasses
+  broker/
+    service.py             -- Broker daemon lifecycle (start/stop)
+    scheduler.py           -- Cron-based job scheduling (croniter)
+    dispatcher.py          -- Job dispatch and overlap policies
+    runner.py              -- Subprocess execution via --run
+    store.py               -- SQLite: broker_jobs, broker_runs, broker_questions
+    channels.py            -- Response channel adapters
+    response_router.py     -- Route broker results to channels
+    webhook_server.py      -- HTTP webhook trigger endpoint
+    polling.py             -- Polling-based trigger source
+    cli.py                 -- Broker CLI commands (--broker, --job)
+  server/
+    app.py                 -- FastAPI application with lifespan management
+    agent_manager.py       -- Per-session Agent lifecycle (create, cache, evict)
+    ws_channel.py          -- WebSocketChannel: AgentChannel for real-time streaming
+    broker_routes.py       -- Broker endpoints as APIRouter (jobs, runs, HITL, webhooks)
+    client.py              -- WebSocket CLI client for --server http://... mode
+    sdk.py                 -- SDK utilities
 
 mcp_servers/ts/            -- TypeScript MCP servers (npm workspaces monorepo)
   packages/
@@ -338,15 +432,40 @@ All tools are TypeScript MCP servers — the Python agent loop is a pure MCP orc
 
 ## Dependencies
 
+### Core
+
 | Package | Purpose |
 |---------|---------|
 | [anthropic](https://pypi.org/project/anthropic/) | Claude API (official SDK) |
+| [openai](https://pypi.org/project/openai/) | OpenAI, DeepSeek, and Ollama APIs (OpenAI-compatible SDK) |
+| [google-genai](https://pypi.org/project/google-genai/) | Gemini API |
+| [mcp](https://pypi.org/project/mcp/) | Model Context Protocol client |
 | [python-dotenv](https://pypi.org/project/python-dotenv/) | Load `.env` files |
 | [tenacity](https://pypi.org/project/tenacity/) | Retry with exponential backoff |
 | [loguru](https://pypi.org/project/loguru/) | Structured logging |
-| [mcp](https://pypi.org/project/mcp/) | Model Context Protocol client |
+| [tiktoken](https://pypi.org/project/tiktoken/) | Token counting for context management |
 
-Tool-specific dependencies (HTTP clients, Google APIs, HTML parsing, docx reading) are in the TypeScript MCP servers under `mcp_servers/ts/`.
+### Server & Broker
+
+| Package | Purpose |
+|---------|---------|
+| [fastapi](https://pypi.org/project/fastapi/) | API server (REST + WebSocket) |
+| [uvicorn](https://pypi.org/project/uvicorn/) | ASGI server |
+| [websockets](https://pypi.org/project/websockets/) | WebSocket transport |
+| [croniter](https://pypi.org/project/croniter/) | Cron expression parsing for trigger broker |
+
+### Utilities
+
+| Package | Purpose |
+|---------|---------|
+| [questionary](https://pypi.org/project/questionary/) | Interactive prompts (ask_user UI) |
+| [rich](https://pypi.org/project/rich/) | Terminal formatting |
+| [httpx](https://pypi.org/project/httpx/) | Async HTTP client |
+| [python-docx](https://pypi.org/project/python-docx/) | DOCX reading |
+| [beautifulsoup4](https://pypi.org/project/beautifulsoup4/) | HTML parsing |
+| [google-api-python-client](https://pypi.org/project/google-api-python-client/) | Google API discovery |
+
+Tool-specific dependencies (HTTP clients, Google APIs, HTML parsing) are in the TypeScript MCP servers under `mcp_servers/ts/`.
 
 ## Documentation
 
@@ -360,7 +479,8 @@ Full documentation is available in [documentation/docs/](documentation/docs/inde
 - [Cost-Aware Task Compilation](documentation/docs/research-papers/cost-aware-task-compilation-for-llm-agents/research-paper.md) — research paper on prompt/compile mode
 - [WhatsApp MCP Setup](documentation/docs/design/tools/whatsapp-mcp/README.md) — WhatsApp integration guide
 - [Configuration Reference](documentation/docs/operations/config.md) — all settings with types and defaults
-- [Architecture Decision Records](documentation/docs/architecture/decisions/README.md) — index of all ADRs
+- [Semantic Routing Design](documentation/docs/design/DESIGN-semantic-model-routing.md) — classifier pipeline, routing policies, feedback loop
+- [Architecture Decision Records](documentation/docs/architecture/decisions/README.md) — index of all 21 ADRs
 
 ## See Also
 

@@ -119,6 +119,10 @@ def _to_openai_tools(tools: list[dict]) -> list[dict]:
 
 
 class OpenAIProvider:
+    @property
+    def family(self) -> str:
+        return "openai"
+
     def __init__(self, api_key: str, *, base_url: str | None = None, provider_name: str = "openai"):
         self._client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
         self._provider_name = provider_name

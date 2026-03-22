@@ -9,9 +9,10 @@ from unittest.mock import AsyncMock, MagicMock
 from micro_x_agent_loop.provider_pool import ProviderPool, ProviderStatus, RoutingTarget
 
 
-def _make_fake_provider(name: str = "fake") -> MagicMock:
+def _make_fake_provider(name: str = "fake", family: str = "openai") -> MagicMock:
     """Create a fake provider with async methods."""
     provider = MagicMock()
+    provider.family = family
     provider.stream_chat = AsyncMock(return_value=(
         {"content": [{"type": "text", "text": f"response from {name}"}]},
         [],
@@ -71,17 +72,17 @@ class ProviderPoolTests(unittest.TestCase):
         self.assertEqual(model, "haiku")
 
     def test_resolve_target_fallback(self) -> None:
-        p1 = _make_fake_provider()
-        p2 = _make_fake_provider()
+        p1 = _make_fake_provider(family="openai")
+        p2 = _make_fake_provider(family="openai")
         pool = ProviderPool(
-            {"anthropic": p1, "openai": p2},
-            fallback_provider="anthropic",
+            {"primary": p1, "secondary": p2},
+            fallback_provider="primary",
         )
-        # Mark openai unavailable
-        pool._status["openai"].mark_error()
-        pool._status["openai"].cooldown_until = float("inf")
-        provider, model = pool.resolve_target(RoutingTarget("openai", "gpt-4o"))
-        self.assertIs(provider, p1)  # Fell back to anthropic
+        # Mark secondary unavailable
+        pool._status["secondary"].mark_error()
+        pool._status["secondary"].cooldown_until = float("inf")
+        provider, model = pool.resolve_target(RoutingTarget("secondary", "gpt-4o"))
+        self.assertIs(provider, p1)  # Fell back to same-family primary
 
     def test_resolve_target_no_providers_raises(self) -> None:
         pool = ProviderPool({})
@@ -100,19 +101,19 @@ class ProviderPoolTests(unittest.TestCase):
         self.assertEqual(pool.active_cache_provider, "anthropic")
 
     def test_stream_chat_fallback_on_error(self) -> None:
-        p1 = _make_fake_provider("anthropic")
-        p2 = _make_fake_provider("openai")
+        p1 = _make_fake_provider("primary", family="openai")
+        p2 = _make_fake_provider("secondary", family="openai")
         p1.stream_chat = AsyncMock(side_effect=RuntimeError("API error"))
         pool = ProviderPool(
-            {"anthropic": p1, "openai": p2},
-            fallback_provider="openai",
+            {"primary": p1, "secondary": p2},
+            fallback_provider="secondary",
         )
 
         asyncio.run(pool.stream_chat(
-            RoutingTarget("anthropic", "model"), 8192, 0.7, "sys", [], [],
+            RoutingTarget("primary", "model"), 8192, 0.7, "sys", [], [],
         ))
         p2.stream_chat.assert_called_once()
-        self.assertEqual(pool.active_cache_provider, "openai")
+        self.assertEqual(pool.active_cache_provider, "secondary")
 
     def test_convert_tools(self) -> None:
         p1 = _make_fake_provider()
@@ -142,3 +143,47 @@ class ProviderPoolTests(unittest.TestCase):
         pool._active_cache_provider = "anthropic"
         # Small savings vs large penalty — should not switch
         self.assertFalse(pool.should_switch_provider("openai", 100, 3.0))
+
+    def test_resolve_target_cross_family_no_fallback(self) -> None:
+        """Cross-family fallback is not attempted — raises ValueError."""
+        p1 = _make_fake_provider(family="anthropic")
+        p2 = _make_fake_provider(family="openai")
+        pool = ProviderPool(
+            {"anthropic": p1, "ollama": p2},
+            fallback_provider="anthropic",
+        )
+        # Mark ollama unavailable
+        pool._status["ollama"].mark_error()
+        pool._status["ollama"].cooldown_until = float("inf")
+        with self.assertRaises(ValueError, msg="No same-family"):
+            pool.resolve_target(RoutingTarget("ollama", "qwen2.5:7b"))
+
+    def test_resolve_target_same_family_fallback(self) -> None:
+        """Same-family fallback works when primary is unavailable."""
+        p1 = _make_fake_provider(family="openai")
+        p2 = _make_fake_provider(family="openai")
+        pool = ProviderPool(
+            {"openai": p1, "ollama": p2},
+            fallback_provider="openai",
+        )
+        pool._status["ollama"].mark_error()
+        pool._status["ollama"].cooldown_until = float("inf")
+        provider, model = pool.resolve_target(RoutingTarget("ollama", "qwen2.5:7b"))
+        self.assertIs(provider, p1)
+        self.assertEqual(model, "qwen2.5:7b")
+
+    def test_stream_chat_cross_family_no_fallback(self) -> None:
+        """Cross-family fallback in stream_chat raises the original error."""
+        p1 = _make_fake_provider("ollama", family="openai")
+        p2 = _make_fake_provider("anthropic", family="anthropic")
+        p1.stream_chat = AsyncMock(side_effect=RuntimeError("Ollama down"))
+        pool = ProviderPool(
+            {"ollama": p1, "anthropic": p2},
+            fallback_provider="anthropic",
+        )
+        with self.assertRaises(RuntimeError, msg="Ollama down"):
+            asyncio.run(pool.stream_chat(
+                RoutingTarget("ollama", "qwen2.5:7b"), 8192, 0.7, "sys", [], [],
+            ))
+        # Anthropic provider should NOT have been called
+        p2.stream_chat.assert_not_called()

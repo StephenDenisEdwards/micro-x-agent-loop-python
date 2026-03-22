@@ -82,7 +82,7 @@ API Server (--server start):
 | `turn_engine.py` | Single turn: LLM call → tool execution → response |
 | `mode_selector.py` | Stage 1 pattern matching + Stage 2 LLM classification |
 | `provider.py` | Factory for LLM providers |
-| `provider_pool.py` | Multi-provider dispatch pool, health tracking, cache-aware switching |
+| `provider_pool.py` | Multi-provider dispatch pool, health tracking, same-family fallback, cache-aware switching |
 | `task_taxonomy.py` | TaskType enum (9 types), cost tier classification |
 | `semantic_classifier.py` | Three-stage classifier: rules → keywords → LLM for task-type routing |
 | `routing_feedback.py` | SQLite-backed routing outcome recording, adaptive thresholds |
