@@ -156,6 +156,7 @@ class TerminalChannel:
     def emit_text_delta(self, text: str) -> None:
         if self._markdown:
             self._ensure_renderer()
+            assert self._renderer is not None
             self._renderer.append_text(text)
         else:
             if self._spinner is not None:
@@ -168,6 +169,7 @@ class TerminalChannel:
     def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
         if self._markdown:
             self._ensure_renderer()
+            assert self._renderer is not None
             self._renderer.finalize_text()
             self._renderer.start_spinner(f" Running {tool_name}...")
         else:
@@ -278,8 +280,8 @@ class TerminalChannel:
             return ""
         if selected == _OTHER_SENTINEL:
             answer = questionary.text("Your answer:", style=_ASK_USER_STYLE).ask()
-            return answer if answer is not None else ""
-        return selected
+            return str(answer) if answer is not None else ""
+        return str(selected)
 
     @staticmethod
     def _prompt_free_text(question: str) -> str:
@@ -414,7 +416,7 @@ class BrokerChannel:
                     data = resp.json()
                     if data["status"] == "answered":
                         logger.info(f"HITL answer received for question {question_id}")
-                        return data["answer"]
+                        return str(data["answer"])
                     if data["status"] == "timed_out":
                         logger.info(f"HITL question {question_id} timed out")
                         break

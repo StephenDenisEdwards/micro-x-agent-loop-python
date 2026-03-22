@@ -556,7 +556,10 @@ class CommandHandler:
                 response_text = resp_content
             elif isinstance(resp_content, list):
                 texts = [b.get("text", "") for b in resp_content if isinstance(b, dict) and b.get("type") == "text"]
-                tool_names = [b.get("name", "") for b in resp_content if isinstance(b, dict) and b.get("type") == "tool_use"]
+                tool_names = [
+                    b.get("name", "") for b in resp_content
+                    if isinstance(b, dict) and b.get("type") == "tool_use"
+                ]
                 if texts:
                     response_text = " ".join(texts)
                 if tool_names:
@@ -781,7 +784,10 @@ class CommandHandler:
                 self._print(f"{self._p}No routing data recorded yet.")
                 return
             self._print(f"{self._p}Routing stats by task type:")
-            self._print(f"{self._p}{'Task Type':<20s} {'Count':>6s} {'Avg Cost':>10s} {'Avg Latency':>12s} {'Avg Conf':>9s} {'+ / -':>7s}")
+            self._print(
+                f"{self._p}{'Task Type':<20s} {'Count':>6s} {'Avg Cost':>10s}"
+                f" {'Avg Latency':>12s} {'Avg Conf':>9s} {'+ / -':>7s}"
+            )
             for s in stats:
                 self._print(
                     f"{self._p}{s['task_type']:<20s} {s['total']:>6d} "
@@ -797,7 +803,10 @@ class CommandHandler:
                 self._print(f"{self._p}No routing data recorded yet.")
                 return
             self._print(f"{self._p}Routing stats by provider:")
-            self._print(f"{self._p}{'Provider':<15s} {'Count':>6s} {'Avg Cost':>10s} {'Avg Latency':>12s} {'Errors':>7s} {'Total Cost':>11s}")
+            self._print(
+                f"{self._p}{'Provider':<15s} {'Count':>6s} {'Avg Cost':>10s}"
+                f" {'Avg Latency':>12s} {'Errors':>7s} {'Total Cost':>11s}"
+            )
             for s in stats:
                 self._print(
                     f"{self._p}{s['provider']:<15s} {s['total']:>6d} "
@@ -827,10 +836,10 @@ class CommandHandler:
             self._print(f"{self._p}Recent routing decisions:")
             for o in outcomes:
                 self._print(
-                    f"{self._p}  T{o['turn_number']} {o['task_type']:<18s} "
-                    f"{o['provider']}/{o['model']:<20s} "
-                    f"stage={o['stage']} conf={o['confidence']:.2f} "
-                    f"${o['cost_usd']:.4f}"
+                    f"{self._p}  T{o['turn_number']} {o['task_type']:<18s}"
+                    f" {o['provider']}/{o['model']:<20s}"
+                    f" stage={o['stage']} conf={o['confidence']:.2f}"
+                    f" ${o['cost_usd']:.4f}"
                 )
             return
 
@@ -838,7 +847,10 @@ class CommandHandler:
         task_stats = store.get_task_type_stats()
         if not task_stats:
             self._print(f"{self._p}No routing data recorded yet.")
-            self._print(f"{self._p}Usage: /routing | /routing tasks | /routing providers | /routing stages | /routing recent")
+            self._print(
+                f"{self._p}Usage: /routing | /routing tasks | /routing providers"
+                " | /routing stages | /routing recent"
+            )
             return
 
         total_calls = sum(s["total"] for s in task_stats)
@@ -866,6 +878,9 @@ class CommandHandler:
     # -- /voice --
 
     async def handle_voice(self, command: str) -> None:
+        if self._voice_runtime is None:
+            self._print(f"{self._p}Voice runtime is not available.")
+            return
         try:
             parts = parse_voice_command(command)
         except ValueError:

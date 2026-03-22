@@ -91,7 +91,7 @@ class ApiPayloadLogConsumerTests(unittest.TestCase):
 
 class SetupLoggingTests(unittest.TestCase):
     def test_default_consumers(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory():
             consumers = [{"type": "console"}]
             descs = setup_logging("INFO", consumers=consumers)
             self.assertEqual(1, len(descs))
@@ -117,7 +117,7 @@ class SetupLoggingTests(unittest.TestCase):
 
     def test_null_consumers_uses_default(self) -> None:
         import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory():
             # Default uses console + file; just check it doesn't raise
             try:
                 setup_logging("INFO", consumers=None)

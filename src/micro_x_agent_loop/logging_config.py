@@ -19,7 +19,10 @@ class ConsoleLogConsumer:
     def __init__(self) -> None:
         self._handler_id: int | None = None
         self._level: str = "INFO"
-        self._format = "<level>{level:<8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+        self._format = (
+            "<level>{level:<8}</level> | <cyan>{name}</cyan>:"
+            "<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+        )
         ConsoleLogConsumer._instance = self
 
     def register(self, level: str) -> None:
@@ -88,7 +91,7 @@ class MetricsLogConsumer:
         logger.add(
             self._path,
             level="INFO",
-            filter=lambda record: record["extra"].get("metrics"),
+            filter=lambda record: bool(record["extra"].get("metrics")),
             format="{message}",
             rotation="10 MB",
             retention=3,
@@ -107,7 +110,7 @@ class ApiPayloadLogConsumer:
         logger.add(
             self._path,
             level="DEBUG",
-            filter=lambda record: record["extra"].get("api_payload"),
+            filter=lambda record: bool(record["extra"].get("api_payload")),
             format="{message}",
             rotation="10 MB",
             retention=3,

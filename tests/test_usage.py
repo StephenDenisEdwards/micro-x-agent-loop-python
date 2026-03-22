@@ -9,6 +9,7 @@ from micro_x_agent_loop.usage import (
     load_pricing_overrides,
 )
 
+
 class UsageResultTests(unittest.TestCase):
     def test_defaults(self) -> None:
         u = UsageResult()
@@ -206,6 +207,10 @@ class EstimateCostAllModelsTests(unittest.TestCase):
         "gemini/gemini-2.0-flash": ("gemini", "gemini-2.0-flash", 0.004250),
         "gemini/gemini-2.0-flash-thinking-exp": ("gemini", "gemini-2.0-flash-thinking-exp", 0.004250),
         "gemini/gemini-2.5-pro-preview-03-25": ("gemini", "gemini-2.5-pro-preview-03-25", 0.078000),
+        "ollama/gemma2:2b": ("ollama", "gemma2:2b", 0.0),
+        "ollama/llama3.2:3b": ("ollama", "llama3.2:3b", 0.0),
+        "ollama/mistral:7b": ("ollama", "mistral:7b", 0.0),
+        "ollama/phi3:mini": ("ollama", "phi3:mini", 0.0),
     }
 
     def setUp(self) -> None:
@@ -297,6 +302,18 @@ class EstimateCostAllModelsTests(unittest.TestCase):
 
     def test_gemini_2_5_pro_preview(self) -> None:
         self._assert_model_cost("gemini/gemini-2.5-pro-preview-03-25")
+
+    def test_ollama_gemma2_2b(self) -> None:
+        self._assert_model_cost("ollama/gemma2:2b")
+
+    def test_ollama_llama3_2_3b(self) -> None:
+        self._assert_model_cost("ollama/llama3.2:3b")
+
+    def test_ollama_mistral_7b(self) -> None:
+        self._assert_model_cost("ollama/mistral:7b")
+
+    def test_ollama_phi3_mini(self) -> None:
+        self._assert_model_cost("ollama/phi3:mini")
 
     # --- Completeness guard ---
 

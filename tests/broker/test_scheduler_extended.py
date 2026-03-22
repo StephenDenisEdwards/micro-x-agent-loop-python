@@ -243,8 +243,6 @@ class SchedulerStartStopTests(unittest.TestCase):
 
             sched = Scheduler(self._store, dispatcher, poll_interval=0)
 
-            original_poll = sched._poll_and_dispatch
-
             call_count = 0
 
             async def failing_poll():

@@ -6,7 +6,6 @@ import unittest
 
 from micro_x_agent_loop.turn_classifier import TurnClassification, classify_turn
 
-
 _DEFAULT_KEYWORDS = [
     "design", "architect", "analyze", "analyse", "explain why",
     "compare", "evaluate", "debug", "refactor", "plan", "implement",

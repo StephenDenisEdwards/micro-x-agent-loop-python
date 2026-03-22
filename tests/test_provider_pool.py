@@ -93,7 +93,7 @@ class ProviderPoolTests(unittest.TestCase):
         pool = ProviderPool({"anthropic": p1})
         target = RoutingTarget("anthropic", "sonnet")
 
-        result = asyncio.run(pool.stream_chat(
+        asyncio.run(pool.stream_chat(
             target, 8192, 0.7, "system", [], [],
         ))
         p1.stream_chat.assert_called_once()
@@ -108,7 +108,7 @@ class ProviderPoolTests(unittest.TestCase):
             fallback_provider="openai",
         )
 
-        result = asyncio.run(pool.stream_chat(
+        asyncio.run(pool.stream_chat(
             RoutingTarget("anthropic", "model"), 8192, 0.7, "sys", [], [],
         ))
         p2.stream_chat.assert_called_once()

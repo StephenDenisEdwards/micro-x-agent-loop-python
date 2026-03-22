@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from croniter import croniter
+from croniter import croniter  # type: ignore[import-untyped]
 from loguru import logger
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ def compute_next_run(cron_expr: str, tz_name: str = "UTC") -> str:
     tz = ZoneInfo(tz_name)
     now_local = datetime.now(tz)
     cron = croniter(cron_expr, now_local)
-    next_local = cron.get_next(datetime)
+    next_local: datetime = cron.get_next(datetime)
     return next_local.astimezone(UTC).isoformat()
 
 
@@ -170,9 +170,9 @@ class Scheduler:
                 break
 
             self._store.start_run(retry_run["id"])
-            job = None
+            retry_job: dict[str, Any] | None = None
             if retry_run.get("job_id"):
-                job = self._store.get_job(retry_run["job_id"])
+                retry_job = self._store.get_job(retry_run["job_id"])
 
             logger.info(
                 f"Dispatching retry run {retry_run['id'][:8]} "
@@ -182,12 +182,12 @@ class Scheduler:
             self._dispatcher.dispatch(
                 run_id=retry_run["id"],
                 prompt=retry_run["prompt"],
-                job=job,
-                config_profile=job.get("config_profile") if job else None,
+                job=retry_job,
+                config_profile=retry_job.get("config_profile") if retry_job else None,
                 session_id=retry_run.get("session_id"),
-                timeout_seconds=job.get("timeout_seconds") if job else None,
-                response_channel=job.get("response_channel", "log") if job else "log",
-                response_target=job.get("response_target") if job else None,
+                timeout_seconds=retry_job.get("timeout_seconds") if retry_job else None,
+                response_channel=retry_job.get("response_channel", "log") if retry_job else "log",
+                response_target=retry_job.get("response_target") if retry_job else None,
             )
 
     def _advance_schedule(self, job: dict) -> None:

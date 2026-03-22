@@ -5,10 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from typing import Any
 
 import httpx
-from loguru import logger
 
 from micro_x_agent_loop.agent_channel import TerminalChannel
 
@@ -189,8 +187,8 @@ async def run_client(
                 except asyncio.CancelledError:
                     pass
 
-    except websockets.InvalidStatusCode as ex:
-        if ex.status_code == 401:
+    except websockets.InvalidStatus as ex:
+        if ex.response.status_code == 401:
             print("Authentication failed. Set SERVER_API_SECRET or use --server start with matching secret.")
         else:
             print(f"WebSocket connection failed: {ex}")

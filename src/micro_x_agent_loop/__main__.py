@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import threading
+from typing import Any
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -29,7 +30,7 @@ class _EscWatcher:
         try:
             import ctypes
 
-            self._kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            self._kernel32 = ctypes.windll.kernel32
             self._available = True
         except (ImportError, AttributeError, OSError):
             pass
@@ -218,7 +219,7 @@ def _print_startup_banner() -> None:
     print()
 
 
-def _create_prompt_session(toolbar_fn=None):
+def _create_prompt_session(toolbar_fn: Any = None) -> Any:
     """Build the interactive prompt_toolkit session."""
     from prompt_toolkit import PromptSession
     from prompt_toolkit.formatted_text import HTML
@@ -253,7 +254,7 @@ def _create_prompt_session(toolbar_fn=None):
     return PromptSession(**kwargs)
 
 
-async def _shutdown_runtime(runtime) -> None:
+async def _shutdown_runtime(runtime: Any) -> None:
     """Clean up all runtime resources.
 
     On Windows, MCP server subprocess termination can send CTRL_C_EVENT to
@@ -277,12 +278,12 @@ async def _shutdown_runtime(runtime) -> None:
 
 
 async def _run_oneshot(
-    app,
-    env,
+    app: Any,
+    env: Any,
     prompt: str,
     session_id: str | None,
     *,
-    resolved_config: dict,
+    resolved_config: dict[str, Any],
 ) -> None:
     """Execute a single prompt in autonomous mode and exit."""
     if session_id:
@@ -456,7 +457,7 @@ async def main() -> None:
     if app.status_bar_enabled:
         accumulator = agent.session_accumulator
 
-        def toolbar_fn():
+        def toolbar_fn() -> Any:
             from prompt_toolkit.formatted_text import HTML
 
             text = accumulator.format_toolbar(budget_usd=app.session_budget_usd)
@@ -526,7 +527,7 @@ def _install_transport_cleanup_hook() -> None:
     """
     _default_hook = sys.unraisablehook
 
-    def _hook(unraisable) -> None:
+    def _hook(unraisable: Any) -> None:
         obj_str = str(unraisable.object) if unraisable.object is not None else ""
         if "Transport" in obj_str and isinstance(unraisable.exc_value, (ResourceWarning, ValueError)):
             return

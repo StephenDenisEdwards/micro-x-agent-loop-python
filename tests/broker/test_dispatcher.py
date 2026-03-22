@@ -213,7 +213,7 @@ class DispatchTests(unittest.TestCase):
                 await task
 
             # A retry run should be scheduled
-            retries = self._store.list_due_retries()
+            self._store.list_due_retries()
             # Not necessarily due yet (scheduled in the future), but a queued run should exist
             runs = self._store.list_runs(job_id=job["id"])
             # Should have original + at least a retry

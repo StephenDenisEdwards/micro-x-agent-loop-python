@@ -10,6 +10,7 @@ import json
 import os
 import urllib.request
 from collections import defaultdict
+from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 
 from loguru import logger
@@ -62,7 +63,7 @@ def _resolve_api_key_id() -> str | None:
             continue
         hint_prefix, hint_suffix = hint.split("...", 1)
         if api_key.startswith(hint_prefix) and api_key.endswith(hint_suffix):
-            key_id = key_record.get("id", "")
+            key_id: str = key_record.get("id", "")
             logger.debug(
                 "Resolved API key: {name} ({key_id})",
                 name=key_record.get("name"),
@@ -164,7 +165,7 @@ def _flatten_buckets(
     buckets: list[dict],
     *,
     api_key_id: str | None = None,
-) -> list[tuple[str, dict]]:
+) -> Generator[tuple[str, dict], None, None]:
     """Flatten time-bucket objects into ``(date_str, result_record)`` pairs.
 
     Each bucket has ``starting_at`` and a ``results`` list.  We yield one
@@ -431,10 +432,8 @@ async def reconcile_costs(
 
     # Anthropic API rejects end dates beyond today — use separate ranges for
     # local queries (can include today) vs API queries (must end at today's midnight).
-    api_end_dt = min(end_dt, now_midnight)
-    if api_end_dt <= start_dt:
-        # All requested data is from today — API has no data yet, but local does
-        api_end_dt = None
+    api_end_dt_val = min(end_dt, now_midnight)
+    api_end_dt: datetime | None = None if api_end_dt_val <= start_dt else api_end_dt_val
     start_str = _format_date(start_dt)
     # Local query uses full range (including today)
     start_date_iso = start_dt.strftime("%Y-%m-%dT00:00:00+00:00")

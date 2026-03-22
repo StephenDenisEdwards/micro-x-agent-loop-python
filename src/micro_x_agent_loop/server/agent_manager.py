@@ -118,6 +118,7 @@ class AgentManager:
     def _create_agent(self, session_id: str, channel: AgentChannel | None) -> Agent:
         app = self._app_config
 
+        compaction_strategy: SummarizeCompactionStrategy | NoneCompactionStrategy
         if app.compaction_strategy_name == "summarize":
             compaction_model = app.compaction_model or app.model
             compaction_strategy = SummarizeCompactionStrategy(
@@ -152,7 +153,6 @@ class AgentManager:
             compact=app.provider_name == "ollama",
         )
 
-        summarization_provider = None
         summarization_model = ""
         if app.tool_result_summarization_enabled:
             summarization_model = app.tool_result_summarization_model or app.model

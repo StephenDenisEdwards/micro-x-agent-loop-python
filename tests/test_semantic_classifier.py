@@ -14,7 +14,6 @@ from micro_x_agent_loop.semantic_classifier import (
 )
 from micro_x_agent_loop.task_taxonomy import TaskType
 
-
 COMPLEXITY_KEYWORDS = [
     "design", "architect", "analyze", "analyse", "explain why",
     "compare", "evaluate", "debug", "refactor", "plan", "implement",
@@ -115,7 +114,10 @@ class Stage1Tests(unittest.TestCase):
 
     def test_no_match_returns_none(self) -> None:
         result = classify_stage1(
-            user_message="I need to process these files and transform the data into a report format that includes aggregated metrics across all departments",
+            user_message=(
+                "I need to process these files and transform the data into a report"
+                " format that includes aggregated metrics across all departments"
+            ),
             has_tools=True,
             turn_iteration=0,
             turn_number=1,

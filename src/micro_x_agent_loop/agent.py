@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+from functools import partial
 from pathlib import Path
 
 from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
-from micro_x_agent_loop.constants import SESSION_BUDGET_WARN_THRESHOLD
-from functools import partial
+from micro_x_agent_loop.app_config import resolve_runtime_env
 from micro_x_agent_loop.commands.command_handler import CommandHandler
 from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.commands.router import CommandRouter
 from micro_x_agent_loop.compaction import SummarizeCompactionStrategy
-from micro_x_agent_loop.constants import MAX_TOKENS_RETRIES
+from micro_x_agent_loop.constants import MAX_TOKENS_RETRIES, SESSION_BUDGET_WARN_THRESHOLD
 from micro_x_agent_loop.memory.facade import ActiveMemoryFacade, NullMemoryFacade
 from micro_x_agent_loop.metrics import (
     SessionAccumulator,
@@ -32,7 +32,6 @@ from micro_x_agent_loop.mode_selector import (
     format_analysis,
     parse_stage2_response,
 )
-from micro_x_agent_loop.app_config import resolve_runtime_env
 from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
@@ -258,6 +257,7 @@ class Agent:
                     from micro_x_agent_loop.semantic_classifier import TaskClassification as TC
                     if not isinstance(task_classification, TC):
                         return
+                    assert self._routing_feedback_store is not None
                     self._routing_feedback_store.record(RoutingOutcome(
                         session_id=self._memory.active_session_id or "",
                         turn_number=self._turn_number,
@@ -527,11 +527,12 @@ class Agent:
         ])
 
         def _do_select() -> str | None:
-            return questionary.select(
+            result: str | None = questionary.select(
                 "Which execution mode should be used?",
                 choices=choices,
                 style=style,
             ).ask()
+            return result
 
         try:
             selected = await asyncio.to_thread(_do_select)
@@ -552,6 +553,7 @@ class Agent:
     async def _classify_ambiguous(self, user_message: str, stage1: ModeAnalysis) -> Stage2Result:
         """Call the LLM to classify an ambiguous prompt as PROMPT or COMPILED."""
         prompt = build_stage2_prompt(user_message, stage1)
+        assert self._stage2_provider is not None
         response_text, usage = await self._stage2_provider.create_message(
             self._stage2_model, 300, 0.0, [{"role": "user", "content": prompt}]
         )

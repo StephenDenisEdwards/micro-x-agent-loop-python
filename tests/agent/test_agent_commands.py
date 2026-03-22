@@ -264,6 +264,7 @@ class DebugCommandTests(unittest.TestCase):
 
     def test_debug_show_payload(self) -> None:
         import time
+
         from micro_x_agent_loop.api_payload_store import ApiPayload
 
         agent = self._make_agent()
@@ -297,6 +298,7 @@ class DebugCommandTests(unittest.TestCase):
 
     def test_debug_skips_tool_result_for_last_user_msg(self) -> None:
         import time
+
         from micro_x_agent_loop.api_payload_store import ApiPayload
 
         agent = self._make_agent()
@@ -320,6 +322,7 @@ class DebugCommandTests(unittest.TestCase):
 
     def test_debug_shows_tool_names_in_response(self) -> None:
         import time
+
         from micro_x_agent_loop.api_payload_store import ApiPayload
 
         agent = self._make_agent()
@@ -341,6 +344,7 @@ class DebugCommandTests(unittest.TestCase):
 
     def test_debug_show_payload_out_of_range(self) -> None:
         import time
+
         from micro_x_agent_loop.api_payload_store import ApiPayload
 
         agent = self._make_agent()

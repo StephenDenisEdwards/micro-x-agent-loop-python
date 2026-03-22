@@ -240,7 +240,11 @@ class OpenAIProvider:
                         if idx not in tool_calls_acc:
                             tool_calls_acc[idx] = {
                                 "id": tc_delta.id or "",
-                                "name": (tc_delta.function.name if tc_delta.function and tc_delta.function.name else ""),
+                                "name": (
+                                    tc_delta.function.name
+                                    if tc_delta.function and tc_delta.function.name
+                                    else ""
+                                ),
                                 "arguments_parts": [],
                             }
                         acc = tool_calls_acc[idx]
@@ -326,7 +330,7 @@ class OpenAIProvider:
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
-            messages=oai_messages,
+            messages=oai_messages,  # type: ignore[arg-type]
         )
         t_end = time.monotonic()
         text = response.choices[0].message.content or ""

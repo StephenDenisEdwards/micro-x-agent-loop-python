@@ -21,7 +21,6 @@ from micro_x_agent_loop.memory.event_sink import AsyncEventSink
 from micro_x_agent_loop.server.agent_manager import AgentManager
 from micro_x_agent_loop.server.ws_channel import WebSocketChannel
 
-
 # Module-level state shared between lifespan and route handlers.
 _state: dict[str, Any] = {}
 
@@ -185,7 +184,7 @@ def create_app(
 
         # Stop broker components
         if broker_enabled:
-            scheduler = _state.get("broker_scheduler")
+            scheduler = _state.get("broker_scheduler")  # type: ignore[assignment]
             if scheduler:
                 scheduler.stop()
             for ingress in polling_ingresses:
@@ -199,11 +198,11 @@ def create_app(
                 except asyncio.CancelledError:
                     pass
 
-            dispatcher = _state.get("broker_dispatcher")
+            dispatcher = _state.get("broker_dispatcher")  # type: ignore[assignment]
             if dispatcher:
                 await dispatcher.wait_for_all()
 
-            broker_store = _state.get("broker_store")
+            broker_store = _state.get("broker_store")  # type: ignore[assignment]
             if broker_store:
                 broker_store.close()
 
@@ -257,7 +256,6 @@ def create_app(
         # Include broker status if enabled
         broker_store = _state.get("broker_store")
         if broker_store:
-            from micro_x_agent_loop.broker.store import BrokerStore
 
             jobs = broker_store.list_jobs()
             dispatcher = _state.get("broker_dispatcher")

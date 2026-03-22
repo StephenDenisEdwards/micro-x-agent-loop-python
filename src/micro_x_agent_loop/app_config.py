@@ -135,6 +135,7 @@ def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
         data = _resolve_config_with_base(data, p.parent)
         data = _expand_config_refs(data)
         data = _expand_env_vars(data)
+        assert isinstance(data, dict)
         return data, str(p)
 
     default_path = Path.cwd() / "config.json"
@@ -157,11 +158,13 @@ def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
         data = _resolve_config_with_base(data, target.parent)
         data = _expand_config_refs(data)
         data = _expand_env_vars(data)
+        assert isinstance(data, dict)
         return data, str(config_file)
 
     data = _resolve_config_with_base(data, default_path.parent)
     data = _expand_config_refs(data)
     data = _expand_env_vars(data)
+    assert isinstance(data, dict)
     return data, "config.json"
 
 
@@ -278,7 +281,9 @@ def parse_app_config(config: dict) -> AppConfig:
         enable_file_checkpointing=_to_bool(config.get("EnableFileCheckpointing", False), default=False),
         checkpoint_write_tools_only=_to_bool(config.get("CheckpointWriteToolsOnly", True), default=True),
         memory_max_sessions=int(config.get("MemoryMaxSessions", DEFAULT_MEMORY_MAX_SESSIONS)),
-        memory_max_messages_per_session=int(config.get("MemoryMaxMessagesPerSession", DEFAULT_MEMORY_MAX_MESSAGES_PER_SESSION)),
+        memory_max_messages_per_session=int(
+            config.get("MemoryMaxMessagesPerSession", DEFAULT_MEMORY_MAX_MESSAGES_PER_SESSION),
+        ),
         memory_retention_days=int(config.get("MemoryRetentionDays", DEFAULT_MEMORY_RETENTION_DAYS)),
         mcp_server_configs=config.get("McpServers", {}),
         metrics_enabled=_to_bool(config.get("MetricsEnabled", True), default=True),
@@ -292,7 +297,9 @@ def parse_app_config(config: dict) -> AppConfig:
         compaction_model=str(config.get("CompactionModel", "")).strip(),
         tool_result_summarization_enabled=_to_bool(config.get("ToolResultSummarizationEnabled", False), default=False),
         tool_result_summarization_model=str(config.get("ToolResultSummarizationModel", "")).strip(),
-        tool_result_summarization_threshold=int(config.get("ToolResultSummarizationThreshold", DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD)),
+        tool_result_summarization_threshold=int(
+            config.get("ToolResultSummarizationThreshold", DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD),
+        ),
         smart_compaction_trigger_enabled=_to_bool(config.get("SmartCompactionTriggerEnabled", True), default=True),
         concise_output_enabled=_to_bool(config.get("ConciseOutputEnabled", False), default=False),
         mode_analysis_enabled=_to_bool(config.get("ModeAnalysisEnabled", True), default=True),
@@ -311,9 +318,15 @@ def parse_app_config(config: dict) -> AppConfig:
         per_turn_routing_enabled=_to_bool(config.get("PerTurnRoutingEnabled", False), default=False),
         per_turn_routing_model=str(config.get("PerTurnRoutingModel", "")).strip(),
         per_turn_routing_provider=str(config.get("PerTurnRoutingProvider", "")).strip().lower(),
-        per_turn_routing_max_user_chars=int(config.get("PerTurnRoutingMaxUserChars", DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS)),
-        per_turn_routing_short_followup_chars=int(config.get("PerTurnRoutingShortFollowupChars", DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS)),
-        per_turn_routing_complexity_keywords=str(config.get("PerTurnRoutingComplexityKeywords", DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS)),
+        per_turn_routing_max_user_chars=int(
+            config.get("PerTurnRoutingMaxUserChars", DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS),
+        ),
+        per_turn_routing_short_followup_chars=int(
+            config.get("PerTurnRoutingShortFollowupChars", DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS),
+        ),
+        per_turn_routing_complexity_keywords=str(
+            config.get("PerTurnRoutingComplexityKeywords", DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS),
+        ),
         semantic_routing_enabled=_to_bool(config.get("SemanticRoutingEnabled", False), default=False),
         semantic_routing_strategy=str(config.get("SemanticRoutingStrategy", "rules+keywords")).strip().lower(),
         routing_policies=config.get("RoutingPolicies", {}),

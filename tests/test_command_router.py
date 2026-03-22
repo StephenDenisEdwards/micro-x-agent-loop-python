@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, MagicMock
 
 from micro_x_agent_loop.commands.router import CommandRouter
 

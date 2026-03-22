@@ -9,10 +9,8 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-
-from loguru import logger
 
 
 @dataclass(frozen=True)

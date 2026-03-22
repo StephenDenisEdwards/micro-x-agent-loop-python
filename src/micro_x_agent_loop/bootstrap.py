@@ -64,12 +64,17 @@ async def bootstrap_runtime(
     )
     tools.extend(manifest_tools)
 
+    compaction_strategy: SummarizeCompactionStrategy | NoneCompactionStrategy
     if app.compaction_strategy_name == "summarize":
         if not app.compaction_provider:
             raise ValueError("CompactionProvider must be set in config when CompactionStrategy is 'summarize'")
         if not app.compaction_model:
             raise ValueError("CompactionModel must be set in config when CompactionStrategy is 'summarize'")
-        compaction_env = resolve_runtime_env(app.compaction_provider) if app.compaction_provider != app.provider_name else env
+        compaction_env = (
+            resolve_runtime_env(app.compaction_provider)
+            if app.compaction_provider != app.provider_name
+            else env
+        )
         compaction_strategy = SummarizeCompactionStrategy(
             provider=create_provider(app.compaction_provider, compaction_env.provider_api_key),
             model=app.compaction_model,
@@ -138,6 +143,7 @@ async def bootstrap_runtime(
     hitl_enabled = autonomous and bool(os.environ.get("MICRO_X_BROKER_URL"))
 
     # Create the appropriate AgentChannel based on context
+    channel: BrokerChannel | BufferedChannel | TerminalChannel
     if autonomous:
         broker_url = os.environ.get("MICRO_X_BROKER_URL")
         run_id = os.environ.get("MICRO_X_RUN_ID")

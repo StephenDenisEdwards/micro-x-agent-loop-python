@@ -11,13 +11,11 @@ from micro_x_agent_loop.agent_channel import (
     ASK_USER_SCHEMA,
     BufferedChannel,
     TerminalChannel,
-    _NO_RESPONSE_MSG,
 )
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult
 from tests.fakes import FakeStreamProvider, FakeTool
 from tests.test_turn_engine import RecordingEvents
-
 
 # ---------------------------------------------------------------------------
 # ASK_USER_SCHEMA tests

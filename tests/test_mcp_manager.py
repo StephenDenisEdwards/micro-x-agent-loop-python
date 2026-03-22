@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from micro_x_agent_loop.mcp.mcp_manager import (
     McpManager,
-    _ServerConnection,
     _build_proxies,
     _mcp_logging_callback,
+    _ServerConnection,
     add_notification_channel,
     remove_notification_channel,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -158,7 +156,7 @@ class ServerConnectionTests(unittest.TestCase):
             conn = _ServerConnection("test")
             config = {"transport": "ftp"}
             await conn.start(config)
-            with self.assertRaises(Exception):
+            with self.assertRaises(ValueError):
                 await conn.wait_ready()
 
         asyncio.run(go())

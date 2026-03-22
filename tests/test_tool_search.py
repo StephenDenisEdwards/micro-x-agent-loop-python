@@ -16,7 +16,6 @@ from micro_x_agent_loop.usage import UsageResult
 from tests.fakes import FakeStreamProvider, FakeTool
 from tests.test_turn_engine import RecordingEvents
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -409,7 +408,7 @@ class TestTurnEngineToolSearch(unittest.TestCase):
             system_prompt="sys",
             converted_tools=[],
             tool_map={tool.name: tool},
-    
+
             max_tool_result_chars=40_000,
             max_tokens_retries=3,
             events=events,

@@ -58,7 +58,6 @@ class PollingVoiceIngressTests(unittest.TestCase):
 
     def test_tool_not_in_map_returns_immediately(self) -> None:
         """If tool key resolves to None, generator exits."""
-        from unittest.mock import MagicMock
         # A tool map where the key ends with __stt_get_updates but value could be None
         # This can't happen in normal usage (dict.get returns None), so test the None branch
         async def collect():
@@ -74,8 +73,8 @@ class PollingVoiceIngressTests(unittest.TestCase):
 
     def test_yields_events_and_updates_seq(self) -> None:
         """Events are yielded with incrementing seq tracking."""
-        from unittest.mock import AsyncMock, MagicMock
         import json
+        from unittest.mock import MagicMock
 
         call_count = 0
 

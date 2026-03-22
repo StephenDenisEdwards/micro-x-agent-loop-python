@@ -53,13 +53,20 @@ class Stage2Result:
 
 # Batch processing: "each", "all", "every" in iteration context,
 # or numeric quantities with collection nouns ("100 emails", "last 50 jobs")
-_ACTION_VERBS = r"(?:search|score|find|check|read|scan|process|evaluate|analyze|analyse|get|fetch|list|review|rate|rank|compare|extract|collect|gather|filter|exclude|summarize|summarise)"
-_COLLECTION_NOUNS = r"(?:jobs?|emails?|messages?|listings?|items?|results?|entries?|records?|candidates?|roles?|positions?|files?|documents?|pages?|posts?|articles?)"
+_ACTION_VERBS = (
+    r"(?:search|score|find|check|read|scan|process|evaluate|analyze|analyse"
+    r"|get|fetch|list|review|rate|rank|compare|extract|collect|gather|filter"
+    r"|exclude|summarize|summarise)"
+)
+_COLLECTION_NOUNS = (
+    r"(?:jobs?|emails?|messages?|listings?|items?|results?|entries?|records?"
+    r"|candidates?|roles?|positions?|files?|documents?|pages?|posts?|articles?)"
+)
 
 _BATCH_PATTERNS = [
     re.compile(rf"{_ACTION_VERBS}\s+(?:each|all|every)\b", re.IGNORECASE),
     re.compile(rf"\b(?:each|all|every)\s+{_COLLECTION_NOUNS}", re.IGNORECASE),
-    re.compile(rf"\bfor\s+(?:each|all|every)\b", re.IGNORECASE),
+    re.compile(r"\bfor\s+(?:each|all|every)\b", re.IGNORECASE),
     # Numeric quantities (>=2): "100 emails", "last 50 jobs", "the 20 results"
     re.compile(rf"\b(?:last|top|first|the)?\s*(?:[2-9]|\d{{2,}})\s+{_COLLECTION_NOUNS}", re.IGNORECASE),
 ]

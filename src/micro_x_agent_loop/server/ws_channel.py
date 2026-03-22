@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from typing import Any
 
 from loguru import logger
@@ -83,7 +82,7 @@ class WebSocketChannel:
 
         try:
             answer = await asyncio.wait_for(future, timeout=self._ask_user_timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             answer = (
                 "No response from human — question timed out. "
                 "Proceed with your best judgement or report that you cannot continue."

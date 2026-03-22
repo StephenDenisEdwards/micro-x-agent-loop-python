@@ -14,8 +14,8 @@ from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
 from micro_x_agent_loop.commands.command_handler import CommandHandler
 from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.metrics import SessionAccumulator
-from micro_x_agent_loop.services.session_controller import SessionController
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
+from micro_x_agent_loop.services.session_controller import SessionController
 
 
 def _make_handler(
@@ -427,7 +427,6 @@ class DebugTests(unittest.TestCase):
 
     def test_debug_show_api_payload_out_of_range(self) -> None:
         store = ApiPayloadStore()
-        from micro_x_agent_loop.usage import UsageResult
         store.record(ApiPayload(
             timestamp=0.0,
             model="claude",

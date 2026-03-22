@@ -4,24 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from typing import Any
-from unittest.mock import AsyncMock, patch
-
-from tests.fakes import FakeStreamProvider, FakeTool
+from unittest.mock import patch
 
 from micro_x_agent_loop.sub_agent import (
+    _TYPE_CONFIGS,
     SPAWN_SUBAGENT_SCHEMA,
     SubAgentRunner,
     SubAgentType,
     _filter_tools,
     _is_read_only_tool,
-    _TYPE_CONFIGS,
 )
-from micro_x_agent_loop.tool import ToolResult
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.turn_events import BaseTurnEvents
 from micro_x_agent_loop.usage import UsageResult
-
+from tests.fakes import FakeStreamProvider, FakeTool
 
 # ---------------------------------------------------------------------------
 # Tool filtering tests
@@ -171,7 +167,6 @@ class TestSubAgentRunner(unittest.TestCase):
 
         self.assertIn("summary", result.text.lower())
         # Verify no tools were passed to the provider
-        call = fake_provider.stream_calls[0]
         # The fake provider doesn't track tools directly, but we can check
         # from the result that it completed successfully
         self.assertFalse(result.timed_out)
@@ -235,7 +230,7 @@ class TestSubAgentRunner(unittest.TestCase):
         fake_provider.queue(text="Done.")
 
         with patch("micro_x_agent_loop.sub_agent.create_provider", return_value=fake_provider):
-            result = asyncio.run(runner.run("Complex task", SubAgentType.GENERAL))
+            asyncio.run(runner.run("Complex task", SubAgentType.GENERAL))
 
         # General type should use parent model, not sub_agent_model
         call = fake_provider.stream_calls[0]
@@ -255,7 +250,7 @@ class TestSubAgentRunner(unittest.TestCase):
         fake_provider.queue(text="Found it.")
 
         with patch("micro_x_agent_loop.sub_agent.create_provider", return_value=fake_provider):
-            result = asyncio.run(runner.run("Search for X", SubAgentType.EXPLORE))
+            asyncio.run(runner.run("Search for X", SubAgentType.EXPLORE))
 
         call = fake_provider.stream_calls[0]
         self.assertEqual(call["model"], "claude-haiku-3")

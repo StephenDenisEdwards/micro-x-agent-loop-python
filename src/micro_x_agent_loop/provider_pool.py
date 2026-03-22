@@ -8,16 +8,13 @@ availability and active cache state.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 if TYPE_CHECKING:
-    from micro_x_agent_loop.agent_channel import AgentChannel
-    from micro_x_agent_loop.provider import LLMProvider
-    from micro_x_agent_loop.tool import Tool
-    from micro_x_agent_loop.usage import UsageResult
+    pass
 
 
 @dataclass
@@ -172,7 +169,7 @@ class ProviderPool:
         provider_name = target.provider
 
         try:
-            result = await provider.stream_chat(
+            result: tuple[dict, list[dict], str, Any] = await provider.stream_chat(
                 model, max_tokens, temperature,
                 system_prompt, messages, tools,
                 channel=channel,
@@ -188,14 +185,14 @@ class ProviderPool:
                     fb_provider, fb_model = self.resolve_target(
                         RoutingTarget(provider=self._fallback_provider, model=model)
                     )
-                    result = await fb_provider.stream_chat(
+                    fb_result: tuple[dict, list[dict], str, Any] = await fb_provider.stream_chat(
                         fb_model, max_tokens, temperature,
                         system_prompt, messages, tools,
                         channel=channel,
                     )
                     self._mark_success(self._fallback_provider)
                     self._active_cache_provider = self._fallback_provider
-                    return result
+                    return fb_result
                 except Exception:
                     self._mark_error(self._fallback_provider)
             raise ex
@@ -212,9 +209,9 @@ class ProviderPool:
         provider_name = target.provider
 
         try:
-            result = await provider.create_message(model, max_tokens, temperature, messages)
+            cm_result: tuple[str, Any] = await provider.create_message(model, max_tokens, temperature, messages)
             self._mark_success(provider_name)
-            return result
+            return cm_result
         except Exception as ex:
             self._mark_error(provider_name)
             raise ex
@@ -225,7 +222,8 @@ class ProviderPool:
         provider = self._providers.get(name)
         if provider is None:
             raise ValueError(f"Provider {name!r} not found in pool")
-        return provider.convert_tools(tools)
+        converted: list[dict] = provider.convert_tools(tools)
+        return converted
 
     def should_switch_provider(
         self,

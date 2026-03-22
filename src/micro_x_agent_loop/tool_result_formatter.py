@@ -76,7 +76,7 @@ class ToolResultFormatter:
         return json.dumps(structured, indent=2, ensure_ascii=False, default=str)
 
     @staticmethod
-    def _format_table(structured: dict[str, Any], config: dict[str, Any]) -> str:
+    def _format_table(structured: dict[str, Any] | list[Any], config: dict[str, Any]) -> str:
         max_rows = int(config.get("max_rows", 50))
 
         # Find the array to tabulate. Look for a top-level list value,

@@ -82,6 +82,9 @@ class NullMemoryFacade:
     def checkpoint_manager(self) -> None:
         return None
 
+    def __init__(self) -> None:
+        self._active_session_id: str | None = None
+
     @property
     def active_session_id(self) -> str | None:
         return self._active_session_id
@@ -89,9 +92,6 @@ class NullMemoryFacade:
     @active_session_id.setter
     def active_session_id(self, value: str | None) -> None:
         self._active_session_id = value
-
-    def __init__(self) -> None:
-        self._active_session_id: str | None = None
 
     def append_message(self, role: str, content: str | list[dict]) -> str | None:
         return None
@@ -177,7 +177,7 @@ class ActiveMemoryFacade:
         if self._session_manager is None or self._active_session_id is None:
             return None
         message_id, _ = self._session_manager.append_message(self._active_session_id, role, content)
-        return message_id
+        return str(message_id) if message_id is not None else None
 
     def ensure_checkpoint_for_turn(
         self,
@@ -196,7 +196,7 @@ class ActiveMemoryFacade:
         ):
             return None
         tool_names = [b["name"] for b in tool_use_blocks]
-        return self._checkpoint_manager.create_checkpoint(
+        result: str | None = self._checkpoint_manager.create_checkpoint(
             self._active_session_id,
             user_message_id,
             scope={
@@ -204,6 +204,7 @@ class ActiveMemoryFacade:
                 "user_preview": (user_message_text or "")[:120],
             },
         )
+        return result
 
     def maybe_track_mutation(
         self, tool_name: str, tool: Tool, tool_input: dict, checkpoint_id: str | None
@@ -288,4 +289,5 @@ class ActiveMemoryFacade:
             self._event_emitter.emit(self._active_session_id, event_type, payload)
 
     def load_messages(self, session_id: str) -> list[dict]:
-        return self._session_manager.load_messages(session_id)
+        result: list[dict] = self._session_manager.load_messages(session_id)
+        return result

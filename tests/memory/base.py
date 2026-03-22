@@ -5,7 +5,6 @@ from uuid import uuid4
 
 from micro_x_agent_loop.memory import EventEmitter, MemoryStore, SessionManager
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 

@@ -4,8 +4,8 @@ Starts real MCP servers via stdio and provides connected clients
 to test functions. Requires credentials in .env or environment.
 """
 
-import os
 import importlib.util
+import os
 from pathlib import Path
 
 import pytest

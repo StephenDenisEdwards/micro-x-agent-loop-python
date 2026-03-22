@@ -9,10 +9,9 @@ from loguru import logger
 
 from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
-from micro_x_agent_loop.sub_agent import SPAWN_SUBAGENT_SCHEMA, SubAgentRunner, SubAgentType
 from micro_x_agent_loop.provider_pool import ProviderPool, RoutingTarget
 from micro_x_agent_loop.semantic_classifier import TaskClassification
-from micro_x_agent_loop.task_taxonomy import TaskType
+from micro_x_agent_loop.sub_agent import SPAWN_SUBAGENT_SCHEMA, SubAgentRunner, SubAgentType
 from micro_x_agent_loop.turn_classifier import TurnClassification
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
 
@@ -258,6 +257,7 @@ class TurnEngine:
             # Handle tool_search calls inline (no MCP execution needed)
             inline_results: list[dict] = []
             for block in search_blocks:
+                assert self._tool_search_manager is not None
                 query = block["input"].get("query", "")
                 result_text = self._tool_search_manager.handle_tool_search(query)
                 inline_results.append({
@@ -269,6 +269,7 @@ class TurnEngine:
 
             # Handle ask_user calls inline (route through the channel)
             for block in ask_user_blocks:
+                assert self._channel is not None
                 question = block["input"].get("question", "")
                 options = block["input"].get("options")
                 answer = await self._channel.ask_user(question, options)
@@ -465,6 +466,7 @@ class TurnEngine:
                 self._channel.emit_tool_started(block["id"], f"subagent:{agent_type.value}")
 
             try:
+                assert self._sub_agent_runner is not None
                 result = await self._sub_agent_runner.run(task, agent_type)
 
                 # Aggregate sub-agent usage to parent metrics
@@ -594,6 +596,7 @@ class TurnEngine:
             stop_reason=stop_reason,
             usage=usage,
         )
+        assert self._api_payload_store is not None
         self._api_payload_store.record(payload)
         try:
             log_data = {

@@ -133,7 +133,7 @@ class _ServerConnection:
     async def start(self, config: dict[str, Any]) -> None:
         transport = config.get("transport", "stdio")
 
-        async def _run():
+        async def _run() -> None:
             try:
                 if transport == "stdio":
                     await self._run_stdio(config)
@@ -156,7 +156,7 @@ class _ServerConnection:
         self._task.cancel()
         try:
             await asyncio.wait_for(asyncio.shield(self._task), timeout=_SHUTDOWN_TIMEOUT)
-        except (asyncio.CancelledError, asyncio.TimeoutError):
+        except (TimeoutError, asyncio.CancelledError):
             pass
 
 

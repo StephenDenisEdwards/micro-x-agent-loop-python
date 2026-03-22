@@ -7,10 +7,10 @@ quality/cost trade-off requirements.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class TaskType(str, Enum):
+class TaskType(StrEnum):
     """Task types for semantic routing classification."""
 
     TRIVIAL = "trivial"                    # Greetings, acknowledgements, yes/no

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import unittest
 
 from micro_x_agent_loop.server.ws_channel import WebSocketChannel

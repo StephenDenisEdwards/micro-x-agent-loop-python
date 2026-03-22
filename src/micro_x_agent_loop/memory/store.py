@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,7 @@ class MemoryStore:
         self._conn.rollback()
 
     @contextmanager
-    def transaction(self):
+    def transaction(self) -> Generator[None, None, None]:
         self._conn.execute("BEGIN")
         try:
             yield

@@ -58,7 +58,8 @@ class EventCallbackTests(unittest.TestCase):
     def test_off_removes_callback(self) -> None:
         emitter = EventEmitter(self._store)
         received: list[str] = []
-        cb = lambda sid, et, p: received.append(et)
+        def cb(sid: str, et: str, p: object) -> None:
+            received.append(et)
         emitter.on("tool.started", cb)
         emitter.off("tool.started", cb)
 
@@ -69,7 +70,8 @@ class EventCallbackTests(unittest.TestCase):
     def test_off_wildcard_removes_on_all_callback(self) -> None:
         emitter = EventEmitter(self._store)
         received: list[str] = []
-        cb = lambda sid, et, p: received.append(et)
+        def cb(sid: str, et: str, p: object) -> None:
+            received.append(et)
         emitter.on_all(cb)
         emitter.off(None, cb)
 

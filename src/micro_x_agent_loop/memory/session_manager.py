@@ -183,7 +183,8 @@ class SessionManager:
         with self._store.transaction():
             self._store.execute(
                 """
-                INSERT INTO tool_calls (id, session_id, message_id, tool_name, input_json, result_text, is_error, created_at)
+                INSERT INTO tool_calls
+                (id, session_id, message_id, tool_name, input_json, result_text, is_error, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (

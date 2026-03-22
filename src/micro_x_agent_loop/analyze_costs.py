@@ -17,7 +17,7 @@ import argparse
 import csv
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -27,7 +27,7 @@ def _load_records(path: str, session_id: str | None = None, since: str | None = 
     if since:
         dt = datetime.fromisoformat(since)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         since_ts = dt.timestamp()
 
     with open(path) as f:
@@ -157,7 +157,7 @@ def main() -> None:
             _print_table(agg_a, label=f"Session {session_a}")
             _print_table(agg_b, label=f"Session {session_b}")
             # Delta
-            print(f"\n=== Delta (B - A) ===")
+            print("\n=== Delta (B - A) ===")
             cost_delta = agg_b["total_cost_usd"] - agg_a["total_cost_usd"]
             token_delta = (
                 (agg_b["total_input_tokens"] + agg_b["total_output_tokens"])

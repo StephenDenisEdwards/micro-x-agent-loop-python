@@ -204,9 +204,11 @@ class VoiceRuntime:
             return
         session_id = self._session_id
         try:
-            async for event in self._ingress.stream_events(session_id=session_id, since_seq=self._last_seq):
+            event_stream = self._ingress.stream_events(session_id=session_id, since_seq=self._last_seq)
+            # stream_events is an async generator; iterate directly
+            async for event in event_stream:  # type: ignore[union-attr]
                 if self._session_id is None:
-                    return
+                    return  # type: ignore[unreachable]
                 seq = int(event.get("seq", 0))
                 if seq > self._last_seq:
                     self._last_seq = seq
@@ -226,8 +228,8 @@ class VoiceRuntime:
         try:
             while self._session_id is not None:
                 text, queued_at = await self._queue.get()
-                if self._session_id is None:
-                    return
+                if self._session_id is None:  # may change during await
+                    return  # type: ignore[unreachable]
                 print(f"{self._line_prefix}[voice] processing")
                 wait_ms = (time.perf_counter() - queued_at) * 1000
                 process_start = time.perf_counter()

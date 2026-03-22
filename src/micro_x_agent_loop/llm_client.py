@@ -1,5 +1,6 @@
 import sys
 import threading
+from typing import Any
 
 from loguru import logger
 
@@ -72,7 +73,7 @@ def print_through_spinner(text: str) -> None:
         print(text, flush=True)
 
 
-def _on_retry(retry_state):
+def _on_retry(retry_state: Any) -> None:
     attempt = retry_state.attempt_number
     wait = retry_state.next_action.sleep if retry_state.next_action else 0
     exc = retry_state.outcome.exception() if retry_state.outcome else None

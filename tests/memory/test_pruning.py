@@ -1,5 +1,5 @@
-from tests.memory.base import MemoryStoreTestCase
 from micro_x_agent_loop.memory import prune_memory
+from tests.memory.base import MemoryStoreTestCase
 
 
 class PruningTests(MemoryStoreTestCase):

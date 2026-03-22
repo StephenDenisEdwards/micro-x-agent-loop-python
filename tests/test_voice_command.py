@@ -5,7 +5,6 @@ from __future__ import annotations
 import unittest
 
 from micro_x_agent_loop.commands.voice_command import (
-    VoiceStartOptions,
     parse_voice_command,
     parse_voice_start_options,
 )

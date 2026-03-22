@@ -51,7 +51,7 @@ class AnthropicProvider:
         try:
             # Prompt caching: wrap system prompt and tag last tool
             if self._prompt_caching_enabled:
-                api_system = [
+                api_system: str | list[dict] = [
                     {
                         "type": "text",
                         "text": system_prompt,
@@ -76,9 +76,9 @@ class AnthropicProvider:
                 model=model,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                system=api_system,
-                messages=messages,
-                tools=api_tools,
+                system=api_system,  # type: ignore[arg-type]
+                messages=messages,  # type: ignore[arg-type]
+                tools=api_tools,  # type: ignore[arg-type]
             ) as stream:
                 async for event in stream:
                     if event.type == "content_block_delta":
@@ -126,10 +126,10 @@ class AnthropicProvider:
             model=model,
             message_count=len(messages),
             tool_schema_count=len(tools),
-            stop_reason=response.stop_reason,
+            stop_reason=response.stop_reason or "end_turn",
         )
 
-        return message, tool_use_blocks, response.stop_reason, usage_result
+        return message, tool_use_blocks, response.stop_reason or "end_turn", usage_result
 
     @retry(**default_retry_kwargs((
         anthropic.RateLimitError,
@@ -150,7 +150,7 @@ class AnthropicProvider:
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
-            messages=messages,
+            messages=messages,  # type: ignore[arg-type]
         )
         t_end = time.monotonic()
         usage = response.usage
@@ -170,4 +170,4 @@ class AnthropicProvider:
             message_count=len(messages),
         )
 
-        return response.content[0].text, usage_result
+        return response.content[0].text, usage_result  # type: ignore[union-attr]

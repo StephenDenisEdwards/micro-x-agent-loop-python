@@ -1,7 +1,12 @@
-from typing import Protocol, runtime_checkable
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.usage import UsageResult
+
+if TYPE_CHECKING:
+    from micro_x_agent_loop.agent_channel import AgentChannel
 
 
 @runtime_checkable
@@ -15,7 +20,7 @@ class LLMProvider(Protocol):
         messages: list[dict],
         tools: list[dict],
         *,
-        line_prefix: str = "",
+        channel: AgentChannel | None = None,
     ) -> tuple[dict, list[dict], str, UsageResult]:
         """Stream a chat response, printing text deltas to stdout in real time.
 
@@ -65,4 +70,6 @@ def create_provider(
     if name == "ollama":
         from micro_x_agent_loop.providers.ollama_provider import OllamaProvider
         return OllamaProvider(api_key)
-    raise ValueError(f"Unknown provider: {provider_name!r}. Supported: 'anthropic', 'openai', 'deepseek', 'gemini', 'ollama'")
+    raise ValueError(
+        f"Unknown provider: {provider_name!r}. Supported: 'anthropic', 'openai', 'deepseek', 'gemini', 'ollama'",
+    )

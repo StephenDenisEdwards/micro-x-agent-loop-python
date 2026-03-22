@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import unittest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import httpx
 
-from micro_x_agent_loop.server.sdk import AgentClient, ChatResponse, HealthStatus, SessionInfo, StreamSession
+from micro_x_agent_loop.server.sdk import AgentClient, StreamSession
 
 
 def _make_response(status_code: int, data: dict | list) -> httpx.Response:

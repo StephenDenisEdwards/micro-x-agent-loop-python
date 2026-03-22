@@ -7,10 +7,8 @@ from unittest.mock import AsyncMock, patch
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.mode_selector import (
-    DetectedSignal,
     ModeAnalysis,
     RecommendedMode,
-    SignalStrength,
     Stage2Result,
     analyze_prompt,
     build_stage2_prompt,

@@ -73,6 +73,7 @@ class ToGeminiContentsTests(unittest.TestCase):
     def test_user_string_content(self) -> None:
         # Re-import with mocked google.genai
         import importlib
+
         from micro_x_agent_loop.providers import gemini_provider
         importlib.reload(gemini_provider)
 
@@ -85,6 +86,7 @@ class ToGeminiContentsTests(unittest.TestCase):
     @patch.dict("sys.modules", {"google.genai": MagicMock(), "google.genai.types": _mock_types, "google": MagicMock()})
     def test_assistant_text_and_tool_use(self) -> None:
         import importlib
+
         from micro_x_agent_loop.providers import gemini_provider
         importlib.reload(gemini_provider)
 
@@ -107,6 +109,7 @@ class ToGeminiToolsTests(unittest.TestCase):
     @patch.dict("sys.modules", {"google.genai": MagicMock(), "google.genai.types": _mock_types, "google": MagicMock()})
     def test_empty_tools(self) -> None:
         import importlib
+
         from micro_x_agent_loop.providers import gemini_provider
         importlib.reload(gemini_provider)
 
@@ -117,6 +120,7 @@ class ToGeminiToolsTests(unittest.TestCase):
     @patch.dict("sys.modules", {"google.genai": MagicMock(), "google.genai.types": _mock_types, "google": MagicMock()})
     def test_converts_tools(self) -> None:
         import importlib
+
         from micro_x_agent_loop.providers import gemini_provider
         importlib.reload(gemini_provider)
 

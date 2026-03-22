@@ -164,7 +164,7 @@ def _job_add(store: BrokerStore, args: list[str]) -> None:
             i += 1
 
     try:
-        from croniter import croniter
+        from croniter import croniter  # type: ignore[import-untyped]
         if not croniter.is_valid(cron_expr):
             print(f"Invalid cron expression: {cron_expr}")
             return

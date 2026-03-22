@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from unittest.mock import MagicMock, patch
 
 from micro_x_agent_loop.agent_channel import BufferedChannel
 from micro_x_agent_loop.app_config import parse_app_config

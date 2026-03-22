@@ -22,15 +22,14 @@ Example — streaming::
 
 from __future__ import annotations
 
-import asyncio
 import json
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import Any
 
 import httpx
-
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -189,7 +188,8 @@ class AgentClient:
         """List available sessions."""
         resp = await self._client.get("/api/sessions")
         resp.raise_for_status()
-        return resp.json().get("sessions", [])
+        result: list[dict[str, Any]] = resp.json().get("sessions", [])
+        return result
 
     async def get_session(self, session_id: str) -> dict[str, Any] | None:
         """Get session details. Returns None if not found."""
@@ -197,7 +197,8 @@ class AgentClient:
         if resp.status_code == 404:
             return None
         resp.raise_for_status()
-        return resp.json()
+        result: dict[str, Any] = resp.json()
+        return result
 
     async def delete_session(self, session_id: str) -> bool:
         """Delete a session."""
@@ -211,7 +212,8 @@ class AgentClient:
         if resp.status_code == 404:
             return []
         resp.raise_for_status()
-        return resp.json().get("messages", [])
+        result: list[dict[str, Any]] = resp.json().get("messages", [])
+        return result
 
     # -- Chat (non-streaming) -------------------------------------------------
 
@@ -288,4 +290,5 @@ class AgentClient:
         """List broker jobs (requires broker enabled)."""
         resp = await self._client.get("/api/jobs")
         resp.raise_for_status()
-        return resp.json()
+        result: list[dict[str, Any]] = resp.json()
+        return result

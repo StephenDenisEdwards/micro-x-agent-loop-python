@@ -65,6 +65,7 @@ class AgentClientSessionTests(unittest.TestCase):
     def _make_transport_client(self, app):
         """Create an AgentClient with httpx ASGI transport."""
         import httpx
+
         from micro_x_agent_loop.server.sdk import AgentClient
 
         class TransportAgentClient(AgentClient):
@@ -134,7 +135,7 @@ class AgentClientSessionTests(unittest.TestCase):
 class AgentClientStreamTests(unittest.TestCase):
     def test_stream_url_building_http_to_ws(self) -> None:
         """Verify the ws:// URL substitution logic."""
-        client = AgentClient("http://localhost:8321")
+        AgentClient("http://localhost:8321")
         # The URL substitution is in the stream method; verify the logic directly
         base = "http://localhost:8321"
         ws_scheme = "wss" if base.startswith("https") else "ws"

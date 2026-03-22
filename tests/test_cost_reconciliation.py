@@ -27,6 +27,7 @@ class ResolveApiKeyIdTests(unittest.TestCase):
     def test_missing_keys_returns_none(self) -> None:
         import os
         from unittest.mock import patch
+
         from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
 
         with patch.dict(os.environ, {}, clear=True):
@@ -35,6 +36,7 @@ class ResolveApiKeyIdTests(unittest.TestCase):
     def test_missing_admin_key_returns_none(self) -> None:
         import os
         from unittest.mock import patch
+
         from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True):
@@ -43,6 +45,7 @@ class ResolveApiKeyIdTests(unittest.TestCase):
     def test_successful_match(self) -> None:
         import os
         from unittest.mock import MagicMock, patch
+
         from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
 
         api_key = "sk-ant-api03-HzWxxxxxxQwAA"
@@ -67,6 +70,7 @@ class ResolveApiKeyIdTests(unittest.TestCase):
     def test_no_match_returns_none(self) -> None:
         import os
         from unittest.mock import MagicMock, patch
+
         from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
 
         response_data = json.dumps({
@@ -89,6 +93,7 @@ class ResolveApiKeyIdTests(unittest.TestCase):
     def test_api_failure_returns_none(self) -> None:
         import os
         from unittest.mock import patch
+
         from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test", "ANTHROPIC_ADMIN_API_KEY": "admin"}):
@@ -100,6 +105,7 @@ class ResolveApiKeyIdTests(unittest.TestCase):
     def test_hint_without_dots_skipped(self) -> None:
         import os
         from unittest.mock import MagicMock, patch
+
         from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
 
         response_data = json.dumps({
@@ -416,25 +422,28 @@ class ReconcileCostsTests(unittest.TestCase):
 
     def test_missing_tool(self) -> None:
         import asyncio
+
         from micro_x_agent_loop.cost_reconciliation import reconcile_costs
 
         lines = asyncio.run(reconcile_costs(tool_map={}, store=None))
-        self.assertTrue(any("not available" in l for l in lines))
+        self.assertTrue(any("not available" in line for line in lines))
 
     def test_missing_store(self) -> None:
         import asyncio
-        from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
         from unittest.mock import MagicMock
+
+        from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
 
         fake_tool = MagicMock()
         lines = asyncio.run(reconcile_costs(
             tool_map={RECONCILE_TOOL_NAME: fake_tool}, store=None,
         ))
-        self.assertTrue(any("Memory not enabled" in l for l in lines))
+        self.assertTrue(any("Memory not enabled" in line for line in lines))
 
     def test_no_local_events(self) -> None:
         import asyncio
         from unittest.mock import MagicMock, patch
+
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
 
         fake_tool = MagicMock()
@@ -450,11 +459,12 @@ class ReconcileCostsTests(unittest.TestCase):
                 store=fake_store,
                 days=1,
             ))
-        self.assertTrue(any("No local metric" in l for l in lines))
+        self.assertTrue(any("No local metric" in line for line in lines))
 
     def test_successful_reconciliation_with_usage(self) -> None:
         import asyncio
         from unittest.mock import MagicMock, patch
+
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
 
         # Use a past date so api_end_dt > start_dt and API calls are made
@@ -516,8 +526,8 @@ class ReconcileCostsTests(unittest.TestCase):
 
     def test_with_start_and_end_dates(self) -> None:
         import asyncio
-        import time
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import MagicMock, patch
+
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
 
         fake_store = MagicMock()
@@ -557,8 +567,8 @@ class ReconcileCostsTests(unittest.TestCase):
 
     def test_api_call_error(self) -> None:
         import asyncio
-        import time
         from unittest.mock import MagicMock, patch
+
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
 
         fake_store = MagicMock()
@@ -591,8 +601,8 @@ class ReconcileCostsTests(unittest.TestCase):
 
     def test_api_returns_error_result(self) -> None:
         import asyncio
-        import time
         from unittest.mock import MagicMock, patch
+
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
 
         fake_store = MagicMock()

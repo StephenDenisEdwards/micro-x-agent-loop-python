@@ -10,13 +10,11 @@ from micro_x_agent_loop.broker.channels import (
     LogAdapter,
     TelegramAdapter,
     TriggerFilter,
-    TriggerRequest,
     WhatsAppAdapter,
     build_adapters,
     build_trigger_filter,
 )
 from micro_x_agent_loop.broker.runner import RunResult
-
 
 # ---------------------------------------------------------------------------
 # TriggerFilter
@@ -78,7 +76,7 @@ class TriggerFilterMatchesTests(unittest.TestCase):
 
     def test_empty_text_after_strip_returns_none(self) -> None:
         f = TriggerFilter()
-        result = f.matches(None, "u", "   ")
+        f.matches(None, "u", "   ")
         # Empty text after strip
         result2 = f.matches(None, "u", "hello")
         self.assertIsNotNone(result2)

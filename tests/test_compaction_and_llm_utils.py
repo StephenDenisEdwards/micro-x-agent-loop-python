@@ -1,6 +1,5 @@
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, patch
 
 from micro_x_agent_loop.compaction import (
     _adjust_boundary,

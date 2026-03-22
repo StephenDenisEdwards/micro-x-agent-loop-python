@@ -119,9 +119,24 @@ Use prefix style: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`
 ### Code Style
 
 - **Ruff** for linting (rules: E, F, W, I, B, UP), 120-char line length
-- **MyPy** for type checking
+- **MyPy** for type checking — all code must pass `mypy src/` with zero errors
 - Type hints on all public functions
 - `from __future__ import annotations` in every module
+
+### Type Checking Rules
+
+All new and modified code must be mypy-clean. Write with mypy in the loop — do not defer type fixes.
+
+- **Annotate variables when the type isn't obvious from assignment** — especially when the variable can hold multiple types across branches (e.g. `strategy: SummarizeCompactionStrategy | NoneCompactionStrategy`)
+- **Guard optional attributes before use** — if a field is `X | None`, check or assert before calling methods on it, even if you "know" it's set by the time that code runs. Mypy can't trace data-flow across collection boundaries
+- **Keep Protocol definitions in sync with implementations** — when you change a method signature on an implementing class, update the Protocol immediately
+- **Annotate all functions** including inner functions, callbacks, and lambdas that mypy flags — `-> None`, `(x: Any) -> None`, etc.
+- **Use `type: ignore` sparingly and with specific codes** — only for genuine mypy limitations:
+  - `# type: ignore[arg-type]` for SDK calls that accept dicts at runtime but expect typed params
+  - `# type: ignore[import-untyped]` for third-party libs without stubs
+  - `# type: ignore[unreachable]` for async code where state changes during `await`
+- **Do not use bare `# type: ignore`** — always specify the error code
+- **For dynamic return values** (`resp.json()`, SQLite results), assign to a typed local variable: `result: list[dict[str, Any]] = resp.json()`
 
 ### Testing
 
@@ -177,6 +192,7 @@ After completing any feature work or committing changes:
 - Do not add dependencies without checking `pyproject.toml` first
 - Do not use `git add -A` — stage specific files only
 - Do not skip pre-commit hooks (`--no-verify`)
+- Do not leave mypy errors — run `mypy src/` and fix before considering work complete
 
 ## Documentation
 

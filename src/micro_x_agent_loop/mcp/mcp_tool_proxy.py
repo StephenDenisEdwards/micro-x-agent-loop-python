@@ -54,7 +54,10 @@ class McpToolProxy:
         return []
 
     async def execute(self, tool_input: dict[str, Any]) -> ToolResult:
-        logger.debug("MCP tool call: {name} | input: {input}", name=self.name, input=json.dumps(tool_input, default=str))
+        logger.debug(
+            "MCP tool call: {name} | input: {input}",
+            name=self.name, input=json.dumps(tool_input, default=str),
+        )
         result = await self._session.call_tool(self._tool_name, arguments=tool_input)
         logger.debug(
             "MCP raw response: {name} | isError={err} | blocks={count} | types={types}",
@@ -76,5 +79,8 @@ class McpToolProxy:
             logger.warning("MCP tool error: {name} | result: {output}", name=self.name, output=output[:500])
             return ToolResult(text=output, structured=structured, is_error=True)
 
-        logger.debug("MCP tool result: {name} | chars={chars} | result: {output}", name=self.name, chars=len(output), output=output[:500])
+        logger.debug(
+            "MCP tool result: {name} | chars={chars} | result: {output}",
+            name=self.name, chars=len(output), output=output[:500],
+        )
         return ToolResult(text=output, structured=structured)

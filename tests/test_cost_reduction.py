@@ -5,27 +5,27 @@ from __future__ import annotations
 import asyncio
 import unittest
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
-from micro_x_agent_loop.app_config import AppConfig, parse_app_config
+if TYPE_CHECKING:
+    from micro_x_agent_loop.agent import Agent
+
+from micro_x_agent_loop.app_config import parse_app_config
 from micro_x_agent_loop.compaction import SummarizeCompactionStrategy
 from micro_x_agent_loop.metrics import build_tool_execution_metric
-from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
 from micro_x_agent_loop.provider import create_provider
+from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
 from micro_x_agent_loop.system_prompt import get_system_prompt, resolve_system_prompt
-from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.turn_events import BaseTurnEvents
 from micro_x_agent_loop.usage import UsageResult
 from tests.fakes import (
-    FakeAnthropicClient,
     FakeProvider,
     FakeStreamContext,
     FakeStreamProvider,
     FakeTool,
 )
-
 
 # ---------------------------------------------------------------------------
 # Feature 1: Prompt Caching
@@ -644,7 +644,7 @@ class SessionBudgetToolbarTests(unittest.TestCase):
 class SessionBudgetAgentTests(unittest.TestCase):
     """Tests for budget warn/stop logic in Agent."""
 
-    def _make_agent(self, budget: float = 0.0) -> "Agent":
+    def _make_agent(self, budget: float = 0.0) -> Agent:
         from micro_x_agent_loop.agent import Agent
         from micro_x_agent_loop.agent_config import AgentConfig
         return Agent(AgentConfig(

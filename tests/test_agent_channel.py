@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from micro_x_agent_loop.agent_channel import BrokerChannel, BufferedChannel, TerminalChannel
 
-
 # ---------------------------------------------------------------------------
 # BufferedChannel (already has some coverage, just ensure key paths)
 # ---------------------------------------------------------------------------
@@ -347,7 +346,8 @@ class SpinnerTests(unittest.TestCase):
         from micro_x_agent_loop.agent_channel import _Spinner
         spinner = _Spinner(prefix="", label=" Thinking...")
         spinner.start()
-        import time; time.sleep(0.05)
+        import time
+        time.sleep(0.05)
         spinner.stop()
 
     def test_stop_idempotent(self) -> None:

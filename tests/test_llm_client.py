@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import io
-import sys
 import time
 import unittest
 from unittest.mock import MagicMock, patch
@@ -53,7 +51,6 @@ class PrintThroughSpinnerTests(unittest.TestCase):
     def test_no_spinner_uses_print(self) -> None:
         # Ensure no active spinner
         llm_client._active_spinner = None
-        captured = io.StringIO()
         with patch("builtins.print") as mock_print:
             print_through_spinner("test message")
             mock_print.assert_called_once_with("test message", flush=True)

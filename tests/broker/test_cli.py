@@ -7,7 +7,7 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from micro_x_agent_loop.broker.cli import (
     _job_add,
@@ -186,7 +186,7 @@ class JobRemoveTests(unittest.TestCase):
 
     def test_remove_ambiguous(self) -> None:
         j1 = self._store.create_job(name="a", cron_expr="* * * * *", prompt_template="p")
-        j2 = self._store.create_job(name="b", cron_expr="* * * * *", prompt_template="p")
+        self._store.create_job(name="b", cron_expr="* * * * *", prompt_template="p")
         # Both IDs start with some UUID prefix; let's try prefix that matches both
         # Use the common start of both UUIDs — just pass empty will match everything
         # Instead, make the prefix match both by using nothing — but that's hard
