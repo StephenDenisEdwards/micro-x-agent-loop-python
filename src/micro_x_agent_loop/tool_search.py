@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import tiktoken
 from loguru import logger
@@ -14,6 +14,9 @@ from micro_x_agent_loop.constants import (
     TOOL_SEARCH_MAX_LOAD,
 )
 from micro_x_agent_loop.tool import Tool
+
+if TYPE_CHECKING:
+    from micro_x_agent_loop.embedding import ToolEmbeddingIndex
 
 _encoding = tiktoken.get_encoding("cl100k_base")
 
@@ -123,17 +126,23 @@ class ToolSearchManager:
     - ``begin_turn()`` resets loaded tools at the start of each turn.
     - ``get_tools_for_api_call()`` returns the tool schemas to send to the LLM.
     - ``handle_tool_search()`` processes a tool_search call and returns results.
-    """
 
-    _MAX_LOAD = TOOL_SEARCH_MAX_LOAD
+    When an embedding index is provided, ``handle_tool_search`` uses semantic
+    similarity (cosine distance on Ollama embeddings) instead of keyword matching.
+    Falls back to keyword search if embedding is unavailable or fails.
+    """
 
     def __init__(
         self,
         all_tools: list[Tool],
         converted_tools: list[dict],
+        embedding_index: ToolEmbeddingIndex | None = None,
+        max_load: int = TOOL_SEARCH_MAX_LOAD,
     ) -> None:
         self._all_tools = all_tools
         self._all_converted_tools = converted_tools
+        self._embedding_index = embedding_index
+        self._max_load = max_load
         # Build index: name -> (Tool, converted_dict)
         self._tool_index: dict[str, tuple[Tool, dict]] = {}
         converted_by_name = {t["name"]: t for t in converted_tools}
@@ -162,11 +171,68 @@ class ToolSearchManager:
     def is_tool_search_call(tool_name: str) -> bool:
         return tool_name == "tool_search"
 
-    def handle_tool_search(self, query: str) -> str:
+    async def initialize_embeddings(self) -> None:
+        """Build the embedding index from all tools. Call once at startup."""
+        if self._embedding_index is None:
+            return
+        tools = [
+            (name, tool.description or "")
+            for name, (tool, _conv) in self._tool_index.items()
+        ]
+        success = await self._embedding_index.build(tools)
+        if success:
+            logger.info(
+                f"Semantic tool search active: {len(tools)} tools indexed"
+            )
+        else:
+            logger.warning(
+                "Semantic tool search unavailable — falling back to keyword search"
+            )
+
+    async def handle_tool_search(self, query: str) -> str:
         """Execute a tool_search query and return matching tool descriptions.
 
-        Also marks matched tools as loaded for the next API call.
+        Uses semantic search (embedding similarity) when the index is ready,
+        otherwise falls back to keyword search.
         """
+        if self._embedding_index is not None and self._embedding_index.is_ready:
+            try:
+                return await self._semantic_search(query)
+            except Exception as e:
+                logger.warning(f"Semantic search failed, falling back to keyword: {e}")
+        return self._keyword_search(query)
+
+    async def _semantic_search(self, query: str) -> str:
+        """Search tools by embedding cosine similarity."""
+        assert self._embedding_index is not None
+        query_embeddings = await self._embedding_index._client.embed([query])
+        query_vec = query_embeddings[0]
+
+        results = self._embedding_index.search(query_vec, top_k=self._max_load)
+
+        for name, _score in results:
+            self._loaded_tool_names.add(name)
+
+        if not results:
+            return (
+                f"No tools found matching '{query}'. "
+                "Try broader search terms, or search for a specific action "
+                "(e.g., 'file', 'web', 'email', 'code')."
+            )
+
+        lines = [f"Found {len(results)} matching tool(s):\n"]
+        for name, score in results:
+            pair = self._tool_index.get(name)
+            desc = pair[0].description or "" if pair else ""
+            short_desc = desc[:200] + "..." if len(desc) > 200 else desc
+            lines.append(f"- {name}: {short_desc}")
+            logger.debug(f"  semantic match: {name} score={score:.4f}")
+
+        lines.append("\nThese tools are now loaded. You can call them directly.")
+        return "\n".join(lines)
+
+    def _keyword_search(self, query: str) -> str:
+        """Search tools by keyword matching (original algorithm)."""
         query_lower = query.lower()
         query_terms = query_lower.split()
 
@@ -189,7 +255,7 @@ class ToolSearchManager:
         # Sort by score descending, then name for stability
         matches.sort(key=lambda m: (-m[2], m[0]))
 
-        for name, _desc, _score in matches[: self._MAX_LOAD]:
+        for name, _desc, _score in matches[: self._max_load]:
             self._loaded_tool_names.add(name)
 
         if not matches:
@@ -200,12 +266,12 @@ class ToolSearchManager:
             )
 
         lines = [f"Found {len(matches)} matching tool(s):\n"]
-        for name, desc, _score in matches[: self._MAX_LOAD]:
+        for name, desc, _score in matches[: self._max_load]:
             short_desc = desc[:200] + "..." if len(desc) > 200 else desc
             lines.append(f"- {name}: {short_desc}")
 
-        if len(matches) > self._MAX_LOAD:
-            lines.append(f"\n(Showing top {self._MAX_LOAD} of {len(matches)} matches)")
+        if len(matches) > self._max_load:
+            lines.append(f"\n(Showing top {self._max_load} of {len(matches)} matches)")
 
         lines.append("\nThese tools are now loaded. You can call them directly.")
         return "\n".join(lines)
@@ -230,3 +296,5 @@ class ToolSearchManager:
         for name in to_remove:
             self._tool_index.pop(name, None)
             self._loaded_tool_names.discard(name)
+        if self._embedding_index is not None:
+            self._embedding_index.remove_tools(list(to_remove))

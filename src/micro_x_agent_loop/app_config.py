@@ -9,12 +9,14 @@ from pathlib import Path
 
 from micro_x_agent_loop.constants import (
     DEFAULT_COMPACTION_THRESHOLD_TOKENS,
+    DEFAULT_EMBEDDING_MODEL,
     DEFAULT_MAX_CONVERSATION_MESSAGES,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_TOOL_RESULT_CHARS,
     DEFAULT_MEMORY_MAX_MESSAGES_PER_SESSION,
     DEFAULT_MEMORY_MAX_SESSIONS,
     DEFAULT_MEMORY_RETENTION_DAYS,
+    DEFAULT_OLLAMA_BASE_URL,
     DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS,
     DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS,
     DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS,
@@ -25,6 +27,8 @@ from micro_x_agent_loop.constants import (
     DEFAULT_SUBAGENT_TIMEOUT,
     DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD,
     DEFAULT_USER_MEMORY_MAX_LINES,
+    TOOL_SEARCH_DEFAULT_STRATEGY,
+    TOOL_SEARCH_SEMANTIC_MAX_LOAD,
 )
 
 
@@ -78,6 +82,10 @@ class AppConfig:
     stage2_provider: str
     stage2_model: str
     tool_search_enabled: str
+    tool_search_strategy: str
+    tool_search_max_load: int
+    embedding_model: str
+    ollama_base_url: str
     # Tool result formatting
     tool_formatting: dict
     default_format: dict
@@ -307,6 +315,10 @@ def parse_app_config(config: dict) -> AppConfig:
         stage2_provider=str(config.get("Stage2Provider", "")).strip().lower(),
         stage2_model=str(config.get("Stage2Model", "")).strip(),
         tool_search_enabled=str(config.get("ToolSearchEnabled", "false")).strip().lower(),
+        tool_search_strategy=str(config.get("ToolSearchStrategy", TOOL_SEARCH_DEFAULT_STRATEGY)).strip().lower(),
+        tool_search_max_load=int(config.get("ToolSearchMaxLoad", TOOL_SEARCH_SEMANTIC_MAX_LOAD)),
+        embedding_model=str(config.get("EmbeddingModel", DEFAULT_EMBEDDING_MODEL)).strip(),
+        ollama_base_url=str(config.get("OllamaBaseUrl", DEFAULT_OLLAMA_BASE_URL)).strip().rstrip("/"),
         tool_formatting=config.get("ToolFormatting", {}),
         default_format=config.get("DefaultFormat", {"format": "json"}),
         sub_agents_enabled=_to_bool(config.get("SubAgentsEnabled", False), default=False),

@@ -45,7 +45,7 @@ _SUMMARIZE_PATTERNS = re.compile(
 )
 
 _CODE_GEN_PATTERNS = re.compile(
-    r"\b(write|create|implement|build|generate|add|make)\b.*\b(function|class|"
+    r"\b(write|create|implement|build|generate|add|make|save)\b.*\b(function|class|"
     r"method|endpoint|api|script|module|component|test|code|file|program)\b",
     re.IGNORECASE,
 )
@@ -217,7 +217,7 @@ _KEYWORD_VECTORS: dict[TaskType, dict[str, float]] = {
         "function": 2.0, "class": 2.0, "method": 2.0, "code": 2.0,
         "script": 2.0, "module": 1.5, "api": 1.5, "endpoint": 1.5,
         "test": 1.5, "component": 1.5, "program": 1.5, "generate": 1.5,
-        "add": 1.0, "feature": 1.0, "file": 1.0,
+        "add": 1.0, "feature": 1.0, "file": 1.5, "save": 1.5,
     },
     TaskType.CODE_REVIEW: {
         "review": 2.5, "explain": 2.0, "debug": 2.5, "bug": 2.5,

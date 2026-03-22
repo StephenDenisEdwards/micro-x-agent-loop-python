@@ -197,6 +197,10 @@ async def bootstrap_runtime(
             stage2_provider=app.stage2_provider,
             stage2_model=app.stage2_model,
             tool_search_enabled=app.tool_search_enabled,
+            tool_search_strategy=app.tool_search_strategy,
+            tool_search_max_load=app.tool_search_max_load,
+            embedding_model=app.embedding_model,
+            ollama_base_url=app.ollama_base_url,
             working_directory=app.working_directory,
             tool_formatting=app.tool_formatting,
             default_format=app.default_format,
@@ -223,6 +227,9 @@ async def bootstrap_runtime(
             channel=channel,
         )
     )
+
+    # Initialize semantic tool search embeddings (async, may take 1-2s)
+    await agent.initialize_tool_search_embeddings()
 
     return AppRuntime(
         agent=agent,

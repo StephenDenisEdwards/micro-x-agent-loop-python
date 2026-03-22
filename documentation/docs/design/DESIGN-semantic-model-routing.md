@@ -225,6 +225,96 @@ All configuration in `config.json` under existing patterns (ADR-012):
 
 `#Provider` and `#Model` self-references are resolved by the config system (existing `_expand_config_refs`). This means the default policies route cheap tasks to Haiku on the same provider and complex tasks to the main model — zero cross-provider switching until the user explicitly configures different providers.
 
+### Per-Policy Tool Narrowing (`tool_search_only`)
+
+Each routing policy supports an optional `tool_search_only` boolean field. When `true`, the model receives only the `tool_search` and `ask_user` pseudo-tools instead of the full tool set. The model can discover and load specific tools on demand via `tool_search` calls.
+
+This is designed for small/local models (e.g. Ollama `llama3.2:3b`) that cannot reliably handle large tool schemas. A 3B-parameter model overwhelmed by 100 tool definitions will typically ignore all tools and respond as a generic chatbot. Narrowing to just `tool_search` keeps the context manageable.
+
+```json
+{
+  "RoutingPolicies": {
+    "conversational": { "provider": "ollama", "model": "llama3.2:3b", "tool_search_only": true },
+    "code_generation": { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" }
+  }
+}
+```
+
+**Implementation:** In `TurnEngine.run()`, after the routing target is resolved, if `target.tool_search_only` is `true`, the `api_tools` list is replaced with `[tool_search_schema] + [loaded_tools] + [ask_user]`. The `ToolSearchManager` is created at agent startup whenever any policy has `tool_search_only=true`, even if `ToolSearchEnabled` is globally `false`. The global `ToolSearchEnabled` setting continues to control whether the *main* model uses tool search.
+
+### Per-Policy System Prompt (`system_prompt`)
+
+Each routing policy supports an optional `system_prompt` string field. When set to `"compact"`, the model receives a minimal system prompt (~500 words) instead of the full prompt (~1800 words). The compact prompt omits:
+
+- User memory content and guidance
+- Code generation negotiation directive
+- Sub-agent delegation directive
+- Ask-user directive
+
+This is essential for small models with limited context windows. A 9KB system prompt can consume a significant fraction of a 3B model's usable context, leaving insufficient room for the conversation and tool schemas.
+
+```json
+{
+  "RoutingPolicies": {
+    "conversational": {
+      "provider": "ollama",
+      "model": "qwen2.5:7b",
+      "tool_search_only": true,
+      "system_prompt": "compact"
+    }
+  }
+}
+```
+
+**Implementation:** At agent startup, if any routing policy has `system_prompt: "compact"`, a compact prompt template is built via `get_system_prompt(compact=True)`. In `TurnEngine.run()`, after routing resolves, if `target.system_prompt == "compact"`, the compact template replaces the full system prompt for that API call only. The full prompt is restored for subsequent turns routed to the main model.
+
+### Pin Continuation (`pin_continuation`)
+
+Each routing policy supports an optional `pin_continuation` boolean field. When `true`, tool-result continuations (iteration 1+ within the same turn) reuse the provider/model from iteration 0, bypassing the `tool_continuation` routing policy entirely.
+
+#### Why this is needed
+
+Within a single turn, the agent may make multiple LLM calls: iteration 0 (initial response, possibly with a tool call), iteration 1 (process the tool result), iteration 2 (another tool call), etc. Without pinning, each iteration is reclassified independently. Iteration 1+ is classified as `tool_continuation` by the rules stage, which routes to whatever model the `tool_continuation` policy specifies.
+
+This causes problems when models of different capability levels are mixed in routing policies:
+
+**Downward switch (large → small) — dangerous:**
+A Sonnet turn calls a tool. The continuation routes to a 7B Ollama model via `tool_continuation`. The small model cannot follow the conversation context that Sonnet built — it may produce an empty response, ignore tool results, or hallucinate. The model switch happens invisibly mid-turn, breaking the task.
+
+**Upward switch (small → large) — wasteful:**
+An Ollama turn calls `tool_search`. The continuation routes to Haiku via `tool_continuation`. Haiku processes the search result correctly, but this costs money for something the local model could handle on a clean context.
+
+#### Behaviour
+
+```
+pin_continuation: true on code_generation policy:
+  Iteration 0: classifier → code_generation → Sonnet → calls write_file
+  Iteration 1: PINNED → Sonnet → processes tool result (classifier skipped)
+  Iteration 2: PINNED → Sonnet → continues if another tool call
+
+pin_continuation: false (or absent):
+  Iteration 0: classifier → code_generation → Sonnet → calls write_file
+  Iteration 1: classifier → tool_continuation → Haiku → processes tool result
+```
+
+**Implementation:** `TurnEngine.run()` saves the `RoutingTarget` from iteration 0 as `pinned_target` when `pin_continuation=True`. On iteration 1+, if `pinned_target` is set, classification is skipped entirely — the saved target is reused with all its per-policy overrides (`tool_search_only`, `system_prompt`, etc.). The pinned target is scoped to the current turn only; the next user message starts fresh.
+
+### Semantic Tool Search
+
+When `ToolSearchStrategy` is `"semantic"` or `"auto"`, the `tool_search` pseudo-tool uses Ollama embeddings instead of keyword matching. At startup, all tool names and descriptions are embedded via the Ollama `/api/embed` endpoint (model configurable via `EmbeddingModel`, default `nomic-embed-text`). On each `tool_search` call, the query is embedded and ranked by cosine similarity against the tool embeddings.
+
+This dramatically improves search quality for small models using `tool_search_only`. Keyword search for "list files" returns 24 noisy matches (any tool with "list" or "file" in its name/description). Semantic search returns the 5 most relevant tools (e.g. `filesystem__bash`, `filesystem__read_file`), because the embedding captures intent, not just keywords.
+
+Configuration:
+- `ToolSearchStrategy`: `"auto"` (default) — try semantic, fallback to keyword
+- `ToolSearchMaxLoad`: `5` (default) — max tools loaded per search
+- `EmbeddingModel`: `"nomic-embed-text"` (default) — Ollama embedding model
+- `OllamaBaseUrl`: `"http://localhost:11434"` (default) — Ollama API endpoint
+
+Fallback is three-layered: config-level (`"keyword"` skips embeddings entirely), startup-level (embedding model unavailable → keyword), per-search-level (embed call fails → keyword).
+
+**Implementation:** `embedding.py` provides `OllamaEmbeddingClient` (async httpx calls to `/api/embed`), `ToolEmbeddingIndex` (build once, search by cosine similarity), and `cosine_similarity` (pure Python, no numpy). `ToolSearchManager` accepts an optional `ToolEmbeddingIndex` and tries semantic search before falling back to keyword search.
+
 ## Integration Points
 
 ### TurnEngine

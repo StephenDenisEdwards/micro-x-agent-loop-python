@@ -197,14 +197,14 @@ class TestToolSearchManager(unittest.TestCase):
 
     def test_search_loads_matching_tools(self) -> None:
         mgr = self._make_manager()
-        result = mgr.handle_tool_search("file")
+        result = asyncio.run(mgr.handle_tool_search("file"))
         self.assertIn("read_file", result)
         self.assertIn("write_file", result)
         self.assertGreater(mgr.loaded_tool_count, 0)
 
     def test_loaded_tools_appear_in_api_call(self) -> None:
         mgr = self._make_manager()
-        mgr.handle_tool_search("file")
+        asyncio.run(mgr.handle_tool_search("file"))
         api_tools = mgr.get_tools_for_api_call()
         names = [t["name"] for t in api_tools]
         self.assertIn("tool_search", names)
@@ -213,7 +213,7 @@ class TestToolSearchManager(unittest.TestCase):
 
     def test_begin_turn_clears_loaded(self) -> None:
         mgr = self._make_manager()
-        mgr.handle_tool_search("file")
+        asyncio.run(mgr.handle_tool_search("file"))
         self.assertGreater(mgr.loaded_tool_count, 0)
         mgr.begin_turn()
         self.assertEqual(0, mgr.loaded_tool_count)
@@ -222,13 +222,13 @@ class TestToolSearchManager(unittest.TestCase):
 
     def test_no_matches_returns_helpful_message(self) -> None:
         mgr = self._make_manager()
-        result = mgr.handle_tool_search("zzzznonexistent")
+        result = asyncio.run(mgr.handle_tool_search("zzzznonexistent"))
         self.assertIn("No tools found", result)
         self.assertEqual(0, mgr.loaded_tool_count)
 
     def test_name_match_scores_higher(self) -> None:
         mgr = self._make_manager()
-        result = mgr.handle_tool_search("read")
+        result = asyncio.run(mgr.handle_tool_search("read"))
         # "read" appears in both fs__read_file name and email__read name
         self.assertIn("fs__read_file", result)
         self.assertIn("email__read", result)
@@ -239,9 +239,9 @@ class TestToolSearchManager(unittest.TestCase):
 
     def test_multiple_searches_accumulate(self) -> None:
         mgr = self._make_manager()
-        mgr.handle_tool_search("file")
+        asyncio.run(mgr.handle_tool_search("file"))
         count_after_first = mgr.loaded_tool_count
-        mgr.handle_tool_search("email")
+        asyncio.run(mgr.handle_tool_search("email"))
         # Should have accumulated more tools
         self.assertGreater(mgr.loaded_tool_count, count_after_first)
 

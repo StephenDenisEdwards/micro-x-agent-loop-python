@@ -18,10 +18,11 @@ class OllamaProvider(OpenAIProvider):
       smaller models an explicit nudge to use function calling.
     """
 
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, api_key: str, base_url: str = "") -> None:
+        effective_url = base_url.rstrip("/") + "/v1" if base_url else _OLLAMA_BASE_URL
         super().__init__(
             api_key=api_key or "ollama",
-            base_url=_OLLAMA_BASE_URL,
+            base_url=effective_url,
             provider_name="ollama",
         )
 

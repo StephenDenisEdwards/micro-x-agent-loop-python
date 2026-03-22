@@ -49,7 +49,12 @@ Reasons:
 
 **3. Provider Pool** — Dict of named `LLMProvider` instances with health tracking (exponential-backoff cooldown) and cache-aware switching (penalty-based decision to prevent cache invalidation from frequent provider switches).
 
-**4. Routing Feedback** — SQLite table `routing_outcomes` with per-turn records. Provides aggregate stats (per task type, provider, classification stage) and adaptive confidence thresholds.
+**4. Routing Target** — `RoutingTarget` dataclass carries the resolved routing decision: `provider`, `model`, plus per-policy overrides:
+- `tool_search_only: bool` — when `true`, narrows the tool set to just `tool_search` + `ask_user`, letting the model discover tools on demand. Essential for small models (e.g. Ollama 3B/7B) that cannot handle 100+ tool schemas.
+- `system_prompt: str` — when `"compact"`, uses a minimal ~500-word system prompt instead of the full ~1800-word prompt. Omits user memory, codegen, sub-agent, and ask-user directives. Essential for small models with limited context windows.
+- `pin_continuation: bool` — when `true`, tool-result continuations (iteration 1+) stay on the same provider/model from iteration 0, bypassing the `tool_continuation` policy. Prevents dangerous mid-turn model switches (e.g. Sonnet → Ollama) and unnecessary cost escalation (Ollama → Haiku).
+
+**5. Routing Feedback** — SQLite table `routing_outcomes` with per-turn records. Provides aggregate stats (per task type, provider, classification stage) and adaptive confidence thresholds.
 
 ### Relationship to Per-Turn Routing
 
@@ -68,7 +73,7 @@ Semantic routing **supersedes** per-turn routing when both are enabled. The sema
 **Harder:**
 
 - Understanding the three-stage classification pipeline when debugging unexpected routing. Mitigated by: structured logging with stage, confidence, and reason on every turn.
-- Configuration surface area increases by 7 new fields. Mitigated by: sensible defaults that produce no behaviour change until explicitly enabled.
+- Configuration surface area increases by 7 new fields plus 2 per-policy fields (`tool_search_only`, `system_prompt`). Mitigated by: sensible defaults that produce no behaviour change until explicitly enabled.
 - Provider pool adds complexity to error handling — a call may fail on one provider and succeed on the fallback. Mitigated by: health tracking with exponential backoff and structured fallback logging.
 
 **Risks:**

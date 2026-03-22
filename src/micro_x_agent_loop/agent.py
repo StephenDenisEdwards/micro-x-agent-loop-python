@@ -55,6 +55,7 @@ class Agent:
         self._provider = create_provider(
             config.provider, config.api_key,
             prompt_caching_enabled=config.prompt_caching_enabled,
+            ollama_base_url=config.ollama_base_url,
         )
         self._model = config.model
         self._max_tokens = config.max_tokens
@@ -71,12 +72,25 @@ class Agent:
             config.model,
             provider=config.provider,
         )
+        # Also need ToolSearchManager if any routing policy uses tool_search_only
+        _any_policy_needs_search = any(
+            p.get("tool_search_only", False) for p in config.routing_policies.values()
+        )
         self._tool_search_manager: ToolSearchManager | None = None
-        if self._tool_search_active:
+        if self._tool_search_active or _any_policy_needs_search:
+            # Build embedding index for semantic search when strategy != "keyword"
+            embedding_index: ToolEmbeddingIndex | None = None
+            if config.tool_search_strategy != "keyword" and config.ollama_base_url:
+                from micro_x_agent_loop.embedding import OllamaEmbeddingClient, ToolEmbeddingIndex
+                client = OllamaEmbeddingClient(config.ollama_base_url, config.embedding_model)
+                embedding_index = ToolEmbeddingIndex(client)
             self._tool_search_manager = ToolSearchManager(
                 all_tools=config.tools,
                 converted_tools=self._converted_tools,
+                embedding_index=embedding_index,
+                max_load=config.tool_search_max_load,
             )
+        if self._tool_search_active:
             from micro_x_agent_loop.system_prompt import _TOOL_SEARCH_DIRECTIVE
             self._system_prompt += _TOOL_SEARCH_DIRECTIVE
             logger.info(
@@ -104,6 +118,24 @@ class Agent:
             if not _compact:
                 from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
                 self._system_prompt += _SUBAGENT_DIRECTIVE
+
+        # Build compact system prompt for per-policy routing overrides
+        _any_policy_needs_compact = any(
+            p.get("system_prompt") == "compact" for p in config.routing_policies.values()
+        )
+        self._compact_system_prompt = ""
+        if _any_policy_needs_compact:
+            from micro_x_agent_loop.system_prompt import get_system_prompt
+            self._compact_system_prompt = get_system_prompt(
+                user_memory="",
+                user_memory_enabled=False,
+                concise_output_enabled=True,
+                working_directory=config.working_directory,
+                autonomous=config.autonomous,
+                hitl_enabled=False,
+                compact=True,
+                tool_search_active=True,
+            )
             self._sub_agent_runner = SubAgentRunner(
                 parent_tools=config.tools,
                 provider_name=config.provider,
@@ -226,6 +258,7 @@ class Agent:
                         pool_providers[p_name] = create_provider(
                             p_name, p_env.provider_api_key,
                             prompt_caching_enabled=config.prompt_caching_enabled,
+                            ollama_base_url=config.ollama_base_url,
                         )
                     except Exception as ex:
                         logger.warning(f"Failed to create provider {p_name!r} for routing: {ex}")
@@ -317,6 +350,8 @@ class Agent:
             formatter=self._tool_result_formatter,
             api_payload_store=self._api_payload_store,
             tool_search_manager=self._tool_search_manager,
+            tool_search_globally_active=self._tool_search_active,
+            compact_system_prompt=self._compact_system_prompt,
             sub_agent_runner=self._sub_agent_runner,
             turn_classifier=turn_classifier,
             routing_model=routing_model,
@@ -391,6 +426,11 @@ class Agent:
                     remove_notification_channel(self._channel)
             else:
                 await self._run_inner(user_message)
+
+    async def initialize_tool_search_embeddings(self) -> None:
+        """Build the embedding index for semantic tool search. Call once at startup."""
+        if self._tool_search_manager is not None:
+            await self._tool_search_manager.initialize_embeddings()
 
     async def _run_inner(self, user_message: str) -> None:
         # /prompt <filename> — read file and use contents as the user message

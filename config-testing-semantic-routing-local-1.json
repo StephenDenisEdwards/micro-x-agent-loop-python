@@ -1,0 +1,21 @@
+{
+  "Base": "config-base.json",
+  "PerTurnRoutingEnabled": false,
+
+  "RoutingFeedbackEnabled": false,
+  "SemanticRoutingEnabled": true,
+  "SemanticRoutingStrategy": "rules+keywords",
+  "RoutingPolicies": {
+    "trivial":           { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true, "system_prompt": "compact", "pin_continuation": true },
+    "conversational":    { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true, "system_prompt": "compact", "pin_continuation": true },
+    "factual_lookup":    { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true, "system_prompt": "compact", "pin_continuation": true },
+    "summarization":     { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" },
+    "code_generation":   { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929", "pin_continuation": true },
+    "code_review":       { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929", "pin_continuation": true },
+    "analysis":          { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929", "pin_continuation": true },
+    "tool_continuation": { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" },
+    "creative":          { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" }
+  },
+
+  "LogLevel": "DEBUG"
+}

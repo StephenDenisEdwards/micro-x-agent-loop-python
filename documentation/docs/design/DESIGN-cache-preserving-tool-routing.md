@@ -399,9 +399,19 @@ This design extends the current tool system ([DESIGN-tool-system.md](DESIGN-tool
 
 The `McpToolProxy`, `McpManager`, `ToolResultFormatter`, and MCP servers are **unchanged**.
 
+## Relationship to Semantic Routing
+
+Semantic model routing ([DESIGN-semantic-model-routing.md](DESIGN-semantic-model-routing.md)) adds a per-policy `tool_search_only` flag to routing policies. When a turn routes to a small model (e.g. Ollama) with `tool_search_only: true`, only the `tool_search` pseudo-tool is sent instead of the full tool set. This is complementary to — not a replacement for — the cache-preserving strategy described here:
+
+- **Cache-preserving providers (Anthropic, Gemini, DeepSeek):** Full tool set with caching remains optimal. `tool_search_only` is not needed.
+- **Local/small models (Ollama):** Cache is irrelevant (no cross-request cache). `tool_search_only` prevents context overflow from 100+ tool schemas in models with limited context windows.
+
+The two mechanisms are orthogonal: cache-preserving routing decides *whether* to use tool search based on provider economics; per-policy `tool_search_only` forces it based on model capability.
+
 ## Related
 
 - [KV Cache and MCP Tool Routing Research](../research/kv-cache-and-mcp-tool-routing.md) — cost analysis backing this design
 - [DESIGN: Tool System](DESIGN-tool-system.md) — current tool architecture
+- [DESIGN: Semantic Model Routing](DESIGN-semantic-model-routing.md) — per-policy `tool_search_only` and `system_prompt` overrides
 - [PLAN: Cost Reduction](../planning/PLAN-cost-reduction.md) — levers #1 (prompt caching) and #7 (tool schema optimisation)
 - [PLAN: Cache-Preserving Tool Routing](../planning/PLAN-cache-preserving-tool-routing.md) — implementation plan

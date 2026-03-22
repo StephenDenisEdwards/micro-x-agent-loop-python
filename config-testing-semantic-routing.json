@@ -1,0 +1,16 @@
+{
+  "Base": "config-base.json",
+  "PerTurnRoutingEnabled": false,
+
+  "RoutingFeedbackEnabled": false,
+  "SemanticRoutingEnabled": true,
+  "SemanticRoutingStrategy": "rules+keywords",
+  "RoutingPolicies": {
+    "trivial": { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" },
+    "conversational": { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" },
+    "code_generation": { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" },
+    "analysis": { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" }
+  },
+  
+  "LogLevel": "DEBUG"
+}

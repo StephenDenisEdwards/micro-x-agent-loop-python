@@ -46,6 +46,8 @@ class TurnEngine:
         formatter: ToolResultFormatter | None = None,
         api_payload_store: ApiPayloadStore | None = None,
         tool_search_manager: ToolSearchManager | None = None,
+        tool_search_globally_active: bool = False,
+        compact_system_prompt: str = "",
         sub_agent_runner: SubAgentRunner | None = None,
         turn_classifier: Any | None = None,
         routing_model: str = "",
@@ -75,6 +77,8 @@ class TurnEngine:
         self._formatter = formatter or ToolResultFormatter()
         self._api_payload_store = api_payload_store
         self._tool_search_manager = tool_search_manager
+        self._tool_search_globally_active = tool_search_globally_active
+        self._compact_system_prompt = compact_system_prompt
         self._sub_agent_runner = sub_agent_runner
         self._turn_classifier = turn_classifier
         self._routing_model = routing_model
@@ -103,14 +107,15 @@ class TurnEngine:
 
         max_tokens_attempts = 0
         turn_iteration = 0
+        pinned_target: RoutingTarget | None = None  # Set on iteration 0 if pin_continuation
 
         while True:
             system_prompt = resolve_system_prompt(self._system_prompt_template)
 
-            # When tool search is active, send only the search tool + loaded tools
+            # When tool search is globally active, send only the search tool + loaded tools
             api_tools = (
                 self._tool_search_manager.get_tools_for_api_call()
-                if self._tool_search_manager is not None
+                if self._tool_search_globally_active and self._tool_search_manager is not None
                 else list(self._converted_tools)
             )
             if self._sub_agent_runner is not None:
@@ -125,7 +130,23 @@ class TurnEngine:
             task_classification: TaskClassification | None = None
             call_type = "main"
 
-            if self._semantic_classifier is not None and self._provider_pool is not None:
+            routing_target: RoutingTarget | None = None
+
+            # Pin continuation: reuse the iteration-0 routing target on iteration 1+
+            if pinned_target is not None and turn_iteration > 0:
+                routing_target = pinned_target
+                effective_provider = self._provider_pool
+                effective_model = routing_target.model
+                call_type = f"pinned:{pinned_target.provider}/{pinned_target.model}"
+                logger.info(
+                    "Pinned continuation: reusing iteration-0 target "
+                    "provider={provider} model={model} (iteration {iteration})",
+                    provider=routing_target.provider,
+                    model=routing_target.model,
+                    iteration=turn_iteration,
+                )
+
+            elif self._semantic_classifier is not None and self._provider_pool is not None:
                 # Semantic routing (Phase 1–4)
                 task_classification = self._semantic_classifier(
                     user_message=user_message,
@@ -133,18 +154,21 @@ class TurnEngine:
                     turn_iteration=turn_iteration,
                     turn_number=turn_number,
                 )
-                target = self._resolve_routing_target(task_classification)
-                if target is not None:
+                routing_target = self._resolve_routing_target(task_classification)
+                if routing_target is not None:
                     effective_provider = self._provider_pool
-                    effective_model = target.model
+                    effective_model = routing_target.model
                     call_type = f"semantic:{task_classification.task_type.value}"
+                    # Save for pinning on subsequent iterations
+                    if routing_target.pin_continuation and turn_iteration == 0:
+                        pinned_target = routing_target
                 logger.info(
                     "Semantic routing: task_type={task_type} stage={stage} "
                     "confidence={confidence:.2f} provider={provider} model={model} reason={reason}",
                     task_type=task_classification.task_type.value,
                     stage=task_classification.stage,
                     confidence=task_classification.confidence,
-                    provider=target.provider if target else "default",
+                    provider=routing_target.provider if routing_target else "default",
                     model=effective_model,
                     reason=task_classification.reason,
                 )
@@ -167,14 +191,38 @@ class TurnEngine:
                     reason=classification.reason,
                 )
 
+            # Per-policy overrides for routed turns (small models)
+            if routing_target is not None:
+                # Narrow tools for tool_search_only routes
+                if routing_target.tool_search_only:
+                    if self._tool_search_manager is not None:
+                        api_tools = self._tool_search_manager.get_tools_for_api_call()
+                    else:
+                        from micro_x_agent_loop.tool_search import TOOL_SEARCH_SCHEMA
+                        api_tools = [TOOL_SEARCH_SCHEMA]
+                    if self._channel is not None:
+                        api_tools.append(ASK_USER_SCHEMA)
+                    logger.info(
+                        "tool_search_only: narrowed tools to {count} for {model}",
+                        count=len(api_tools),
+                        model=routing_target.model,
+                    )
+                # Swap to compact system prompt for small models
+                if routing_target.system_prompt == "compact" and self._compact_system_prompt:
+                    system_prompt = resolve_system_prompt(self._compact_system_prompt)
+                    logger.info(
+                        "system_prompt: using compact prompt for {model}",
+                        model=routing_target.model,
+                    )
+
             # Dispatch to provider
             if effective_provider is not None and isinstance(effective_provider, ProviderPool):
-                target = self._resolve_routing_target(task_classification) or RoutingTarget(
+                dispatch_target = routing_target or RoutingTarget(
                     provider=self._routing_fallback_provider,
                     model=effective_model,
                 )
                 message, tool_use_blocks, stop_reason, usage = await effective_provider.stream_chat(
-                    target,
+                    dispatch_target,
                     self._max_tokens,
                     self._temperature,
                     system_prompt,
@@ -259,7 +307,7 @@ class TurnEngine:
             for block in search_blocks:
                 assert self._tool_search_manager is not None
                 query = block["input"].get("query", "")
-                result_text = self._tool_search_manager.handle_tool_search(query)
+                result_text = await self._tool_search_manager.handle_tool_search(query)
                 inline_results.append({
                     "type": "tool_result",
                     "tool_use_id": block["id"],
@@ -338,6 +386,9 @@ class TurnEngine:
 
         provider = policy.get("provider", self._routing_fallback_provider)
         model = policy.get("model", self._routing_fallback_model)
+        tool_search_only = bool(policy.get("tool_search_only", False))
+        system_prompt_policy = str(policy.get("system_prompt", ""))
+        pin_continuation = bool(policy.get("pin_continuation", False))
         if not provider or not model:
             return None
 
@@ -353,7 +404,13 @@ class TurnEngine:
                     model=self._routing_fallback_model or self._model,
                 )
 
-        return RoutingTarget(provider=provider, model=model)
+        return RoutingTarget(
+            provider=provider,
+            model=model,
+            tool_search_only=tool_search_only,
+            system_prompt=system_prompt_policy,
+            pin_continuation=pin_continuation,
+        )
 
     @staticmethod
     def _merge_tool_results(

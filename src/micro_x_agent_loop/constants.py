@@ -36,7 +36,11 @@ COMPACTION_SUMMARIZE_HALF_CAP = 50_000
 # Tool search
 # ---------------------------------------------------------------------------
 TOOL_SEARCH_MAX_LOAD = 20
+TOOL_SEARCH_SEMANTIC_MAX_LOAD = 5
 TOOL_SEARCH_DEFAULT_THRESHOLD_PERCENT = 40
+TOOL_SEARCH_DEFAULT_STRATEGY = "auto"
+DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
+DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 TOOL_SEARCH_CONTEXT_WINDOWS: dict[str, int] = {
     "claude-opus-4": 200_000,
     "claude-sonnet-4": 200_000,

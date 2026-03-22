@@ -133,19 +133,19 @@
 
 ## Test 7 — Cross-provider routing (Anthropic + Ollama)
 
-**Goal:** Verify that the provider pool dispatches to different providers for different task types.
+**Goal:** Verify that the provider pool dispatches to different providers for different task types, using `tool_search_only` and `system_prompt: "compact"` for the local model.
 
 **Steps:**
 
 1. Ensure Ollama is running: `ollama serve` (or Docker equivalent)
-2. Pull a model: `ollama pull llama3.2:3b`
+2. Pull a model: `docker exec ollama ollama pull qwen2.5:7b`
 3. Configure:
    ```json
    {
      "SemanticRoutingEnabled": true,
      "RoutingPolicies": {
-       "trivial": { "provider": "ollama", "model": "llama3.2:3b" },
-       "conversational": { "provider": "ollama", "model": "llama3.2:3b" },
+       "trivial": { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true, "system_prompt": "compact" },
+       "conversational": { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true, "system_prompt": "compact" },
        "code_generation": { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" },
        "analysis": { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" }
      }
@@ -157,10 +157,11 @@
 7. Run `/cost`
 
 **Expected:**
-- "hi" → routed to `ollama/llama3.2:3b` (cost: $0.00)
+- "hi" → routed to `ollama/qwen2.5:7b` (cost: $0.00)
 - Sorting algorithm → routed to `anthropic/claude-sonnet-4-5-20250929`
 - `/cost` model breakdown shows both providers
 - Logs show `provider=ollama` and `provider=anthropic` for respective calls
+- Ollama calls show `tool_search_only: narrowed tools to 2` and `system_prompt: using compact prompt` in logs
 
 ---
 
@@ -296,3 +297,141 @@
 - Logs show `stage=rules` for all classifications
 - No `stage=keywords` classifications appear
 - Unmatched prompts default to `conversational` with low confidence
+
+---
+
+## Test 13 — tool_search_only narrows tool set for small models
+
+**Goal:** Verify that `tool_search_only: true` in a routing policy sends only `tool_search` + `ask_user` to the routed model, not the full tool set.
+
+**Steps:**
+
+1. Configure with Ollama and `tool_search_only`:
+   ```json
+   {
+     "SemanticRoutingEnabled": true,
+     "RoutingPolicies": {
+       "trivial": { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true },
+       "code_generation": { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" }
+     }
+   }
+   ```
+2. Start the agent with `LogLevel: "DEBUG"`
+3. Submit: "hello" (routes to Ollama as trivial)
+4. Observe the logs for tool count
+5. Submit: "write a function to add two numbers" (routes to Anthropic)
+6. Observe the logs for tool count
+
+**Expected:**
+- Ollama call: logs show `tool_search_only: narrowed tools to 2` and `tools_count: 2`
+- Anthropic call: logs show full tool count (e.g. `tools_count: 100`)
+- Ollama response should be text only (not attempting to call unknown tools)
+
+---
+
+## Test 14 — system_prompt: "compact" reduces prompt for small models
+
+**Goal:** Verify that `system_prompt: "compact"` sends a minimal system prompt to the routed model.
+
+**Steps:**
+
+1. Configure with Ollama and compact prompt:
+   ```json
+   {
+     "SemanticRoutingEnabled": true,
+     "RoutingPolicies": {
+       "trivial": { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true, "system_prompt": "compact" },
+       "code_generation": { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" }
+     }
+   }
+   ```
+2. Enable `api_payload` log consumer to capture full API payloads
+3. Start the agent with `LogLevel: "DEBUG"`
+4. Submit: "hello" (routes to Ollama)
+5. Check API payload log or `/debug show-api-payload 0`
+
+**Expected:**
+- Logs show `system_prompt: using compact prompt for qwen2.5:7b`
+- API payload shows system prompt is ~500 words (not ~1800)
+- Compact prompt does NOT contain: "Code Generation", "Sub-Agent Delegation", "Asking the User", "User Memory Guidance"
+- Compact prompt DOES contain: base identity, working directory, tool discovery directive
+
+---
+
+## Test 15 — pin_continuation keeps model consistent within a turn
+
+**Goal:** Verify that `pin_continuation: true` prevents mid-turn model switching.
+
+**Steps:**
+
+1. Configure:
+   ```json
+   {
+     "SemanticRoutingEnabled": true,
+     "RoutingPolicies": {
+       "code_generation": { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929", "pin_continuation": true },
+       "tool_continuation": { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" }
+     }
+   }
+   ```
+2. Start the agent with `LogLevel: "DEBUG"`
+3. Submit: "write a hello world script to hello.py" (triggers code_generation → tool call → continuation)
+4. Observe the logs for iteration 0 and iteration 1
+
+**Expected:**
+- Iteration 0: logs show `semantic:code_generation` with Sonnet
+- Iteration 1: logs show `Pinned continuation: reusing iteration-0 target provider=anthropic model=claude-sonnet-4-5-20250929`
+- The `tool_continuation` policy (Haiku) is NOT used
+- The response is coherent — Sonnet processes its own tool result
+
+**Counter-test (without pinning):**
+
+1. Remove `pin_continuation` from the `code_generation` policy
+2. Repeat the same prompt
+3. Observe iteration 1 uses `tool_continuation` → Haiku instead of Sonnet
+
+---
+
+## Test 16 — pin_continuation with Ollama prevents unnecessary escalation
+
+**Goal:** Verify that pinned Ollama turns don't escalate to Haiku for tool continuations.
+
+**Steps:**
+
+1. Configure:
+   ```json
+   {
+     "SemanticRoutingEnabled": true,
+     "RoutingPolicies": {
+       "trivial": { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true, "system_prompt": "compact", "pin_continuation": true },
+       "tool_continuation": { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" }
+     }
+   }
+   ```
+2. Start a fresh session (`/session new`)
+3. Submit: "list my files" (if classified as trivial, routes to Ollama)
+4. If the model calls `tool_search`, observe the continuation
+
+**Expected:**
+- Iteration 0: routed to Ollama
+- Iteration 1 (if tool_search was called): logs show `Pinned continuation` to Ollama (not Haiku)
+- `/cost` shows $0.00 for the entire turn (no Anthropic API calls)
+
+---
+
+## Test 17 — File operation routes to main model (not trivial)
+
+(Previously Test 15)
+
+**Goal:** Verify that "save X to a file" routes to `code_generation` (main model), not `trivial`.
+
+**Steps:**
+
+1. Same config as Test 7 (semantic routing with Ollama for trivial/conversational)
+2. Submit: `save "HELLO WORLD" to a file named hello-world.txt`
+3. Observe the logs
+
+**Expected:**
+- Logs show: `task_type=code_generation stage=rules reason=code generation pattern detected`
+- API call uses Sonnet (not Ollama)
+- The file is created successfully

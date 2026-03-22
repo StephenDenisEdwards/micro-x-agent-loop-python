@@ -55,6 +55,10 @@ class AgentConfig:
     stage2_provider: str = ""
     stage2_model: str = ""
     tool_search_enabled: str = "false"
+    tool_search_strategy: str = "auto"
+    tool_search_max_load: int = 5
+    embedding_model: str = ""
+    ollama_base_url: str = ""
     working_directory: str | None = None
     # Tool result formatting
     tool_formatting: dict = field(default_factory=dict)

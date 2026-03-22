@@ -23,6 +23,9 @@ class RoutingTarget:
 
     provider: str
     model: str
+    tool_search_only: bool = False
+    system_prompt: str = ""  # "compact" or "" (default/full)
+    pin_continuation: bool = False
 
 
 @dataclass

@@ -122,11 +122,23 @@ The required API key depends on the configured `Provider`. The `ollama` provider
 | `Stage2ClassificationEnabled` | bool | `true` | Enable Stage 2 LLM classification when Stage 1 is ambiguous |
 | `Stage2Model` | string | `"#Model"` | Model for Stage 2 classification; `#Model` = use main Model |
 | `ToolSearchEnabled` | string | `"false"` | Enable on-demand tool discovery for large tool sets |
+| `ToolSearchStrategy` | string | `"auto"` | Tool search algorithm: `"semantic"` (embedding similarity via Ollama), `"keyword"` (original), or `"auto"` (try semantic, fallback to keyword) |
+| `ToolSearchMaxLoad` | int | `5` | Maximum tools loaded per search query |
+| `EmbeddingModel` | string | `"nomic-embed-text"` | Ollama embedding model for semantic tool search |
+| `OllamaBaseUrl` | string | `"http://localhost:11434"` | Ollama API base URL (also used for LLM provider) |
 | `SubAgentsEnabled` | bool | `false` | Enable sub-agent delegation for complex tasks |
 | `SubAgentModel` | string | `"#Model"` | Model for sub-agents; `#Model` = use main Model |
 | `SubAgentTimeout` | int | `120` | Sub-agent execution timeout in seconds |
 | `SubAgentMaxTurns` | int | `15` | Maximum turns per sub-agent run |
 | `SubAgentMaxTokens` | int | `4096` | Maximum tokens per sub-agent API response |
+| `SemanticRoutingEnabled` | bool | `false` | Enable semantic task-type routing to dispatch turns to different provider/model pairs |
+| `SemanticRoutingStrategy` | string | `"rules+keywords"` | Classification strategy: `"rules+keywords"` or `"rules+keywords+llm"` |
+| `RoutingPolicies` | object | _(see below)_ | Maps task types to `{provider, model}` pairs with optional `tool_search_only` |
+| `RoutingFallbackProvider` | string | `"#Provider"` | Provider to use when no routing policy matches |
+| `RoutingFallbackModel` | string | `"#Model"` | Model to use when no routing policy matches |
+| `RoutingFeedbackEnabled` | bool | `false` | Record routing outcomes in SQLite for adaptive threshold tuning |
+| `RoutingFeedbackDbPath` | string | `".micro_x/routing.db"` | SQLite path for routing feedback data |
+| `SessionBudgetUSD` | float | `0.0` | Per-session cost budget in USD; `0.0` = unlimited |
 | `MarkdownRenderingEnabled` | bool | `true` | Enable progressive markdown rendering in CLI output |
 | `StatusBarEnabled` | bool | `true` | Enable bottom toolbar with live cost/token metrics in CLI |
 | `ToolFormatting` | object | `{}` | Per-tool format rules for structured result formatting (see [Tool System Design](../design/DESIGN-tool-system.md#tool-result-formatting)) |
@@ -506,6 +518,111 @@ All estimates assume Sonnet ($3/$15 per MTok input/output) as the main model and
 **Combined estimate:** ~40-50% reduction in total session cost (from ~$2.00-2.50 to ~$1.00-1.50 for a typical session).
 
 Features enabled by default (prompt caching, smart trigger) are pure wins with no quality tradeoff. Opt-in features (tool summarization, concise output) trade some fidelity for cost. The cheapest single change is setting `CompactionModel` to Haiku — a ~91% reduction per compaction event with negligible quality impact.
+
+### Semantic Routing
+
+When `SemanticRoutingEnabled=true`, the agent classifies each user message into a task type and routes it to the configured provider/model pair. This allows cheap tasks (greetings, simple questions) to use smaller, faster models while complex tasks (code generation, analysis) use the main model.
+
+#### SemanticRoutingStrategy
+
+| Value | Behaviour |
+|-------|-----------|
+| `"rules+keywords"` | Two-stage classification: pattern matching then keyword similarity (default, no LLM cost) |
+| `"rules+keywords+llm"` | Three-stage: adds an LLM classification call when earlier stages lack confidence |
+
+#### RoutingPolicies
+
+Maps each of the 9 task types to a `{provider, model}` pair. Supports `#Provider` and `#Model` self-references.
+
+```json
+{
+  "RoutingPolicies": {
+    "trivial":           { "provider": "#Provider", "model": "claude-haiku-4-5-20251001" },
+    "conversational":    { "provider": "#Provider", "model": "claude-haiku-4-5-20251001" },
+    "factual_lookup":    { "provider": "#Provider", "model": "claude-haiku-4-5-20251001" },
+    "summarization":     { "provider": "#Provider", "model": "claude-haiku-4-5-20251001" },
+    "code_generation":   { "provider": "#Provider", "model": "#Model" },
+    "code_review":       { "provider": "#Provider", "model": "#Model" },
+    "analysis":          { "provider": "#Provider", "model": "#Model" },
+    "tool_continuation": { "provider": "#Provider", "model": "claude-haiku-4-5-20251001" },
+    "creative":          { "provider": "#Provider", "model": "#Model" }
+  }
+}
+```
+
+Each policy object supports these fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `provider` | string | Yes | Provider name (e.g. `"anthropic"`, `"ollama"`) or `"#Provider"` |
+| `model` | string | Yes | Model ID or `"#Model"` to use the main model |
+| `tool_search_only` | bool | No | When `true`, only the `tool_search` and `ask_user` pseudo-tools are sent to this model instead of the full tool set. The model can discover and load tools on demand via `tool_search`. This is essential for small models (e.g. Ollama 3B) that cannot handle large tool schemas. Default: `false` |
+| `system_prompt` | string | No | System prompt policy: `"compact"` sends a minimal ~500-word prompt (omits user memory, codegen, sub-agent, and ask-user directives). Empty/omitted = use the full system prompt. Essential for small models where a 9KB prompt overwhelms the context window |
+| `pin_continuation` | bool | No | When `true`, tool-result continuations (iteration 1+) stay on the same provider/model that handled iteration 0, bypassing the `tool_continuation` routing policy. See [Pin Continuation](#pin-continuation) below. Default: `false` |
+
+**Example — routing cheap tasks to a local Ollama model with tool search:**
+
+```json
+{
+  "RoutingPolicies": {
+    "trivial":        { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true, "system_prompt": "compact" },
+    "conversational": { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true, "system_prompt": "compact" },
+    "code_generation": { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" }
+  }
+}
+```
+
+When `tool_search_only` is set on any policy, the agent creates a `ToolSearchManager` regardless of the global `ToolSearchEnabled` setting. The manager is used only for turns routed to `tool_search_only` policies — other models continue to receive the full tool set.
+
+See [Semantic Model Routing Design](../design/DESIGN-semantic-model-routing.md) for the full architecture.
+
+#### Pin Continuation
+
+When the agent calls a tool during a turn, the tool result triggers a **continuation** — a second LLM call (iteration 1+) to process the result. By default, the continuation is reclassified as `tool_continuation` and routed to whatever provider/model is configured for that task type.
+
+This creates a problem when models of different capability levels are mixed:
+
+- **Large → small model switch (dangerous):** Sonnet starts a complex code generation task, calls a tool, and the continuation routes to a small Ollama model via `tool_continuation`. The small model cannot follow Sonnet's reasoning and produces garbage or an empty response.
+- **Small → large model switch (safe but wasteful):** Ollama handles a trivial greeting, calls `tool_search`, and the continuation routes to Haiku. This works but costs money for a task the small model could finish itself.
+
+`pin_continuation: true` solves both problems by keeping the entire turn on the model that started it:
+
+```
+Without pinning:
+  Iteration 0: classifier → code_generation → Sonnet → calls write_file
+  Iteration 1: classifier → tool_continuation → Haiku (model switch!)
+
+With pinning:
+  Iteration 0: classifier → code_generation → Sonnet → calls write_file
+  Iteration 1: pinned → Sonnet (same model continues)
+```
+
+**When to use `pin_continuation`:**
+
+- **Ollama/local model routes** — prevents unnecessary escalation to a paid model for tool continuations the local model can handle
+- **Sonnet/expensive model routes** — prevents dangerous downgrade to a cheaper model that can't follow the context
+- **Any route where mid-turn model switching could cause quality or cost issues**
+
+**When NOT to use `pin_continuation`:**
+
+- **Cheap Haiku routes** — if Haiku starts a turn and you're happy with Haiku handling continuations via the `tool_continuation` policy, pinning is unnecessary
+- **Routes that never trigger tools** — `trivial` greetings rarely call tools, so pinning has no practical effect (but is harmless to enable)
+
+**Example — mixed Ollama + Anthropic config:**
+
+```json
+{
+  "RoutingPolicies": {
+    "trivial":           { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true, "system_prompt": "compact", "pin_continuation": true },
+    "conversational":    { "provider": "ollama", "model": "qwen2.5:7b", "tool_search_only": true, "system_prompt": "compact", "pin_continuation": true },
+    "code_generation":   { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929", "pin_continuation": true },
+    "analysis":          { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929", "pin_continuation": true },
+    "tool_continuation": { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" }
+  }
+}
+```
+
+In this config, `tool_continuation` is only used for unpinned task types (e.g. `factual_lookup`, `summarization`) where Haiku is an acceptable continuation model. Pinned routes ignore it entirely.
 
 ### Pricing
 

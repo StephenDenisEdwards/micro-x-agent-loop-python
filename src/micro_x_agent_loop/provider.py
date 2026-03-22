@@ -52,6 +52,7 @@ def create_provider(
     api_key: str,
     *,
     prompt_caching_enabled: bool = False,
+    ollama_base_url: str = "",
 ) -> LLMProvider:
     """Factory: create an LLMProvider by name."""
     name = provider_name.strip().lower()
@@ -69,7 +70,7 @@ def create_provider(
         return GeminiProvider(api_key)
     if name == "ollama":
         from micro_x_agent_loop.providers.ollama_provider import OllamaProvider
-        return OllamaProvider(api_key)
+        return OllamaProvider(api_key, base_url=ollama_base_url)
     raise ValueError(
         f"Unknown provider: {provider_name!r}. Supported: 'anthropic', 'openai', 'deepseek', 'gemini', 'ollama'",
     )

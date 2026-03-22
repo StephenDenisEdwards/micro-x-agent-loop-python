@@ -96,7 +96,8 @@ API Server (--server start):
 | `compaction.py` | Conversation compaction strategies (none/summarize) |
 | `agent_channel.py` | AgentChannel protocol + implementations (Terminal, Buffered, Broker channels) |
 | `tool.py` | Tool protocol (name, description, execute, is_mutating) |
-| `tool_search.py` | On-demand tool discovery for large tool sets |
+| `tool_search.py` | On-demand tool discovery for large tool sets (keyword or semantic via embeddings) |
+| `embedding.py` | Ollama embedding client, vector index, cosine similarity for semantic tool search |
 | `sub_agent.py` | SubAgentRunner, agent types (explore/summarize/general), spawn_subagent pseudo-tool |
 | `system_prompt.py` | LLM system prompt and directives (`_ASK_USER_DIRECTIVE`, `_SUBAGENT_DIRECTIVE`, etc.) |
 | `metrics.py` | Metric builders, `SessionAccumulator`, cost tracking |
@@ -169,6 +170,7 @@ When a user submits a prompt:
 - `Pricing` key: per-model token pricing (input/output/cache_read/cache_create per MTok USD) — no hardcoded defaults
 - All configuration elements must be in `config-base.json` — no hardcoded fallback defaults in code
 - Profiles: `config-standard.json`, `config-standard-no-summarization.json`, `config-baseline.json`
+- `RoutingPolicies` map task types to `{provider, model}` pairs with optional per-policy overrides: `tool_search_only` (narrow tools for small models), `system_prompt: "compact"` (minimal prompt for small context windows), `pin_continuation` (keep tool continuations on the same model that started the turn — prevents dangerous large→small model switches mid-turn)
 
 ### Memory System
 
