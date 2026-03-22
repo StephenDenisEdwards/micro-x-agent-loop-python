@@ -254,13 +254,13 @@
     },
     "whatsapp": {
       "transport": "stdio",
-      "command": "python",
-      "args": ["-m", "uv", "--directory", "C:\\Users\\steph\\source\\repos\\whatsapp-mcp\\whatsapp-mcp-server", "run", "main.py"]
+      "command": "C:\\Users\\steph\\source\\repos\\whatsapp-mcp\\whatsapp-mcp-server\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\Users\\steph\\source\\repos\\whatsapp-mcp\\whatsapp-mcp-server\\main.py"]
     },
     "codegen": {
       "transport": "stdio",
-      "command": "python",
-      "args": ["-m", "uv", "--directory", "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\python\\codegen", "run", "main.py"],
+      "command": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\python\\codegen\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\python\\codegen\\main.py"],
       "env": {
         "PROJECT_ROOT": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python",
         "WORKING_DIR": "C:\\Users\\steph\\source\\repos\\resources\\documents"
