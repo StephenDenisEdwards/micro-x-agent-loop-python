@@ -6,7 +6,9 @@ config.json
 .gmail-tokens/
 .calendar-tokens/
 .contacts-tokens/
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/settings.json
 .venv/
 dist/
 *.egg-info/
