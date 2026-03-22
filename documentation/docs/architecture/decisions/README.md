@@ -41,4 +41,6 @@ What becomes easier or more difficult to do because of this change?
 | [ADR-015](ADR-015-all-tools-as-typescript-mcp-servers.md) | All tools as TypeScript MCP servers | Accepted |
 | [ADR-016](ADR-016-retry-resilience-for-mcp-servers-and-transport.md) | Retry/resilience for MCP servers and transport | Accepted |
 | [ADR-017](ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md) | Ask user pseudo-tool for human-in-the-loop questioning | Accepted |
+| [ADR-018](ADR-018-trigger-broker-subprocess-dispatch.md) | Trigger broker with subprocess dispatch | Accepted |
 | [ADR-019](ADR-019-typescript-codegen-template.md) | TypeScript codegen template | Proposed |
+| [ADR-020](ADR-020-semantic-model-routing.md) | Semantic model routing across providers | Accepted |

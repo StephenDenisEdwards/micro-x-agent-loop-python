@@ -86,6 +86,7 @@ API Server (--server start):
 | `task_taxonomy.py` | TaskType enum (9 types), cost tier classification |
 | `semantic_classifier.py` | Three-stage classifier: rules → keywords → LLM for task-type routing |
 | `routing_feedback.py` | SQLite-backed routing outcome recording, adaptive thresholds |
+| `turn_classifier.py` | Legacy per-turn binary classifier: cheap/main model heuristic (superseded by semantic routing) |
 | `providers/anthropic_provider.py` | Anthropic streaming + prompt caching |
 | `providers/openai_provider.py` | OpenAI streaming |
 | `providers/ollama_provider.py` | Ollama local LLM (OpenAI-compatible) |

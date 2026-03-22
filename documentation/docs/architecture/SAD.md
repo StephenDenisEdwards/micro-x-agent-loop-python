@@ -1,8 +1,8 @@
 # Software Architecture Document
 
 **Project:** micro-x-agent-loop-python
-**Version:** 3.1
-**Last Updated:** 2026-03-09
+**Version:** 3.2
+**Last Updated:** 2026-03-22
 
 ## 1. Introduction and Goals
 
@@ -92,6 +92,7 @@ The agent sits between the user and external services. The user provides natural
 | File safety | Checkpoint/rewind for mutating tools (`write_file`, `append_file`) |
 | Human-in-the-loop | `ask_user` pseudo-tool for LLM-initiated clarifying questions ([ADR-017](decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md)) |
 | Cost reduction | Layered approach: prompt caching, tool schema caching, compaction, concise output, tool search ([ADR-012](decisions/ADR-012-layered-cost-reduction.md)) |
+| Model routing | Per-turn heuristic (binary cheap/main) or semantic routing (task-type classification → per-type provider/model). Semantic supersedes per-turn when enabled. ([ADR-020](decisions/ADR-020-semantic-model-routing.md)) |
 | Mode selection | Structural pattern matching + optional LLM classification to route prompts to compiled or prompt mode |
 | Shared MCP server | [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo — .NET MCP server providing system information tools |
 
@@ -143,9 +144,14 @@ graph TD
     Agent --> ModeSelect["ModeSelector<br/>Prompt vs Compiled"]
 
     TurnEngine --> Provider["LLMProvider<br/>Protocol"]
+    TurnEngine --> ProvPool["ProviderPool<br/>Multi-Provider Dispatch"]
+    TurnEngine --> SemanticCls["SemanticClassifier<br/>Task-Type Classification"]
+    TurnEngine --> TurnCls["TurnClassifier<br/>Cheap/Main Heuristic"]
     TurnEngine --> McpTools["MCP Tool Proxies"]
     TurnEngine --> Events["TurnEvents<br/>Lifecycle Callbacks"]
     TurnEngine --> Constants["constants.py<br/>Shared Defaults"]
+
+    ProvPool --> Provider
 
     Agent --> Memory
 
@@ -203,11 +209,16 @@ graph TD
 | `app_config` | Parses `config.json` into `AppConfig` dataclass; resolves runtime environment variables into `RuntimeEnv` |
 | `Agent` | Top-level orchestrator: holds conversation state, routes commands, delegates turns to `TurnEngine` |
 | `AgentConfig` | Dataclass holding all agent configuration (model, tools, memory components, compaction) |
-| `TurnEngine` | Executes a single LLM turn: streams response, classifies tool blocks (search/ask_user/subagent/regular), dispatches tools in parallel, handles retries |
+| `TurnEngine` | Executes a single LLM turn: streams response, classifies tool blocks (search/ask_user/subagent/regular), dispatches tools in parallel, handles retries. Routes each LLM call via semantic or per-turn classifier to select the provider and model. |
 | `SubAgentRunner` | Creates lightweight, disposable in-process agent instances for focused tasks. Three types: explore (read-only, cheap), summarize (no tools), general (full capability). Results return as tool_result to parent. |
 | `TurnEvents` | Protocol defining lifecycle callbacks: `on_append_message`, `on_api_call_completed`, `on_tool_executed`, `on_ensure_checkpoint_for_turn`, etc. `BaseTurnEvents` provides no-op defaults. |
 | `AskUserHandler` | Pseudo-tool handler for human-in-the-loop questioning. Presents structured choices via `questionary` with "Other" free-text escape; falls back to plain `input()` for non-interactive terminals. |
 | `ToolSearchManager` | On-demand tool discovery pseudo-tool. Replaces large schema payloads with a single search tool when schema size exceeds a threshold. Uses `tiktoken` for token counting. |
+| `SemanticClassifier` | Three-stage task classification pipeline (rules → keywords → LLM) that maps user messages to one of 9 `TaskType` values. Pure functions, < 1ms for stages 1–2. Used by `TurnEngine` to select provider/model per LLM call. |
+| `TurnClassifier` | Legacy per-turn binary classifier: decides cheap model vs main model using heuristics (message length, turn iteration, complexity keywords). Superseded by semantic classifier when both are enabled. |
+| `ProviderPool` | Manages multiple `LLMProvider` instances for cross-provider routing. Dispatches by name, tracks health (exponential-backoff cooldown), handles fallback, and evaluates cache-switch penalty before switching providers. |
+| `TaskTaxonomy` | `TaskType` enum (9 types: trivial, conversational, factual_lookup, summarization, code_generation, code_review, analysis, tool_continuation, creative) with `CHEAP_TASK_TYPES` / `MAIN_TASK_TYPES` frozen sets. |
+| `RoutingFeedback` | SQLite-backed outcome recording (`routing_outcomes` table). Tracks cost, latency, and quality signals per task type. Computes adaptive confidence thresholds. Exposed via `/routing` command. |
 | `ModeSelector` | Stage 1 structural pattern matching + Stage 2 LLM classification for routing prompts to compiled vs prompt mode. Pure computation, no async. |
 | `ToolResultFormatter` | Formats `ToolResult.structured` into LLM-friendly text using per-tool config (json, table, text, key_value strategies) |
 | `CommandRouter` | Routes `/help`, `/session`, `/checkpoint`, `/voice` commands to handlers |
@@ -272,7 +283,19 @@ sequenceDiagram
     M->>A: run(prompt)
     A->>TE: run(messages, user_message)
     TE->>Mem: append_message(user)
-    TE->>P: stream_chat(messages)
+
+    Note over TE: Model routing: semantic → per-turn → default
+    alt Semantic routing enabled
+        TE->>TE: SemanticClassifier(message) → TaskClassification
+        TE->>TE: _resolve_routing_target(task_type) → RoutingTarget
+        TE->>P: ProviderPool.stream_chat(target, messages)
+    else Per-turn routing enabled
+        TE->>TE: TurnClassifier(message) → cheap/main
+        TE->>P: stream_chat(effective_model, messages)
+    else Default
+        TE->>P: stream_chat(configured_model, messages)
+    end
+
     P->>API: Provider-specific streaming call
     API-->>P: Text deltas (SSE)
     P-->>U: Print text in real time
@@ -346,6 +369,24 @@ A warning is also printed to stderr.
 - Checkpoint tracking failures are non-blocking (logged + event emitted, tool still executes)
 - Unrecoverable errors propagate to the REPL catch block
 
+### Model Routing
+
+The agent supports two model routing strategies, configured in `config.json`. When both are enabled, semantic routing takes precedence.
+
+**Per-turn routing** (`PerTurnRoutingEnabled`, `RoutingModel`) — a binary heuristic classifier in `turn_classifier.py`. Each LLM call is classified as cheap or main based on four rules checked in order: (1) complexity keyword guard → main model, (2) tool-result continuation → cheap, (3) short message with no tools → cheap, (4) short follow-up in established session → cheap, (5) default → main. Both models are served by the same provider.
+
+**Semantic routing** (`SemanticRoutingEnabled`, `RoutingPolicies`) — a richer system that classifies the user message into one of 9 task types (`trivial`, `conversational`, `factual_lookup`, `summarization`, `code_generation`, `code_review`, `analysis`, `tool_continuation`, `creative`) via a three-stage pipeline:
+
+| Stage | Method | Latency | Coverage |
+|-------|--------|---------|----------|
+| 1. Rules | Regex patterns + turn context | < 1ms | ~60-70% of turns |
+| 2. Keywords | Cosine similarity to keyword centroids | < 1ms | ~25-30% |
+| 3. LLM | Cheapest model classifies via JSON prompt | ~200ms | < 5% |
+
+Each task type maps to a `(provider, model)` pair via routing policies in config. The `ProviderPool` dispatches to the target provider, with health tracking (exponential backoff 5–60s), automatic fallback, and cache-aware switching (penalty-based decision to avoid losing prompt prefix cache). An optional feedback loop (`RoutingFeedbackEnabled`) records outcomes to SQLite and computes adaptive confidence thresholds.
+
+See [ADR-020](decisions/ADR-020-semantic-model-routing.md) and [DESIGN-semantic-model-routing](../design/DESIGN-semantic-model-routing.md).
+
 ### Session Persistence and Memory
 
 When `MemoryEnabled=true`, the agent persists all conversation state to a local SQLite database:
@@ -402,6 +443,7 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-016](decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md) | Retry/resilience for MCP servers and transport | Accepted |
 | [ADR-017](decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md) | Ask user pseudo-tool for human-in-the-loop questioning | Accepted |
 | [ADR-018](decisions/ADR-018-trigger-broker-subprocess-dispatch.md) | Trigger broker with subprocess dispatch | Accepted |
+| [ADR-020](decisions/ADR-020-semantic-model-routing.md) | Semantic model routing across providers | Accepted |
 
 ## 9. Risks and Technical Debt
 
