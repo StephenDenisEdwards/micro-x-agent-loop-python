@@ -243,6 +243,8 @@ class Agent:
         self._routing_feedback_store = None
         self._semantic_routing_enabled = config.semantic_routing_enabled
 
+        self._task_embedding_index: object | None = None
+
         if config.semantic_routing_enabled:
             # Phase 1: Build provider pool
             from micro_x_agent_loop.provider_pool import ProviderPool
@@ -268,12 +270,18 @@ class Agent:
                 fallback_provider=config.routing_fallback_provider or config.provider,
             )
 
-            # Phase 2: Build semantic classifier
+            # Phase 2: Build semantic classifier with optional embedding index
+            if config.ollama_base_url and config.embedding_model:
+                from micro_x_agent_loop.embedding import OllamaEmbeddingClient, TaskEmbeddingIndex
+                task_client = OllamaEmbeddingClient(config.ollama_base_url, config.embedding_model)
+                self._task_embedding_index = TaskEmbeddingIndex(task_client)
+
             keywords = [kw.strip() for kw in config.per_turn_routing_complexity_keywords.split(",") if kw.strip()]
             semantic_classifier = partial(
                 classify_task,
                 complexity_keywords=keywords,
                 strategy=config.semantic_routing_strategy,
+                task_embedding_index=self._task_embedding_index,
             )
 
             # Phase 4: Routing feedback
@@ -361,6 +369,7 @@ class Agent:
             routing_fallback_provider=config.routing_fallback_provider or config.provider,
             routing_fallback_model=config.routing_fallback_model or config.model,
             routing_feedback_callback=routing_feedback_callback,
+            task_embedding_index=self._task_embedding_index,
         )
 
         commands_dir = Path(self._working_directory or ".") / ".commands"
@@ -431,6 +440,15 @@ class Agent:
         """Build the embedding index for semantic tool search. Call once at startup."""
         if self._tool_search_manager is not None:
             await self._tool_search_manager.initialize_embeddings()
+
+    async def initialize_task_embeddings(self) -> None:
+        """Build the task type embedding index for semantic routing. Call once at startup."""
+        if self._task_embedding_index is not None:
+            from micro_x_agent_loop.embedding import TaskEmbeddingIndex
+            if isinstance(self._task_embedding_index, TaskEmbeddingIndex):
+                success = await self._task_embedding_index.build()
+                if not success:
+                    logger.warning("Task embedding index unavailable — falling back to keywords")
 
     async def _run_inner(self, user_message: str) -> None:
         # /prompt <filename> — read file and use contents as the user message

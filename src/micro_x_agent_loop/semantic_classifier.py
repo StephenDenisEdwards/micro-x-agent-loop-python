@@ -2,7 +2,8 @@
 
 Three-stage pipeline:
   Stage 1 (rules)      — Pattern matching, < 1ms, handles obvious cases.
-  Stage 2 (keywords)   — Keyword-vector similarity, < 1ms, no external deps.
+  Stage 2 (embeddings) — Dense embeddings via Ollama, ~10ms, real semantic matching.
+  Stage 2 (keywords)   — Keyword-vector fallback when embeddings unavailable, < 1ms.
   Stage 3 (LLM)        — Cheapest model classifies ambiguous tasks, ~200ms.
 
 Pure functions (no async, no state) except for Stage 3 which requires a provider.
@@ -13,6 +14,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from micro_x_agent_loop.task_taxonomy import TaskType
 
@@ -280,8 +282,41 @@ def _cosine_similarity(tokens: list[str], task_type: TaskType) -> float:
     return dot / (norm * token_norm)
 
 
-def classify_stage2(user_message: str) -> TaskClassification:
-    """Stage 2: Keyword-vector classification. Always returns a result."""
+def classify_stage2(
+    user_message: str,
+    *,
+    query_embedding: list[float] | None = None,
+    task_embedding_index: Any | None = None,
+) -> TaskClassification:
+    """Stage 2: Semantic embedding or keyword-vector classification.
+
+    When ``query_embedding`` and a ready ``task_embedding_index`` are provided,
+    uses real dense embeddings from Ollama.  Otherwise falls back to the
+    keyword-vector heuristic.  Always returns a result.
+    """
+    # Embedding path — real semantic classification
+    if (
+        query_embedding is not None
+        and task_embedding_index is not None
+        and getattr(task_embedding_index, "is_ready", False)
+    ):
+        task_type_str, similarity = task_embedding_index.classify(query_embedding)
+        try:
+            task_type = TaskType(task_type_str)
+        except ValueError:
+            task_type = TaskType.CONVERSATIONAL
+
+        # If similarity is too low, fall through to keyword vectors
+        if similarity >= 0.3:
+            confidence = min(0.90, 0.5 + similarity * 0.5)
+            return TaskClassification(
+                task_type=task_type,
+                confidence=confidence,
+                stage="embeddings",
+                reason=f"embedding similarity ({similarity:.3f}) → {task_type.value}",
+            )
+
+    # Keyword-vector fallback
     tokens = _tokenize(user_message)
     if not tokens:
         return TaskClassification(
@@ -294,13 +329,13 @@ def classify_stage2(user_message: str) -> TaskClassification:
     best_type = TaskType.CONVERSATIONAL
     best_score = 0.0
 
-    for task_type in TaskType:
-        if task_type == TaskType.TOOL_CONTINUATION:
+    for task_type_iter in TaskType:
+        if task_type_iter == TaskType.TOOL_CONTINUATION:
             continue  # Only classified by rules (iteration > 0)
-        score = _cosine_similarity(tokens, task_type)
+        score = _cosine_similarity(tokens, task_type_iter)
         if score > best_score:
             best_score = score
-            best_type = task_type
+            best_type = task_type_iter
 
     # Map raw cosine similarity to confidence (0.4–0.85 range)
     confidence = min(0.85, 0.4 + best_score * 0.6)
@@ -398,6 +433,8 @@ def classify_task(
     strategy: str = "rules+keywords",
     confidence_threshold_stage1: float = 0.75,
     confidence_threshold_stage2: float = 0.60,
+    query_embedding: list[float] | None = None,
+    task_embedding_index: Any | None = None,
 ) -> TaskClassification:
     """Run the classification pipeline up to the configured strategy depth.
 
@@ -405,6 +442,11 @@ def classify_task(
         strategy: One of "rules", "rules+keywords", "rules+keywords+llm".
             Note: "rules+keywords+llm" still returns after stage 2 — the caller
             must invoke the async LLM stage separately if confidence is low.
+        query_embedding: Pre-computed dense embedding of the user message (from
+            Ollama). When provided alongside ``task_embedding_index``, Stage 2
+            uses real semantic matching instead of keyword vectors.
+        task_embedding_index: A ``TaskEmbeddingIndex`` instance (or any object
+            with ``classify(embedding)`` and ``is_ready``).
 
     Returns:
         Best classification found within the sync stages.
@@ -429,8 +471,12 @@ def classify_task(
             reason="no rule matched, default to conversational",
         )
 
-    # Stage 2: Keywords
-    stage2_result = classify_stage2(user_message)
+    # Stage 2: Embeddings (when available) or keyword vectors
+    stage2_result = classify_stage2(
+        user_message,
+        query_embedding=query_embedding,
+        task_embedding_index=task_embedding_index,
+    )
 
     # If stage 1 had a result but low confidence, pick the higher-confidence one
     if result is not None:

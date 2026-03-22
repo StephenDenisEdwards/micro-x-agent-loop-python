@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-03-13
+Last updated: 2026-03-22
 
 ## Priority Queue
 
@@ -27,6 +27,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | **17** | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | — | — | Nice-to-have |
 | **18** | [MCP Mutation Tracking](PLAN-mcp-mutation-tracking.md) | Planned | — | — | Opt-in checkpoint tracking |
 | **19** | [Semantic Model Routing](PLAN-semantic-model-routing.md) | **Completed** | [semantic-routing](../testing/MANUAL-TEST-semantic-routing.md) | 🔴 | Cross-provider semantic routing: rule→keywords→LLM classifier, provider pool, cache-aware dispatch, feedback loop |
+| **20** | [Routing Simplification](PLAN-routing-simplification.md) | **Review** | — | — | Semantic routing unreliable for tool-use prompts; 4 options under review. **Next up.** |
 | — | [Reddit MCP](PLAN-reddit-mcp.md) | **Blocked** | — | — | Reddit dev registration inaccessible |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
@@ -59,6 +60,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | Status | Count |
 |--------|-------|
 | Completed | 36 |
+| Review | 1 |
 | Phase 2b Completed (remaining phases pending) | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
@@ -109,3 +111,4 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | [Externalise Pricing Data](PLAN-externalise-pricing-data.md) | Completed | Config.json Pricing key overlays hardcoded defaults; unknown-model warnings. Completed 2026-03-12 |
 | [Multi-Provider Support](PLAN-multi-provider.md) | Completed | Gemini + DeepSeek providers. Completed 2026-03-13 |
 | [Semantic Model Routing](PLAN-semantic-model-routing.md) | Completed | Cross-provider semantic routing with 3-stage classifier, provider pool, cache-aware dispatch, feedback loop. Completed 2026-03-21 |
+| [Routing Simplification](PLAN-routing-simplification.md) | Review | Semantic routing unreliable for tool-use prompts; 4 options under review |

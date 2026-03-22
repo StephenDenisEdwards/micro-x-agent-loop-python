@@ -61,8 +61,13 @@ def _to_openai_messages(
             oai_msg: dict = {"role": "assistant"}
             if text_parts:
                 oai_msg["content"] = "\n".join(text_parts)
-            else:
+            elif tool_calls:
+                # OpenAI allows content: null when tool_calls is present
                 oai_msg["content"] = None
+            else:
+                # Empty content with no tool calls — use empty string to
+                # avoid null rejection from Ollama/OpenAI-compatible APIs
+                oai_msg["content"] = ""
             if tool_calls:
                 oai_msg["tool_calls"] = tool_calls
             out.append(oai_msg)

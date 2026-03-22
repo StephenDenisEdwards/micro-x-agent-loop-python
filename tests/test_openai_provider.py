@@ -123,6 +123,33 @@ class ToOpenAiMessagesTests(unittest.TestCase):
         self.assertEqual(1, len(result))
         self.assertEqual("hello world", result[0]["content"])
 
+    def test_assistant_empty_content_list_no_tool_calls(self) -> None:
+        """Empty content list with no tool calls should produce empty string, not null."""
+        msg = {"role": "assistant", "content": []}
+        result = _to_openai_messages("", [msg])
+        self.assertEqual(1, len(result))
+        self.assertEqual("assistant", result[0]["role"])
+        self.assertEqual("", result[0]["content"])
+        self.assertNotIn("tool_calls", result[0])
+
+    def test_assistant_tool_use_only_content_is_null(self) -> None:
+        """Tool calls with no text should produce content: None (OpenAI convention)."""
+        msg = {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "tid1",
+                    "name": "search",
+                    "input": {"query": "foo"},
+                },
+            ],
+        }
+        result = _to_openai_messages("", [msg])
+        self.assertEqual(1, len(result))
+        self.assertIsNone(result[0]["content"])
+        self.assertEqual(1, len(result[0]["tool_calls"]))
+
     def test_other_role_pass_through(self) -> None:
         msg = {"role": "system", "content": "custom system"}
         result = _to_openai_messages("", [msg])

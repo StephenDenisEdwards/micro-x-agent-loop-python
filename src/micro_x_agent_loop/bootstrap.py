@@ -228,8 +228,9 @@ async def bootstrap_runtime(
         )
     )
 
-    # Initialize semantic tool search embeddings (async, may take 1-2s)
+    # Initialize embedding indices (async, may take 1-2s each)
     await agent.initialize_tool_search_embeddings()
+    await agent.initialize_task_embeddings()
 
     return AppRuntime(
         agent=agent,

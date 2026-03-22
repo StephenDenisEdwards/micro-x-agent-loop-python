@@ -58,6 +58,7 @@ class TurnEngine:
         routing_fallback_provider: str = "",
         routing_fallback_model: str = "",
         routing_feedback_callback: Any | None = None,
+        task_embedding_index: Any | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -88,6 +89,7 @@ class TurnEngine:
         self._routing_policies = routing_policies or {}
         self._routing_fallback_provider = routing_fallback_provider
         self._routing_fallback_model = routing_fallback_model
+        self._task_embedding_index = task_embedding_index
         self._routing_feedback_callback = routing_feedback_callback
 
     async def run(
@@ -147,12 +149,23 @@ class TurnEngine:
                 )
 
             elif self._semantic_classifier is not None and self._provider_pool is not None:
+                # Pre-embed query for semantic classification (~10ms via Ollama)
+                query_embedding: list[float] | None = None
+                if (
+                    self._task_embedding_index is not None
+                    and getattr(self._task_embedding_index, "is_ready", False)
+                ):
+                    query_embedding = await self._task_embedding_index.embed_query(
+                        user_message[:2000],
+                    )
+
                 # Semantic routing (Phase 1–4)
                 task_classification = self._semantic_classifier(
                     user_message=user_message,
                     has_tools=bool(api_tools),
                     turn_iteration=turn_iteration,
                     turn_number=turn_number,
+                    query_embedding=query_embedding,
                 )
                 routing_target = self._resolve_routing_target(task_classification)
                 if routing_target is not None:

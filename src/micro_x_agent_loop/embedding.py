@@ -110,6 +110,131 @@ def _build_embedding_text(name: str, description: str) -> str:
     return text
 
 
+# ---------------------------------------------------------------------------
+# Task type descriptions for semantic classification
+# ---------------------------------------------------------------------------
+
+TASK_TYPE_DESCRIPTIONS: dict[str, str] = {
+    "trivial": (
+        "trivial: simple greetings, acknowledgements, yes/no answers, "
+        "thank you, ok, sure, goodbye, hi, hello, hey, thanks, bye, "
+        "single-word responses, pleasantries"
+    ),
+    "conversational": (
+        "conversational: casual chat, simple questions, quick answers, "
+        "clarifications, follow-up questions, general discussion, "
+        "asking for help, what do you think, can you explain"
+    ),
+    "factual_lookup": (
+        "factual lookup: simple factual questions, definitions, "
+        "what is, who is, when did, where is, how many, "
+        "difference between, meaning of, list of facts"
+    ),
+    "summarization": (
+        "summarization: summarize, condense, shorten, recap, "
+        "give me a summary, brief overview, TLDR, key points, "
+        "highlights, condensed version"
+    ),
+    "code_generation": (
+        "code generation: write code, create a function, implement a class, "
+        "build a script, generate a module, add a feature, make an API endpoint, "
+        "create a test, write a program, save to file, edit code"
+    ),
+    "code_review": (
+        "code review: review code, explain this code, what does this function do, "
+        "how does this work, walk me through, trace the execution, debug this, "
+        "find the bug, what's wrong with this code, explain the error"
+    ),
+    "analysis": (
+        "analysis: complex reasoning, deep analysis, design a system, "
+        "architect a solution, compare approaches, evaluate trade-offs, "
+        "plan a strategy, optimize performance, investigate an issue, "
+        "research a topic, pros and cons, critique"
+    ),
+    "tool_continuation": (
+        "tool continuation: continuing after a tool returned results, "
+        "processing tool output, interpreting command output, "
+        "acting on API response, next step after tool execution"
+    ),
+    "creative": (
+        "creative writing: draft a blog post, write an article, compose an essay, "
+        "brainstorm ideas, write a story, draft an email, compose a letter, "
+        "write a proposal, create a presentation, pitch deck, content creation"
+    ),
+}
+
+
+class TaskEmbeddingIndex:
+    """In-memory vector index for task type descriptions.
+
+    Build once at startup via Ollama embeddings, then classify
+    user messages by cosine similarity — real semantic matching.
+    """
+
+    def __init__(self, client: OllamaEmbeddingClient) -> None:
+        self._client = client
+        self._task_embeddings: dict[str, list[float]] = {}
+
+    async def build(self) -> bool:
+        """Embed all task type descriptions and store in the index.
+
+        Returns:
+            True if built successfully, False on error.
+        """
+        descriptions = list(TASK_TYPE_DESCRIPTIONS.items())
+        texts = [desc for _, desc in descriptions]
+        names = [name for name, _ in descriptions]
+
+        try:
+            embeddings = await self._client.embed(texts)
+            if len(embeddings) != len(names):
+                logger.warning(
+                    f"Task embedding count mismatch: expected {len(names)}, "
+                    f"got {len(embeddings)}"
+                )
+                return False
+
+            self._task_embeddings = dict(zip(names, embeddings, strict=True))
+            logger.info(
+                f"Task embedding index built: {len(self._task_embeddings)} task types, "
+                f"dimension={len(embeddings[0]) if embeddings else 0}"
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to build task embedding index: {e}")
+            return False
+
+    def classify(self, query_embedding: list[float]) -> tuple[str, float]:
+        """Find the best-matching task type for a query embedding.
+
+        Returns:
+            (task_type_value, similarity_score) for the best match.
+        """
+        best_type = "conversational"
+        best_score = 0.0
+
+        for task_type, task_embedding in self._task_embeddings.items():
+            score = cosine_similarity(query_embedding, task_embedding)
+            if score > best_score:
+                best_score = score
+                best_type = task_type
+
+        return best_type, best_score
+
+    async def embed_query(self, text: str) -> list[float] | None:
+        """Embed a single query text. Returns None on failure."""
+        try:
+            result = await self._client.embed([text])
+            return result[0] if result else None
+        except Exception:
+            return None
+
+    @property
+    def is_ready(self) -> bool:
+        """True if the index has been built with task type embeddings."""
+        return len(self._task_embeddings) > 0
+
+
 class ToolEmbeddingIndex:
     """In-memory vector index for tool descriptions.
 
