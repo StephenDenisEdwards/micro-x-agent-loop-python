@@ -277,3 +277,5 @@ if best_route.provider != active_cache_provider:
 | Misclassification rate | < 5% (validated against labelled test set) |
 | Cache-hit preservation | No degradation vs single-provider baseline |
 | Phase 1 delivery | Config + pool + dispatch working, no new dependencies |
+
+**Post-implementation review:** See [PLAN-routing-simplification.md](PLAN-routing-simplification.md) — Appendix: Code-Level Critical Review.

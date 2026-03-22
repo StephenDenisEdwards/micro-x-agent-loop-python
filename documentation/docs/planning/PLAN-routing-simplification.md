@@ -149,3 +149,62 @@ All options keep the pool. The question is whether it dispatches based on classi
 - [ADR-021: Same-Family Provider Fallback](../architecture/decisions/ADR-021-same-family-provider-fallback.md) — bug fix during investigation
 - [PLAN-semantic-model-routing.md](PLAN-semantic-model-routing.md) — original implementation plan (completed)
 - [PLAN-cost-reduction.md](PLAN-cost-reduction.md) — broader cost reduction context
+
+---
+
+## Appendix: Code-Level Critical Review (2026-03-22)
+
+Deep review of the routing implementation as built across all 4 phases of `PLAN-semantic-model-routing.md`.
+
+### What Works Well
+
+**1. Layered classification pipeline** — The 3-stage escalation (rules → keywords → LLM) is well-structured. Stages 1–2 are pure functions with sub-millisecond latency and zero I/O, so the vast majority of requests never incur classification overhead. The early-exit design is sound.
+
+**2. Config-driven routing policies** — The `RoutingPolicies` map with `#Provider`/`#Model` self-references is elegant. It decouples routing decisions from code, making it trivial to change cost strategies by swapping config profiles.
+
+**3. Health tracking with exponential backoff** — `ProviderStatus` in `provider_pool.py` is a clean circuit-breaker implementation. The fallback chain (target → fallback → any available) is sensible.
+
+**4. Feedback store for observability** — Recording outcomes to SQLite with adaptive threshold computation is a pragmatic approach to closing the loop.
+
+### Critical Issues
+
+**1. TOOL_CONTINUATION is misclassified as "cheap"** — `task_taxonomy.py` puts `TOOL_CONTINUATION` in `CHEAP_TASK_TYPES`, and routing policies map it to Haiku. But tool continuations often require the *most* sophisticated reasoning — synthesizing tool results, deciding next steps, composing multi-tool outputs. Routing these to Haiku will degrade quality for complex agentic workflows. A tool continuation after a code search needs the same model quality as the original code generation request.
+
+**2. Classification re-runs every iteration with the same user_message** — In `turn_engine.py`, the classifier is called on every loop iteration with the original `user_message`, not the evolving context. On iteration 0 it classifies as `CODE_GENERATION` → Sonnet. On iteration 1 (tool results came back), it re-classifies as `TOOL_CONTINUATION` → Haiku. The model *downgrades mid-turn*. The model writing the final synthesis after tool calls is weaker than the one that initiated the work.
+
+**3. `_resolve_routing_target` called twice per dispatch** — At line ~137 it's called to determine the model, then at line ~173 it's called *again* to construct the `RoutingTarget` for the actual `stream_chat` call. Wasteful and introduces a subtle inconsistency risk if provider status changes between calls.
+
+**4. Stage 2 "cosine similarity" is not real cosine similarity** — The user token vector uses raw token frequencies (counts) while keyword vectors use handcrafted weights. Repeated words inflate the score arbitrarily. The confidence mapping (`0.4 + score * 0.6`) is an arbitrary linear transform with no probabilistic interpretation.
+
+**5. Regex pattern overlap causes deterministic mis-routing** — `_CREATIVE_PATTERNS` includes `\bwrite\b`, which also appears in `_CODE_GEN_PATTERNS`. The linear scan with first-match-wins means "write a blog post about our API" matches `_CODE_GEN_PATTERNS` first (because `write` + `api` matches) and gets classified as `CODE_GENERATION`.
+
+**6. Adaptive thresholds are computed but never consumed** — `routing_feedback.py` implements `get_adaptive_thresholds()`, but no code path in `turn_engine.py` or `semantic_classifier.py` reads these thresholds. The feedback loop is open — data goes in but never influences routing.
+
+**7. `quality_signal` is always 0** — The `RoutingOutcome` defaults `quality_signal` to 0 and the feedback callback never sets it. `update_quality_signal` exists but is never called. Adaptive thresholds compute from an all-zero error rate, always evaluating to 0.6 (the base). The quality feedback mechanism is inert.
+
+**8. Cache-awareness is disconnected** — `ProviderPool.should_switch_provider()` exists but `_resolve_routing_target` in `turn_engine.py` doesn't call it. The system can switch from Anthropic to OpenAI mid-conversation, destroying the prompt cache.
+
+**9. Fallback uses the target model on the wrong provider** — In `provider_pool.py:143`, when falling back to a different provider, the code uses `target.model` (the original model name). Model names aren't portable across providers — using `claude-sonnet-4-5-20250929` on OpenAI will fail. *(Partially addressed by ADR-021 same-family fallback, which prevents cross-family fallback entirely.)*
+
+**10. No confidence gating on routing decisions** — The classifier returns a confidence score, but `_resolve_routing_target` doesn't check it. A classification with confidence 0.35 still routes to Haiku. No threshold below which the system refuses to downgrade.
+
+### Design Concerns
+
+**Dual routing systems** — Both "semantic routing" (new) and "per-turn routing" (legacy) exist as parallel code paths in `turn_engine.py`, both disabled by default. No deprecation plan or migration timeline.
+
+**Mode selector vs. semantic classifier** — `mode_selector.py` (PROMPT vs. COMPILED) and `semantic_classifier.py` (9 task types) independently analyze the same user message for different purposes with no coordination. A message classified as `ANALYSIS` might simultaneously trigger `COMPILED` mode.
+
+**No telemetry on classification accuracy** — Beyond the inert `quality_signal`, there's no way to measure whether the classifier makes correct decisions or whether downgraded responses were actually good enough.
+
+### Recommended Fixes (priority order)
+
+These are code-level fixes independent of which simplification option (A–D) is chosen:
+
+1. **Remove TOOL_CONTINUATION from CHEAP_TASK_TYPES** or make it inherit the task type of the initiating turn
+2. **Latch the routing decision at iteration 0** and reuse it for all subsequent iterations within the same turn
+3. **Gate routing on confidence** — if confidence < threshold, don't downgrade
+4. **Wire up adaptive thresholds** or remove the dead code
+5. **Fix cross-provider model name portability** in the fallback chain *(partially done via ADR-021)*
+6. **Resolve regex overlap** between creative and code generation patterns
+7. **Call `should_switch_provider()`** in `_resolve_routing_target` before switching providers
+8. **Deduplicate `_resolve_routing_target` call** — compute once, reuse for dispatch
