@@ -318,6 +318,19 @@ With `"summarize"`, the first user message and the most recent `ProtectedTailMes
 
 See [Compaction Design](../design/DESIGN-compaction.md) for the full algorithm.
 
+#### Manual compaction with `/compact`
+
+The `/compact` command forces compaction immediately, regardless of the current token threshold. This is useful for testing or when you want to shrink the context before it reaches the automatic trigger.
+
+```
+/compact            # Force compaction using the default ProtectedTailMessages
+/compact tail 2     # Force compaction, protecting only the last 2 messages
+```
+
+The `tail N` option temporarily overrides `ProtectedTailMessages` for that compaction only. Use a low value (e.g., `tail 2`) when the default protection keeps too many messages to compact effectively.
+
+The current context size (tokens and message count) is displayed in the bottom status bar as `ctx <tokens>tok/<N>msg`.
+
 ### CompactionThresholdTokens
 
 The estimated token count that triggers compaction. Tokens are estimated using a chars/4 heuristic across all message content blocks. Only relevant when `CompactionStrategy` is `"summarize"`.

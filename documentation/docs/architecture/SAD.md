@@ -221,7 +221,7 @@ graph TD
 | `RoutingFeedback` | SQLite-backed outcome recording (`routing_outcomes` table). Tracks cost, latency, and quality signals per task type. Computes adaptive confidence thresholds. Exposed via `/routing` command. |
 | `ModeSelector` | Stage 1 structural pattern matching + Stage 2 LLM classification for routing prompts to compiled vs prompt mode. Pure computation, no async. |
 | `ToolResultFormatter` | Formats `ToolResult.structured` into LLM-friendly text using per-tool config (json, table, text, key_value strategies) |
-| `CommandRouter` | Routes `/help`, `/session`, `/checkpoint`, `/voice` commands to handlers |
+| `CommandRouter` | Routes `/help`, `/session`, `/checkpoint`, `/voice`, `/compact` commands to handlers |
 | `SessionController` | Formatting service for session list entries, summaries, and short IDs |
 | `broker/service` | Always-on daemon lifecycle: PID file, signal handling, graceful shutdown |
 | `broker/scheduler` | Cron polling loop: checks due jobs, enforces overlap policy, dispatches runs via subprocess |

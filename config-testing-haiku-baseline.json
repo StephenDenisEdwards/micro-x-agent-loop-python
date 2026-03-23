@@ -1,0 +1,24 @@
+{
+  "Base": "config-base.json",
+  "Model": "claude-haiku-4-5-20251001",
+  "PerTurnRoutingEnabled": false,
+
+  "RoutingFeedbackEnabled": false,
+  "SemanticRoutingEnabled": true,
+  "SemanticRoutingStrategy": "rules+keywords",
+  "RoutingPolicies": {
+    "trivial":           { "provider": "anthropic", "model": "claude-haiku-4-5-20251001", "tool_search_only": true, "pin_continuation": true },
+    "conversational":    { "provider": "anthropic", "model": "claude-haiku-4-5-20251001", "tool_search_only": true, "pin_continuation": true },
+    "factual_lookup":    { "provider": "anthropic", "model": "claude-haiku-4-5-20251001", "tool_search_only": true, "pin_continuation": true },
+    "summarization":     { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" },
+    "code_generation":   { "provider": "anthropic", "model": "claude-haiku-4-5-20251001", "pin_continuation": true },
+    "code_review":       { "provider": "anthropic", "model": "claude-haiku-4-5-20251001", "pin_continuation": true },
+    "analysis":          { "provider": "anthropic", "model": "claude-haiku-4-5-20251001", "pin_continuation": true },
+    "tool_continuation": { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" },
+    "creative":          { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" }
+  },
+
+  "CompactionThresholdTokens": 4000,
+
+  "LogLevel": "DEBUG"
+}

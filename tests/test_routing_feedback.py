@@ -73,23 +73,6 @@ class RoutingFeedbackStoreTests(unittest.TestCase):
         outcomes = self._store.get_recent_outcomes(1)
         self.assertEqual(outcomes[0]["quality_signal"], -1)
 
-    def test_adaptive_thresholds_empty(self) -> None:
-        thresholds = self._store.get_adaptive_thresholds()
-        self.assertEqual(thresholds, {})
-
-    def test_adaptive_thresholds_with_data(self) -> None:
-        for i in range(10):
-            signal = -1 if i < 3 else 0  # 30% error rate
-            self._store.record(self._make_outcome(
-                turn_number=i,
-                task_type="trivial",
-                quality_signal=signal,
-            ))
-        thresholds = self._store.get_adaptive_thresholds()
-        self.assertIn("trivial", thresholds)
-        # 30% error → threshold = 0.6 + 0.3 * 0.5 = 0.75
-        self.assertAlmostEqual(thresholds["trivial"], 0.75, places=1)
-
     def test_close_and_reopen(self) -> None:
         self._store.record(self._make_outcome())
         self._store.close()

@@ -24,13 +24,14 @@ class TaskType(StrEnum):
     CREATIVE = "creative"                  # Writing, brainstorming
 
 
-# Cost tier mapping: which task types can use cheap models
+# Cost tier mapping: which task types can use cheap models.
+# TOOL_CONTINUATION is intentionally NOT cheap — it often requires
+# sophisticated reasoning (synthesizing tool results, deciding next steps).
 CHEAP_TASK_TYPES: frozenset[TaskType] = frozenset({
     TaskType.TRIVIAL,
     TaskType.CONVERSATIONAL,
     TaskType.FACTUAL_LOOKUP,
     TaskType.SUMMARIZATION,
-    TaskType.TOOL_CONTINUATION,
 })
 
 MAIN_TASK_TYPES: frozenset[TaskType] = frozenset({
@@ -38,4 +39,5 @@ MAIN_TASK_TYPES: frozenset[TaskType] = frozenset({
     TaskType.CODE_REVIEW,
     TaskType.ANALYSIS,
     TaskType.CREATIVE,
+    TaskType.TOOL_CONTINUATION,
 })

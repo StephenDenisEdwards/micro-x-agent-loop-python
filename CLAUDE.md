@@ -85,7 +85,7 @@ API Server (--server start):
 | `provider_pool.py` | Multi-provider dispatch pool, health tracking, same-family fallback, cache-aware switching |
 | `task_taxonomy.py` | TaskType enum (9 types), cost tier classification |
 | `semantic_classifier.py` | Three-stage classifier: rules → keywords → LLM for task-type routing |
-| `routing_feedback.py` | SQLite-backed routing outcome recording, adaptive thresholds |
+| `routing_feedback.py` | SQLite-backed routing outcome recording |
 | `turn_classifier.py` | Legacy per-turn binary classifier: cheap/main model heuristic (superseded by semantic routing) |
 | `providers/anthropic_provider.py` | Anthropic streaming + prompt caching |
 | `providers/openai_provider.py` | OpenAI streaming |
@@ -103,7 +103,7 @@ API Server (--server start):
 | `metrics.py` | Metric builders, `SessionAccumulator`, cost tracking |
 | `memory/` | SQLite session persistence, checkpoints, events, pruning |
 | `mcp/` | MCP server lifecycle, tool proxying |
-| `commands/` | Slash command routing (/session, /voice, /cost, etc.) |
+| `commands/` | Slash command routing (/session, /voice, /cost, /compact, etc.) |
 | `services/` | Session controller, checkpoint service |
 | `broker/` | Trigger broker: cron scheduler, webhook server, HITL, retries, channel adapters, CLI |
 | `server/app.py` | FastAPI API server with REST + WebSocket endpoints |
@@ -170,7 +170,8 @@ When a user submits a prompt:
 - `Pricing` key: per-model token pricing (input/output/cache_read/cache_create per MTok USD) — no hardcoded defaults
 - All configuration elements must be in `config-base.json` — no hardcoded fallback defaults in code
 - Profiles: `config-standard.json`, `config-standard-no-summarization.json`, `config-baseline.json`
-- `RoutingPolicies` map task types to `{provider, model}` pairs with optional per-policy overrides: `tool_search_only` (narrow tools for small models), `system_prompt: "compact"` (minimal prompt for small context windows), `pin_continuation` (keep tool continuations on the same model that started the turn — prevents dangerous large→small model switches mid-turn)
+- `RoutingPolicies` map task types to `{provider, model}` pairs with optional per-policy overrides: `tool_search_only` (narrow tools for small models), `system_prompt: "compact"` (minimal prompt for small context windows), `pin_continuation` (latch routing at iteration 0 — prevents mid-turn model switches)
+- `RoutingConfidenceThreshold` (default 0.6) — classifier confidence below this threshold refuses to downgrade to a cheaper model, falling back to the main model instead
 
 ### Memory System
 

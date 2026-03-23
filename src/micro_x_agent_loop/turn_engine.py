@@ -58,6 +58,7 @@ class TurnEngine:
         routing_fallback_provider: str = "",
         routing_fallback_model: str = "",
         routing_feedback_callback: Any | None = None,
+        routing_confidence_threshold: float = 0.6,
         task_embedding_index: Any | None = None,
     ) -> None:
         self._provider = provider
@@ -91,6 +92,7 @@ class TurnEngine:
         self._routing_fallback_model = routing_fallback_model
         self._task_embedding_index = task_embedding_index
         self._routing_feedback_callback = routing_feedback_callback
+        self._routing_confidence_threshold = routing_confidence_threshold
 
     async def run(
         self,
@@ -382,7 +384,12 @@ class TurnEngine:
     def _resolve_routing_target(
         self, classification: TaskClassification | None,
     ) -> RoutingTarget | None:
-        """Map a task classification to a provider/model routing target."""
+        """Map a task classification to a provider/model routing target.
+
+        Applies confidence gating: if confidence is below the threshold and
+        the policy would route to a different (cheaper) model, fall back to
+        the main model to avoid degrading quality on uncertain classifications.
+        """
         if classification is None or not self._routing_policies:
             return None
 
@@ -404,6 +411,26 @@ class TurnEngine:
         pin_continuation = bool(policy.get("pin_continuation", False))
         if not provider or not model:
             return None
+
+        # Confidence gating: if confidence is below threshold and this would
+        # route to a different (presumably cheaper) model, refuse to downgrade
+        main_model = self._routing_fallback_model or self._model
+        if (
+            classification.confidence < self._routing_confidence_threshold
+            and model != main_model
+        ):
+            logger.info(
+                "Confidence gate: {confidence:.2f} < {threshold:.2f}, "
+                "refusing downgrade from {main} to {target}",
+                confidence=classification.confidence,
+                threshold=self._routing_confidence_threshold,
+                main=main_model,
+                target=model,
+            )
+            return RoutingTarget(
+                provider=self._routing_fallback_provider or provider,
+                model=main_model,
+            )
 
         # Cache-awareness: check if switching is worth it
         if self._provider_pool is not None:

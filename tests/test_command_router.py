@@ -12,7 +12,7 @@ def _make_router() -> tuple[CommandRouter, dict[str, list]]:
     """Create a router with all handlers collecting calls."""
     calls: dict[str, list] = {k: [] for k in (
         "help", "command", "cost", "rewind", "checkpoint", "session",
-        "voice", "memory", "tools", "tool", "console_log_level", "debug", "routing", "unknown"
+        "voice", "memory", "tools", "tool", "console_log_level", "debug", "routing", "compact", "unknown"
     )}
 
     async def on_help():
@@ -55,6 +55,9 @@ def _make_router() -> tuple[CommandRouter, dict[str, list]]:
     async def on_routing(cmd: str) -> None:
         calls["routing"].append(cmd)
 
+    async def on_compact(cmd: str) -> None:
+        calls["compact"].append(cmd)
+
     def on_unknown(cmd: str) -> None:
         calls["unknown"].append(cmd)
 
@@ -72,6 +75,7 @@ def _make_router() -> tuple[CommandRouter, dict[str, list]]:
         on_console_log_level=on_console_log_level,
         on_debug=on_debug,
         on_routing=on_routing,
+        on_compact=on_compact,
         on_unknown=on_unknown,
     )
     return router, calls

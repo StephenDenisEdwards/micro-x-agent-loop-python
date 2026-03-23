@@ -211,35 +211,6 @@ class RoutingFeedbackStore:
             for row in rows
         ]
 
-    def get_adaptive_thresholds(self) -> dict[str, float]:
-        """Compute adaptive confidence thresholds per task type.
-
-        If a task type consistently gets low quality signals when routed
-        to cheap models, its threshold is raised (requiring higher confidence
-        before routing cheaply).
-        """
-        conn = self._ensure_connection()
-        rows = conn.execute(
-            "SELECT task_type, "
-            "COUNT(*) as total, "
-            "AVG(CASE WHEN quality_signal < 0 THEN 1.0 ELSE 0.0 END) as error_rate "
-            "FROM routing_outcomes "
-            "WHERE timestamp > ? "
-            "GROUP BY task_type "
-            "HAVING total >= 5",
-            (time.time() - 7 * 86400,),  # Last 7 days
-        ).fetchall()
-
-        thresholds: dict[str, float] = {}
-        for row in rows:
-            task_type = row[0]
-            error_rate = row[2]
-            # Base threshold 0.6, increase by error rate (max 0.95)
-            threshold = min(0.95, 0.6 + error_rate * 0.5)
-            thresholds[task_type] = threshold
-
-        return thresholds
-
     def close(self) -> None:
         if self._conn is not None:
             self._conn.close()

@@ -91,7 +91,7 @@ Define a fixed set of task types that map to routing policies:
 | `code_generation` | Write/edit code | Main (Sonnet/GPT-4o) | Quality-sensitive |
 | `code_review` | Review/explain code | Main (Sonnet/GPT-4o) | Reasoning required |
 | `analysis` | Complex reasoning, planning, design | Best available (Opus/Sonnet) | Quality-critical |
-| `tool_continuation` | Processing tool results | Cheap → Main (adaptive) | Depends on result complexity |
+| `tool_continuation` | Processing tool results | Main (pinned) | Requires same model quality as initiating turn; `pin_continuation: true` |
 | `creative` | Writing, brainstorming | Main (Sonnet/GPT-4o) | Quality-sensitive |
 
 **D4: Routing policy is config-driven**
@@ -109,7 +109,7 @@ Routing policies live in `config.json` under a new `SemanticRouting` key, not ha
     "code_generation":   { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" },
     "code_review":       { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" },
     "analysis":          { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" },
-    "tool_continuation": { "provider": "anthropic", "model": "claude-haiku-4-5-20251001" },
+    "tool_continuation": { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929", "pin_continuation": true },
     "creative":          { "provider": "anthropic", "model": "claude-sonnet-4-5-20250929" }
   },
   "RoutingFallback": { "provider": "#Provider", "model": "#Model" }

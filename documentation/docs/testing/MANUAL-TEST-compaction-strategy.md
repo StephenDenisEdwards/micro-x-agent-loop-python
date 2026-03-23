@@ -149,6 +149,43 @@
 - Conversation continues normally
 
 ---
+## Test 9 — `/compact` command forces compaction
+
+**Goal:** Verify that `/compact` forces compaction regardless of threshold, and `tail N` overrides protected tail messages.
+
+**Steps:**
+
+1. Set `CompactionThresholdTokens: 200000` (very high, so auto-compaction won't trigger)
+2. Have a multi-turn conversation with tool use (5+ turns to build up context)
+3. Run `/compact` — observe it compacts with default `ProtectedTailMessages`
+4. Continue conversation to build up context again
+5. Run `/compact tail 2` — observe it compacts more aggressively
+
+**Expected:**
+- `/compact` fires compaction even though threshold is not reached
+- Log: `Compaction: estimated ~X tokens, threshold 0 — compacting N messages`
+- `/compact tail 2` compacts more messages than the default (only 2 tail messages protected)
+- After compaction, the status bar shows updated `ctx <tokens>tok/<N>msg`
+- Conversation continues normally after compaction
+
+---
+
+## Test 10 — Context size in status bar
+
+**Goal:** Verify the bottom toolbar displays current context token/message count.
+
+**Steps:**
+
+1. Start the agent with `StatusBarEnabled: true`
+2. Send a few messages
+3. Observe the bottom toolbar after each turn
+
+**Expected:**
+- Toolbar shows `ctx <N>tok/<M>msg` segment alongside cost and model info
+- Values update after each turn and after `/compact`
+
+---
+
 ## Notebook Tests
 Automated notebook coverage for selected tests in this plan:
 - `notebooks/test_tier1_config_and_logic.ipynb` — Cells 1.8 (none strategy), 1.9 (summarize trigger), 1.10 (role alternation)

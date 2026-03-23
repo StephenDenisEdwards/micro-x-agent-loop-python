@@ -66,10 +66,13 @@ _ANALYSIS_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-_CREATIVE_PATTERNS = re.compile(
-    r"\b(write|draft|compose|brainstorm|ideate|come up with|"
-    r"blog post|article|essay|story|email|message|letter|proposal|"
-    r"presentation|pitch)\b",
+_CREATIVE_NOUN_PATTERNS = re.compile(
+    r"\b(blog post|article|essay|story|email|message|letter|proposal|"
+    r"presentation|pitch|poem|song|speech|newsletter|press release)\b",
+    re.IGNORECASE,
+)
+_CREATIVE_VERB_PATTERNS = re.compile(
+    r"\b(draft|compose|brainstorm|ideate|come up with)\b",
     re.IGNORECASE,
 )
 
@@ -130,7 +133,21 @@ def classify_stage1(
             reason="summarization keyword detected",
         )
 
-    # Code generation — check before creative to avoid false matches
+    # Creative writing — check creative nouns BEFORE code-gen to prevent
+    # "write a blog post about our API" from matching code_generation.
+    # Creative-specific nouns (blog post, article, essay, etc.) are checked
+    # first; creative-specific verbs (draft, compose, brainstorm) also match.
+    has_creative_noun = _CREATIVE_NOUN_PATTERNS.search(msg) is not None
+    has_creative_verb = _CREATIVE_VERB_PATTERNS.search(msg) is not None
+    if has_creative_noun or has_creative_verb:
+        return TaskClassification(
+            task_type=TaskType.CREATIVE,
+            confidence=0.85 if has_creative_noun else 0.75,
+            stage="rules",
+            reason="creative writing pattern detected",
+        )
+
+    # Code generation
     if _CODE_GEN_PATTERNS.search(msg):
         return TaskClassification(
             task_type=TaskType.CODE_GENERATION,
@@ -164,15 +181,6 @@ def classify_stage1(
             confidence=0.80,
             stage="rules",
             reason="factual question pattern detected",
-        )
-
-    # Creative writing
-    if _CREATIVE_PATTERNS.search(msg):
-        return TaskClassification(
-            task_type=TaskType.CREATIVE,
-            confidence=0.75,
-            stage="rules",
-            reason="creative writing pattern detected",
         )
 
     # Short conversational (no tools, short message, not first turn)
@@ -254,28 +262,34 @@ def _tokenize(text: str) -> list[str]:
 
 
 def _cosine_similarity(tokens: list[str], task_type: TaskType) -> float:
-    """Compute cosine similarity between token bag and task type keyword vector."""
+    """Compute cosine similarity between token presence and task type keyword vector.
+
+    Uses binary presence (1 if token appears, 0 if not) rather than raw
+    frequency counts.  This makes the cosine similarity mathematically
+    consistent: both vectors live in the same space where the keyword
+    vector uses handcrafted TF-IDF-like weights.
+    """
     vec = _KEYWORD_VECTORS[task_type]
     norm = _VECTOR_NORMS[task_type]
     if norm == 0:
         return 0.0
 
-    # Build token frequency vector
-    token_freq: dict[str, int] = {}
-    for t in tokens:
-        token_freq[t] = token_freq.get(t, 0) + 1
+    # Build binary token-presence set
+    token_set = set(tokens)
 
-    # Dot product
+    # Dot product (binary presence × keyword weight)
     dot = 0.0
+    present_count = 0
     for word, weight in vec.items():
-        if word in token_freq:
-            dot += weight * token_freq[word]
+        if word in token_set:
+            dot += weight  # 1.0 * weight
+            present_count += 1
 
     if dot == 0:
         return 0.0
 
-    # Token vector norm
-    token_norm = math.sqrt(sum(f * f for f in token_freq.values()))
+    # Token vector norm (binary: sqrt of count of present keywords)
+    token_norm = math.sqrt(present_count)
     if token_norm == 0:
         return 0.0
 

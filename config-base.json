@@ -64,9 +64,10 @@
     "code_generation":   { "provider": "#Provider", "model": "#Model" },
     "code_review":       { "provider": "#Provider", "model": "#Model" },
     "analysis":          { "provider": "#Provider", "model": "#Model" },
-    "tool_continuation": { "provider": "#Provider", "model": "claude-haiku-4-5-20251001" },
+    "tool_continuation": { "provider": "#Provider", "model": "#Model", "pin_continuation": true },
     "creative":          { "provider": "#Provider", "model": "#Model" }
   },
+  "RoutingConfidenceThreshold": 0.6,
   "RoutingFallbackProvider": "#Provider",
   "RoutingFallbackModel": "#Model",
   "RoutingFeedbackEnabled": false,

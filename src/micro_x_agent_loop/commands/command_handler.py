@@ -4,7 +4,7 @@ import json
 import os
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
@@ -39,6 +39,7 @@ class CommandHandler:
         user_memory_dir: str,
         prompt_command_store: PromptCommandStore,
         on_session_reset: Callable[[str, list[dict]], None],
+        on_force_compact: Callable[[int | None], Awaitable[tuple[bool, str]]] | None = None,
         on_tools_deleted: Callable[[list[str]], None] | None = None,
         output: Callable[[str], None] = print,
         routing_feedback_store: object | None = None,
@@ -58,6 +59,7 @@ class CommandHandler:
         self._user_memory_enabled = user_memory_enabled
         self._user_memory_dir = user_memory_dir
         self._on_session_reset = on_session_reset
+        self._on_force_compact = on_force_compact
         self._on_tools_deleted = on_tools_deleted or (lambda _tool_names: None)
         self._routing_feedback_store = routing_feedback_store
 
@@ -95,6 +97,7 @@ class CommandHandler:
         self._print(f"{p}- /tool delete <name>")
         self._print(f"{p}- /routing")
         self._print(f"{p}- /routing tasks | providers | stages | recent")
+        self._print(f"{p}- /compact [tail N]")
         self._print(f"{p}- /console-log-level [TRACE|DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL|OFF]")
         self._print(f"{p}- /debug show-api-payload [N]")
         if self._user_memory_enabled:
@@ -866,13 +869,6 @@ class CommandHandler:
                 f"{self._p}  Stage {s['stage']}: {s['percentage']:.1f}% of calls"
             )
 
-        # Adaptive thresholds
-        thresholds = store.get_adaptive_thresholds()
-        if thresholds:
-            self._print(f"{self._p}  Adaptive thresholds (task types with history):")
-            for task_type, threshold in sorted(thresholds.items()):
-                self._print(f"{self._p}    {task_type}: {threshold:.2f}")
-
         self._print(f"{self._p}Use /routing tasks|providers|stages|recent for details.")
 
     # -- /voice --
@@ -943,3 +939,24 @@ class CommandHandler:
             "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>] | "
             "/voice status | /voice devices | /voice events [limit] | /voice stop"
         )
+
+    async def handle_compact(self, command: str) -> None:
+        """Handle /compact [tail N] — force conversation compaction now."""
+        if self._on_force_compact is None:
+            self._print(f"{self._p}Compaction not available (strategy is 'none').")
+            return
+
+        parts = command.split()
+        protected_tail: int | None = None
+        if len(parts) >= 3 and parts[1] == "tail":
+            try:
+                protected_tail = int(parts[2])
+            except ValueError:
+                self._print(f"{self._p}Usage: /compact [tail N]")
+                return
+        elif len(parts) > 1:
+            self._print(f"{self._p}Usage: /compact [tail N]")
+            return
+
+        ok, message = await self._on_force_compact(protected_tail)
+        self._print(f"{self._p}{message}")

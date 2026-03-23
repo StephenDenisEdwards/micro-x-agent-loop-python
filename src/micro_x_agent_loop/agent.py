@@ -369,6 +369,7 @@ class Agent:
             routing_fallback_provider=config.routing_fallback_provider or config.provider,
             routing_fallback_model=config.routing_fallback_model or config.model,
             routing_feedback_callback=routing_feedback_callback,
+            routing_confidence_threshold=config.routing_confidence_threshold,
             task_embedding_index=self._task_embedding_index,
         )
 
@@ -390,6 +391,7 @@ class Agent:
             user_memory_dir=self._user_memory_dir,
             prompt_command_store=self._prompt_command_store,
             on_session_reset=self._on_session_reset,
+            on_force_compact=self._on_force_compact,
             on_tools_deleted=self._on_tools_deleted,
             output=self._channel.emit_system_message if self._channel is not None else print,
             routing_feedback_store=self._routing_feedback_store,
@@ -409,6 +411,7 @@ class Agent:
             on_console_log_level=self._command_handler.handle_console_log_level,
             on_debug=self._command_handler.handle_debug,
             on_routing=self._command_handler.handle_routing,
+            on_compact=self._command_handler.handle_compact,
             on_unknown=self._command_handler.on_unknown_command,
         )
 
@@ -524,6 +527,7 @@ class Agent:
 
         self._current_user_message_id = current_user_message_id
         self._last_assistant_message_id = last_assistant_message_id
+        self._update_context_stats()
 
     # -- Mode choice prompt --
 
@@ -678,6 +682,40 @@ class Agent:
     async def on_maybe_compact(self) -> None:
         self._messages = await self._compaction_strategy.maybe_compact(self._messages)
         self._trim_conversation_history()
+
+    async def _on_force_compact(self, protected_tail: int | None = None) -> tuple[bool, str]:
+        """Force compaction regardless of token threshold. Returns (ok, message)."""
+        if not isinstance(self._compaction_strategy, SummarizeCompactionStrategy):
+            return False, "Compaction not available (strategy is 'none')."
+        if len(self._messages) < 3:
+            return False, "Not enough messages to compact."
+
+        from micro_x_agent_loop.compaction import estimate_tokens
+
+        tokens_before = estimate_tokens(self._messages)
+        # Temporarily override threshold and optionally protected tail
+        saved_threshold = self._compaction_strategy._threshold_tokens
+        saved_tail = self._compaction_strategy._protected_tail_messages
+        self._compaction_strategy._threshold_tokens = 0
+        if protected_tail is not None:
+            self._compaction_strategy._protected_tail_messages = protected_tail
+        try:
+            self._messages = await self._compaction_strategy.maybe_compact(self._messages)
+        finally:
+            self._compaction_strategy._threshold_tokens = saved_threshold
+            self._compaction_strategy._protected_tail_messages = saved_tail
+        self._trim_conversation_history()
+        self._update_context_stats()
+        tokens_after = estimate_tokens(self._messages)
+        return True, (
+            f"Compacted: ~{tokens_before:,} → ~{tokens_after:,} tokens "
+            f"({len(self._messages)} messages remaining)."
+        )
+
+    def _update_context_stats(self) -> None:
+        from micro_x_agent_loop.compaction import estimate_tokens
+        self._session_accumulator.context_tokens = estimate_tokens(self._messages)
+        self._session_accumulator.context_messages = len(self._messages)
 
     def _trim_conversation_history(self) -> None:
         if self._max_conversation_messages <= 0:

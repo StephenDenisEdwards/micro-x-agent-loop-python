@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-03-21
+Accepted — 2026-03-21. Bug fixes applied 2026-03-22 (see [PLAN-routing-simplification.md](../planning/PLAN-routing-simplification.md#fixes-applied-2026-03-22)). Architectural simplification under review.
 
 Extends [ADR-012](ADR-012-layered-cost-reduction.md) (layered cost reduction) as a sixth cost reduction layer.
 
@@ -40,7 +40,7 @@ Reasons:
 
 ### Architecture Components
 
-**1. Task Taxonomy** — 9 fixed task types (`trivial`, `conversational`, `factual_lookup`, `summarization`, `code_generation`, `code_review`, `analysis`, `tool_continuation`, `creative`). Each task type is either "cheap-eligible" or "main-required". The taxonomy is extensible but changes require updating the classifier and config schema.
+**1. Task Taxonomy** — 9 fixed task types (`trivial`, `conversational`, `factual_lookup`, `summarization`, `code_generation`, `code_review`, `analysis`, `tool_continuation`, `creative`). Cheap-eligible: `trivial`, `conversational`, `factual_lookup`, `summarization`. Main-required: `code_generation`, `code_review`, `analysis`, `creative`, `tool_continuation`. Note: `tool_continuation` was originally cheap-eligible but moved to main-required (2026-03-22) because tool continuations often require sophisticated reasoning.
 
 **2. Semantic Classifier** — Three-stage pipeline:
 - Stage 1 (rules): regex patterns + turn context signals. Subsumes the existing `turn_classifier.py` heuristics.
@@ -54,7 +54,7 @@ Reasons:
 - `system_prompt: str` — when `"compact"`, uses a minimal ~500-word system prompt instead of the full ~1800-word prompt. Omits user memory, codegen, sub-agent, and ask-user directives. Essential for small models with limited context windows.
 - `pin_continuation: bool` — when `true`, tool-result continuations (iteration 1+) stay on the same provider/model from iteration 0, bypassing the `tool_continuation` policy. Prevents dangerous mid-turn model switches (e.g. Sonnet → Ollama) and unnecessary cost escalation (Ollama → Haiku).
 
-**5. Routing Feedback** — SQLite table `routing_outcomes` with per-turn records. Provides aggregate stats (per task type, provider, classification stage) and adaptive confidence thresholds.
+**5. Routing Feedback** — SQLite table `routing_outcomes` with per-turn records. Provides aggregate stats (per task type, provider, classification stage) via the `/routing` command. Confidence gating is handled by `RoutingConfidenceThreshold` (default 0.6) in `_resolve_routing_target`.
 
 ### Relationship to Per-Turn Routing
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-**Review** — Decisions to be made. See [Decision Points](#decision-points) below.
+**In Progress** — Code-level bug fixes applied 2026-03-22 (see [Fixes Applied](#fixes-applied)). Architectural simplification decision (Options A–D) still pending review.
 
 ## Problem
 
@@ -150,6 +150,20 @@ All options keep the pool. The question is whether it dispatches based on classi
 - [PLAN-semantic-model-routing.md](PLAN-semantic-model-routing.md) — original implementation plan (completed)
 - [PLAN-cost-reduction.md](PLAN-cost-reduction.md) — broader cost reduction context
 
+## Fixes Applied (2026-03-22)
+
+Code-level bug fixes applied independent of the architectural simplification decision (Options A–D):
+
+| # | Fix | Files Changed |
+|---|-----|---------------|
+| 1 | **TOOL_CONTINUATION → main model** with `pin_continuation: true` | `task_taxonomy.py`, `config-base.json` |
+| 2 | **Confidence gating** — refuse to downgrade when `confidence < 0.6` (configurable) | `turn_engine.py`, `agent_config.py`, `app_config.py`, `config-base.json` |
+| 3 | **Creative/code-gen regex overlap** — creative nouns checked before code-gen patterns | `semantic_classifier.py` |
+| 4 | **Dead adaptive threshold code removed** — `get_adaptive_thresholds()` was never consumed | `routing_feedback.py`, `command_handler.py` |
+| 5 | **Keyword-vector cosine similarity** — binary presence instead of raw frequency counts | `semantic_classifier.py` |
+
+All tests pass (1353), ruff clean, mypy clean.
+
 ---
 
 ## Appendix: Code-Level Critical Review (2026-03-22)
@@ -168,25 +182,25 @@ Deep review of the routing implementation as built across all 4 phases of `PLAN-
 
 ### Critical Issues
 
-**1. TOOL_CONTINUATION is misclassified as "cheap"** — `task_taxonomy.py` puts `TOOL_CONTINUATION` in `CHEAP_TASK_TYPES`, and routing policies map it to Haiku. But tool continuations often require the *most* sophisticated reasoning — synthesizing tool results, deciding next steps, composing multi-tool outputs. Routing these to Haiku will degrade quality for complex agentic workflows. A tool continuation after a code search needs the same model quality as the original code generation request.
+**1. ~~TOOL_CONTINUATION is misclassified as "cheap"~~** — **FIXED.** Moved from `CHEAP_TASK_TYPES` to `MAIN_TASK_TYPES`. Config routes to main model with `pin_continuation: true`.
 
-**2. Classification re-runs every iteration with the same user_message** — In `turn_engine.py`, the classifier is called on every loop iteration with the original `user_message`, not the evolving context. On iteration 0 it classifies as `CODE_GENERATION` → Sonnet. On iteration 1 (tool results came back), it re-classifies as `TOOL_CONTINUATION` → Haiku. The model *downgrades mid-turn*. The model writing the final synthesis after tool calls is weaker than the one that initiated the work.
+**2. Classification re-runs every iteration with the same user_message** — By design. The `pin_continuation` per-policy flag controls whether a policy's routing decision is latched at iteration 0. Policies that need stability (e.g. `tool_continuation`) set `pin_continuation: true`. Other policies can re-classify to allow flexible routing.
 
-**3. `_resolve_routing_target` called twice per dispatch** — At line ~137 it's called to determine the model, then at line ~173 it's called *again* to construct the `RoutingTarget` for the actual `stream_chat` call. Wasteful and introduces a subtle inconsistency risk if provider status changes between calls.
+**3. ~~`_resolve_routing_target` called twice per dispatch~~** — **Already fixed.** Only one call site verified during review.
 
-**4. Stage 2 "cosine similarity" is not real cosine similarity** — The user token vector uses raw token frequencies (counts) while keyword vectors use handcrafted weights. Repeated words inflate the score arbitrarily. The confidence mapping (`0.4 + score * 0.6`) is an arbitrary linear transform with no probabilistic interpretation.
+**4. ~~Stage 2 "cosine similarity" is not real cosine similarity~~** — **FIXED.** `_cosine_similarity` now uses binary token presence (1/0) instead of raw frequency counts, making the dot product mathematically consistent with the handcrafted keyword weight vectors. The confidence mapping (`0.4 + score * 0.6`) is still a linear transform but now operates on meaningful similarity scores.
 
-**5. Regex pattern overlap causes deterministic mis-routing** — `_CREATIVE_PATTERNS` includes `\bwrite\b`, which also appears in `_CODE_GEN_PATTERNS`. The linear scan with first-match-wins means "write a blog post about our API" matches `_CODE_GEN_PATTERNS` first (because `write` + `api` matches) and gets classified as `CODE_GENERATION`.
+**5. ~~Regex pattern overlap causes deterministic mis-routing~~** — **FIXED.** Creative patterns split into noun-based (`blog post`, `article`, `essay`) and verb-based (`draft`, `compose`, `brainstorm`). Creative nouns are now checked before code-gen patterns.
 
-**6. Adaptive thresholds are computed but never consumed** — `routing_feedback.py` implements `get_adaptive_thresholds()`, but no code path in `turn_engine.py` or `semantic_classifier.py` reads these thresholds. The feedback loop is open — data goes in but never influences routing.
+**6. ~~Adaptive thresholds are computed but never consumed~~** — **FIXED.** `get_adaptive_thresholds()` removed entirely (dead code). Confidence gating is now handled directly by `RoutingConfidenceThreshold` in `_resolve_routing_target`.
 
-**7. `quality_signal` is always 0** — The `RoutingOutcome` defaults `quality_signal` to 0 and the feedback callback never sets it. `update_quality_signal` exists but is never called. Adaptive thresholds compute from an all-zero error rate, always evaluating to 0.6 (the base). The quality feedback mechanism is inert.
+**7. `quality_signal` is always 0** — The `RoutingOutcome` defaults `quality_signal` to 0 and the feedback callback never sets it. `update_quality_signal` exists but is never called in production. Retained for future use but not blocking — the adaptive thresholds that depended on it have been removed.
 
-**8. Cache-awareness is disconnected** — `ProviderPool.should_switch_provider()` exists but `_resolve_routing_target` in `turn_engine.py` doesn't call it. The system can switch from Anthropic to OpenAI mid-conversation, destroying the prompt cache.
+**8. ~~Cache-awareness is disconnected~~** — **Already wired.** `_resolve_routing_target` calls `should_switch_provider()` before switching providers. Verified during review.
 
 **9. Fallback uses the target model on the wrong provider** — In `provider_pool.py:143`, when falling back to a different provider, the code uses `target.model` (the original model name). Model names aren't portable across providers — using `claude-sonnet-4-5-20250929` on OpenAI will fail. *(Partially addressed by ADR-021 same-family fallback, which prevents cross-family fallback entirely.)*
 
-**10. No confidence gating on routing decisions** — The classifier returns a confidence score, but `_resolve_routing_target` doesn't check it. A classification with confidence 0.35 still routes to Haiku. No threshold below which the system refuses to downgrade.
+**10. ~~No confidence gating on routing decisions~~** — **FIXED.** `_resolve_routing_target` now checks `classification.confidence < routing_confidence_threshold` (default 0.6, configurable via `RoutingConfidenceThreshold`). Low-confidence classifications fall back to the main model instead of downgrading.
 
 ### Design Concerns
 
@@ -200,11 +214,15 @@ Deep review of the routing implementation as built across all 4 phases of `PLAN-
 
 These are code-level fixes independent of which simplification option (A–D) is chosen:
 
-1. **Remove TOOL_CONTINUATION from CHEAP_TASK_TYPES** or make it inherit the task type of the initiating turn
-2. **Latch the routing decision at iteration 0** and reuse it for all subsequent iterations within the same turn
-3. **Gate routing on confidence** — if confidence < threshold, don't downgrade
-4. **Wire up adaptive thresholds** or remove the dead code
+1. ~~**Remove TOOL_CONTINUATION from CHEAP_TASK_TYPES**~~ — **FIXED 2026-03-22.** Moved to `MAIN_TASK_TYPES`, config routes to `#Model` with `pin_continuation: true`.
+2. **Use `pin_continuation` per-policy to prevent unwanted mid-turn downgrades** — the re-classification on each iteration is by design (allows flexible per-policy control). Policies that need pinning set `pin_continuation: true` (e.g. `tool_continuation`).
+3. ~~**Gate routing on confidence**~~ — **FIXED 2026-03-22.** `_resolve_routing_target` now checks `classification.confidence < routing_confidence_threshold` (default 0.6) and refuses to downgrade to a cheaper model when confidence is low. Configurable via `RoutingConfidenceThreshold`.
+4. ~~**Remove dead adaptive threshold code**~~ — **FIXED 2026-03-22.** `get_adaptive_thresholds()` removed from `RoutingFeedbackStore` (was computed but never consumed). `quality_signal` field and `update_quality_signal()` retained for future use.
 5. **Fix cross-provider model name portability** in the fallback chain *(partially done via ADR-021)*
-6. **Resolve regex overlap** between creative and code generation patterns
-7. **Call `should_switch_provider()`** in `_resolve_routing_target` before switching providers
-8. **Deduplicate `_resolve_routing_target` call** — compute once, reuse for dispatch
+6. ~~**Resolve regex overlap**~~ — **FIXED 2026-03-22.** Creative patterns split into noun-based (`blog post`, `article`, `essay`, etc.) and verb-based (`draft`, `compose`, `brainstorm`). Creative nouns checked before code-gen patterns to prevent "write a blog post about our API" from misclassifying as `CODE_GENERATION`.
+7. **Call `should_switch_provider()`** in `_resolve_routing_target` before switching providers — **Already wired** (verified during review).
+8. **Deduplicate `_resolve_routing_target` call** — **Already fixed** (only one call site, verified during review).
+
+### Additional Fixes Applied (2026-03-22)
+
+- **Keyword-vector cosine similarity** — `_cosine_similarity` now uses binary token presence instead of raw frequency counts, making the dot product mathematically consistent with the handcrafted keyword weight vectors.

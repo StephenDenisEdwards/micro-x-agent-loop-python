@@ -109,6 +109,7 @@ class AppConfig:
     routing_policies: dict
     routing_fallback_provider: str
     routing_fallback_model: str
+    routing_confidence_threshold: float
     routing_feedback_enabled: bool
     routing_feedback_db_path: str
     # Budget
@@ -344,6 +345,7 @@ def parse_app_config(config: dict) -> AppConfig:
         routing_policies=config.get("RoutingPolicies", {}),
         routing_fallback_provider=str(config.get("RoutingFallbackProvider", "")).strip().lower(),
         routing_fallback_model=str(config.get("RoutingFallbackModel", "")).strip(),
+        routing_confidence_threshold=float(config.get("RoutingConfidenceThreshold", 0.6)),
         routing_feedback_enabled=_to_bool(config.get("RoutingFeedbackEnabled", False), default=False),
         routing_feedback_db_path=str(config.get("RoutingFeedbackDbPath", ".micro_x/routing.db")),
         session_budget_usd=float(config.get("SessionBudgetUSD", DEFAULT_SESSION_BUDGET_USD)),

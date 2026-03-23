@@ -85,6 +85,7 @@ class AgentConfig:
     routing_policies: dict = field(default_factory=dict)
     routing_fallback_provider: str = ""
     routing_fallback_model: str = ""
+    routing_confidence_threshold: float = 0.6
     routing_feedback_enabled: bool = False
     routing_feedback_db_path: str = ".micro_x/routing.db"
     # Budget

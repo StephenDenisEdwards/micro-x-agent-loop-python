@@ -139,6 +139,8 @@ class SessionAccumulator:
     total_duration_ms: float = 0.0
     model_subtotals: dict[str, dict] = field(default_factory=dict)
     api_call_log: list[dict] = field(default_factory=list)
+    context_tokens: int = 0
+    context_messages: int = 0
 
     def reset(self, session_id: str = "") -> None:
         """Reset all counters for a new session."""
@@ -159,6 +161,8 @@ class SessionAccumulator:
         self.total_duration_ms = 0.0
         self.model_subtotals.clear()
         self.api_call_log.clear()
+        self.context_tokens = 0
+        self.context_messages = 0
 
     def _record_model(self, usage: UsageResult) -> None:
         cost = estimate_cost(usage)
@@ -285,6 +289,9 @@ class SessionAccumulator:
         if total_input > 0 and self.total_cache_read_tokens > 0:
             hit_rate = self.total_cache_read_tokens / total_input * 100
             parts.append(f"cache {hit_rate:.0f}%")
+
+        if self.context_tokens > 0:
+            parts.append(f"ctx {self.context_tokens:,}tok/{self.context_messages}msg")
 
         if self.model:
             parts.append(_short_model_name(self.model))
