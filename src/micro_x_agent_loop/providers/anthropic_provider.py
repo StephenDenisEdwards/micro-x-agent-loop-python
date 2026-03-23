@@ -53,7 +53,9 @@ class AnthropicProvider:
         t_first_token: float | None = None
 
         try:
-            # Prompt caching: wrap system prompt and tag last tool
+            # Prompt caching: up to 3 breakpoints (system, last tool, last message)
+            # Anthropic allows 4 breakpoints max; we use 3 to cache the growing
+            # conversation prefix across iterations within a turn.
             if self._prompt_caching_enabled:
                 api_system: str | list[dict] = [
                     {
@@ -67,9 +69,29 @@ class AnthropicProvider:
                     api_tools[-1] = {**api_tools[-1], "cache_control": {"type": "ephemeral"}}
                 else:
                     api_tools = tools
+                # Tag the last message so conversation history is cached
+                # between iterations (tool-use loops) within the same turn.
+                if messages:
+                    api_messages = [*messages]
+                    last_msg = api_messages[-1]
+                    content = last_msg.get("content")
+                    if isinstance(content, list) and content:
+                        patched_content = [*content]
+                        patched_content[-1] = {**patched_content[-1], "cache_control": {"type": "ephemeral"}}
+                        api_messages[-1] = {**last_msg, "content": patched_content}
+                    elif isinstance(content, str):
+                        api_messages[-1] = {
+                            **last_msg,
+                            "content": [
+                                {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}},
+                            ],
+                        }
+                else:
+                    api_messages = messages
             else:
                 api_system = system_prompt
                 api_tools = tools
+                api_messages = messages
 
             logger.debug(
                 f"API request: model={model}, max_tokens={max_tokens}, "
@@ -81,7 +103,7 @@ class AnthropicProvider:
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=api_system,  # type: ignore[arg-type]
-                messages=messages,  # type: ignore[arg-type]
+                messages=api_messages,  # type: ignore[arg-type]
                 tools=api_tools,  # type: ignore[arg-type]
             ) as stream:
                 async for event in stream:

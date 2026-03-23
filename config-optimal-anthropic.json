@@ -24,7 +24,10 @@
 
   "PromptCachingEnabled": true,
   "CompactionStrategy": "summarize",
-  "CompactionThresholdTokens": 80000,
+  "CompactionThresholdTokens": 25000,
+
+  "ToolResultSummarizationEnabled": true,
+  "ToolResultSummarizationThreshold": 4000,
 
   "LogLevel": "INFO"
 }

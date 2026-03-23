@@ -371,3 +371,282 @@ Config file: `config-testing-haiku-baseline.json`
 | **Token visibility** | Zero (all blind) | Full | — |
 | **Output quality** | Raw list / wrong query | Categorised / error recovery | — |
 | **TTFT (worst)** | 10.6s | 890ms | **12x faster** |
+
+## Optimal Anthropic Config: Session `7e366d5c-b585-48e2-bc00-1b726e2a8508`
+
+A 5-turn, multi-task session using `config-optimal-anthropic.json` — Haiku for simple tasks, Sonnet for complex ones. This session tests the cost/quality split across varied workloads.
+
+### Session Summary
+
+| Field | Value |
+|-------|-------|
+| **Duration** | ~10 min (15:02:52 → 15:12:39) |
+| **Messages** | 30 (15 user, 15 assistant) |
+| **API Calls** | 17 |
+| **Total Input Tokens** | 329,112 |
+| **Total Output Tokens** | 6,574 |
+| **Cache Created** | 37,990 tokens |
+| **Cache Read** | 94,975 tokens |
+| **Total Cost** | **$0.879** |
+
+### Config
+
+Config file: `config-optimal-anthropic.json` — Haiku for trivial/conversational/factual\_lookup/summarization, Sonnet for code/analysis/creative/tool\_continuation. Semantic routing with `rules+keywords` strategy, routing feedback enabled.
+
+### Turn-by-Turn Breakdown
+
+| Turn | User Prompt | Classification | Model | API Calls | Duration | Cost |
+|------|-------------|----------------|-------|-----------|----------|------|
+| 1 | "list this weeks appointments" | `factual_lookup` | Haiku | 3 | 5.4s | $0.014 |
+| 2 | "list all emails regarding payments..." | `trivial` (stage 2) | Haiku | 4 | 11.5s | $0.020 |
+| 3 | "for all urgent action emails provide a summary..." | `creative` (stage 2) | Sonnet | 2 | 25.7s | $0.179 |
+| 4 | "list my repositories" | `factual_lookup` | Haiku | 3 | 8.0s | $0.089 |
+| 5 | "summarise each" | `summarization` → `tool_continuation` | Haiku → Sonnet | 4 | 83.7s | $0.577 |
+
+### Per-Call Detail
+
+| # | Turn | Call Type | Model | Input | Output | Cache Create | Cache Read | Duration | Cost |
+|---|------|-----------|-------|-------|--------|-------------|------------|----------|------|
+| 1 | 1 | `semantic:factual_lookup` | Haiku | 2,858 | 73 | 0 | 0 | 2.0s | $0.003 |
+| 2 | 1 | `pinned:haiku` | Haiku | 4,173 | 154 | 0 | 0 | 1.8s | $0.005 |
+| 3 | 1 | `pinned:haiku` | Haiku | 4,696 | 144 | 0 | 0 | 1.6s | $0.005 |
+| 4 | 2 | `stage2_classification` | Haiku | 310 | 39 | 0 | 0 | 1.4s | $0.001 |
+| 5 | 2 | `semantic:trivial` | Haiku | 3,823 | 70 | 0 | 0 | 3.9s | $0.004 |
+| 6 | 2 | `pinned:haiku` | Haiku | 4,813 | 104 | 0 | 0 | 1.2s | $0.005 |
+| 7 | 2 | `pinned:haiku` | Haiku | 8,493 | 380 | 0 | 0 | 5.2s | $0.010 |
+| 8 | 3 | `stage2_classification` | Haiku | 314 | 30 | 0 | 0 | 1.4s | $0.000 |
+| 9 | 3 | `semantic:creative` | **Sonnet** | 5,667 | 278 | **18,995** | 0 | 6.8s | **$0.092** |
+| 10 | 3 | `tool_continuation` | **Sonnet** | 23,697 | 695 | 0 | **18,995** | 18.9s | $0.087 |
+| 11 | 4 | `semantic:factual_lookup` | Haiku | 26,929 | 71 | 0 | 0 | 1.6s | $0.027 |
+| 12 | 4 | `pinned:haiku` | Haiku | 28,285 | 64 | 0 | 0 | 1.4s | $0.029 |
+| 13 | 4 | `pinned:haiku` | Haiku | 30,171 | 547 | 0 | 0 | 5.0s | $0.033 |
+| 14 | 5 | `semantic:summarization` | Haiku | 27,100 | 740 | **18,995** | 0 | 4.4s | $0.055 |
+| 15 | 5 | `tool_continuation` | **Sonnet** | 46,595 | 422 | 0 | **18,995** | 9.4s | $0.152 |
+| 16 | 5 | `tool_continuation` | **Sonnet** | 51,844 | 2,453 | 0 | **18,995** | 62.2s | **$0.198** |
+| 17 | 5 | `tool_continuation` | **Sonnet** | 54,344 | 250 | 0 | **18,995** | 7.7s | $0.172 |
+
+### Cost by Model
+
+| Model | Calls | Input Tokens | Output Tokens | Cache Created | Cache Read | Cost | % |
+|-------|-------|-------------|---------------|---------------|------------|------|---|
+| **Haiku 4.5** | 12 | 146,965 | 2,476 | 18,995 | 0 | $0.200 | **23%** |
+| **Sonnet 4.5** | 5 | 182,147 | 4,098 | 18,995 | 94,975 | $0.702 | **77%** |
+| **Total** | **17** | **329,112** | **6,574** | **37,990** | **94,975** | **$0.879** | |
+
+### Observations
+
+1. **Routing worked correctly** — simple lookups (appointments, repos, emails) went to Haiku. The summary and email-detail tasks escalated to Sonnet. The system correctly identified "summarise each" as needing Sonnet via `tool_continuation`.
+
+2. **Prompt caching is working** — 18,995 tokens cached on turn 3, then read 4 times (turns 3, 5×3). That's 94,975 cache-read tokens at $0.30/MTok instead of $3.00/MTok input — saving roughly **$0.26** on this session alone.
+
+3. **Turn 5 dominates cost ($0.577 / 66%)** — "summarise each" triggered 10 parallel `github__get_file` calls, then 5 more, generating ~19K tokens of tool results. Sonnet then processed 50K+ input tokens across 3 continuation calls. This is where the money goes.
+
+4. **Haiku input tokens grow fast** — by turn 4, Haiku is processing 26–30K input tokens per call ($0.027–0.033 each). The conversation history accumulates. Compaction hasn't triggered yet (threshold is 80K).
+
+5. **Turn 4 is expensive for what it does** — "list my repositories" is a simple `factual_lookup` but costs $0.089 because the conversation history is already ~28K tokens. Each Haiku call at that point costs more than the entire turn 1.
+
+6. **Stage 2 classification cost is negligible** — $0.001 total for 2 classification calls. Worth it for routing accuracy.
+
+### Cost-Saving Opportunities
+
+1. **Earlier compaction** — by turn 4, Haiku is re-processing 28K tokens of history for a simple lookup. Compacting after turn 3 would cut turn 4–5 Haiku costs significantly.
+
+2. **Prompt caching on Haiku calls** — cache creation happened on Sonnet calls but not Haiku. If Haiku calls also cached the system prompt/history, the repeated 28K input would be much cheaper ($0.10/MTok read vs $1.00/MTok input).
+
+3. **Tool result summarization** — turn 5 pulled 15K+ tokens of GitHub file content. Summarizing tool results before feeding back would reduce Sonnet's input costs on continuation calls.
+
+### Changes Made
+
+#### 1. Config: `config-optimal-anthropic.json`
+
+- **`CompactionThresholdTokens`**: 80,000 → **25,000** — triggers compaction much earlier, preventing Haiku from re-processing 28K+ tokens of stale history on simple lookups.
+- **`ToolResultSummarizationEnabled`**: `false` → **`true`** — summarizes tool results over 4,000 tokens before feeding them back to the LLM, reducing input costs on continuation calls (e.g. the 15K+ GitHub content in turn 5).
+
+#### 2. Code: Conversation history caching (`anthropic_provider.py`)
+
+**Problem**: Haiku calls with `tool_search_only: true` get only 2 tool schemas. The cached prefix (system prompt + 2 tools) was under Anthropic's 2,048 token minimum for Haiku, so `cache_control` markers were silently ignored. Sonnet calls with 99 tool schemas easily exceeded the minimum, which is why only Sonnet got cache hits.
+
+**Fix**: Added a third cache breakpoint on the **last message** in the conversation. Anthropic allows up to 4 breakpoints; we now use 3:
+
+```
+Before (2 breakpoints):
+  [system prompt + cache_control] → [last tool + cache_control] → [messages...]
+
+After (3 breakpoints):
+  [system prompt + cache_control] → [last tool + cache_control] → [messages... + last msg cache_control]
+```
+
+On iteration 2+ within a turn, the entire prefix (system + tools + all prior messages) gets cached. Even with only 2 tool schemas, once the conversation grows past 2,048 tokens the cache kicks in. The last message content block is patched with `cache_control: {type: "ephemeral"}` — handles both `list[dict]` content (patches last block) and `str` content (wraps in a text block).
+
+**Expected impact on session `7e366d5c`**: Turn 4's three Haiku calls re-processed 26–30K tokens each at $1.00/MTok. With message caching, iterations 2 and 3 would read ~26K from cache at $0.10/MTok — saving roughly **$0.05 per multi-iteration Haiku turn**.
+
+**Validation**: mypy clean, 1355 tests passing.
+
+## Replay Comparison: Before vs After Optimisation
+
+The same 5 prompts were replayed in a new session (`d99b8057`) using the optimised config and caching code change, then compared against the original session (`7e366d5c`).
+
+### Prompts (identical in both sessions)
+
+1. `"list this weeks appointments"`
+2. `"list all emails regarding payments, late payments, credit cards and so forth"`
+3. `"for all the urgent action emails provide a brief summary and include any links or email links etc"`
+4. `"list my repositories"`
+5. `"summurise each"`
+
+### Session `d99b8057` — Per-Call Detail
+
+| # | Turn | Call Type | Model | Input | Output | Cache Create | Cache Read | Duration | Cost |
+|---|------|-----------|-------|-------|--------|-------------|------------|----------|------|
+| 1 | 1 | `semantic:factual_lookup` | Haiku | 2,979 | 80 | 0 | 0 | 1.6s | $0.0034 |
+| 2 | 1 | `pinned:haiku` | Haiku | 5 | 158 | 4,296 | 0 | 1.6s | $0.0062 |
+| 3 | 1 | `pinned:haiku` | Haiku | 5 | 147 | 527 | 4,296 | 1.4s | $0.0018 |
+| 4 | 2 | `semantic:trivial` | Haiku | 3,958 | 67 | 0 | 0 | 1.5s | $0.0043 |
+| 5 | 2 | `pinned:haiku` | Haiku | 5 | 109 | 5,640 | 0 | 1.3s | $0.0076 |
+| 6 | 2 | `tool_summarization` | Sonnet | 3,677 | 514 | 0 | 0 | 9.0s | $0.0187 |
+| 7 | 2 | `pinned:haiku` | Haiku | 4 | 389 | 631 | 5,640 | 3.2s | $0.0033 |
+| 8 | 3 | `semantic:creative` | Sonnet | 3 | 279 | 4,808 | 16,992 | 4.5s | $0.0273 |
+| 9 | 3 | `tool_summarization` | Sonnet | 1,444 | 216 | 0 | 0 | 5.0s | $0.0076 |
+| 10 | 3 | `tool_summarization` | Sonnet | 8,949 | 329 | 0 | 0 | 10.0s | $0.0318 |
+| 11 | 3 | `tool_summarization` | Sonnet | 3,786 | 279 | 0 | 0 | 11.2s | $0.0155 |
+| 12 | 3 | `tool_continuation` | Sonnet | 7 | 840 | 4,801 | 21,800 | 13.9s | $0.0372 |
+| 13 | 4 | `semantic:factual_lookup` | Haiku | 3 | 67 | 10,987 | 0 | 1.6s | $0.0141 |
+| 14 | 4 | `pinned:haiku` | Haiku | 5 | 64 | 12,337 | 0 | 1.4s | $0.0157 |
+| 15 | 4 | `tool_summarization` | Sonnet | 1,854 | 305 | 0 | 0 | 7.4s | $0.0101 |
+| 16 | 4 | `pinned:haiku` | Haiku | 4 | 286 | 377 | 12,337 | 2.7s | $0.0031 |
+| 17 | 5 | `semantic:summarization` | Haiku | 3 | 361 | 28,378 | 0 | 2.9s | $0.0373 |
+| 18 | 5 | `tool_continuation` | Sonnet | 7 | 600 | 2,832 | 26,601 | 6.9s | $0.0276 |
+| 19 | 5 | `tool_summarization` | Sonnet | 2,423 | 395 | 0 | 0 | 10.0s | $0.0132 |
+| 20 | 5 | `tool_summarization` | Sonnet | 3,772 | 684 | 0 | 0 | 11.3s | $0.0216 |
+| 21 | 5 | `tool_summarization` | Sonnet | 7,235 | 1,107 | 0 | 0 | 23.4s | $0.0383 |
+| 22 | 5 | `tool_continuation` | Sonnet | 7 | 86 | 3,813 | 29,433 | 3.0s | $0.0244 |
+| 23 | 5 | `tool_summarization` | Sonnet | 1,854 | 340 | 0 | 0 | 9.3s | $0.0107 |
+| 24 | 5 | `tool_continuation` | Sonnet | 6 | 735 | 435 | 33,246 | 14.3s | $0.0226 |
+
+### Cost by Model (After)
+
+| Model | Calls | Input Tokens | Output Tokens | Cache Created | Cache Read | Cost | % |
+|-------|-------|-------------|---------------|---------------|------------|------|---|
+| **Haiku 4.5** | 10 | 6,971 | 1,728 | 63,173 | 22,273 | $0.097 | **24%** |
+| **Sonnet 4.5** | 14 | 35,024 | 6,709 | 16,689 | 128,072 | $0.307 | **76%** |
+| **Total** | **24** | **41,995** | **8,437** | **79,862** | **150,345** | **$0.404** | |
+
+### Head-to-Head Comparison
+
+| Metric | Before (`7e366d5c`) | After (`d99b8057`) | Delta |
+|--------|--------------------|--------------------|-------|
+| **Total Cost** | **$0.879** | **$0.404** | **-$0.475 (54% saving)** |
+| API Calls | 17 | 24 | +7 (tool summarization) |
+| Input Tokens | 329,112 | 41,995 | **-287,117 (87% reduction)** |
+| Output Tokens | 6,574 | 8,437 | +1,863 (summarization output) |
+| Cache Created | 37,990 | 79,862 | +41,872 (more caching) |
+| Cache Read | 94,975 | 150,345 | +55,370 (more cache hits) |
+| Haiku Cost | $0.200 | $0.097 | **-$0.103 (52% saving)** |
+| Sonnet Cost | $0.702 | $0.307 | **-$0.395 (56% saving)** |
+| Duration | ~134s | ~159s | +25s (summarization overhead) |
+
+### What Drove the Savings
+
+1. **Message caching on Haiku** — Haiku calls now show `cache_read` tokens (e.g. call #3: 4,296 read, call #7: 5,640 read, call #16: 12,337 read). Before, all Haiku cache columns were zero. The input tokens per Haiku call dropped from 26–30K to single digits on cached iterations.
+
+2. **Tool result summarization** — 8 `tool_summarization` calls compressed large tool results before feeding them back. This is why input tokens dropped 87% (329K → 42K) even though output tokens increased slightly. The summarization calls themselves cost ~$0.17 total but saved far more by reducing downstream input costs.
+
+3. **Compounding effect** — smaller tool results → smaller conversation history → smaller input on every subsequent call. The savings compound across turns.
+
+### Trade-offs
+
+- **+25s wall time** — the 8 summarization calls add latency (~9–23s each). For interactive use this is noticeable but acceptable given the cost savings.
+- **+7 extra API calls** — more calls but much cheaper ones. Total output tokens increased by 1,863 (summarization outputs).
+- **Information loss** — summarized tool results lose detail. The LLM sees a compressed version, not the raw data. For most use cases this is fine; for tasks requiring exact data (e.g. extracting specific fields from raw HTML), it could be a problem.
+
+## Replay 2: Session `9846759b-6280-4bec-9cd1-abec0d8f5e41`
+
+A second replay of the same 5 prompts with the optimised config, to test repeatability and account for LLM non-determinism.
+
+### Session Summary
+
+| Field | Value |
+|-------|-------|
+| **Duration** | ~4 min 42s (15:37:57 → 15:42:39) |
+| **Model** | Haiku 4.5 + Sonnet 4.5 (semantic routing) |
+| **Total Cost** | **$0.537** |
+| **API Calls** | 32 |
+| **Total Input Tokens** | 52,593 |
+| **Total Output Tokens** | 11,906 |
+| **Cache Created** | 81,531 tokens |
+| **Cache Read** | 242,570 tokens |
+
+### Per-Call Detail
+
+| # | Turn | Call Type | Model | Input | Output | Cache Create | Cache Read | Duration | Cost |
+|---|------|-----------|-------|-------|--------|-------------|------------|----------|------|
+| 1 | 1 | `semantic:factual_lookup` | Haiku | 2,858 | 73 | 0 | 0 | 2.2s | $0.0032 |
+| 2 | 1 | `pinned:haiku` | Haiku | 5 | 154 | 4,168 | 0 | 1.8s | $0.0060 |
+| 3 | 1 | `pinned:haiku` | Haiku | 5 | 131 | 523 | 4,168 | 1.4s | $0.0017 |
+| 4 | 2 | `stage2_classification` | Haiku | 310 | 39 | 0 | 0 | 1.4s | $0.0005 |
+| 5 | 2 | `semantic:trivial` | Haiku | 3,810 | 70 | 0 | 0 | 1.2s | $0.0042 |
+| 6 | 2 | `pinned:haiku` | Haiku | 5 | 106 | 4,795 | 0 | 1.5s | $0.0065 |
+| 7 | 2 | `tool_summarization` | Sonnet | 3,198 | 443 | 0 | 0 | 8.3s | $0.0162 |
+| 8 | 2 | `pinned:haiku` | Haiku | 5 | 353 | 557 | 4,795 | 3.0s | $0.0029 |
+| 9 | 3 | `stage2_classification` | Haiku | 314 | 31 | 0 | 0 | 1.6s | $0.0005 |
+| 10 | 3 | `semantic:creative` | Sonnet | 3 | 233 | 4,504 | 16,992 | 4.2s | $0.0255 |
+| 11 | 3 | `tool_summarization` | Sonnet | 1,444 | 216 | 0 | 0 | 5.0s | $0.0076 |
+| 12 | 3 | `tool_summarization` | Sonnet | 3,786 | 287 | 0 | 0 | 8.6s | $0.0157 |
+| 13 | 3 | `tool_summarization` | Sonnet | 8,949 | 349 | 0 | 0 | 10.9s | $0.0321 |
+| 14 | 3 | `tool_continuation` | Sonnet | 7 | 652 | 3,147 | 21,496 | 11.1s | $0.0281 |
+| 15 | 4 | `semantic:factual_lookup` | Haiku | 3 | 71 | 8,841 | 0 | 1.5s | $0.0114 |
+| 16 | 4 | `pinned:haiku` | Haiku | 5 | 64 | 10,195 | 0 | 1.1s | $0.0131 |
+| 17 | 4 | `tool_summarization` | Sonnet | 1,854 | 348 | 0 | 0 | 8.1s | $0.0108 |
+| 18 | 4 | `pinned:haiku` | Haiku | 4 | 271 | 420 | 10,195 | 2.2s | $0.0029 |
+| 19 | 5 | `semantic:summarization` | Haiku | 3 | 596 | 26,264 | 0 | 3.6s | $0.0358 |
+| 20 | 5 | `tool_summarization` | Sonnet | 1,982 | 609 | 0 | 0 | 11.2s | $0.0151 |
+| 21 | 5 | `tool_summarization` | Sonnet | 2,423 | 470 | 0 | 0 | 12.6s | $0.0143 |
+| 22 | 5 | `tool_summarization` | Sonnet | 7,235 | 1,161 | 0 | 0 | 25.9s | $0.0391 |
+| 23 | 5 | `tool_continuation` | Sonnet | 7 | 401 | 11,129 | 18,995 | 6.0s | $0.0535 |
+| 24 | 5 | `tool_summarization` | Sonnet | 2,187 | 468 | 0 | 0 | 9.5s | $0.0136 |
+| 25 | 5 | `tool_summarization` | Sonnet | 3,772 | 659 | 0 | 0 | 10.9s | $0.0212 |
+| 26 | 5 | `tool_continuation` | Sonnet | 7 | 367 | 1,746 | 30,124 | 5.8s | $0.0211 |
+| 27 | 5 | `tool_continuation` | Sonnet | 7 | 361 | 1,065 | 31,870 | 4.6s | $0.0190 |
+| 28 | 5 | `tool_continuation` | Sonnet | 7 | 240 | 1,457 | 32,935 | 11.3s | $0.0190 |
+| 29 | 5 | `tool_summarization` | Sonnet | 6,531 | 771 | 0 | 0 | 16.5s | $0.0312 |
+| 30 | 5 | `tool_continuation` | Sonnet | 7 | 96 | 2,216 | 34,392 | 3.7s | $0.0201 |
+| 31 | 5 | `tool_summarization` | Sonnet | 1,854 | 399 | 0 | 0 | 10.6s | $0.0115 |
+| 32 | 5 | `tool_continuation` | Sonnet | 6 | 1,417 | 504 | 36,608 | 37.5s | $0.0341 |
+
+### Cost by Model
+
+| Model | Calls | Input Tokens | Output Tokens | Cache Created | Cache Read | Cost | % |
+|-------|-------|-------------|---------------|---------------|------------|------|---|
+| **Haiku 4.5** | 12 | 7,327 | 1,959 | 55,763 | 19,158 | $0.089 | **17%** |
+| **Sonnet 4.5** | 20 | 45,266 | 9,947 | 25,768 | 223,412 | $0.449 | **83%** |
+| **Total** | **32** | **52,593** | **11,906** | **81,531** | **242,570** | **$0.537** | |
+
+### Observations
+
+1. **Turn 5 took more iterations** — Sonnet made 6 `tool_continuation` calls (vs 4 in replay 1) and 7 `tool_summarization` calls (vs 4). The model chose to fetch repos in smaller batches this time, adding more round-trips.
+
+2. **Caching improved further** — 242K cache read tokens vs 150K in replay 1. Haiku cost dropped to $0.089 (from $0.097). The message caching fix compounds over more iterations.
+
+3. **Non-determinism is the cost variance driver** — the $0.133 difference between replays ($0.404 vs $0.537) is entirely from Sonnet's turn 5 behaviour. Haiku costs were nearly identical ($0.097 vs $0.089).
+
+### Three-Way Comparison
+
+| Metric | Original (`7e366d5c`) | Replay 1 (`d99b8057`) | Replay 2 (`9846759b`) |
+|--------|--------------------|--------------------|---------------------|
+| **Total Cost** | **$0.879** | **$0.404** | **$0.537** |
+| **Saving vs Original** | — | **54%** | **39%** |
+| API Calls | 17 | 24 | 32 |
+| Input Tokens | 329,112 | 41,995 | 52,593 |
+| Output Tokens | 6,574 | 8,437 | 11,906 |
+| Cache Created | 37,990 | 79,862 | 81,531 |
+| Cache Read | 94,975 | 150,345 | 242,570 |
+| Haiku Cost | $0.200 | $0.097 | $0.089 |
+| Sonnet Cost | $0.702 | $0.307 | $0.449 |
+| Duration | ~134s | ~159s | ~245s |
+
+### Conclusions
+
+- **Optimisations deliver consistent savings** — both replays are significantly cheaper than the original (39–54%), despite LLM non-determinism causing variance between runs.
+- **Haiku costs are stable and low** — $0.089–$0.097 across replays, down from $0.200. The message caching fix and compaction threshold change are working reliably.
+- **Sonnet cost variance is the wildcard** — $0.307–$0.449 depending on how many iterations the model takes on complex tasks. This is inherent to non-deterministic LLM behaviour and cannot be eliminated through configuration.
+- **Expected cost range for this workload** — $0.40–$0.55 with the optimised config, vs $0.88 without. A **40–55% reduction**.
