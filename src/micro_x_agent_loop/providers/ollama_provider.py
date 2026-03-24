@@ -13,7 +13,6 @@ class OllamaProvider(OpenAIProvider):
     a non-empty string, so a dummy value is used when none is supplied.
 
     Differences from vanilla OpenAI handled here:
-    - ``stream_options`` is omitted (not reliably supported by Ollama).
     - ``tool_choice`` is set to ``"auto"`` when tools are present, giving
       smaller models an explicit nudge to use function calling.
     """
@@ -34,14 +33,9 @@ class OllamaProvider(OpenAIProvider):
         messages: list[dict],
         tools: list[dict],
     ) -> dict:
-        kwargs: dict = dict(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=messages,
-            stream=True,
+        kwargs = super()._build_stream_kwargs(
+            model, max_tokens, temperature, messages, tools,
         )
         if tools:
-            kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
         return kwargs
