@@ -10,9 +10,8 @@ from loguru import logger
 from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
 from micro_x_agent_loop.provider_pool import ProviderPool, RoutingTarget
-from micro_x_agent_loop.semantic_classifier import TaskClassification
+from micro_x_agent_loop.routing_strategy import RoutingStrategy
 from micro_x_agent_loop.sub_agent import SPAWN_SUBAGENT_SCHEMA, SubAgentRunner, SubAgentType
-from micro_x_agent_loop.turn_classifier import TurnClassification
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
 
 if TYPE_CHECKING:
@@ -49,9 +48,10 @@ class TurnEngine:
         tool_search_globally_active: bool = False,
         compact_system_prompt: str = "",
         sub_agent_runner: SubAgentRunner | None = None,
+        routing: RoutingStrategy | None = None,
+        # Legacy params — used when `routing` is None (backward compat for tests)
         turn_classifier: Any | None = None,
         routing_model: str = "",
-        # Semantic routing (Phase 1–4)
         provider_pool: ProviderPool | None = None,
         semantic_classifier: Any | None = None,
         routing_policies: dict[str, dict] | None = None,
@@ -82,17 +82,36 @@ class TurnEngine:
         self._tool_search_globally_active = tool_search_globally_active
         self._compact_system_prompt = compact_system_prompt
         self._sub_agent_runner = sub_agent_runner
-        self._turn_classifier = turn_classifier
-        self._routing_model = routing_model
-        # Semantic routing
-        self._provider_pool = provider_pool
-        self._semantic_classifier = semantic_classifier
-        self._routing_policies = routing_policies or {}
-        self._routing_fallback_provider = routing_fallback_provider
-        self._routing_fallback_model = routing_fallback_model
-        self._task_embedding_index = task_embedding_index
-        self._routing_feedback_callback = routing_feedback_callback
-        self._routing_confidence_threshold = routing_confidence_threshold
+        # Build RoutingStrategy from legacy params if not provided directly
+        resolved_routing: RoutingStrategy | None = None
+        if routing is not None:
+            resolved_routing = routing
+        elif semantic_classifier is not None or turn_classifier is not None:
+            resolved_routing = RoutingStrategy(
+                default_model=model,
+                provider_pool=provider_pool,
+                semantic_classifier=semantic_classifier,
+                turn_classifier=turn_classifier,
+                routing_policies=routing_policies,
+                routing_fallback_provider=routing_fallback_provider,
+                routing_fallback_model=routing_fallback_model,
+                routing_confidence_threshold=routing_confidence_threshold,
+                routing_model=routing_model,
+                routing_feedback_callback=routing_feedback_callback,
+                compact_system_prompt=compact_system_prompt,
+                task_embedding_index=task_embedding_index,
+                tool_search_manager=tool_search_manager,
+            )
+        self._routing = resolved_routing
+        # Keep direct references needed outside of routing
+        self._routing_fallback_provider = (
+            routing_fallback_provider if routing is None
+            else (routing.fallback_provider if routing else "")
+        )
+        self._routing_fallback_model = (
+            routing_fallback_model if routing is None
+            else (routing.fallback_model if routing else "")
+        )
 
     async def run(
         self,
@@ -127,108 +146,33 @@ class TurnEngine:
             if self._channel is not None:
                 api_tools.append(ASK_USER_SCHEMA)
 
-            # Model routing: semantic (if enabled) → per-turn heuristic → default
+            # Model routing via RoutingStrategy
             effective_model = self._model
-            effective_provider = None  # None = use self._provider
-            classification: TurnClassification | None = None
-            task_classification: TaskClassification | None = None
+            effective_provider: Any = None
+            task_classification = None
             call_type = "main"
-
             routing_target: RoutingTarget | None = None
 
-            # Pin continuation: reuse the iteration-0 routing target on iteration 1+
-            if pinned_target is not None and turn_iteration > 0:
-                routing_target = pinned_target
-                effective_provider = self._provider_pool
-                effective_model = routing_target.model
-                call_type = f"pinned:{pinned_target.provider}/{pinned_target.model}"
-                logger.info(
-                    "Pinned continuation: reusing iteration-0 target "
-                    "provider={provider} model={model} (iteration {iteration})",
-                    provider=routing_target.provider,
-                    model=routing_target.model,
-                    iteration=turn_iteration,
-                )
-
-            elif self._semantic_classifier is not None and self._provider_pool is not None:
-                # Pre-embed query for semantic classification (~10ms via Ollama)
-                query_embedding: list[float] | None = None
-                if (
-                    self._task_embedding_index is not None
-                    and getattr(self._task_embedding_index, "is_ready", False)
-                ):
-                    query_embedding = await self._task_embedding_index.embed_query(
-                        user_message[:2000],
-                    )
-
-                # Semantic routing (Phase 1–4)
-                task_classification = self._semantic_classifier(
+            if self._routing is not None:
+                decision = await self._routing.decide(
                     user_message=user_message,
-                    has_tools=bool(api_tools),
                     turn_iteration=turn_iteration,
                     turn_number=turn_number,
-                    query_embedding=query_embedding,
+                    api_tools=api_tools,
+                    pinned_target=pinned_target,
+                    channel=self._channel,
                 )
-                routing_target = self._resolve_routing_target(task_classification)
-                if routing_target is not None:
-                    effective_provider = self._provider_pool
-                    effective_model = routing_target.model
-                    call_type = f"semantic:{task_classification.task_type.value}"
-                    # Save for pinning on subsequent iterations
-                    if routing_target.pin_continuation and turn_iteration == 0:
-                        pinned_target = routing_target
-                logger.info(
-                    "Semantic routing: task_type={task_type} stage={stage} "
-                    "confidence={confidence:.2f} provider={provider} model={model} reason={reason}",
-                    task_type=task_classification.task_type.value,
-                    stage=task_classification.stage,
-                    confidence=task_classification.confidence,
-                    provider=routing_target.provider if routing_target else "default",
-                    model=effective_model,
-                    reason=task_classification.reason,
-                )
-
-            elif self._turn_classifier is not None:
-                # Legacy per-turn routing
-                classification = self._turn_classifier(
-                    user_message=user_message,
-                    has_tools=bool(api_tools),
-                    turn_iteration=turn_iteration,
-                    turn_number=turn_number,
-                )
-                if classification.use_cheap_model and self._routing_model:
-                    effective_model = self._routing_model
-                    call_type = "main:routed"
-                logger.info(
-                    "Turn routing: model={model} rule={rule} reason={reason}",
-                    model=effective_model,
-                    rule=classification.rule,
-                    reason=classification.reason,
-                )
-
-            # Per-policy overrides for routed turns (small models)
-            if routing_target is not None:
-                # Narrow tools for tool_search_only routes
-                if routing_target.tool_search_only:
-                    if self._tool_search_manager is not None:
-                        api_tools = self._tool_search_manager.get_tools_for_api_call()
-                    else:
-                        from micro_x_agent_loop.tool_search import TOOL_SEARCH_SCHEMA
-                        api_tools = [TOOL_SEARCH_SCHEMA]
-                    if self._channel is not None:
-                        api_tools.append(ASK_USER_SCHEMA)
-                    logger.info(
-                        "tool_search_only: narrowed tools to {count} for {model}",
-                        count=len(api_tools),
-                        model=routing_target.model,
-                    )
-                # Swap to compact system prompt for small models
-                if routing_target.system_prompt == "compact" and self._compact_system_prompt:
-                    system_prompt = resolve_system_prompt(self._compact_system_prompt)
-                    logger.info(
-                        "system_prompt: using compact prompt for {model}",
-                        model=routing_target.model,
-                    )
+                effective_model = decision.effective_model
+                effective_provider = decision.effective_provider
+                routing_target = decision.routing_target
+                task_classification = decision.task_classification
+                call_type = decision.call_type
+                if decision.new_pinned_target is not None:
+                    pinned_target = decision.new_pinned_target
+                if decision.narrowed_tools is not None:
+                    api_tools = decision.narrowed_tools
+                if decision.system_prompt_override is not None:
+                    system_prompt = decision.system_prompt_override
 
             # Dispatch to provider
             if effective_provider is not None and isinstance(effective_provider, ProviderPool):
@@ -259,8 +203,8 @@ class TurnEngine:
             self._events.on_api_call_completed(usage, call_type)
 
             # Routing feedback callback
-            if self._routing_feedback_callback and task_classification is not None:
-                self._routing_feedback_callback(
+            if self._routing is not None and self._routing.feedback_callback and task_classification is not None:
+                self._routing.feedback_callback(
                     task_classification=task_classification,
                     usage=usage,
                     call_type=call_type,
@@ -380,77 +324,6 @@ class TurnEngine:
             self._events.on_append_message("user", all_results)
             await self._events.on_maybe_compact()
             turn_iteration += 1
-
-    def _resolve_routing_target(
-        self, classification: TaskClassification | None,
-    ) -> RoutingTarget | None:
-        """Map a task classification to a provider/model routing target.
-
-        Applies confidence gating: if confidence is below the threshold and
-        the policy would route to a different (cheaper) model, fall back to
-        the main model to avoid degrading quality on uncertain classifications.
-        """
-        if classification is None or not self._routing_policies:
-            return None
-
-        task_type = classification.task_type.value
-        policy = self._routing_policies.get(task_type)
-        if policy is None:
-            # Fall back to default
-            if self._routing_fallback_provider and self._routing_fallback_model:
-                return RoutingTarget(
-                    provider=self._routing_fallback_provider,
-                    model=self._routing_fallback_model,
-                )
-            return None
-
-        provider = policy.get("provider", self._routing_fallback_provider)
-        model = policy.get("model", self._routing_fallback_model)
-        tool_search_only = bool(policy.get("tool_search_only", False))
-        system_prompt_policy = str(policy.get("system_prompt", ""))
-        pin_continuation = bool(policy.get("pin_continuation", False))
-        if not provider or not model:
-            return None
-
-        # Confidence gating: if confidence is below threshold and this would
-        # route to a different (presumably cheaper) model, refuse to downgrade
-        main_model = self._routing_fallback_model or self._model
-        if (
-            classification.confidence < self._routing_confidence_threshold
-            and model != main_model
-        ):
-            logger.info(
-                "Confidence gate: {confidence:.2f} < {threshold:.2f}, "
-                "refusing downgrade from {main} to {target}",
-                confidence=classification.confidence,
-                threshold=self._routing_confidence_threshold,
-                main=main_model,
-                target=model,
-            )
-            return RoutingTarget(
-                provider=self._routing_fallback_provider or provider,
-                model=main_model,
-            )
-
-        # Cache-awareness: check if switching is worth it
-        if self._provider_pool is not None:
-            if not self._provider_pool.should_switch_provider(
-                provider,
-                expected_savings_tokens=1000,  # Rough estimate
-                input_price_per_mtok=3.0,      # Default Sonnet pricing
-            ):
-                return RoutingTarget(
-                    provider=self._provider_pool.active_cache_provider,
-                    model=self._routing_fallback_model or self._model,
-                )
-
-        return RoutingTarget(
-            provider=provider,
-            model=model,
-            tool_search_only=tool_search_only,
-            system_prompt=system_prompt_policy,
-            pin_continuation=pin_continuation,
-        )
 
     @staticmethod
     def _merge_tool_results(

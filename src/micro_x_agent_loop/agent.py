@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from functools import partial
 from pathlib import Path
 
 from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig
-from micro_x_agent_loop.api_payload_store import ApiPayloadStore
-from micro_x_agent_loop.app_config import resolve_runtime_env
 from micro_x_agent_loop.commands.command_handler import CommandHandler
 from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.commands.router import CommandRouter
@@ -32,13 +29,9 @@ from micro_x_agent_loop.mode_selector import (
     format_analysis,
     parse_stage2_response,
 )
-from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
-from micro_x_agent_loop.sub_agent import SubAgentRunner
 from micro_x_agent_loop.tool import Tool
-from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
-from micro_x_agent_loop.tool_search import ToolSearchManager, should_activate_tool_search
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
 from micro_x_agent_loop.voice_runtime import VoiceRuntime
@@ -52,147 +45,66 @@ class Agent:
     _MAX_TOKENS_RETRIES = MAX_TOKENS_RETRIES
 
     def __init__(self, config: AgentConfig):
-        self._provider = create_provider(
-            config.provider, config.api_key,
-            prompt_caching_enabled=config.prompt_caching_enabled,
-            ollama_base_url=config.ollama_base_url,
-        )
-        self._model = config.model
-        self._max_tokens = config.max_tokens
-        self._temperature = config.temperature
-        self._system_prompt = config.system_prompt
+        from micro_x_agent_loop.agent_builder import build_agent_components
+
+        c = build_agent_components(config)
+
+        # --- Core LLM ---
+        self._provider = c.provider
+        self._model = c.model
+        self._max_tokens = c.max_tokens
+        self._temperature = c.temperature
+        self._system_prompt = c.system_prompt
         self._messages: list[dict] = []
-        self._tool_map: dict[str, Tool] = {t.name: t for t in config.tools}
-        self._converted_tools = self._provider.convert_tools(config.tools)
+        self._tool_map = c.tool_map
+        self._converted_tools = c.converted_tools
 
-        # Tool search (on-demand tool discovery)
-        self._tool_search_active = should_activate_tool_search(
-            config.tool_search_enabled,
-            self._converted_tools,
-            config.model,
-            provider=config.provider,
-        )
-        # Also need ToolSearchManager if any routing policy uses tool_search_only
-        _any_policy_needs_search = any(
-            p.get("tool_search_only", False) for p in config.routing_policies.values()
-        )
-        self._tool_search_manager: ToolSearchManager | None = None
-        if self._tool_search_active or _any_policy_needs_search:
-            # Build embedding index for semantic search when strategy != "keyword"
-            embedding_index: ToolEmbeddingIndex | None = None
-            if config.tool_search_strategy != "keyword" and config.ollama_base_url:
-                from micro_x_agent_loop.embedding import OllamaEmbeddingClient, ToolEmbeddingIndex
-                client = OllamaEmbeddingClient(config.ollama_base_url, config.embedding_model)
-                embedding_index = ToolEmbeddingIndex(client)
-            self._tool_search_manager = ToolSearchManager(
-                all_tools=config.tools,
-                converted_tools=self._converted_tools,
-                embedding_index=embedding_index,
-                max_load=config.tool_search_max_load,
-            )
-        if self._tool_search_active:
-            from micro_x_agent_loop.system_prompt import _TOOL_SEARCH_DIRECTIVE
-            self._system_prompt += _TOOL_SEARCH_DIRECTIVE
-            logger.info(
-                f"Tool search active: {len(config.tools)} tools deferred, "
-                "LLM will discover tools via tool_search"
-            )
+        # --- Tool search ---
+        self._tool_search_active = c.tool_search_active
+        self._tool_search_manager = c.tool_search_manager
 
-        self._autonomous = config.autonomous
-        self._channel = config.channel
-        self._line_prefix = self._LINE_PREFIX_AUTONOMOUS if config.autonomous else self._LINE_PREFIX
+        # --- Channel & display ---
+        self._autonomous = c.autonomous
+        self._channel = c.channel
+        self._line_prefix = c.line_prefix
 
-        # Enable ask_user directive when a channel is available
-        _compact = config.provider == "ollama"
-        if self._channel is not None and not _compact:
-            from micro_x_agent_loop.system_prompt import _ASK_USER_DIRECTIVE
-            self._system_prompt += _ASK_USER_DIRECTIVE
+        # --- Sub-agents & compact prompt ---
+        self._sub_agent_runner = c.sub_agent_runner
+        self._compact_system_prompt = c.compact_system_prompt
 
-        # Sub-agents
-        self._sub_agent_runner: SubAgentRunner | None = None
-        if config.sub_agents_enabled:
-            if not config.sub_agent_provider:
-                raise ValueError("SubAgentProvider must be set in config when SubAgentsEnabled is true")
-            if not config.sub_agent_model:
-                raise ValueError("SubAgentModel must be set in config when SubAgentsEnabled is true")
-            if not _compact:
-                from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
-                self._system_prompt += _SUBAGENT_DIRECTIVE
+        # --- Tool result & conversation limits ---
+        self._max_tool_result_chars = c.max_tool_result_chars
+        self._max_conversation_messages = c.max_conversation_messages
+        self._compaction_strategy = c.compaction_strategy
+        self._memory_enabled = c.memory_enabled
 
-        # Build compact system prompt for per-policy routing overrides
-        _any_policy_needs_compact = any(
-            p.get("system_prompt") == "compact" for p in config.routing_policies.values()
-        )
-        self._compact_system_prompt = ""
-        if _any_policy_needs_compact:
-            from micro_x_agent_loop.system_prompt import get_system_prompt
-            self._compact_system_prompt = get_system_prompt(
-                user_memory="",
-                user_memory_enabled=False,
-                concise_output_enabled=True,
-                working_directory=config.working_directory,
-                autonomous=config.autonomous,
-                hitl_enabled=False,
-                compact=True,
-                tool_search_active=True,
-            )
-            self._sub_agent_runner = SubAgentRunner(
-                parent_tools=config.tools,
-                provider_name=config.provider,
-                api_key=config.api_key,
-                parent_model=config.model,
-                sub_agent_provider=config.sub_agent_provider,
-                sub_agent_model=config.sub_agent_model,
-                timeout=config.sub_agent_timeout,
-                max_turns=config.sub_agent_max_turns,
-                max_tokens=config.sub_agent_max_tokens,
-                max_tool_result_chars=config.max_tool_result_chars,
-            )
+        # --- Memory ---
+        self._memory: ActiveMemoryFacade | NullMemoryFacade = c.memory
 
-        self._max_tool_result_chars = config.max_tool_result_chars
-        self._max_conversation_messages = config.max_conversation_messages
-        self._compaction_strategy = config.compaction_strategy
-        self._memory_enabled = config.memory_enabled
-
-        # Memory facade
-        if config.memory_enabled and config.session_manager is not None:
-            self._memory: ActiveMemoryFacade | NullMemoryFacade = ActiveMemoryFacade(
-                session_manager=config.session_manager,
-                checkpoint_manager=config.checkpoint_manager,
-                event_emitter=config.event_emitter,
-                active_session_id=config.session_id,
-                store=config.memory_store,
-            )
-        else:
-            self._memory = NullMemoryFacade()
-            self._memory.active_session_id = config.session_id
-
+        # --- Message state ---
         self._current_user_message_id: str | None = None
         self._current_user_message_text: str | None = None
         self._current_checkpoint_id: str | None = None
         self._last_assistant_message_id: str | None = None
         self._run_lock = asyncio.Lock()
 
-        # User memory
-        self._user_memory_enabled = config.user_memory_enabled
-        self._user_memory_dir = config.user_memory_dir
+        # --- User memory ---
+        self._user_memory_enabled = c.user_memory_enabled
+        self._user_memory_dir = c.user_memory_dir
 
-        # Metrics
-        self._metrics_enabled = config.metrics_enabled
+        # --- Metrics ---
+        self._metrics_enabled = c.metrics_enabled
         self._turn_number = 0
-        self._session_accumulator = SessionAccumulator(
-            session_id=config.session_id or "",
-        )
-
-        # Session budget
-        self._session_budget_usd = config.session_budget_usd
+        self._session_accumulator = c.session_accumulator
+        self._session_budget_usd = c.session_budget_usd
         self._budget_warning_emitted = False
 
-        # Wire compaction callback if metrics enabled
+        # Wire compaction callback (needs self)
         if self._metrics_enabled and isinstance(self._compaction_strategy, SummarizeCompactionStrategy):
             self._compaction_strategy._on_compaction_completed = self._on_compaction_completed
 
-        if config.autonomous:
+        # --- Voice runtime (needs self for callback) ---
+        if c.autonomous:
             self._voice_runtime = None
         else:
             self._voice_runtime = VoiceRuntime(
@@ -201,144 +113,54 @@ class Agent:
                 on_utterance=self._process_voice_utterance,
             )
 
+        # --- Services ---
         self._session_controller = SessionController(line_prefix=self._line_prefix)
         self._checkpoint_service = CheckpointService(line_prefix=self._line_prefix)
 
-        # Mode analysis
-        self._mode_analysis_enabled = config.mode_analysis_enabled
-        self._stage2_classification_enabled = config.stage2_classification_enabled
-        if config.stage2_classification_enabled:
-            if not config.stage2_provider:
-                raise ValueError("Stage2Provider must be set in config when Stage2ClassificationEnabled is true")
-            if not config.stage2_model:
-                raise ValueError("Stage2Model must be set in config when Stage2ClassificationEnabled is true")
-        self._stage2_model = config.stage2_model
-        self._stage2_provider = (
-            create_provider(config.stage2_provider, resolve_runtime_env(config.stage2_provider).provider_api_key)
-            if config.stage2_classification_enabled else None
-        )
-        self._working_directory = config.working_directory
+        # --- Mode analysis ---
+        self._mode_analysis_enabled = c.mode_analysis_enabled
+        self._stage2_classification_enabled = c.stage2_classification_enabled
+        self._stage2_model = c.stage2_model
+        self._stage2_provider = c.stage2_provider
+        self._working_directory = c.working_directory
 
-        # Tool result summarization
-        summarization_provider = None
-        summarization_model = ""
-        if config.tool_result_summarization_enabled:
-            summarization_model = config.tool_result_summarization_model or config.model
-            summarization_provider = create_provider(config.provider, config.api_key)
+        # --- Tool result formatting ---
+        self._tool_result_formatter = c.tool_result_formatter
+        self._api_payload_store = c.api_payload_store
 
-        self._tool_result_formatter = ToolResultFormatter(
-            tool_formatting=config.tool_formatting,
-            default_format=config.default_format,
-        )
+        # --- Routing state ---
+        self._per_turn_routing_enabled = c.per_turn_routing_enabled
+        self._semantic_routing_enabled = c.semantic_routing_enabled
+        self._routing_feedback_store = c.routing_feedback_store
+        self._task_embedding_index = c.task_embedding_index
 
-        self._api_payload_store = ApiPayloadStore()
+        # Wire routing feedback callback (captures self)
+        routing_feedback_callback = c.routing_feedback_callback
+        if c.routing_feedback_store is not None and c.semantic_routing_enabled:
+            from micro_x_agent_loop.routing_feedback import RoutingOutcome
 
-        # Per-turn routing (legacy) and semantic routing
-        turn_classifier = None
-        routing_model = ""
-        self._per_turn_routing_enabled = config.per_turn_routing_enabled
-        provider_pool = None
-        semantic_classifier = None
-        routing_feedback_callback = None
-        self._routing_feedback_store = None
-        self._semantic_routing_enabled = config.semantic_routing_enabled
+            def _on_routing_feedback(
+                *, task_classification: object, usage: UsageResult, call_type: str
+            ) -> None:
+                from micro_x_agent_loop.semantic_classifier import TaskClassification as TC
+                if not isinstance(task_classification, TC):
+                    return
+                assert self._routing_feedback_store is not None
+                self._routing_feedback_store.record(RoutingOutcome(
+                    session_id=self._memory.active_session_id or "",
+                    turn_number=self._turn_number,
+                    task_type=task_classification.task_type.value,
+                    provider=usage.provider,
+                    model=usage.model,
+                    cost_usd=estimate_cost(usage),
+                    latency_ms=usage.duration_ms,
+                    stage=task_classification.stage,
+                    confidence=task_classification.confidence,
+                ))
 
-        self._task_embedding_index: object | None = None
+            routing_feedback_callback = _on_routing_feedback
 
-        if config.semantic_routing_enabled:
-            # Phase 1: Build provider pool
-            from micro_x_agent_loop.provider_pool import ProviderPool
-            from micro_x_agent_loop.semantic_classifier import classify_task
-
-            pool_providers: dict[str, object] = {config.provider: self._provider}
-            # Add providers referenced in routing policies
-            for policy in config.routing_policies.values():
-                p_name = policy.get("provider", "")
-                if p_name and p_name not in pool_providers:
-                    try:
-                        p_env = resolve_runtime_env(p_name)
-                        pool_providers[p_name] = create_provider(
-                            p_name, p_env.provider_api_key,
-                            prompt_caching_enabled=config.prompt_caching_enabled,
-                            ollama_base_url=config.ollama_base_url,
-                        )
-                    except Exception as ex:
-                        logger.warning(f"Failed to create provider {p_name!r} for routing: {ex}")
-
-            provider_pool = ProviderPool(
-                pool_providers,
-                fallback_provider=config.routing_fallback_provider or config.provider,
-            )
-
-            # Phase 2: Build semantic classifier with optional embedding index
-            if config.ollama_base_url and config.embedding_model:
-                from micro_x_agent_loop.embedding import OllamaEmbeddingClient, TaskEmbeddingIndex
-                task_client = OllamaEmbeddingClient(config.ollama_base_url, config.embedding_model)
-                self._task_embedding_index = TaskEmbeddingIndex(task_client)
-
-            keywords = [kw.strip() for kw in config.per_turn_routing_complexity_keywords.split(",") if kw.strip()]
-            semantic_classifier = partial(
-                classify_task,
-                complexity_keywords=keywords,
-                strategy=config.semantic_routing_strategy,
-                task_embedding_index=self._task_embedding_index,
-            )
-
-            # Phase 4: Routing feedback
-            if config.routing_feedback_enabled:
-                from micro_x_agent_loop.routing_feedback import RoutingFeedbackStore, RoutingOutcome
-                db_path = Path(config.routing_feedback_db_path)
-                if not db_path.is_absolute():
-                    db_path = Path.cwd() / db_path
-                self._routing_feedback_store = RoutingFeedbackStore(str(db_path))
-
-                def _on_routing_feedback(
-                    *, task_classification: object, usage: UsageResult, call_type: str
-                ) -> None:
-                    from micro_x_agent_loop.semantic_classifier import TaskClassification as TC
-                    if not isinstance(task_classification, TC):
-                        return
-                    assert self._routing_feedback_store is not None
-                    self._routing_feedback_store.record(RoutingOutcome(
-                        session_id=self._memory.active_session_id or "",
-                        turn_number=self._turn_number,
-                        task_type=task_classification.task_type.value,
-                        provider=usage.provider,
-                        model=usage.model,
-                        cost_usd=estimate_cost(usage),
-                        latency_ms=usage.duration_ms,
-                        stage=task_classification.stage,
-                        confidence=task_classification.confidence,
-                    ))
-
-                routing_feedback_callback = _on_routing_feedback
-
-            logger.info(
-                "Semantic routing enabled: strategy={strategy} providers={providers} policies={policies}",
-                strategy=config.semantic_routing_strategy,
-                providers=list(pool_providers.keys()),
-                policies=list(config.routing_policies.keys()),
-            )
-
-        elif config.per_turn_routing_enabled:
-            if not config.per_turn_routing_model:
-                raise ValueError("PerTurnRoutingModel must be set in config when PerTurnRoutingEnabled is true")
-            if not config.per_turn_routing_provider:
-                raise ValueError("PerTurnRoutingProvider must be set in config when PerTurnRoutingEnabled is true")
-            from micro_x_agent_loop.turn_classifier import classify_turn
-            keywords = [kw.strip() for kw in config.per_turn_routing_complexity_keywords.split(",") if kw.strip()]
-            turn_classifier = partial(
-                classify_turn,
-                max_user_chars=config.per_turn_routing_max_user_chars,
-                short_followup_chars=config.per_turn_routing_short_followup_chars,
-                complexity_keywords=keywords,
-            )
-            routing_model = config.per_turn_routing_model
-            logger.info(
-                "Per-turn routing enabled: cheap model={model}",
-                model=routing_model,
-            )
-
+        # --- TurnEngine ---
         self._turn_engine = TurnEngine(
             provider=self._provider,
             model=self._model,
@@ -351,28 +173,29 @@ class Agent:
             max_tokens_retries=self._MAX_TOKENS_RETRIES,
             events=self,
             channel=self._channel,
-            summarization_provider=summarization_provider,
-            summarization_model=summarization_model,
-            summarization_enabled=config.tool_result_summarization_enabled,
-            summarization_threshold=config.tool_result_summarization_threshold,
+            summarization_provider=c.summarization_provider,
+            summarization_model=c.summarization_model,
+            summarization_enabled=c.summarization_enabled,
+            summarization_threshold=c.summarization_threshold,
             formatter=self._tool_result_formatter,
             api_payload_store=self._api_payload_store,
             tool_search_manager=self._tool_search_manager,
             tool_search_globally_active=self._tool_search_active,
             compact_system_prompt=self._compact_system_prompt,
             sub_agent_runner=self._sub_agent_runner,
-            turn_classifier=turn_classifier,
-            routing_model=routing_model,
-            provider_pool=provider_pool,
-            semantic_classifier=semantic_classifier,
-            routing_policies=config.routing_policies,
-            routing_fallback_provider=config.routing_fallback_provider or config.provider,
-            routing_fallback_model=config.routing_fallback_model or config.model,
+            turn_classifier=c.turn_classifier,
+            routing_model=c.routing_model,
+            provider_pool=c.provider_pool,
+            semantic_classifier=c.semantic_classifier,
+            routing_policies=c.routing_policies,
+            routing_fallback_provider=c.routing_fallback_provider,
+            routing_fallback_model=c.routing_fallback_model,
             routing_feedback_callback=routing_feedback_callback,
-            routing_confidence_threshold=config.routing_confidence_threshold,
+            routing_confidence_threshold=c.routing_confidence_threshold,
             task_embedding_index=self._task_embedding_index,
         )
 
+        # --- Commands (need self for callbacks) ---
         commands_dir = Path(self._working_directory or ".") / ".commands"
         self._prompt_command_store = PromptCommandStore(commands_dir)
 

@@ -12,6 +12,7 @@ from micro_x_agent_loop.agent_channel import (
     BufferedChannel,
     TerminalChannel,
 )
+from micro_x_agent_loop.terminal_prompter import prompt_free_text, prompt_with_options
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult
 from tests.fakes import FakeStreamProvider, FakeTool
@@ -98,65 +99,65 @@ class TestTerminalChannel(unittest.TestCase):
 
     def test_ask_user_free_text(self) -> None:
         ch = TerminalChannel()
-        with patch.object(TerminalChannel, "_prompt_free_text", return_value="main.py"):
+        with patch("micro_x_agent_loop.agent_channel.prompt_free_text", return_value="main.py"):
             answer = asyncio.run(ch.ask_user("Which file?"))
         self.assertEqual("main.py", answer)
 
     def test_ask_user_with_options(self) -> None:
         ch = TerminalChannel()
         options = [{"label": "A", "description": "First"}, {"label": "B", "description": "Second"}]
-        with patch.object(TerminalChannel, "_prompt_with_options", return_value="A"):
+        with patch("micro_x_agent_loop.agent_channel.prompt_with_options", return_value="A"):
             answer = asyncio.run(ch.ask_user("Pick one", options))
         self.assertEqual("A", answer)
 
     def test_ask_user_fallback_on_error(self) -> None:
         ch = TerminalChannel()
         with (
-            patch.object(TerminalChannel, "_prompt_free_text", side_effect=RuntimeError("not a tty")),
-            patch.object(ch, "_fallback_prompt", return_value="fallback.py"),
+            patch("micro_x_agent_loop.agent_channel.prompt_free_text", side_effect=RuntimeError("not a tty")),
+            patch("micro_x_agent_loop.agent_channel.fallback_prompt", return_value="fallback.py"),
         ):
             answer = asyncio.run(ch.ask_user("Which file?"))
         self.assertEqual("fallback.py", answer)
 
-    @patch("micro_x_agent_loop.agent_channel.questionary")
+    @patch("micro_x_agent_loop.terminal_prompter.questionary")
     def test_prompt_with_options_returns_selected(self, mock_q: MagicMock) -> None:
         mock_q.select.return_value.ask.return_value = "OAuth 2.0"
-        result = TerminalChannel._prompt_with_options(
+        result = prompt_with_options(
             "Which auth?",
             [{"label": "OAuth 2.0", "description": "Standard"}, {"label": "API Keys", "description": "Simple"}],
         )
         self.assertEqual("OAuth 2.0", result)
 
-    @patch("micro_x_agent_loop.agent_channel.questionary")
+    @patch("micro_x_agent_loop.terminal_prompter.questionary")
     def test_prompt_with_options_other_triggers_text(self, mock_q: MagicMock) -> None:
         mock_q.select.return_value.ask.return_value = "__other__"
         mock_q.text.return_value.ask.return_value = "Custom answer"
-        result = TerminalChannel._prompt_with_options(
+        result = prompt_with_options(
             "Which auth?",
             [{"label": "OAuth 2.0", "description": "Standard"}, {"label": "API Keys", "description": "Simple"}],
         )
         self.assertEqual("Custom answer", result)
         mock_q.text.assert_called_once()
 
-    @patch("micro_x_agent_loop.agent_channel.questionary")
+    @patch("micro_x_agent_loop.terminal_prompter.questionary")
     def test_prompt_with_options_ctrl_c_returns_empty(self, mock_q: MagicMock) -> None:
         mock_q.select.return_value.ask.return_value = None
-        result = TerminalChannel._prompt_with_options(
+        result = prompt_with_options(
             "Which auth?",
             [{"label": "OAuth 2.0", "description": "Standard"}],
         )
         self.assertEqual("", result)
 
-    @patch("micro_x_agent_loop.agent_channel.questionary")
+    @patch("micro_x_agent_loop.terminal_prompter.questionary")
     def test_prompt_free_text_returns_typed(self, mock_q: MagicMock) -> None:
         mock_q.text.return_value.ask.return_value = "hello world"
-        result = TerminalChannel._prompt_free_text("What?")
+        result = prompt_free_text("What?")
         self.assertEqual("hello world", result)
 
-    @patch("micro_x_agent_loop.agent_channel.questionary")
+    @patch("micro_x_agent_loop.terminal_prompter.questionary")
     def test_prompt_free_text_ctrl_c_returns_empty(self, mock_q: MagicMock) -> None:
         mock_q.text.return_value.ask.return_value = None
-        result = TerminalChannel._prompt_free_text("What?")
+        result = prompt_free_text("What?")
         self.assertEqual("", result)
 
     def test_begin_streaming_starts_spinner_plain(self) -> None:

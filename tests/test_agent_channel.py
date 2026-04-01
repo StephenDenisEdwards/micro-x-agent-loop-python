@@ -66,7 +66,7 @@ class TerminalChannelPlainTests(unittest.TestCase):
     def test_emit_text_delta_stops_spinner(self) -> None:
         ch = self._make_channel()
         # Start a spinner manually
-        from micro_x_agent_loop.agent_channel import _Spinner
+        from micro_x_agent_loop.terminal_renderer import PlainSpinner as _Spinner
         spinner = MagicMock(spec=_Spinner)
         ch._spinner = spinner
         with patch("builtins.print"):
@@ -76,7 +76,7 @@ class TerminalChannelPlainTests(unittest.TestCase):
 
     def test_emit_tool_started_starts_spinner(self) -> None:
         ch = self._make_channel()
-        with patch("micro_x_agent_loop.agent_channel._Spinner") as MockSpinner:
+        with patch("micro_x_agent_loop.agent_channel.PlainSpinner") as MockSpinner:
             instance = MagicMock()
             MockSpinner.return_value = instance
             ch.emit_tool_started("id1", "search")
@@ -127,7 +127,7 @@ class TerminalChannelPlainTests(unittest.TestCase):
 
     def test_begin_and_end_streaming_plain(self) -> None:
         ch = self._make_channel()
-        with patch("micro_x_agent_loop.agent_channel._Spinner") as MockSpinner:
+        with patch("micro_x_agent_loop.agent_channel.PlainSpinner") as MockSpinner:
             instance = MagicMock()
             MockSpinner.return_value = instance
             ch.begin_streaming()
@@ -174,7 +174,7 @@ class TerminalChannelMarkdownTests(unittest.TestCase):
         ch = self._make_channel()
         renderer = MagicMock()
         ch._renderer = renderer
-        with patch("micro_x_agent_loop.agent_channel.Console"):
+        with patch("micro_x_agent_loop.terminal_renderer.Console"):
             ch.emit_error("failure")
         renderer.stop.assert_called_once()
         self.assertIsNone(ch._renderer)
@@ -343,7 +343,7 @@ class BrokerChannelTests(unittest.TestCase):
 
 class SpinnerTests(unittest.TestCase):
     def test_start_stop(self) -> None:
-        from micro_x_agent_loop.agent_channel import _Spinner
+        from micro_x_agent_loop.terminal_renderer import PlainSpinner as _Spinner
         spinner = _Spinner(prefix="", label=" Thinking...")
         spinner.start()
         import time
@@ -351,14 +351,14 @@ class SpinnerTests(unittest.TestCase):
         spinner.stop()
 
     def test_stop_idempotent(self) -> None:
-        from micro_x_agent_loop.agent_channel import _Spinner
+        from micro_x_agent_loop.terminal_renderer import PlainSpinner as _Spinner
         spinner = _Spinner()
         spinner.start()
         spinner.stop()
         spinner.stop()  # Should not raise
 
     def test_print_line(self) -> None:
-        from micro_x_agent_loop.agent_channel import _Spinner
+        from micro_x_agent_loop.terminal_renderer import PlainSpinner as _Spinner
         spinner = _Spinner()
         spinner.start()
         spinner.print_line("test line")
@@ -371,12 +371,12 @@ class SpinnerTests(unittest.TestCase):
 
 class RichRendererTests(unittest.TestCase):
     def _make(self):
-        from micro_x_agent_loop.agent_channel import _RichRenderer
+        from micro_x_agent_loop.terminal_renderer import RichRenderer as _RichRenderer
         return _RichRenderer(line_prefix="  ")
 
     def test_start_spinner(self) -> None:
         renderer = self._make()
-        with patch("micro_x_agent_loop.agent_channel.Live") as MockLive:
+        with patch("micro_x_agent_loop.terminal_renderer.Live") as MockLive:
             instance = MagicMock()
             MockLive.return_value = instance
             renderer.start_spinner()
@@ -385,7 +385,7 @@ class RichRendererTests(unittest.TestCase):
 
     def test_stop_spinner(self) -> None:
         renderer = self._make()
-        with patch("micro_x_agent_loop.agent_channel.Live") as MockLive:
+        with patch("micro_x_agent_loop.terminal_renderer.Live") as MockLive:
             live_instance = MagicMock()
             MockLive.return_value = live_instance
             renderer.start_spinner()
@@ -394,7 +394,7 @@ class RichRendererTests(unittest.TestCase):
 
     def test_switch_to_markdown(self) -> None:
         renderer = self._make()
-        with patch("micro_x_agent_loop.agent_channel.Live") as MockLive:
+        with patch("micro_x_agent_loop.terminal_renderer.Live") as MockLive:
             live_instance = MagicMock()
             MockLive.return_value = live_instance
             renderer.start_spinner()
@@ -403,7 +403,7 @@ class RichRendererTests(unittest.TestCase):
 
     def test_append_text(self) -> None:
         renderer = self._make()
-        with patch("micro_x_agent_loop.agent_channel.Live") as MockLive:
+        with patch("micro_x_agent_loop.terminal_renderer.Live") as MockLive:
             live_instance = MagicMock()
             MockLive.return_value = live_instance
             renderer.switch_to_markdown()
@@ -414,12 +414,12 @@ class RichRendererTests(unittest.TestCase):
     def test_finalize_text_empty(self) -> None:
         renderer = self._make()
         # Empty buffer — should not raise or print
-        with patch("micro_x_agent_loop.agent_channel.Live"):
+        with patch("micro_x_agent_loop.terminal_renderer.Live"):
             renderer.finalize_text()  # No-op when buffer is empty
 
     def test_finalize_text_with_content(self) -> None:
         renderer = self._make()
-        with patch("micro_x_agent_loop.agent_channel.Live") as MockLive:
+        with patch("micro_x_agent_loop.terminal_renderer.Live") as MockLive:
             live_instance = MagicMock()
             MockLive.return_value = live_instance
             renderer.switch_to_markdown()
@@ -430,12 +430,12 @@ class RichRendererTests(unittest.TestCase):
 
     def test_print_line(self) -> None:
         renderer = self._make()
-        with patch("micro_x_agent_loop.agent_channel.Live"):
+        with patch("micro_x_agent_loop.terminal_renderer.Live"):
             renderer.print_line("a line")  # Should not raise
 
     def test_stop(self) -> None:
         renderer = self._make()
-        with patch("micro_x_agent_loop.agent_channel.Live") as MockLive:
+        with patch("micro_x_agent_loop.terminal_renderer.Live") as MockLive:
             live_instance = MagicMock()
             MockLive.return_value = live_instance
             renderer.start_spinner()
@@ -446,7 +446,7 @@ class RichRendererTests(unittest.TestCase):
     def test_stop_live_with_exception(self) -> None:
         """Errors from live.stop() are swallowed."""
         renderer = self._make()
-        with patch("micro_x_agent_loop.agent_channel.Live") as MockLive:
+        with patch("micro_x_agent_loop.terminal_renderer.Live") as MockLive:
             live_instance = MagicMock()
             live_instance.stop.side_effect = RuntimeError("terminal error")
             MockLive.return_value = live_instance
@@ -460,30 +460,30 @@ class RichRendererTests(unittest.TestCase):
 
 class TerminalChannelFallbackPromptTests(unittest.TestCase):
     def test_fallback_prompt_free_text(self) -> None:
-        ch = TerminalChannel(markdown=False)
+        from micro_x_agent_loop.terminal_prompter import fallback_prompt
         with patch("builtins.input", return_value="my answer"):
-            result = ch._fallback_prompt("What is your name?", [])
+            result = fallback_prompt("What is your name?", [])
         self.assertEqual("my answer", result)
 
     def test_fallback_prompt_with_options_numeric(self) -> None:
-        ch = TerminalChannel(markdown=False)
+        from micro_x_agent_loop.terminal_prompter import fallback_prompt
         options = [
             {"label": "yes", "description": "Go ahead"},
             {"label": "no", "description": "Stop"},
         ]
         with patch("builtins.input", return_value="1"):
             with patch("builtins.print"):
-                result = ch._fallback_prompt("Proceed?", options)
+                result = fallback_prompt("Proceed?", options)
         self.assertEqual("yes", result)
 
     def test_fallback_prompt_with_options_free_text(self) -> None:
-        ch = TerminalChannel(markdown=False)
+        from micro_x_agent_loop.terminal_prompter import fallback_prompt
         options = [
             {"label": "yes", "description": "Go ahead"},
         ]
         with patch("builtins.input", return_value="maybe"):
             with patch("builtins.print"):
-                result = ch._fallback_prompt("Proceed?", options)
+                result = fallback_prompt("Proceed?", options)
         self.assertEqual("maybe", result)
 
 

@@ -383,7 +383,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
 
         fake_provider.create_message = fake_create_message
 
-        with patch("micro_x_agent_loop.agent.create_provider", return_value=fake_provider):
+        with patch("micro_x_agent_loop.agent_builder.create_provider", return_value=fake_provider):
             return Agent(AgentConfig(
                 api_key="test",
                 tools=[FakeTool()],
@@ -474,7 +474,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
         """With Stage 2 disabled, ambiguous prompts still ask the user."""
         fake_provider = FakeStreamProvider()
         fake_provider.queue(text="Hello!", stop_reason="end_turn")
-        with patch("micro_x_agent_loop.agent.create_provider", return_value=fake_provider):
+        with patch("micro_x_agent_loop.agent_builder.create_provider", return_value=fake_provider):
             agent = Agent(AgentConfig(
                 api_key="test",
                 tools=[FakeTool()],
@@ -503,7 +503,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
 
         fake_provider.create_message = failing_create_message
 
-        with patch("micro_x_agent_loop.agent.create_provider", return_value=fake_provider):
+        with patch("micro_x_agent_loop.agent_builder.create_provider", return_value=fake_provider):
             agent = Agent(AgentConfig(
                 api_key="test",
                 tools=[FakeTool()],

@@ -7,17 +7,12 @@ to handle output events and human-in-the-loop interactions.
 from __future__ import annotations
 
 import asyncio
-import sys
-import threading
 from typing import Any, Protocol, runtime_checkable
 
-import questionary
-from questionary import Choice, Style
 from rich.console import Console
-from rich.live import Live
-from rich.markdown import Markdown
-from rich.spinner import Spinner as RichSpinner
-from rich.text import Text
+
+from micro_x_agent_loop.terminal_prompter import fallback_prompt, prompt_free_text, prompt_with_options
+from micro_x_agent_loop.terminal_renderer import PlainSpinner, RichRenderer
 
 # ---------------------------------------------------------------------------
 # ASK_USER_SCHEMA — tool definition for human-in-the-loop questioning
@@ -110,19 +105,6 @@ class AgentChannel(Protocol):
 # TerminalChannel — CLI implementation
 # ---------------------------------------------------------------------------
 
-_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-
-_ASK_USER_STYLE = Style([
-    ("qmark", "fg:cyan bold"),
-    ("question", "bold"),
-    ("pointer", "fg:cyan bold"),
-    ("highlighted", "fg:cyan bold"),
-    ("selected", "fg:cyan"),
-    ("instruction", "fg:gray"),
-])
-
-_OTHER_SENTINEL = "__other__"
-
 
 class TerminalChannel:
     """AgentChannel for the interactive CLI.
@@ -149,9 +131,9 @@ class TerminalChannel:
         self._markdown = markdown
         self._first_delta_in_turn = True
         # Plain-text mode state
-        self._spinner: _Spinner | None = None
+        self._spinner: PlainSpinner | None = None
         # Markdown mode state
-        self._renderer: _RichRenderer | None = None
+        self._renderer: RichRenderer | None = None
 
     def emit_text_delta(self, text: str) -> None:
         if self._markdown:
@@ -174,7 +156,7 @@ class TerminalChannel:
             self._renderer.start_spinner(f" Running {tool_name}...")
         else:
             self._stop_spinner()
-            self._spinner = _Spinner(prefix=self._line_prefix, label=f" Running {tool_name}...")
+            self._spinner = PlainSpinner(prefix=self._line_prefix, label=f" Running {tool_name}...")
             self._spinner.start()
 
     def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
@@ -218,21 +200,24 @@ class TerminalChannel:
             self._stop_spinner()
         try:
             if options:
-                answer = await asyncio.to_thread(self._prompt_with_options, question, options)
+                answer = await asyncio.to_thread(prompt_with_options, question, options)
             else:
-                answer = await asyncio.to_thread(self._prompt_free_text, question)
+                answer = await asyncio.to_thread(prompt_free_text, question)
         except Exception:
-            answer = await asyncio.to_thread(self._fallback_prompt, question, options or [])
+            answer = await asyncio.to_thread(
+                fallback_prompt, question, options or [],
+                line_prefix=self._line_prefix, user_prompt=self._user_prompt,
+            )
         return answer
 
     def begin_streaming(self) -> None:
         """Called before an LLM stream starts. Starts the thinking spinner."""
         self._first_delta_in_turn = True
         if self._markdown:
-            self._renderer = _RichRenderer(self._line_prefix)
+            self._renderer = RichRenderer(self._line_prefix)
             self._renderer.start_spinner()
         else:
-            self._spinner = _Spinner(prefix=self._line_prefix)
+            self._spinner = PlainSpinner(prefix=self._line_prefix)
             self._spinner.start()
 
     def end_streaming(self) -> None:
@@ -257,9 +242,9 @@ class TerminalChannel:
     # -- private helpers ---------------------------------------------------
 
     def _ensure_renderer(self) -> None:
-        """Ensure a _RichRenderer exists, creating one if needed."""
+        """Ensure a RichRenderer exists, creating one if needed."""
         if self._renderer is None:
-            self._renderer = _RichRenderer(self._line_prefix)
+            self._renderer = RichRenderer(self._line_prefix)
         if self._renderer.is_showing_spinner():
             self._renderer.switch_to_markdown()
 
@@ -267,39 +252,6 @@ class TerminalChannel:
         if self._spinner is not None:
             self._spinner.stop()
             self._spinner = None
-
-    @staticmethod
-    def _prompt_with_options(question: str, options: list[dict[str, str]]) -> str:
-        choices = [
-            Choice(title=f"{opt['label']} \u2014 {opt.get('description', '')}", value=opt["label"])
-            for opt in options
-        ]
-        choices.append(Choice(title="Other (type your own answer)", value=_OTHER_SENTINEL))
-        selected = questionary.select(question, choices=choices, style=_ASK_USER_STYLE).ask()
-        if selected is None:
-            return ""
-        if selected == _OTHER_SENTINEL:
-            answer = questionary.text("Your answer:", style=_ASK_USER_STYLE).ask()
-            return str(answer) if answer is not None else ""
-        return str(selected)
-
-    @staticmethod
-    def _prompt_free_text(question: str) -> str:
-        answer = questionary.text(question, style=_ASK_USER_STYLE).ask()
-        return answer if answer is not None else ""
-
-    def _fallback_prompt(self, question: str, options: list[dict[str, str]]) -> str:
-        print(f"\n{self._line_prefix}Question: {question}")
-        if options:
-            for i, opt in enumerate(options, 1):
-                print(f"{self._line_prefix}  {i}. {opt.get('label', '')} \u2014 {opt.get('description', '')}")
-            print(f"{self._line_prefix}  (enter a number or type your own answer)")
-        raw = input(self._user_prompt).strip()
-        if options and raw.isdigit():
-            idx = int(raw)
-            if 1 <= idx <= len(options):
-                return options[idx - 1]["label"]
-        return raw
 
 
 # ---------------------------------------------------------------------------
@@ -430,152 +382,3 @@ _NO_RESPONSE_MSG = (
     "No response from human — question timed out. "
     "Proceed with your best judgement or report that you cannot continue."
 )
-
-
-# ---------------------------------------------------------------------------
-# _RichRenderer — progressive markdown rendering (private implementation)
-# ---------------------------------------------------------------------------
-
-
-class _RichRenderer:
-    """Manages a ``rich.Live`` context that switches between spinner and markdown.
-
-    Lifecycle:
-    - ``start_spinner()`` — show a spinner (thinking / tool running)
-    - ``switch_to_markdown()`` — transition from spinner to markdown rendering
-    - ``append_text(text)`` — buffer text and re-render as markdown
-    - ``finalize_text()`` — print the final rendered markdown and reset buffer
-    - ``start_spinner(label)`` — switch back to spinner (e.g. next tool call)
-    - ``stop()`` — clean up
-    """
-
-    def __init__(self, line_prefix: str = "") -> None:
-        self._line_prefix = line_prefix
-        self._console = Console()
-        self._live: Live | None = None
-        self._buffer = ""
-        self._showing_spinner = False
-
-    def start_spinner(self, label: str = " Thinking...") -> None:
-        """Start or switch to spinner mode."""
-        self._stop_live()
-        spinner = RichSpinner("dots", text=Text(label, style="cyan"), style="cyan")
-        self._live = Live(
-            spinner,
-            console=self._console,
-            refresh_per_second=10,
-            transient=True,
-        )
-        self._live.start()
-        self._showing_spinner = True
-
-    def stop_spinner(self) -> None:
-        """Stop the spinner without starting markdown."""
-        if self._showing_spinner:
-            self._stop_live()
-            self._showing_spinner = False
-
-    def is_showing_spinner(self) -> bool:
-        return self._showing_spinner
-
-    def switch_to_markdown(self) -> None:
-        """Transition from spinner to markdown rendering mode."""
-        self._stop_live()
-        self._showing_spinner = False
-        self._buffer = ""
-        self._live = Live(
-            Text(""),
-            console=self._console,
-            refresh_per_second=8,
-            transient=True,
-            vertical_overflow="visible",
-        )
-        self._live.start()
-
-    def append_text(self, text: str) -> None:
-        """Append text to the buffer and re-render as markdown."""
-        self._buffer += text
-        if self._live is not None:
-            self._live.update(Markdown(self._buffer))
-
-    def finalize_text(self) -> None:
-        """Print the final rendered markdown and reset the buffer."""
-        if not self._buffer:
-            return
-        self._stop_live()
-        # Print the final rendered markdown (non-transient)
-        self._console.print(Markdown(self._buffer))
-        self._buffer = ""
-
-    def print_line(self, text: str) -> None:
-        """Print a line above the live region (if active) or directly."""
-        if self._live is not None:
-            self._console.print(text)
-        else:
-            self._console.print(text)
-
-    def stop(self) -> None:
-        """Clean up the live context."""
-        self._stop_live()
-        self._showing_spinner = False
-        self._buffer = ""
-
-    def _stop_live(self) -> None:
-        if self._live is not None:
-            try:
-                self._live.stop()
-            except Exception:
-                pass
-            self._live = None
-
-
-# ---------------------------------------------------------------------------
-# _Spinner — thread-based terminal spinner (plain-text mode fallback)
-# ---------------------------------------------------------------------------
-
-
-class _Spinner:
-    """Thread-based spinner that renders on the current line using \\r."""
-
-    def __init__(self, prefix: str = "", label: str = " Thinking...") -> None:
-        self._prefix = prefix
-        self._label = label
-        self._stop_event = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._frame_width = 1 + len(label)
-        self._lock = threading.Lock()
-
-    def start(self) -> None:
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
-        if self._stop_event.is_set():
-            return
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join()
-        clear = self._prefix + " " * self._frame_width
-        sys.stdout.write("\r" + clear + "\r" + self._prefix)
-        sys.stdout.flush()
-
-    def print_line(self, text: str) -> None:
-        with self._lock:
-            sys.stdout.write(f"\r\033[K{text}\n")
-            if not self._stop_event.is_set():
-                frame = _SPINNER_FRAMES[0] + self._label
-                sys.stdout.write(self._prefix + frame)
-            sys.stdout.flush()
-
-    def _run(self) -> None:
-        i = 0
-        try:
-            while not self._stop_event.is_set():
-                with self._lock:
-                    frame = _SPINNER_FRAMES[i % len(_SPINNER_FRAMES)] + self._label
-                    sys.stdout.write("\r" + self._prefix + frame)
-                    sys.stdout.flush()
-                self._stop_event.wait(0.08)
-                i += 1
-        except (UnicodeEncodeError, OSError):
-            pass
