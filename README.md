@@ -114,6 +114,8 @@ Sub-agents protect the main context window from excessive intermediate results a
 
 An opt-in rich terminal interface launched via `--tui` or `run-tui.bat`, built on [Textual](https://textual.textualize.io/) ([ADR-022](documentation/docs/architecture/decisions/ADR-022-textual-tui-for-cli.md)). Provides a full-screen, widget-based experience while the existing REPL remains the default.
 
+![Textual TUI](images/Screenshot%202026-04-02%20161341.png)
+
 ```bash
 run-tui.bat --config config-optimal-anthropic.json   # Windows
 python -m micro_x_agent_loop --tui                    # Direct (requires: pip install -e ".[tui]")
