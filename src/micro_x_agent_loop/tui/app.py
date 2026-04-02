@@ -14,9 +14,16 @@ from textual.widgets import Header, Input
 from micro_x_agent_loop.app_config import AppConfig
 from micro_x_agent_loop.bootstrap import AppRuntime
 from micro_x_agent_loop.tui.channel import TextualChannel
+from micro_x_agent_loop.tui.screens.ask_user_modal import AskUserModal
 from micro_x_agent_loop.tui.widgets.chat_log import ChatLog
+from micro_x_agent_loop.tui.widgets.log_panel import LogPanel
 from micro_x_agent_loop.tui.widgets.status_bar import StatusBar
 from micro_x_agent_loop.tui.widgets.tool_panel import ToolPanel
+
+_NO_RESPONSE_MSG = (
+    "No response from human — question timed out. "
+    "Proceed with your best judgement or report that you cannot continue."
+)
 
 
 class AgentTUI(App[None]):
@@ -71,6 +78,17 @@ class AgentTUI(App[None]):
         margin: 0 1 0 1;
     }
 
+    #log-panel {
+        height: 12;
+        border-top: solid $primary;
+        display: none;
+    }
+
+    .log-entry {
+        height: auto;
+        padding: 0 1;
+    }
+
     #prompt-input {
         margin: 0 1;
         height: 3;
@@ -90,6 +108,7 @@ class AgentTUI(App[None]):
     BINDINGS = [
         Binding("escape", "cancel_task", "Cancel", show=True),
         Binding("ctrl+t", "toggle_tools", "Tools", show=True),
+        Binding("ctrl+l", "toggle_logs", "Logs", show=True),
         Binding("ctrl+c", "quit", "Quit", show=True),
     ]
 
@@ -118,6 +137,7 @@ class AgentTUI(App[None]):
         with Horizontal(id="main-area"):
             yield ChatLog(id="chat-log")
             yield ToolPanel(id="tool-panel")
+        yield LogPanel(id="log-panel")
         yield Input(placeholder="Type a message... (Enter to send, Escape to cancel)", id="prompt-input")
         yield StatusBar(
             self._agent.session_accumulator,
@@ -145,6 +165,12 @@ class AgentTUI(App[None]):
                 f"Tools: {len(self._runtime.mcp_tools)} MCP tools loaded"
             )
         chat_log.add_system_message("")
+
+        # Wire loguru to the log panel
+        from loguru import logger
+
+        log_panel = self.query_one("#log-panel", LogPanel)
+        logger.add(log_panel.sink, level="INFO", format="{message}")
 
         self.query_one("#status-bar", StatusBar).refresh_metrics()
         self.query_one("#prompt-input", Input).focus()
@@ -184,6 +210,11 @@ class AgentTUI(App[None]):
         """Toggle the tool panel visibility."""
         tool_panel = self.query_one("#tool-panel", ToolPanel)
         tool_panel.display = not tool_panel.display
+
+    def action_toggle_logs(self) -> None:
+        """Toggle the log panel visibility."""
+        log_panel = self.query_one("#log-panel", LogPanel)
+        log_panel.display = not log_panel.display
 
     async def _run_agent(self, text: str) -> None:
         """Run the agent in the background and re-enable input when done."""
@@ -236,20 +267,15 @@ class AgentTUI(App[None]):
         options: list[dict[str, str]] | None,
         future: asyncio.Future[str],
     ) -> None:
-        """Handle ask_user — Phase 1: show in chat, use default answer."""
+        """Handle ask_user — push a modal dialog and resolve the future with the answer."""
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.add_system_message(f"Question: {question}")
-        if options:
-            for opt in options:
-                label = opt.get("label", "")
-                desc = opt.get("description", "")
-                chat_log.add_system_message(f"  - {label}: {desc}")
-            chat_log.add_system_message("[ask_user modal not yet implemented]")
-        if not future.done():
-            future.set_result(
-                "No response from human — question timed out. "
-                "Proceed with your best judgement or report that you cannot continue."
-            )
+
+        def _on_dismiss(answer: str | None) -> None:
+            if not future.done():
+                future.set_result(answer if answer else _NO_RESPONSE_MSG)
+
+        self.push_screen(AskUserModal(question, options), callback=_on_dismiss)
 
     # -- Shutdown --
 
@@ -280,11 +306,34 @@ async def _shutdown_runtime(runtime: AppRuntime) -> None:
         signal.signal(signal.SIGINT, prev_handler)
 
 
+def _install_prompt_toolkit_shutdown_hook() -> None:
+    """Suppress prompt_toolkit Win32 shutdown errors.
+
+    ``questionary`` (a dependency) imports ``prompt_toolkit`` which installs
+    Win32 console input handlers.  When Textual shuts down the event loop,
+    prompt_toolkit's cleanup tries to schedule futures on the closed executor
+    and raises ``RuntimeError('cannot schedule new futures after shutdown')``.
+    This is harmless — suppress it.
+    """
+    import sys
+
+    _default_hook = sys.unraisablehook
+
+    def _hook(unraisable: Any) -> None:
+        exc = getattr(unraisable, "exc_value", None)
+        if isinstance(exc, RuntimeError) and "cannot schedule new futures" in str(exc):
+            return
+        _default_hook(unraisable)
+
+    sys.unraisablehook = _hook
+
+
 async def run_tui(
     app_config: AppConfig,
     runtime: AppRuntime,
     config_source: str,
 ) -> None:
     """Entry point — create and run the Textual TUI."""
+    _install_prompt_toolkit_shutdown_hook()
     tui = AgentTUI(app_config, runtime, config_source)
     await tui.run_async()
