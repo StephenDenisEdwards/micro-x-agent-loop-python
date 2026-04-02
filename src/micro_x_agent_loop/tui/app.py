@@ -8,6 +8,7 @@ from typing import Any
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.containers import Horizontal
 from textual.widgets import Header, Input
 
 from micro_x_agent_loop.app_config import AppConfig
@@ -15,6 +16,7 @@ from micro_x_agent_loop.bootstrap import AppRuntime
 from micro_x_agent_loop.tui.channel import TextualChannel
 from micro_x_agent_loop.tui.widgets.chat_log import ChatLog
 from micro_x_agent_loop.tui.widgets.status_bar import StatusBar
+from micro_x_agent_loop.tui.widgets.tool_panel import ToolPanel
 
 
 class AgentTUI(App[None]):
@@ -25,9 +27,23 @@ class AgentTUI(App[None]):
         layout: vertical;
     }
 
-    #chat-log {
+    #main-area {
         height: 1fr;
-        border-bottom: solid $primary;
+    }
+
+    #chat-log {
+        width: 1fr;
+    }
+
+    #tool-panel {
+        width: 30;
+        border-left: solid $primary;
+    }
+
+    .tool-panel-title {
+        text-style: bold;
+        padding: 0 1;
+        color: $text-muted;
     }
 
     .user-message {
@@ -73,6 +89,7 @@ class AgentTUI(App[None]):
 
     BINDINGS = [
         Binding("escape", "cancel_task", "Cancel", show=True),
+        Binding("ctrl+t", "toggle_tools", "Tools", show=True),
         Binding("ctrl+c", "quit", "Quit", show=True),
     ]
 
@@ -98,7 +115,9 @@ class AgentTUI(App[None]):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield ChatLog(id="chat-log")
+        with Horizontal(id="main-area"):
+            yield ChatLog(id="chat-log")
+            yield ToolPanel(id="tool-panel")
         yield Input(placeholder="Type a message... (Enter to send, Escape to cancel)", id="prompt-input")
         yield StatusBar(
             self._agent.session_accumulator,
@@ -161,6 +180,11 @@ class AgentTUI(App[None]):
             chat_log = self.query_one("#chat-log", ChatLog)
             chat_log.add_system_message("[Interrupted]")
 
+    def action_toggle_tools(self) -> None:
+        """Toggle the tool panel visibility."""
+        tool_panel = self.query_one("#tool-panel", ToolPanel)
+        tool_panel.display = not tool_panel.display
+
     async def _run_agent(self, text: str) -> None:
         """Run the agent in the background and re-enable input when done."""
         try:
@@ -190,10 +214,12 @@ class AgentTUI(App[None]):
 
     def on_tool_started(self, tool_use_id: str, tool_name: str) -> None:
         self.query_one("#chat-log", ChatLog).add_tool_message(tool_name, "Running")
+        self.query_one("#tool-panel", ToolPanel).tool_started(tool_use_id, tool_name)
 
     def on_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
         status = "Error" if is_error else "Done"
         self.query_one("#chat-log", ChatLog).add_tool_message(tool_name, status)
+        self.query_one("#tool-panel", ToolPanel).tool_completed(tool_use_id, tool_name, is_error)
 
     def on_turn_complete(self, usage: dict[str, Any]) -> None:
         self.query_one("#status-bar", StatusBar).refresh_metrics()
