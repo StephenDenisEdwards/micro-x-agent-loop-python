@@ -17,6 +17,7 @@ from micro_x_agent_loop.tui.channel import TextualChannel
 from micro_x_agent_loop.tui.screens.ask_user_modal import AskUserModal
 from micro_x_agent_loop.tui.widgets.chat_log import ChatLog
 from micro_x_agent_loop.tui.widgets.log_panel import LogPanel
+from micro_x_agent_loop.tui.widgets.session_sidebar import SessionSidebar
 from micro_x_agent_loop.tui.widgets.status_bar import StatusBar
 from micro_x_agent_loop.tui.widgets.tool_panel import ToolPanel
 
@@ -36,6 +37,12 @@ class AgentTUI(App[None]):
 
     #main-area {
         height: 1fr;
+    }
+
+    #session-sidebar {
+        width: 28;
+        border-right: solid $primary;
+        display: none;
     }
 
     #chat-log {
@@ -107,6 +114,7 @@ class AgentTUI(App[None]):
 
     BINDINGS = [
         Binding("escape", "cancel_task", "Cancel", show=True),
+        Binding("ctrl+s", "toggle_sessions", "Sessions", show=True),
         Binding("ctrl+t", "toggle_tools", "Tools", show=True),
         Binding("ctrl+l", "toggle_logs", "Logs", show=True),
         Binding("ctrl+c", "quit", "Quit", show=True),
@@ -135,6 +143,7 @@ class AgentTUI(App[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal(id="main-area"):
+            yield SessionSidebar(id="session-sidebar")
             yield ChatLog(id="chat-log")
             yield ToolPanel(id="tool-panel")
         yield LogPanel(id="log-panel")
@@ -206,6 +215,13 @@ class AgentTUI(App[None]):
             chat_log = self.query_one("#chat-log", ChatLog)
             chat_log.add_system_message("[Interrupted]")
 
+    def action_toggle_sessions(self) -> None:
+        """Toggle the session sidebar visibility."""
+        sidebar = self.query_one("#session-sidebar", SessionSidebar)
+        sidebar.display = not sidebar.display
+        if sidebar.display:
+            self._refresh_session_sidebar()
+
     def action_toggle_tools(self) -> None:
         """Toggle the tool panel visibility."""
         tool_panel = self.query_one("#tool-panel", ToolPanel)
@@ -215,6 +231,78 @@ class AgentTUI(App[None]):
         """Toggle the log panel visibility."""
         log_panel = self.query_one("#log-panel", LogPanel)
         log_panel.display = not log_panel.display
+
+    # -- Session sidebar events --
+
+    def _refresh_session_sidebar(self) -> None:
+        """Refresh the session sidebar from the memory store."""
+        sidebar = self.query_one("#session-sidebar", SessionSidebar)
+        sm = getattr(self._agent, "_memory", None)
+        session_manager = getattr(sm, "session_manager", None) if sm else None
+        sidebar.refresh_sessions(session_manager, self._agent.active_session_id)
+
+    def on_session_sidebar_session_selected(self, event: SessionSidebar.SessionSelected) -> None:
+        """Handle click-to-switch session."""
+        sid = event.session_id
+        if sid == self._agent.active_session_id:
+            return
+
+        memory = self._agent._memory
+        sm = memory.session_manager
+        if sm is None:
+            return
+
+        session = sm.resolve_session_identifier(sid)
+        if session is None:
+            return
+
+        resolved_id = session["id"]
+        memory.active_session_id = resolved_id
+        new_messages = memory.load_messages(resolved_id)
+        self._agent._on_session_reset(resolved_id, new_messages)
+
+        # Clear the chat log and show the resumed session
+        chat_log = self.query_one("#chat-log", ChatLog)
+        chat_log.add_system_message(
+            f"Resumed session: {session.get('title', resolved_id)} ({len(new_messages)} messages)"
+        )
+        self._refresh_session_sidebar()
+        self.query_one("#status-bar", StatusBar).refresh_metrics()
+
+    def on_session_sidebar_new_session_requested(self, event: SessionSidebar.NewSessionRequested) -> None:
+        """Handle New session button."""
+        memory = self._agent._memory
+        sm = memory.session_manager
+        if sm is None:
+            return
+
+        new_id = sm.create_session()
+        memory.active_session_id = new_id
+        self._agent._on_session_reset(new_id, [])
+
+        chat_log = self.query_one("#chat-log", ChatLog)
+        session = sm.get_session(new_id)
+        title = session.get("title", new_id) if session else new_id
+        chat_log.add_system_message(f"New session: {title}")
+        self._refresh_session_sidebar()
+        self.query_one("#status-bar", StatusBar).refresh_metrics()
+
+    def on_session_sidebar_fork_session_requested(self, event: SessionSidebar.ForkSessionRequested) -> None:
+        """Handle Fork session button."""
+        memory = self._agent._memory
+        sm = memory.session_manager
+        if sm is None or self._agent.active_session_id is None:
+            return
+
+        source_id = self._agent.active_session_id
+        fork_id = sm.fork_session(source_id)
+        memory.active_session_id = fork_id
+        self._agent._on_session_reset(fork_id, memory.load_messages(fork_id))
+
+        chat_log = self.query_one("#chat-log", ChatLog)
+        chat_log.add_system_message(f"Forked session {source_id[:8]} -> {fork_id[:8]}")
+        self._refresh_session_sidebar()
+        self.query_one("#status-bar", StatusBar).refresh_metrics()
 
     async def _run_agent(self, text: str) -> None:
         """Run the agent in the background and re-enable input when done."""
