@@ -77,5 +77,23 @@ class ToolPanel(VerticalScroll):
         for entry in self.query(_ToolEntry):
             entry.remove()
 
+    def load_history(self, tool_calls: list[dict[str, object]]) -> None:
+        """Populate the panel with historical tool calls from the database.
+
+        Each dict should have: ``tool_name``, ``is_error``, ``created_at``.
+        """
+        self.clear_entries()
+        for tc in tool_calls:
+            name = str(tc.get("tool_name", "unknown"))
+            is_error = bool(tc.get("is_error", 0))
+            if is_error:
+                label = f"[red]ERR[/red] {escape(name)}"
+            else:
+                label = f"[green] ok[/green] {escape(name)}"
+            entry = _ToolEntry(label)
+            self.mount(entry)
+        if tool_calls:
+            self.scroll_end(animate=False)
+
     def compose(self) -> ComposeResult:
         yield Static("[bold]Tools[/bold]", classes="tool-panel-title")

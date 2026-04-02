@@ -276,6 +276,7 @@ class AgentTUI(App[None]):
                 chat_log.load_history(history)
                 chat_log.add_system_message(f"--- {len(history)} messages loaded ---")
             self._restore_session_costs(self._agent.active_session_id)
+            self._restore_session_tools(self._agent.active_session_id)
         chat_log.add_system_message("")
 
         # Wire loguru to the log panel
@@ -394,6 +395,28 @@ class AgentTUI(App[None]):
 
         self._agent._session_accumulator.restore_from_events(events)
 
+    def _restore_session_tools(self, session_id: str) -> None:
+        """Restore the tool panel from persisted tool_calls."""
+        store = getattr(self._agent._memory, "store", None)
+        if store is None:
+            return
+
+        rows = store.execute(
+            """
+            SELECT tool_name, is_error, created_at
+            FROM tool_calls
+            WHERE session_id = ?
+            ORDER BY created_at ASC
+            """,
+            (session_id,),
+        ).fetchall()
+
+        if not rows:
+            return
+
+        tool_calls = [dict(row) for row in rows]
+        self.query_one("#tool-panel", ToolPanel).load_history(tool_calls)
+
     def _refresh_session_sidebar(self) -> None:
         """Refresh the session sidebar from the memory store."""
         sidebar = self.query_one("#session-sidebar", SessionSidebar)
@@ -421,6 +444,7 @@ class AgentTUI(App[None]):
         new_messages = memory.load_messages(resolved_id)
         self._agent._on_session_reset(resolved_id, new_messages)
         self._restore_session_costs(resolved_id)
+        self._restore_session_tools(resolved_id)
 
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.load_history(new_messages)
@@ -443,6 +467,7 @@ class AgentTUI(App[None]):
 
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.load_history([])  # Clear chat log
+        self.query_one("#tool-panel", ToolPanel).clear_entries()
         session = sm.get_session(new_id)
         title = session.get("title", new_id) if session else new_id
         chat_log.add_system_message(f"--- New session: {title} ---")
@@ -464,6 +489,7 @@ class AgentTUI(App[None]):
 
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.load_history(fork_messages)
+        self._restore_session_tools(fork_id)
         chat_log.add_system_message(f"--- Forked: {source_id[:8]} -> {fork_id[:8]} ({len(fork_messages)} messages) ---")
         self._refresh_session_sidebar()
         self.query_one("#status-bar", StatusBar).refresh_metrics()
