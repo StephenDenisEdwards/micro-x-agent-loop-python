@@ -13,6 +13,8 @@ from textual.widgets import Button, Static
 if TYPE_CHECKING:
     from micro_x_agent_loop.memory.session_manager import SessionManager
 
+_PAGE_SIZE = 20
+
 
 class SessionSidebar(Vertical):
     """Left sidebar listing sessions with click-to-switch, new, and fork."""
@@ -83,6 +85,8 @@ class SessionSidebar(Vertical):
     def __init__(self, *, id: str | None = None) -> None:  # noqa: A002
         super().__init__(id=id)
         self._active_session_id: str | None = None
+        self._session_manager: SessionManager | None = None
+        self._loaded_count: int = 0
 
     def compose(self) -> ComposeResult:
         yield Static("[bold]Sessions[/bold]", classes="sidebar-title")
@@ -98,26 +102,42 @@ class SessionSidebar(Vertical):
     ) -> None:
         """Reload the session list from the database."""
         self._active_session_id = active_session_id
+        self._session_manager = session_manager
+        self._loaded_count = 0
         scroll = self.query_one("#session-list-scroll", VerticalScroll)
 
-        # Remove existing entries
-        for entry in list(scroll.query(".session-entry")):
-            entry.remove()
+        # Remove existing entries and load-more button
+        for child in list(scroll.query(".session-entry, #btn-load-more")):
+            child.remove()
 
         if session_manager is None:
             scroll.mount(Static("[dim]Memory disabled[/dim]", classes="session-entry"))
             return
 
-        sessions = session_manager.list_sessions(limit=20)
-        if not sessions:
+        self._load_page(scroll)
+
+    def _load_page(self, scroll: VerticalScroll) -> None:
+        """Load the next page of sessions into the scroll area."""
+        if self._session_manager is None:
+            return
+
+        sessions = self._session_manager.list_sessions(limit=_PAGE_SIZE + self._loaded_count)
+        # Skip already-loaded sessions
+        page = sessions[self._loaded_count:]
+
+        if not page and self._loaded_count == 0:
             scroll.mount(Static("[dim]No sessions[/dim]", classes="session-entry"))
             return
 
-        for s in sessions:
+        # Remove existing load-more button
+        for btn in list(scroll.query("#btn-load-more")):
+            btn.remove()
+
+        for s in page:
             sid = s["id"]
             title = s.get("title", sid[:8])
             date = s.get("updated_at", s.get("created_at", ""))[:10]
-            is_active = sid == active_session_id
+            is_active = sid == self._active_session_id
 
             if is_active:
                 label = f"[bold cyan]> {escape(title)}[/bold cyan]\n  [dim]{date}[/dim]"
@@ -129,11 +149,20 @@ class SessionSidebar(Vertical):
             entry = _ClickableSession(label, session_id=sid, classes=css_class)
             scroll.mount(entry)
 
+        self._loaded_count += len(page)
+
+        # Show "Load more" if we got a full page (there may be more)
+        if len(page) >= _PAGE_SIZE:
+            scroll.mount(Button("Load more...", id="btn-load-more", variant="default"))
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-new-session":
             self.post_message(self.NewSessionRequested())
         elif event.button.id == "btn-fork-session":
             self.post_message(self.ForkSessionRequested())
+        elif event.button.id == "btn-load-more":
+            scroll = self.query_one("#session-list-scroll", VerticalScroll)
+            self._load_page(scroll)
 
     def on_click(self, event: Any) -> None:
         """Bubble up session clicks from child entries."""
