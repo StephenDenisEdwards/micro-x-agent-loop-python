@@ -18,8 +18,6 @@ from micro_x_agent_loop.constants import (
     DEFAULT_MEMORY_RETENTION_DAYS,
     DEFAULT_OLLAMA_BASE_URL,
     DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS,
-    DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS,
-    DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS,
     DEFAULT_PROTECTED_TAIL_MESSAGES,
     DEFAULT_SESSION_BUDGET_USD,
     DEFAULT_SUBAGENT_MAX_TOKENS,
@@ -96,13 +94,8 @@ class AppConfig:
     sub_agent_timeout: int
     sub_agent_max_turns: int
     sub_agent_max_tokens: int
-    # Per-turn routing
-    per_turn_routing_enabled: bool
-    per_turn_routing_model: str
-    per_turn_routing_provider: str
-    per_turn_routing_max_user_chars: int
-    per_turn_routing_short_followup_chars: int
-    per_turn_routing_complexity_keywords: str
+    # Routing
+    complexity_keywords: str
     # Semantic routing
     semantic_routing_enabled: bool
     semantic_routing_strategy: str
@@ -328,17 +321,11 @@ def parse_app_config(config: dict) -> AppConfig:
         sub_agent_timeout=int(config.get("SubAgentTimeout", DEFAULT_SUBAGENT_TIMEOUT)),
         sub_agent_max_turns=int(config.get("SubAgentMaxTurns", DEFAULT_SUBAGENT_MAX_TURNS)),
         sub_agent_max_tokens=int(config.get("SubAgentMaxTokens", DEFAULT_SUBAGENT_MAX_TOKENS)),
-        per_turn_routing_enabled=_to_bool(config.get("PerTurnRoutingEnabled", False), default=False),
-        per_turn_routing_model=str(config.get("PerTurnRoutingModel", "")).strip(),
-        per_turn_routing_provider=str(config.get("PerTurnRoutingProvider", "")).strip().lower(),
-        per_turn_routing_max_user_chars=int(
-            config.get("PerTurnRoutingMaxUserChars", DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS),
-        ),
-        per_turn_routing_short_followup_chars=int(
-            config.get("PerTurnRoutingShortFollowupChars", DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS),
-        ),
-        per_turn_routing_complexity_keywords=str(
-            config.get("PerTurnRoutingComplexityKeywords", DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS),
+        complexity_keywords=str(
+            config.get(
+                "ComplexityKeywords",
+                config.get("PerTurnRoutingComplexityKeywords", DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS),
+            ),
         ),
         semantic_routing_enabled=_to_bool(config.get("SemanticRoutingEnabled", False), default=False),
         semantic_routing_strategy=str(config.get("SemanticRoutingStrategy", "rules+keywords")).strip().lower(),

@@ -32,7 +32,6 @@ for p in (_SRC, _ROOT):
 from micro_x_agent_loop.usage import UsageResult, PRICING, load_pricing_overrides, _lookup_pricing, estimate_cost  # noqa: E402
 from micro_x_agent_loop.metrics import SessionAccumulator, build_api_call_metric  # noqa: E402
 from micro_x_agent_loop.tool_search import should_activate_tool_search  # noqa: E402
-from micro_x_agent_loop.turn_classifier import classify_turn, TurnClassification  # noqa: E402
 from micro_x_agent_loop.system_prompt import get_system_prompt  # noqa: E402
 from micro_x_agent_loop.compaction import (  # noqa: E402
     NoneCompactionStrategy,

@@ -709,65 +709,14 @@ class SessionBudgetAgentTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Feature: Per-Turn Model Routing
+# Feature: Routing — no routing uses main model
 # ---------------------------------------------------------------------------
 
 
-class PerTurnRoutingConfigTests(unittest.TestCase):
-    def test_default_disabled(self) -> None:
-        config = parse_app_config({})
-        self.assertFalse(config.per_turn_routing_enabled)
+class NoRoutingTurnEngineTests(unittest.TestCase):
+    """Verify TurnEngine uses main model when no routing is configured."""
 
-    def test_enabled_via_config(self) -> None:
-        config = parse_app_config({
-            "PerTurnRoutingEnabled": True,
-            "PerTurnRoutingModel": "claude-haiku-4-5-20251001",
-            "PerTurnRoutingProvider": "anthropic",
-        })
-        self.assertTrue(config.per_turn_routing_enabled)
-        self.assertEqual(config.per_turn_routing_model, "claude-haiku-4-5-20251001")
-        self.assertEqual(config.per_turn_routing_provider, "anthropic")
-
-    def test_custom_thresholds(self) -> None:
-        config = parse_app_config({
-            "PerTurnRoutingMaxUserChars": 300,
-            "PerTurnRoutingShortFollowupChars": 80,
-            "PerTurnRoutingComplexityKeywords": "foo,bar,baz",
-        })
-        self.assertEqual(config.per_turn_routing_max_user_chars, 300)
-        self.assertEqual(config.per_turn_routing_short_followup_chars, 80)
-        self.assertEqual(config.per_turn_routing_complexity_keywords, "foo,bar,baz")
-
-
-class PerTurnRoutingTurnEngineTests(unittest.TestCase):
-    """Verify TurnEngine routes to cheap model when classifier says so."""
-
-    def test_no_classifier_uses_main_model(self) -> None:
-        provider = FakeStreamProvider()
-        provider.queue(text="done")
-        models_called_2: list[str] = []
-        original = provider.stream_chat
-
-        async def tracking(model, *args, **kwargs):
-            models_called_2.append(model)
-            return await original(model, *args, **kwargs)
-
-        provider.stream_chat = tracking
-        events = BaseTurnEvents()
-        engine2 = TurnEngine(
-            provider=provider, model="main-model", max_tokens=1024, temperature=0.7,
-            system_prompt="test", converted_tools=[], tool_map={},
-            max_tool_result_chars=40000, max_tokens_retries=1, events=events,
-        )
-        asyncio.run(engine2.run(messages=[], user_message="hello"))
-        self.assertEqual(models_called_2, ["main-model"])
-
-    def test_classifier_routes_to_cheap(self) -> None:
-        from micro_x_agent_loop.turn_classifier import TurnClassification
-
-        def always_cheap(**kwargs) -> TurnClassification:
-            return TurnClassification(use_cheap_model=True, reason="test", rule="test_rule")
-
+    def test_no_routing_uses_main_model(self) -> None:
         provider = FakeStreamProvider()
         provider.queue(text="done")
         models_called: list[str] = []
@@ -783,93 +732,9 @@ class PerTurnRoutingTurnEngineTests(unittest.TestCase):
             provider=provider, model="main-model", max_tokens=1024, temperature=0.7,
             system_prompt="test", converted_tools=[], tool_map={},
             max_tool_result_chars=40000, max_tokens_retries=1, events=events,
-            turn_classifier=always_cheap, routing_model="cheap-model",
-        )
-        asyncio.run(engine.run(messages=[], user_message="hello"))
-        self.assertEqual(models_called, ["cheap-model"])
-
-    def test_classifier_keeps_main(self) -> None:
-        from micro_x_agent_loop.turn_classifier import TurnClassification
-
-        def never_cheap(**kwargs) -> TurnClassification:
-            return TurnClassification(use_cheap_model=False, reason="test", rule="default")
-
-        provider = FakeStreamProvider()
-        provider.queue(text="done")
-        models_called: list[str] = []
-        original = provider.stream_chat
-
-        async def tracking(model, *args, **kwargs):
-            models_called.append(model)
-            return await original(model, *args, **kwargs)
-
-        provider.stream_chat = tracking
-        events = BaseTurnEvents()
-        engine = TurnEngine(
-            provider=provider, model="main-model", max_tokens=1024, temperature=0.7,
-            system_prompt="test", converted_tools=[], tool_map={},
-            max_tool_result_chars=40000, max_tokens_retries=1, events=events,
-            turn_classifier=never_cheap, routing_model="cheap-model",
         )
         asyncio.run(engine.run(messages=[], user_message="hello"))
         self.assertEqual(models_called, ["main-model"])
-
-    def test_no_routing_model_stays_main(self) -> None:
-        """Even if classifier says cheap, no routing_model means main model."""
-        from micro_x_agent_loop.turn_classifier import TurnClassification
-
-        def always_cheap(**kwargs) -> TurnClassification:
-            return TurnClassification(use_cheap_model=True, reason="test", rule="test_rule")
-
-        provider = FakeStreamProvider()
-        provider.queue(text="done")
-        models_called: list[str] = []
-        original = provider.stream_chat
-
-        async def tracking(model, *args, **kwargs):
-            models_called.append(model)
-            return await original(model, *args, **kwargs)
-
-        provider.stream_chat = tracking
-        events = BaseTurnEvents()
-        engine = TurnEngine(
-            provider=provider, model="main-model", max_tokens=1024, temperature=0.7,
-            system_prompt="test", converted_tools=[], tool_map={},
-            max_tool_result_chars=40000, max_tokens_retries=1, events=events,
-            turn_classifier=always_cheap, routing_model="",
-        )
-        asyncio.run(engine.run(messages=[], user_message="hello"))
-        self.assertEqual(models_called, ["main-model"])
-
-
-class PerTurnRoutingAgentConfigTests(unittest.TestCase):
-    """Verify Agent validates per-turn routing config."""
-
-    def test_enabled_without_model_raises(self) -> None:
-        from micro_x_agent_loop.agent import Agent
-        from micro_x_agent_loop.agent_config import AgentConfig
-
-        with self.assertRaises(ValueError) as ctx:
-            Agent(AgentConfig(
-                api_key="test",
-                per_turn_routing_enabled=True,
-                per_turn_routing_model="",
-                per_turn_routing_provider="anthropic",
-            ))
-        self.assertIn("PerTurnRoutingModel", str(ctx.exception))
-
-    def test_enabled_without_provider_raises(self) -> None:
-        from micro_x_agent_loop.agent import Agent
-        from micro_x_agent_loop.agent_config import AgentConfig
-
-        with self.assertRaises(ValueError) as ctx:
-            Agent(AgentConfig(
-                api_key="test",
-                per_turn_routing_enabled=True,
-                per_turn_routing_model="claude-haiku-4-5-20251001",
-                per_turn_routing_provider="",
-            ))
-        self.assertIn("PerTurnRoutingProvider", str(ctx.exception))
 
 
 if __name__ == "__main__":

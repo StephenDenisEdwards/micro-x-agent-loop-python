@@ -8,7 +8,5 @@
   "CompactionModel": "deepseek-chat",
   "Stage2Provider": "deepseek",
   "Stage2Model": "deepseek-chat",
-  "PerTurnRoutingProvider": "deepseek",
-  "PerTurnRoutingModel": "deepseek-chat",
   "PromptCachingEnabled": false
 }

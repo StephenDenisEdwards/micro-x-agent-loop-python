@@ -129,7 +129,6 @@ class Agent:
         self._api_payload_store = c.api_payload_store
 
         # --- Routing state ---
-        self._per_turn_routing_enabled = c.per_turn_routing_enabled
         self._semantic_routing_enabled = c.semantic_routing_enabled
         self._routing_feedback_store = c.routing_feedback_store
         self._task_embedding_index = c.task_embedding_index
@@ -183,8 +182,6 @@ class Agent:
             tool_search_globally_active=self._tool_search_active,
             compact_system_prompt=self._compact_system_prompt,
             sub_agent_runner=self._sub_agent_runner,
-            turn_classifier=c.turn_classifier,
-            routing_model=c.routing_model,
             provider_pool=c.provider_pool,
             semantic_classifier=c.semantic_classifier,
             routing_policies=c.routing_policies,

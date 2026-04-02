@@ -63,7 +63,6 @@ class AgentComponents:
     working_directory: str | None
     tool_result_formatter: ToolResultFormatter
     api_payload_store: ApiPayloadStore
-    per_turn_routing_enabled: bool
     semantic_routing_enabled: bool
     routing_feedback_store: Any
     task_embedding_index: object | None
@@ -72,8 +71,6 @@ class AgentComponents:
     summarization_model: str
     summarization_enabled: bool
     summarization_threshold: int
-    turn_classifier: Any
-    routing_model: str
     provider_pool: Any
     semantic_classifier: Any
     routing_policies: dict
@@ -198,7 +195,7 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
     )
 
     # --- Routing ---
-    turn_classifier, routing_model, provider_pool, semantic_classifier = None, "", None, None
+    provider_pool, semantic_classifier = None, None
     routing_feedback_callback = None
     routing_feedback_store = None
     task_embedding_index: object | None = None
@@ -207,8 +204,6 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
         provider_pool, semantic_classifier, routing_feedback_store, routing_feedback_callback, task_embedding_index = (
             _build_semantic_routing(rc, llm, ts, provider)
         )
-    elif config.per_turn_routing_enabled:
-        turn_classifier, routing_model = _build_per_turn_routing(rc)
 
     return AgentComponents(
         provider=provider, model=config.model, max_tokens=config.max_tokens,
@@ -232,7 +227,6 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
         working_directory=config.working_directory,
         tool_result_formatter=tool_result_formatter,
         api_payload_store=ApiPayloadStore(),
-        per_turn_routing_enabled=config.per_turn_routing_enabled,
         semantic_routing_enabled=config.semantic_routing_enabled,
         routing_feedback_store=routing_feedback_store,
         task_embedding_index=task_embedding_index,
@@ -240,7 +234,6 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
         summarization_model=summarization_model,
         summarization_enabled=config.tool_result_summarization_enabled,
         summarization_threshold=config.tool_result_summarization_threshold,
-        turn_classifier=turn_classifier, routing_model=routing_model,
         provider_pool=provider_pool, semantic_classifier=semantic_classifier,
         routing_policies=config.routing_policies,
         routing_fallback_provider=config.routing_fallback_provider or config.provider,
@@ -296,7 +289,7 @@ def _build_semantic_routing(
         task_client = OllamaEmbeddingClient(ts.ollama_base_url, ts.embedding_model)
         task_embedding_index = TaskEmbeddingIndex(task_client)
 
-    keywords = [kw.strip() for kw in rc.per_turn_routing_complexity_keywords.split(",") if kw.strip()]
+    keywords = [kw.strip() for kw in rc.complexity_keywords.split(",") if kw.strip()]
     semantic_classifier = partial(
         classify_task, complexity_keywords=keywords,
         strategy=rc.semantic_routing_strategy,
@@ -322,20 +315,3 @@ def _build_semantic_routing(
     return provider_pool, semantic_classifier, routing_feedback_store, routing_feedback_callback, task_embedding_index
 
 
-def _build_per_turn_routing(rc: RoutingConfig) -> tuple[Any, str]:
-    """Build legacy per-turn routing. Returns (turn_classifier, routing_model)."""
-    if not rc.per_turn_routing_model:
-        raise ValueError("PerTurnRoutingModel must be set in config when PerTurnRoutingEnabled is true")
-    if not rc.per_turn_routing_provider:
-        raise ValueError("PerTurnRoutingProvider must be set in config when PerTurnRoutingEnabled is true")
-    from micro_x_agent_loop.turn_classifier import classify_turn
-    keywords = [kw.strip() for kw in rc.per_turn_routing_complexity_keywords.split(",") if kw.strip()]
-    turn_classifier = partial(
-        classify_turn,
-        max_user_chars=rc.per_turn_routing_max_user_chars,
-        short_followup_chars=rc.per_turn_routing_short_followup_chars,
-        complexity_keywords=keywords,
-    )
-    routing_model = rc.per_turn_routing_model
-    logger.info("Per-turn routing enabled: cheap model={model}", model=routing_model)
-    return turn_classifier, routing_model

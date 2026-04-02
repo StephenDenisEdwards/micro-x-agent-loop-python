@@ -1,6 +1,5 @@
 {
   "Base": "config-base.json",
-  "PerTurnRoutingEnabled": false,
 
   "RoutingFeedbackEnabled": false,
   "SemanticRoutingEnabled": true,

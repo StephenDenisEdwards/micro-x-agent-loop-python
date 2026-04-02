@@ -1,9 +1,8 @@
 """Routing strategy — decides which provider/model handles each API call.
 
 Extracted from ``TurnEngine.run()`` to give routing its own single
-responsibility.  Handles pin-continuation, semantic routing, legacy
-per-turn routing, confidence gating, and per-policy overrides (tool
-narrowing, compact system prompt).
+responsibility.  Handles pin-continuation, semantic routing, confidence
+gating, and per-policy overrides (tool narrowing, compact system prompt).
 """
 
 from __future__ import annotations
@@ -15,7 +14,6 @@ from loguru import logger
 
 from micro_x_agent_loop.provider_pool import ProviderPool, RoutingTarget
 from micro_x_agent_loop.semantic_classifier import TaskClassification
-from micro_x_agent_loop.turn_classifier import TurnClassification
 
 
 @dataclass
@@ -26,7 +24,6 @@ class RoutingDecision:
     effective_provider: Any  # ProviderPool | original provider | None
     routing_target: RoutingTarget | None
     task_classification: TaskClassification | None
-    turn_classification: TurnClassification | None
     call_type: str
     system_prompt_override: str | None = None
     narrowed_tools: list[dict] | None = None
@@ -42,12 +39,10 @@ class RoutingStrategy:
         default_model: str,
         provider_pool: ProviderPool | None = None,
         semantic_classifier: Any | None = None,
-        turn_classifier: Any | None = None,
         routing_policies: dict[str, dict] | None = None,
         routing_fallback_provider: str = "",
         routing_fallback_model: str = "",
         routing_confidence_threshold: float = 0.6,
-        routing_model: str = "",
         routing_feedback_callback: Any | None = None,
         compact_system_prompt: str = "",
         task_embedding_index: Any | None = None,
@@ -56,12 +51,10 @@ class RoutingStrategy:
         self._default_model = default_model
         self._provider_pool = provider_pool
         self._semantic_classifier = semantic_classifier
-        self._turn_classifier = turn_classifier
         self._routing_policies = routing_policies or {}
         self._routing_fallback_provider = routing_fallback_provider
         self._routing_fallback_model = routing_fallback_model
         self._routing_confidence_threshold = routing_confidence_threshold
-        self._routing_model = routing_model
         self._routing_feedback_callback = routing_feedback_callback
         self._compact_system_prompt = compact_system_prompt
         self._task_embedding_index = task_embedding_index
@@ -96,7 +89,6 @@ class RoutingStrategy:
         """Run the routing cascade and return a decision."""
         effective_model = self._default_model
         effective_provider: Any = None
-        classification: TurnClassification | None = None
         task_classification: TaskClassification | None = None
         call_type = "main"
         routing_target: RoutingTarget | None = None
@@ -152,24 +144,6 @@ class RoutingStrategy:
                 reason=task_classification.reason,
             )
 
-        # --- Legacy per-turn routing ---
-        elif self._turn_classifier is not None:
-            classification = self._turn_classifier(
-                user_message=user_message,
-                has_tools=bool(api_tools),
-                turn_iteration=turn_iteration,
-                turn_number=turn_number,
-            )
-            if classification.use_cheap_model and self._routing_model:
-                effective_model = self._routing_model
-                call_type = "main:routed"
-            logger.info(
-                "Turn routing: model={model} rule={rule} reason={reason}",
-                model=effective_model,
-                rule=classification.rule,
-                reason=classification.reason,
-            )
-
         # --- Per-policy overrides ---
         system_prompt_override: str | None = None
         narrowed_tools: list[dict] | None = None
@@ -202,7 +176,6 @@ class RoutingStrategy:
             effective_provider=effective_provider,
             routing_target=routing_target,
             task_classification=task_classification,
-            turn_classification=classification,
             call_type=call_type,
             system_prompt_override=system_prompt_override,
             narrowed_tools=narrowed_tools,

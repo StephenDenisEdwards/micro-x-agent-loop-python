@@ -3,7 +3,6 @@
   "Provider": "anthropic",
   "Model": "claude-sonnet-4-5-20250929",
 
-  "PerTurnRoutingEnabled": false,
   "SemanticRoutingEnabled": true,
   "SemanticRoutingStrategy": "rules+keywords",
   "RoutingConfidenceThreshold": 0.6,

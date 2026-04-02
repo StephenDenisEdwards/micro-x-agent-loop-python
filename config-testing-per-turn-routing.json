@@ -1,7 +1,0 @@
-{
-  "Base": "config-base.json",
-  "PerTurnRoutingEnabled": true,
-  "PerTurnRoutingModel": "claude-haiku-4-5-20251001",
-  "PerTurnRoutingProvider": "anthropic",
-  "LogLevel": "DEBUG"
-}

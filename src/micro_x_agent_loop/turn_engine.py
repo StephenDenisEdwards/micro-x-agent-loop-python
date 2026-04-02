@@ -50,8 +50,6 @@ class TurnEngine:
         sub_agent_runner: SubAgentRunner | None = None,
         routing: RoutingStrategy | None = None,
         # Legacy params — used when `routing` is None (backward compat for tests)
-        turn_classifier: Any | None = None,
-        routing_model: str = "",
         provider_pool: ProviderPool | None = None,
         semantic_classifier: Any | None = None,
         routing_policies: dict[str, dict] | None = None,
@@ -86,17 +84,15 @@ class TurnEngine:
         resolved_routing: RoutingStrategy | None = None
         if routing is not None:
             resolved_routing = routing
-        elif semantic_classifier is not None or turn_classifier is not None:
+        elif semantic_classifier is not None:
             resolved_routing = RoutingStrategy(
                 default_model=model,
                 provider_pool=provider_pool,
                 semantic_classifier=semantic_classifier,
-                turn_classifier=turn_classifier,
                 routing_policies=routing_policies,
                 routing_fallback_provider=routing_fallback_provider,
                 routing_fallback_model=routing_fallback_model,
                 routing_confidence_threshold=routing_confidence_threshold,
-                routing_model=routing_model,
                 routing_feedback_callback=routing_feedback_callback,
                 compact_system_prompt=compact_system_prompt,
                 task_embedding_index=task_embedding_index,

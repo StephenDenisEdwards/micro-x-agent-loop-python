@@ -9,8 +9,6 @@ from micro_x_agent_loop.constants import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_TOOL_RESULT_CHARS,
     DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS,
-    DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS,
-    DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS,
     DEFAULT_SESSION_BUDGET_USD,
     DEFAULT_SUBAGENT_MAX_TOKENS,
     DEFAULT_SUBAGENT_MAX_TURNS,
@@ -63,14 +61,9 @@ class ToolSearchConfig:
 
 @dataclass
 class RoutingConfig:
-    """Per-turn and semantic routing settings."""
+    """Semantic routing settings."""
 
-    per_turn_routing_enabled: bool = False
-    per_turn_routing_model: str = ""
-    per_turn_routing_provider: str = ""
-    per_turn_routing_max_user_chars: int = DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS
-    per_turn_routing_short_followup_chars: int = DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS
-    per_turn_routing_complexity_keywords: str = DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS
+    complexity_keywords: str = DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS
     semantic_routing_enabled: bool = False
     semantic_routing_strategy: str = "rules+keywords"
     routing_policies: dict = field(default_factory=dict)
@@ -163,13 +156,8 @@ class AgentConfig:
     sub_agent_timeout: int = DEFAULT_SUBAGENT_TIMEOUT
     sub_agent_max_turns: int = DEFAULT_SUBAGENT_MAX_TURNS
     sub_agent_max_tokens: int = DEFAULT_SUBAGENT_MAX_TOKENS
-    # Per-turn routing
-    per_turn_routing_enabled: bool = False
-    per_turn_routing_model: str = ""
-    per_turn_routing_provider: str = ""
-    per_turn_routing_max_user_chars: int = DEFAULT_PER_TURN_ROUTING_MAX_USER_CHARS
-    per_turn_routing_short_followup_chars: int = DEFAULT_PER_TURN_ROUTING_SHORT_FOLLOWUP_CHARS
-    per_turn_routing_complexity_keywords: str = DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS
+    # Routing
+    complexity_keywords: str = DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS
     # Semantic routing
     semantic_routing_enabled: bool = False
     semantic_routing_strategy: str = "rules+keywords"
@@ -213,12 +201,7 @@ class AgentConfig:
 
     def routing_config(self) -> RoutingConfig:
         return RoutingConfig(
-            per_turn_routing_enabled=self.per_turn_routing_enabled,
-            per_turn_routing_model=self.per_turn_routing_model,
-            per_turn_routing_provider=self.per_turn_routing_provider,
-            per_turn_routing_max_user_chars=self.per_turn_routing_max_user_chars,
-            per_turn_routing_short_followup_chars=self.per_turn_routing_short_followup_chars,
-            per_turn_routing_complexity_keywords=self.per_turn_routing_complexity_keywords,
+            complexity_keywords=self.complexity_keywords,
             semantic_routing_enabled=self.semantic_routing_enabled,
             semantic_routing_strategy=self.semantic_routing_strategy,
             routing_policies=self.routing_policies,

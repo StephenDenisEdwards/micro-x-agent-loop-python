@@ -1,8 +1,6 @@
 {
   "Base": "config-base.json",
   "Model": "claude-haiku-4-5-20251001",
-  "PerTurnRoutingEnabled": false,
-
   "RoutingFeedbackEnabled": false,
   "SemanticRoutingEnabled": true,
   "SemanticRoutingStrategy": "rules+keywords",

@@ -6,7 +6,7 @@
 
 ## Status
 
-**Open** — Analysis complete, no refactoring started.
+**In Progress** — Section 1 (SRP) complete, Section 3.1 (KISS — per-turn routing removal) in progress.
 
 ## Summary
 
@@ -28,47 +28,25 @@ An audit of the codebase against SOLID, DRY, and KISS principles reveals strong 
 
 ## 1. Single Responsibility Violations
 
-### 1.1 `agent.py` (915 lines) — Critical
+### 1.1 `agent.py` (915 lines) — ✅ Complete
 
-The `Agent.__init__()` handles 9+ distinct responsibilities:
+Extracted `AgentBuilder` (`agent_builder.py`) for subsystem construction and `SystemPromptBuilder` (`system_prompt_builder.py`) for directive consolidation. Agent reduced to 738 lines.
 
-- Provider creation
-- Tool map building
-- Tool search initialization
-- Sub-agent setup
-- Memory facade setup
-- Voice runtime initialization
-- Command router creation
-- Mode analysis setup
-- Semantic routing setup
+### 1.2 `turn_engine.py` (719 lines) — ✅ Complete
 
-**Impact:** Massive constructor makes testing hard. Changes to any subsystem require understanding all dependencies.
+Extracted `RoutingStrategy` (`routing_strategy.py`) for routing decisions (pin continuation, semantic, legacy, per-policy overrides). TurnEngine reduced to 592 lines.
 
-**Recommendation:** Extract factory methods or use composition with specialized builders.
+### 1.3 `agent_config.py` — ✅ Complete
 
-### 1.2 `turn_engine.py` (719 lines) — Significant
+Added 7 sub-config dataclasses (`LLMConfig`, `MemoryConfig`, `RoutingConfig`, `ToolSearchConfig`, etc.) with factory methods.
 
-Constructor takes 17+ parameters covering LLM config, system prompt management, tool management, summarization, routing, formatting, and sub-agents. The `run()` method orchestrates all of these in a single method.
+### 1.4 `__main__.py` (544 lines) — ✅ Complete
 
-**Recommendation:** Extract `RoutingEngine`, `ToolExecutor`, and `CostTracker` classes.
+Split into `cli/` package: `dispatch.py`, `repl.py`, `esc_watcher.py`. `__main__.py` reduced to 130 lines.
 
-### 1.3 `app_config.py` — Moderate
+### 1.5 `agent_channel.py` (581 lines) — ✅ Complete
 
-`AppConfig` dataclass has 55+ fields mixing LLM selection, memory, compaction, tool search, routing, broker, and formatting config. Config loading repeats the same expansion pipeline in 3 places.
-
-**Recommendation:** Split into `LLMConfig`, `MemoryConfig`, `RoutingConfig`, `ToolSearchConfig` sub-configs.
-
-### 1.4 `__main__.py` (544 lines) — Moderate
-
-Single file handles REPL, `--run` autonomous mode, `--broker` daemon management, `--job` scheduler, and `--server` API dispatch.
-
-**Recommendation:** Extract `REPLRunner`, `BrokerManager`, `JobManager`, `ServerManager` modules.
-
-### 1.5 `agent_channel.py` (581 lines) — Moderate
-
-`TerminalChannel` mixes live markdown rendering (rich.Live), spinner animation, interactive prompts (questionary), and output buffering.
-
-**Recommendation:** Extract `MarkdownRenderer`, `ToolSpinner`, `InteractivePrompt` classes.
+Extracted `terminal_renderer.py` and `terminal_prompter.py`. `agent_channel.py` reduced to 384 lines.
 
 ---
 
@@ -106,17 +84,15 @@ Similar routing logic appears in both `turn_engine.py` (runtime resolution) and 
 
 ## 3. KISS Violations
 
-### 3.1 Three Redundant Routing Systems (~2000 lines)
+### 3.1 Redundant Per-Turn Routing System — In Progress
 
 Three routing systems exist simultaneously but are mutually exclusive:
 
-1. **Per-turn routing** (`turn_classifier.py`) — Legacy binary classifier (cheap vs. main model)
-2. **Semantic routing** (`semantic_classifier.py` + `task_taxonomy.py`) — 9 task types mapped to routing policies
-3. **Mode analysis** (`mode_selector.py`) — Stage 1 pattern matching + Stage 2 LLM classification, currently diagnostic only / unimplemented
+1. **Per-turn routing** (`turn_classifier.py`) — Legacy binary classifier (cheap vs. main model). Fully superseded by semantic routing.
+2. **Semantic routing** (`semantic_classifier.py` + `task_taxonomy.py`) — 9 task types mapped to routing policies. Active system.
+3. **Mode analysis** (`mode_selector.py`) — Stage 1 pattern matching + Stage 2 LLM classification. Currently diagnostic only but retained for future compiled-mode execution.
 
-Only semantic routing is actively used.
-
-**Recommendation:** Remove per-turn routing (legacy) and mode analysis (unimplemented). Saves ~1000 lines.
+**Decision:** Remove per-turn routing only. Keep mode analysis — it is a distinct feature (prompt vs. compiled mode detection) that will be implemented in a future iteration. Saves ~500 lines.
 
 ### 3.2 Four Separate Message Format Converters
 
@@ -177,14 +153,14 @@ These patterns should be preserved:
 
 ## Proposed Refactoring Priority
 
-| Priority | Refactoring | Impact | Estimated Reduction |
-|----------|-------------|--------|---------------------|
-| 1 | Remove dead routing systems (per-turn + mode analysis) | KISS | ~1000 lines |
-| 2 | Extract `MessageConverter` Protocol | DRY | ~150 lines deduped |
-| 3 | Extract `SystemPromptBuilder` | DRY, SRP | ~80 lines from agent.py |
-| 4 | Extract `RoutingEngine` from TurnEngine | SRP | ~200 lines from turn_engine.py |
-| 5 | Extract `ProviderFactory` | DIP | Centralizes 5 creation sites |
-| 6 | Split `AgentConfig` into sub-configs | ISP | Clearer interfaces |
-| 7 | Extract `__main__.py` dispatch modules | SRP | ~300 lines from __main__.py |
+| Priority | Refactoring | Impact | Status |
+|----------|-------------|--------|--------|
+| 1 | Remove per-turn routing system | KISS §3.1 | In progress |
+| 2 | Extract `MessageConverter` Protocol | DRY §2.1 | Open |
+| 3 | Extract `SystemPromptBuilder` | DRY §2.3, SRP | ✅ Done (commit 9a4a41b) |
+| 4 | Extract `RoutingEngine` from TurnEngine | SRP §1.2 | ✅ Done as `RoutingStrategy` (commit 9a4a41b) |
+| 5 | Extract `ProviderFactory` | DIP §4.3 | Open |
+| 6 | Split `AgentConfig` into sub-configs | ISP §1.3 | ✅ Done (commit 9a4a41b) |
+| 7 | Extract `__main__.py` dispatch modules | SRP §1.4 | ✅ Done as `cli/` package (commit 9a4a41b) |
 
-Each refactoring is independent and can be done incrementally.
+Each remaining refactoring is independent and can be done incrementally.
