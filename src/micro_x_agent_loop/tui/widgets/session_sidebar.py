@@ -107,7 +107,7 @@ class SessionSidebar(Vertical):
         scroll = self.query_one("#session-list-scroll", VerticalScroll)
 
         # Remove existing entries and load-more button
-        for child in list(scroll.query(".session-entry, #btn-load-more")):
+        for child in list(scroll.query(".session-entry, .load-more-btn")):
             child.remove()
 
         if session_manager is None:
@@ -121,16 +121,15 @@ class SessionSidebar(Vertical):
         if self._session_manager is None:
             return
 
-        sessions = self._session_manager.list_sessions(limit=_PAGE_SIZE + self._loaded_count)
-        # Skip already-loaded sessions
-        page = sessions[self._loaded_count:]
+        all_sessions = self._session_manager.list_sessions(limit=self._loaded_count + _PAGE_SIZE)
+        page = all_sessions[self._loaded_count:]
 
         if not page and self._loaded_count == 0:
             scroll.mount(Static("[dim]No sessions[/dim]", classes="session-entry"))
             return
 
         # Remove existing load-more button
-        for btn in list(scroll.query("#btn-load-more")):
+        for btn in list(scroll.query(".load-more-btn")):
             btn.remove()
 
         for s in page:
@@ -153,16 +152,18 @@ class SessionSidebar(Vertical):
 
         # Show "Load more" if we got a full page (there may be more)
         if len(page) >= _PAGE_SIZE:
-            scroll.mount(Button("Load more...", id="btn-load-more", variant="default"))
+            scroll.mount(_LoadMoreButton())
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-new-session":
             self.post_message(self.NewSessionRequested())
         elif event.button.id == "btn-fork-session":
             self.post_message(self.ForkSessionRequested())
-        elif event.button.id == "btn-load-more":
-            scroll = self.query_one("#session-list-scroll", VerticalScroll)
-            self._load_page(scroll)
+
+    def _on_load_more_clicked(self) -> None:
+        """Load the next page of sessions."""
+        scroll = self.query_one("#session-list-scroll", VerticalScroll)
+        self._load_page(scroll)
 
     def on_click(self, event: Any) -> None:
         """Bubble up session clicks from child entries."""
@@ -178,3 +179,29 @@ class _ClickableSession(Static):
 
     def on_click(self) -> None:
         self.post_message(SessionSidebar.SessionSelected(self._session_id))
+
+
+class _LoadMoreButton(Static):
+    """Clickable 'Load more' label that triggers the next page load."""
+
+    DEFAULT_CSS = """
+    _LoadMoreButton {
+        padding: 0 1;
+        color: $primary;
+        height: auto;
+    }
+
+    _LoadMoreButton:hover {
+        background: $primary 20%;
+    }
+    """
+
+    def __init__(self) -> None:
+        super().__init__("[dim]Load more...[/dim]", classes="load-more-btn")
+
+    def on_click(self) -> None:
+        sidebar = self.ancestors_with_self
+        for ancestor in sidebar:
+            if isinstance(ancestor, SessionSidebar):
+                ancestor._on_load_more_clicked()
+                break
