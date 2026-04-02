@@ -16,10 +16,6 @@ class TextualChannel:
     as the Textual app, so all calls are direct (no ``call_from_thread``).
     """
 
-    # Signal to the agent that interactive terminal prompts (questionary,
-    # input()) must not be used — the TUI owns the terminal.
-    suppress_interactive_prompts: bool = True
-
     def __init__(self, app: AgentTUI) -> None:
         self._app = app
 
@@ -48,6 +44,19 @@ class TextualChannel:
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:
         future: asyncio.Future[str] = asyncio.Future()
         self._app.on_ask_user(question, options, future)
+        return await future
+
+    # -- Mode analysis --
+
+    async def prompt_mode_choice(
+        self,
+        signals: list[str],
+        recommended: str,
+        reasoning: str,
+    ) -> str:
+        """Show a modal for PROMPT/COMPILED mode selection. Returns the chosen mode."""
+        future: asyncio.Future[str] = asyncio.Future()
+        self._app.on_mode_choice(signals, recommended, reasoning, future)
         return await future
 
     # -- Streaming lifecycle (called by Agent._run_inner) --

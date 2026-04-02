@@ -297,8 +297,7 @@ class Agent:
         if isinstance(command_result, str):
             user_message = command_result
 
-        _suppress = getattr(self._channel, "suppress_interactive_prompts", False)
-        if self._mode_analysis_enabled and not self._autonomous and not _suppress:
+        if self._mode_analysis_enabled and not self._autonomous:
             analysis = analyze_prompt(user_message)
             stage2: Stage2Result | None = None
 
@@ -310,11 +309,10 @@ class Agent:
                     logger.warning(f"Stage 2 classification failed: {ex}")
 
             if analysis.signals:
-                # Signals detected — ask the user which mode to use
                 chosen_mode = await self._prompt_mode_choice(analysis, stage2)
-                print(f"[Mode] Proceeding in {chosen_mode.value} mode")
+                self._system_print(f"[Mode] Proceeding in {chosen_mode.value} mode")
             else:
-                print(format_analysis(analysis))
+                self._system_print(format_analysis(analysis))
 
         # Budget check — refuse to start a new turn if budget is exhausted
         if self._is_budget_exceeded():
@@ -365,20 +363,38 @@ class Agent:
         if recommended == RecommendedMode.AMBIGUOUS:
             recommended = RecommendedMode.COMPILED
 
-        # Print why we're asking
-        print("\n[Mode Analysis] Your prompt contains signals that suggest "
-              "compiled (batch) mode may be more appropriate:")
-        for signal in analysis.signals:
-            print(f"  • {signal.name} ({signal.strength.value}): "
-                  f'"{signal.matched_text}"')
-        if stage2 and stage2.reasoning:
-            print(f"  LLM assessment: {stage2.reasoning}")
-        print()
-        print("  PROMPT mode: conversational, single-turn responses — good for "
-              "questions, explanations, and single-item tasks.")
-        print("  COMPILED mode: structured batch execution — good for multi-item "
-              "processing, data collection, scoring, and repeatable workflows.")
-        print()
+        # Build signal descriptions for display
+        signal_texts = [
+            f"{s.name} ({s.strength.value}): \"{s.matched_text}\""
+            for s in analysis.signals
+        ]
+        reasoning = stage2.reasoning if stage2 and stage2.reasoning else ""
+        recommended_str = recommended.value
+
+        # Route through channel if it supports mode choice (e.g. TUI modal)
+        if self._channel is not None and hasattr(self._channel, "prompt_mode_choice"):
+            selected = await self._channel.prompt_mode_choice(
+                signal_texts, recommended_str, reasoning,
+            )
+            if selected == "COMPILED":
+                return RecommendedMode.COMPILED
+            if selected == "PROMPT":
+                return RecommendedMode.PROMPT
+            return recommended
+
+        # Fallback: interactive terminal prompt via questionary
+        self._system_print(
+            "[Mode Analysis] Your prompt contains signals that suggest "
+            "compiled (batch) mode may be more appropriate:"
+        )
+        for text in signal_texts:
+            self._system_print(f"  * {text}")
+        if reasoning:
+            self._system_print(f"  LLM assessment: {reasoning}")
+        self._system_print(
+            "  PROMPT mode: conversational, single-turn responses\n"
+            "  COMPILED mode: structured batch execution"
+        )
 
         import questionary
         from questionary import Choice, Style
@@ -420,8 +436,10 @@ class Agent:
         try:
             selected = await asyncio.to_thread(_do_select)
         except Exception:
-            print(f"[Mode Analysis] Non-interactive terminal, using recommendation: "
-                  f"{recommended.value}")
+            self._system_print(
+                f"[Mode Analysis] Non-interactive terminal, using recommendation: "
+                f"{recommended.value}"
+            )
             return recommended
 
         if selected == "COMPILED":
