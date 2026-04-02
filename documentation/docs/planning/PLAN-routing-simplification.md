@@ -204,7 +204,7 @@ Deep review of the routing implementation as built across all 4 phases of `PLAN-
 
 ### Design Concerns
 
-**Dual routing systems** — Both "semantic routing" (new) and "per-turn routing" (legacy) exist as parallel code paths in `turn_engine.py`, both disabled by default. No deprecation plan or migration timeline.
+**~~Dual routing systems~~** — Resolved (2026-04-02). Per-turn routing removed; semantic routing is now the sole model routing system. The binary heuristic classifier was strictly superseded by semantic routing's Stage 1 rules, which cover the same cases while providing task-type granularity and multi-provider support.
 
 **Mode selector vs. semantic classifier** — `mode_selector.py` (PROMPT vs. COMPILED) and `semantic_classifier.py` (9 task types) independently analyze the same user message for different purposes with no coordination. A message classified as `ANALYSIS` might simultaneously trigger `COMPILED` mode.
 

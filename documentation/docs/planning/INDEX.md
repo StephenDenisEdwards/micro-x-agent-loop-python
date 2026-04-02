@@ -18,7 +18,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | **8** | [Sub-Agents](PLAN-sub-agents.md) - Phase 2a+2b (routing policy, observability) | **Completed** | [sub-agents](../testing/MANUAL-TEST-sub-agents.md) | 🔴 | Routing directive rewritten, enabled by default, memory tracking added. Delivers QW-3 |
 | **9** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 2.5a: Session budget caps | **Completed** | [session-budget](../testing/MANUAL-TEST-session-budget.md) | 🔴 | `SessionBudgetUSD` warn at 80%, hard stop at 100% |
 | **10** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3a: ADR-014 decision | **Completed** | — | — | Option C accepted; already implemented (`ToolResult.structured`, `ToolResultFormatter`) |
-| **11** | [Cost Reduction](PLAN-cost-reduction.md) - Phase 3b: Per-turn model routing | **Completed** | [per-turn-routing](../testing/MANUAL-TEST-per-turn-routing.md) | 🔴 | Heuristic classifier, opt-in via `PerTurnRoutingEnabled` |
+| ~~11~~ | ~~[Cost Reduction](PLAN-cost-reduction.md) - Phase 3b: Per-turn model routing~~ | **Removed** | — | — | Superseded by semantic routing (2026-04). Binary heuristic lacked task-type granularity and multi-provider support. |
 | ~~12~~ | ~~[Cost Reduction](PLAN-cost-reduction.md) - Phase 3c: Batch API for broker~~ | **Dropped** | — | — | Incompatible with multi-turn agentic loops |
 | **13** | [Cache-Preserving Tool Routing](PLAN-cache-preserving-tool-routing.md) | **Completed** | [tool-search-and-canonicalisation](../testing/MANUAL-TEST-tool-search-and-canonicalisation.md) | 🔴 | Canonical serialisation + provider-aware tool search. Lanes permanently shelved |
 | **14** | [Multi-Provider Support](PLAN-multi-provider.md) | **Completed** | — | — | Gemini + DeepSeek providers |
@@ -79,7 +79,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | [Interview Assist MCP](PLAN-interview-assist-mcp.md) | Completed | Phase 1 + STT extension, updated 2026-02-19 |
 | [Memory System](PLAN-claude-style-memory.md) | Completed | All phases done. MCP mutation tracking extracted to [own plan](PLAN-mcp-mutation-tracking.md) |
 | [Continuous Voice Agent](PLAN-continuous-voice-agent.md) | Completed | Phases 1-4 done. Optional future hardening: debounce, noise filters, crash recovery, confidence gating |
-| [Cost Reduction](PLAN-cost-reduction.md) | Phases 1–3b Completed — 3c Dropped | 14 strategies reviewed ([cost-reduction-review.md](../review/cost-reduction-review.md)). QW-1/2/3, session budgets, ADR-014, per-turn routing done. Batch API (3c) dropped — incompatible with agentic loops |
+| [Cost Reduction](PLAN-cost-reduction.md) | Phases 1–3a Completed, 3b Removed, 3c Dropped | 14 strategies reviewed ([cost-reduction-review.md](../review/cost-reduction-review.md)). QW-1/2/3, session budgets, ADR-014 done. Per-turn routing (3b) removed — superseded by semantic routing. Batch API (3c) dropped — incompatible with agentic loops |
 | [Cost Metrics Logging](PLAN-cost-metrics-logging.md) | Completed | Structured metrics for cost analysis - prerequisite for cost reduction. See [DESIGN-cost-metrics.md](../design/DESIGN-cost-metrics.md) |
 | [Browser Automation](PLAN-browser-automation.md) | Planned | Phase 3 of web tooling |
 | [Cloud File Systems](PLAN-cloud-file-systems.md) | Planned | |

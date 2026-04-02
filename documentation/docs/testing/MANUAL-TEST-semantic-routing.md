@@ -251,29 +251,9 @@
 
 ---
 
-## Test 11 — Semantic routing coexists with per-turn routing
+## ~~Test 11~~ — Removed
 
-**Goal:** Verify that semantic routing supersedes per-turn routing when both are enabled.
-
-**Steps:**
-
-1. Configure both:
-   ```json
-   {
-     "SemanticRoutingEnabled": true,
-     "PerTurnRoutingEnabled": true,
-     "PerTurnRoutingModel": "claude-haiku-4-5-20251001",
-     "PerTurnRoutingProvider": "anthropic"
-   }
-   ```
-2. Start the agent
-3. Submit several prompts
-4. Observe the logs
-
-**Expected:**
-- Logs show "Semantic routing" messages (not "Turn routing")
-- Semantic routing takes precedence when both are enabled
-- Per-turn routing is not used
+Per-turn routing was removed from the codebase (2026-04-02). This coexistence test is no longer applicable.
 
 ---
 

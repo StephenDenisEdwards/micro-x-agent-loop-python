@@ -8,11 +8,13 @@ Extends [ADR-012](ADR-012-layered-cost-reduction.md) (layered cost reduction) as
 
 ## Context
 
-ADR-012 established five independent cost reduction layers. Phase 3b added per-turn model routing — a binary classifier that routes simple turns to a cheaper model based on heuristics (message length, turn iteration, keyword blocklist). This delivered measurable savings but left two significant opportunities:
+ADR-012 established five independent cost reduction layers. Phase 3b had added per-turn model routing — a binary heuristic classifier that routed simple turns to a cheaper model based on message length, turn iteration, and keyword blocklists. While this delivered measurable savings, it had two fundamental limitations:
 
-1. **No task-type awareness.** The heuristic classifier cannot distinguish a code review from a factual question — it only knows whether the message is short, whether tools are present, and whether it's a tool-result continuation. Two messages of identical length may have very different model-quality requirements.
+1. **No task-type awareness.** The binary classifier could not distinguish a code review from a factual question — it only knew whether the message was short, whether tools were present, and whether it was a tool-result continuation. Two messages of identical length may have very different model-quality requirements.
 
-2. **Single-provider constraint.** Per-turn routing selects between two models on the *same* provider. This prevents routing trivial tasks to free local models (Ollama) while keeping complex reasoning on Anthropic — a combination that could reduce costs to near-zero for ~40% of turns.
+2. **Single-provider constraint.** Per-turn routing selected between two models on the *same* provider. This prevented routing trivial tasks to free local models (Ollama) while keeping complex reasoning on Anthropic — a combination that could reduce costs to near-zero for ~40% of turns.
+
+> **Update (2026-04-02):** Per-turn routing was removed from the codebase. Semantic routing's Stage 1 rules fully subsume the binary heuristics while providing task-type granularity, multi-provider dispatch, confidence gating, and adaptive feedback that the binary classifier could never support without being rewritten into essentially the same system.
 
 Options considered:
 
@@ -43,7 +45,7 @@ Reasons:
 **1. Task Taxonomy** — 9 fixed task types (`trivial`, `conversational`, `factual_lookup`, `summarization`, `code_generation`, `code_review`, `analysis`, `tool_continuation`, `creative`). Cheap-eligible: `trivial`, `conversational`, `factual_lookup`, `summarization`. Main-required: `code_generation`, `code_review`, `analysis`, `creative`, `tool_continuation`. Note: `tool_continuation` was originally cheap-eligible but moved to main-required (2026-03-22) because tool continuations often require sophisticated reasoning.
 
 **2. Semantic Classifier** — Three-stage pipeline:
-- Stage 1 (rules): regex patterns + turn context signals. Subsumes the existing `turn_classifier.py` heuristics.
+- Stage 1 (rules): regex patterns + turn context signals. Covers all cases previously handled by the removed per-turn heuristic classifier.
 - Stage 2 (keywords): cosine similarity between tokenized message and pre-defined keyword centroids per task type.
 - Stage 3 (LLM): cheapest available model classifies ambiguous prompts via structured JSON output.
 
@@ -56,15 +58,15 @@ Reasons:
 
 **5. Routing Feedback** — SQLite table `routing_outcomes` with per-turn records. Provides aggregate stats (per task type, provider, classification stage) via the `/routing` command. Confidence gating is handled by `RoutingConfidenceThreshold` (default 0.6) in `_resolve_routing_target`.
 
-### Relationship to Per-Turn Routing
+### Relationship to Per-Turn Routing (Historical)
 
-Semantic routing **supersedes** per-turn routing when both are enabled. The semantic classifier produces the same outputs for the cases that per-turn routing handles (tool-result continuations, complexity guard) plus task-type classification for all other cases. The legacy `PerTurnRoutingEnabled` path remains functional for users who prefer the simpler binary classifier.
+Per-turn routing (`turn_classifier.py`) was removed from the codebase on 2026-04-02. Semantic routing strictly superseded it: the Stage 1 rules produce the same outputs for all cases per-turn routing handled (tool-result continuations, short messages, complexity guard) while additionally providing 9-type task classification, multi-provider dispatch, confidence gating, pin-continuation, and adaptive feedback. Maintaining both systems added ~500 lines of dead code with no user-facing benefit.
 
 ## Consequences
 
 **Easier:**
 
-- Reducing session cost by 30-50% beyond what per-turn routing achieves, by routing ~40% of turns to Haiku or free local models
+- Reducing session cost by 30-50% by routing ~40% of turns to Haiku or free local models
 - Observing routing decisions via structured logging and the `/routing` command
 - Configuring per-task-type provider/model mapping without code changes
 - Adding Ollama-based local inference for trivial tasks at zero API cost

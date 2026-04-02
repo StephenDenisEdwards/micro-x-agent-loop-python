@@ -92,7 +92,7 @@ The agent sits between the user and external services. The user provides natural
 | File safety | Checkpoint/rewind for mutating tools (`write_file`, `append_file`) |
 | Human-in-the-loop | `ask_user` pseudo-tool for LLM-initiated clarifying questions ([ADR-017](decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md)) |
 | Cost reduction | Layered approach: prompt caching, tool schema caching, compaction, concise output, tool search ([ADR-012](decisions/ADR-012-layered-cost-reduction.md)) |
-| Model routing | Per-turn heuristic (binary cheap/main) or semantic routing (task-type classification → per-type provider/model). Semantic supersedes per-turn when enabled. ([ADR-020](decisions/ADR-020-semantic-model-routing.md)) |
+| Model routing | Semantic routing: three-stage task-type classification (rules → keywords → LLM) mapped to per-type provider/model policies via `ProviderPool`. ([ADR-020](decisions/ADR-020-semantic-model-routing.md)) |
 | Mode selection | Structural pattern matching + optional LLM classification to route prompts to compiled or prompt mode |
 | Shared MCP server | [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repo — .NET MCP server providing system information tools |
 
@@ -209,13 +209,13 @@ graph TD
 | `app_config` | Parses `config.json` into `AppConfig` dataclass; resolves runtime environment variables into `RuntimeEnv` |
 | `Agent` | Top-level orchestrator: holds conversation state, routes commands, delegates turns to `TurnEngine` |
 | `AgentConfig` | Dataclass holding all agent configuration (model, tools, memory components, compaction) |
-| `TurnEngine` | Executes a single LLM turn: streams response, classifies tool blocks (search/ask_user/subagent/regular), dispatches tools in parallel, handles retries. Routes each LLM call via semantic or per-turn classifier to select the provider and model. |
+| `TurnEngine` | Executes a single LLM turn: streams response, classifies tool blocks (search/ask_user/subagent/regular), dispatches tools in parallel, handles retries. Routes each LLM call via `RoutingStrategy` (semantic classifier) to select the provider and model. |
 | `SubAgentRunner` | Creates lightweight, disposable in-process agent instances for focused tasks. Three types: explore (read-only, cheap), summarize (no tools), general (full capability). Results return as tool_result to parent. |
 | `TurnEvents` | Protocol defining lifecycle callbacks: `on_append_message`, `on_api_call_completed`, `on_tool_executed`, `on_ensure_checkpoint_for_turn`, etc. `BaseTurnEvents` provides no-op defaults. |
 | `AskUserHandler` | Pseudo-tool handler for human-in-the-loop questioning. Presents structured choices via `questionary` with "Other" free-text escape; falls back to plain `input()` for non-interactive terminals. |
 | `ToolSearchManager` | On-demand tool discovery pseudo-tool. Replaces large schema payloads with a single search tool when schema size exceeds a threshold. Uses `tiktoken` for token counting. |
 | `SemanticClassifier` | Three-stage task classification pipeline (rules → keywords → LLM) that maps user messages to one of 9 `TaskType` values. Pure functions, < 1ms for stages 1–2. Used by `TurnEngine` to select provider/model per LLM call. |
-| `TurnClassifier` | Legacy per-turn binary classifier: decides cheap model vs main model using heuristics (message length, turn iteration, complexity keywords). Superseded by semantic classifier when both are enabled. |
+| `RoutingStrategy` | Encapsulates all model-routing logic: pin-continuation, semantic routing, confidence gating, and per-policy overrides (tool narrowing, compact system prompt). Extracted from `TurnEngine` for single responsibility. |
 | `ProviderPool` | Manages multiple `LLMProvider` instances for cross-provider routing. Dispatches by name, tracks health (exponential-backoff cooldown), handles same-family fallback (providers tagged by `family`: `"anthropic"`, `"openai"`, `"gemini"`), and evaluates cache-switch penalty before switching providers. |
 | `TaskTaxonomy` | `TaskType` enum (9 types: trivial, conversational, factual_lookup, summarization, code_generation, code_review, analysis, tool_continuation, creative) with `CHEAP_TASK_TYPES` / `MAIN_TASK_TYPES` frozen sets. |
 | `RoutingFeedback` | SQLite-backed outcome recording (`routing_outcomes` table). Tracks cost, latency, and quality signals per task type. Computes adaptive confidence thresholds. Exposed via `/routing` command. |
@@ -284,15 +284,12 @@ sequenceDiagram
     A->>TE: run(messages, user_message)
     TE->>Mem: append_message(user)
 
-    Note over TE: Model routing: semantic → per-turn → default
+    Note over TE: Model routing via RoutingStrategy
     alt Semantic routing enabled
         TE->>TE: SemanticClassifier(message) → TaskClassification
         TE->>TE: _resolve_routing_target(task_type) → RoutingTarget
         TE->>P: ProviderPool.stream_chat(target, messages)
-    else Per-turn routing enabled
-        TE->>TE: TurnClassifier(message) → cheap/main
-        TE->>P: stream_chat(effective_model, messages)
-    else Default
+    else Default (no routing)
         TE->>P: stream_chat(configured_model, messages)
     end
 
@@ -371,11 +368,11 @@ A warning is also printed to stderr.
 
 ### Model Routing
 
-The agent supports two model routing strategies, configured in `config.json`. When both are enabled, semantic routing takes precedence.
+The agent uses semantic model routing, configured via `SemanticRoutingEnabled` and `RoutingPolicies` in `config.json`.
 
-**Per-turn routing** (`PerTurnRoutingEnabled`, `RoutingModel`) — a binary heuristic classifier in `turn_classifier.py`. Each LLM call is classified as cheap or main based on four rules checked in order: (1) complexity keyword guard → main model, (2) tool-result continuation → cheap, (3) short message with no tools → cheap, (4) short follow-up in established session → cheap, (5) default → main. Both models are served by the same provider.
+> **History:** An earlier per-turn routing system (`turn_classifier.py`) used binary heuristics (message length, turn iteration, complexity keywords) to route between a cheap and main model on the same provider. It was removed in 2026-04 because semantic routing strictly superseded it: the semantic classifier's Stage 1 rules cover all per-turn heuristics while also providing task-type granularity, multi-provider dispatch, confidence gating, and adaptive feedback — capabilities the binary classifier could never support without being rewritten into essentially the same system.
 
-**Semantic routing** (`SemanticRoutingEnabled`, `RoutingPolicies`) — a richer system that classifies the user message into one of 9 task types (`trivial`, `conversational`, `factual_lookup`, `summarization`, `code_generation`, `code_review`, `analysis`, `tool_continuation`, `creative`) via a three-stage pipeline:
+**Semantic routing** classifies the user message into one of 9 task types (`trivial`, `conversational`, `factual_lookup`, `summarization`, `code_generation`, `code_review`, `analysis`, `tool_continuation`, `creative`) via a three-stage pipeline:
 
 | Stage | Method | Latency | Coverage |
 |-------|--------|---------|----------|

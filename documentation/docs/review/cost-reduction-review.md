@@ -138,13 +138,10 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 
 | Attribute | Detail |
 |-----------|--------|
-| **Status** | ✅ Done |
-| **Review finding** | Per-turn model routing implemented via heuristic classifier (`turn_classifier.py`). Routes tool-result continuations, short conversational messages, and short follow-ups to a cheap model. Complexity keywords guard ensures complex turns stay on the main model. Opt-in via `PerTurnRoutingEnabled`. |
-| **Code location** | `src/micro_x_agent_loop/turn_classifier.py`; `src/micro_x_agent_loop/turn_engine.py`; `src/micro_x_agent_loop/agent.py` |
-| **Config** | `PerTurnRoutingEnabled: false`, `PerTurnRoutingModel`, `PerTurnRoutingProvider`, `PerTurnRoutingMaxUserChars: 200`, `PerTurnRoutingShortFollowupChars: 50`, `PerTurnRoutingComplexityKeywords` |
-| **Estimated impact** | 50–80% cost reduction for turns that don't need Sonnet capability. |
-| **Residual gaps** | Quality evaluation with real usage data not yet done. Classifier is conservative (errs toward main model). No automatic fallback if cheap model produces poor results. |
-| **Action taken** | Implemented (2026-03-12). `Stage2Model` → Haiku. Per-turn routing with heuristic classifier. |
+| **Status** | ❌ Removed (2026-04-02) — superseded by semantic routing ([ADR-020](../architecture/decisions/ADR-020-semantic-model-routing.md)) |
+| **Review finding** | Per-turn model routing was implemented via a binary heuristic classifier (`turn_classifier.py`). It routed tool-result continuations, short conversational messages, and short follow-ups to a cheap model on the same provider. |
+| **Why removed** | Semantic routing (Strategy 13 / ADR-020) strictly superseded per-turn routing: its Stage 1 rules cover all per-turn heuristics while also providing 9-type task-type granularity, multi-provider dispatch, confidence gating, pin-continuation, and adaptive feedback. The binary classifier could not support these capabilities without being rewritten into essentially the same system. Maintaining both added ~500 lines of dead code with no user-facing benefit. |
+| **Action taken** | Implemented (2026-03-12). Removed (2026-04-02, ISSUE-004 §3.1). All config keys (`PerTurnRoutingEnabled`, etc.), code, and tests deleted. `ComplexityKeywords` config retained for semantic routing. |
 
 ---
 
@@ -205,7 +202,7 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | **Review finding** | **Architecturally incompatible.** Batch API submits a single LLM request and returns one response asynchronously — it cannot participate in multi-turn agentic loops. Broker `--run` jobs execute full agent loops (LLM → tool execution → feed results → LLM → repeat), requiring tool results from turn N to construct turn N+1. Chaining batch submissions between tool calls would turn a 6-second job into a multi-hour job with high complexity for modest savings. |
 | **Code location** | `src/micro_x_agent_loop/broker/` |
 | **Residual gaps** | None — dropped as infeasible. |
-| **Action taken** | Dropped (2026-03-12). Batch API is incompatible with agentic execution. Cost reduction for broker jobs served by existing levers (prompt caching, per-turn routing, sub-agent delegation). |
+| **Action taken** | Dropped (2026-03-12). Batch API is incompatible with agentic execution. Cost reduction for broker jobs served by existing levers (prompt caching, semantic routing, sub-agent delegation). |
 
 ---
 
@@ -218,7 +215,7 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | **Status** | ⚠️ Partial |
 | **Review finding** | `OpenAIProvider` fully implemented. Multi-provider factory (ADR-010) supports config-level switching. No runtime arbitrage — provider is static per session. No quality benchmarking for this agent's tasks across providers. No DeepSeek or Gemini provider. |
 | **Code location** | `src/micro_x_agent_loop/providers/openai_provider.py`; `src/micro_x_agent_loop/provider.py` |
-| **Residual gaps** | (a) No automatic failover. (b) No cost comparison matrix for agent-specific tasks. (c) No additional provider implementations (DeepSeek, Gemini). (d) Per-turn model routing (Strategy 8) is a prerequisite for meaningful arbitrage. |
+| **Residual gaps** | (a) No automatic failover. (b) No cost comparison matrix for agent-specific tasks. (c) No additional provider implementations (DeepSeek, Gemini). (d) Semantic routing (Strategy 13) enables meaningful cross-provider arbitrage. |
 | **Action taken** | — |
 
 ---
@@ -248,7 +245,7 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 | 5 | Tool result size reduction | ⚠️ Partial | Medium — structured pipeline in place; per-tool formatting tuning remains | ADR-014 resolved (2026-03-12) |
 | 6 | Tool result data format (ADR-014) | ✅ Done | — | Option C accepted, implemented incrementally (2026-03-12) |
 | 7 | Sub-agent delegation | ✅ Done | Enabled by default, routing directive with examples | Routing policy + enabled (2026-03-12) |
-| 8 | Per-turn model routing | ✅ Done | Heuristic classifier, opt-in, conservative defaults | Implemented (2026-03-12) |
+| 8 | ~~Per-turn model routing~~ | ❌ Removed | Superseded by semantic routing (ADR-020) | Removed (2026-04-02) |
 | 9 | Output token reduction | ✅ Done | Low — `ConciseOutputEnabled` enabled in config-base.json | Enabled |
 | 10 | On-demand tool discovery | ✅ Done | Provider-aware auto + canonical serialisation | Implemented (2026-03-12) |
 | 11 | Compiled mode / batch execution | 🔲 Planned | Low — Phase 4+, ADR-014 blocker resolved | ADR-014 resolved (2026-03-12) |
@@ -261,6 +258,6 @@ Research source: [`cost-reduction-research-report.md`](../research/cost-reductio
 1. ~~**Per-turn cost display in REPL**~~ — ✅ Done ([CLI Status Bar](../planning/PLAN-cli-status-bar.md)).
 2. ~~**Session budget caps**~~ — ✅ Done (2026-03-12). `SessionBudgetUSD` with warn at 80%, hard stop at 100%.
 3. ~~**ADR-014 decision**~~ — ✅ Done (2026-03-12). Option C accepted; structured tool results implemented (`ToolResult.structured`, `ToolResultFormatter`). Strategies 5 and 11 unblocked.
-4. ~~**Per-turn model routing**~~ — ✅ Done (2026-03-12). Heuristic classifier routes tool-result continuations and short messages to cheap model.
+4. ~~**Per-turn model routing**~~ — ❌ Removed (2026-04-02). Superseded by semantic routing (ADR-020).
 5. ~~**Batch API for broker**~~ — Dropped (2026-03-12). Incompatible with multi-turn agentic loops.
 6. ~~**`Stage2Model` → Haiku**~~ — ✅ Done (2026-03-12). Changed to `claude-haiku-4-5-20251001` in `config-base.json`.

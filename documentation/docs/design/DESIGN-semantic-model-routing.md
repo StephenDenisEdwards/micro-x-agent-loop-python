@@ -2,11 +2,11 @@
 
 ## Status
 
-**Completed** — all 4 phases implemented 2026-03-21.
+**Completed** — all 4 phases implemented 2026-03-21. Per-turn routing removed 2026-04-02 (fully superseded).
 
 ## Problem
 
-The existing per-turn routing (`turn_classifier.py`) uses simple heuristics (message length, turn iteration, keyword blocklist) to decide between a "main" and "cheap" model — both served by the same provider. This leaves cost optimisation on the table:
+The previous per-turn routing (`turn_classifier.py`, now removed) used simple heuristics (message length, turn iteration, keyword blocklist) to decide between a "main" and "cheap" model — both served by the same provider. This left cost optimisation on the table:
 
 1. **No task-type awareness.** A code review, a translation, and a factual lookup all route the same way despite having very different quality requirements.
 2. **Single provider per routing slot.** Cannot route trivial tasks to a free local model (Ollama) while keeping complex reasoning on Anthropic.
@@ -22,7 +22,7 @@ User message
     ↓
 ┌─────────────────────────────────┐
 │  Semantic Classifier             │
-│  Stage 1: Rules      (< 1ms)    │ ← Extended turn_classifier heuristics
+│  Stage 1: Rules      (< 1ms)    │ ← Heuristic rules (subsumes former turn_classifier)
 │  Stage 2: Keywords   (< 1ms)    │ ← Cosine similarity to task-type centroids
 │  Stage 3: LLM        (~200ms)   │ ← Cheapest model classifies ambiguous tasks
 │           ↓                      │
@@ -65,7 +65,7 @@ Nine fixed task types, each with distinct quality/cost profiles:
 | `code_generation` | Write/edit code | Main (Sonnet) | Quality-sensitive |
 | `code_review` | Review/explain code | Main (Sonnet) | Reasoning required |
 | `analysis` | Complex reasoning, design | Main (Sonnet) | Quality-critical |
-| `tool_continuation` | Processing tool results | Cheap (Haiku) | Pattern from per-turn routing |
+| `tool_continuation` | Processing tool results | Main (Sonnet) | Moved to main — requires sophisticated reasoning |
 | `creative` | Writing, brainstorming | Main (Sonnet) | Quality-sensitive |
 
 Defined in `task_taxonomy.py` as a `TaskType` string enum with `CHEAP_TASK_TYPES` and `MAIN_TASK_TYPES` frozen sets.
@@ -76,7 +76,7 @@ Defined in `task_taxonomy.py` as a `TaskType` string enum with `CHEAP_TASK_TYPES
 
 ### Stage 1: Rules (< 1ms)
 
-Extends the existing `turn_classifier.py` heuristics with task-type-specific patterns:
+Heuristic rules (subsumes all former `turn_classifier.py` logic) plus task-type-specific patterns:
 
 | Rule | Pattern | Task Type | Confidence |
 |------|---------|-----------|------------|
@@ -319,7 +319,7 @@ Fallback is three-layered: config-level (`"keyword"` skips embeddings entirely),
 
 ### TurnEngine
 
-The routing decision happens in `TurnEngine.run()` at the same point where legacy per-turn routing was:
+The routing decision happens in `TurnEngine.run()` via `RoutingStrategy.decide()`:
 
 1. If `semantic_classifier` is set, call it with the user message context.
 2. Map the `TaskClassification.task_type` to a `RoutingTarget` via `_resolve_routing_target()`.
@@ -333,13 +333,12 @@ The routing decision happens in `TurnEngine.run()` at the same point where legac
 - Creates `ProviderPool` with all providers referenced in routing policies.
 - Creates a `partial(classify_task, ...)` with configured complexity keywords and strategy.
 - If `RoutingFeedbackEnabled`, creates a `RoutingFeedbackStore` and wires a callback.
-- Semantic routing supersedes per-turn routing when both are configured.
+- Semantic routing is the sole model routing system (per-turn routing removed 2026-04-02).
 
 ### Backward Compatibility
 
 - `SemanticRoutingEnabled` defaults to `false` — no change in behaviour.
-- Legacy `PerTurnRoutingEnabled` continues to work as before.
-- When both are enabled, semantic routing takes precedence.
+- `ComplexityKeywords` (formerly `PerTurnRoutingComplexityKeywords`) is used by the semantic classifier's Stage 1 rules.
 - All existing tests pass without modification (except adding `on_routing` to `CommandRouter` test fixture).
 
 ## File Inventory

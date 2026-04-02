@@ -123,7 +123,7 @@ With `claude-sonnet-4-5-20250929` at $3/$15 per MTok (input/output):
 
 **Gaps:**
 - No classification scheme for task complexity
-- No design for per-turn model routing
+- No design for model routing (per-turn routing was later implemented and then superseded by semantic routing)
 - Risk of quality degradation needs evaluation
 - No plan document exists
 
@@ -325,15 +325,11 @@ These items were identified by the [cost reduction review](../review/cost-reduct
 
 ---
 
-#### 3b. Per-Turn Model Routing ✅ Completed (2026-03-12)
+#### ~~3b. Per-Turn Model Routing~~ — ❌ Removed (2026-04-02)
 
-**Impact:** 50–80% cost reduction for turns that don't need Sonnet capability.
+**Originally completed** 2026-03-12 as a binary heuristic classifier (`turn_classifier.py`). Routed tool-result continuations, short conversational messages, and short follow-ups to a cheap model on the same provider.
 
-**Mechanism:** Pure-function heuristic classifier (`turn_classifier.py`) decides per-LLM-call whether to use the cheap model. Rules (first match wins, complexity guard overrides all): (1) tool-result continuation → cheap, (2) short conversational (no tools, < 200 chars) → cheap, (3) short follow-up (turn > 1, < 50 chars) → cheap, (4) complexity keywords → main, (5) default → main.
-
-**Code:** `turn_classifier.py` (classifier), `turn_engine.py` (dynamic model per `stream_chat` call, iteration counter), `agent.py` (wiring via `functools.partial`). Config: `PerTurnRoutingEnabled`, `PerTurnRoutingModel`, `PerTurnRoutingProvider`, `PerTurnRoutingMaxUserChars`, `PerTurnRoutingShortFollowupChars`, `PerTurnRoutingComplexityKeywords`.
-
-**Tests:** 22 classifier tests + 7 integration/config tests. Manual test plan: [per-turn-routing](../testing/MANUAL-TEST-per-turn-routing.md).
+**Why removed:** Semantic routing ([PLAN-semantic-model-routing](PLAN-semantic-model-routing.md), [ADR-020](../architecture/decisions/ADR-020-semantic-model-routing.md)) strictly superseded per-turn routing. The semantic classifier's Stage 1 rules cover all per-turn heuristics while also providing: (1) 9-type task-type granularity instead of binary cheap/main, (2) multi-provider dispatch via `ProviderPool`, (3) confidence gating to prevent quality degradation, (4) pin-continuation to avoid dangerous mid-turn model switches, and (5) adaptive feedback. The binary classifier could not support these capabilities without being rewritten into essentially the same system. Maintaining both added ~500 lines of dead code with no user-facing benefit. Removed in ISSUE-004 §3.1. `ComplexityKeywords` config key retained for semantic routing.
 
 ---
 
@@ -343,7 +339,7 @@ These items were identified by the [cost reduction review](../review/cost-reduct
 
 **Why dropped:** Batch API submits a single LLM request and returns one response asynchronously. Broker `--run` jobs execute full multi-turn agentic loops (LLM → tool execution → feed results back → LLM → repeat). The agent needs tool results from turn N to construct turn N+1 — Batch API cannot participate in this feedback loop. Chaining batch submissions between tool calls would turn a 6-second job into a multi-hour job with high implementation complexity for modest savings.
 
-**Conclusion:** Batch API is architecturally incompatible with agentic execution. Cost reduction for broker jobs is better served by the existing levers (prompt caching, per-turn routing, sub-agent delegation, cheap compaction).
+**Conclusion:** Batch API is architecturally incompatible with agentic execution. Cost reduction for broker jobs is better served by the existing levers (prompt caching, semantic routing, sub-agent delegation, cheap compaction).
 
 ---
 
@@ -356,7 +352,7 @@ Ordered by effort-adjusted impact:
 3. **QW-3: Sub-agent routing policy** — low effort, high impact
 4. **2.5a: Session budget caps** — low-medium effort on existing infrastructure
 5. **3a: ADR-014 decision** — unblocks 3 downstream strategies
-6. **3b: Per-turn model routing** — highest long-term savings, highest effort
+6. ~~**3b: Per-turn model routing**~~ — removed (superseded by semantic routing)
 7. ~~**3c: Batch API for broker**~~ — Dropped (incompatible with multi-turn agentic loops)
 
 ---
@@ -369,7 +365,7 @@ Ordered by effort-adjusted impact:
 | 2 | Cheap compaction model | **High** (70-90% compaction) | Low | ADR-010, DESIGN-compaction | **No** |
 | 3 | Tool result size reduction | **High** (30-60% input) | Medium | key-insights §2, DESIGN-compaction | **No** |
 | 4 | Smarter compaction trigger | **Medium** (15-30% session) | Medium | DESIGN-compaction, ADR-010 | **No** |
-| 5 | Per-turn model routing | **Medium-High** (50-80% simple turns) | High | ADR-010, openclaw-research | **No** |
+| ~~5~~ | ~~Per-turn model routing~~ | — | — | — | Removed (superseded by semantic routing) |
 | 6 | Sub-agent delegation | **Medium-High** (40-70% sub-tasks) | High | 4 research docs, gateway plan | **Partial** (gateway plan) |
 | 7 | Tool schema / MCP routing | **Low-Medium** (Anthropic) to **High** (OpenAI) | Low-Medium | [KV cache & routing research](../research/kv-cache-and-mcp-tool-routing.md), key-insights §5 | **No** |
 | 8 | Cost tracking & budgeting | **Enabling** | Medium | DESIGN-account-mgmt-apis | **Yes** ([metrics plan](PLAN-cost-metrics-logging.md)) |

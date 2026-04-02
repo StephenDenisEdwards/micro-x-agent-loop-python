@@ -2,11 +2,11 @@
 
 ## Status
 
-**Completed** — All 4 phases implemented 2026-03-21.
+**Completed** — All 4 phases implemented 2026-03-21. Per-turn routing removed 2026-04-02 (fully superseded).
 
 ## Problem
 
-The current per-turn routing (`turn_classifier.py`) uses simple heuristics (message length, turn iteration, keyword blocklist) to decide "main model" vs "cheap model" — both served by the **same provider**. This leaves significant cost and quality optimisation on the table:
+The previous per-turn routing (`turn_classifier.py`, now removed) used simple heuristics (message length, turn iteration, keyword blocklist) to decide "main model" vs "cheap model" — both served by the **same provider**. This left significant cost and quality optimisation on the table:
 
 1. **No task-type awareness** — A code review, a translation, and a factual lookup all route the same way despite having very different model-quality requirements.
 2. **Single provider per routing slot** — Cannot route to Ollama for trivial tasks, OpenAI for code, and Anthropic for complex reasoning within the same session.
@@ -39,7 +39,7 @@ User message
 ┌──────────────────────────┐
 │   Semantic Router        │
 │  ┌────────────────────┐  │
-│  │ 1. Rule Engine     │  │  ← Existing heuristics (turn_classifier.py) — fast path
+│  │ 1. Rule Engine     │  │  ← Heuristic rules (formerly turn_classifier.py) — fast path
 │  │ 2. Embedding        │  │  ← Task-type classification via embeddings (no LLM call)
 │  │    Classifier       │  │
 │  │ 3. LLM Classifier  │  │  ← Fallback: tiny LLM classifies ambiguous tasks
@@ -70,7 +70,7 @@ TurnEngine.stream_chat(effective_provider, effective_model, ...)
 ### Key Design Decisions
 
 **D1: Three-stage classifier (rule → embedding → LLM)**
-- Stage 1 (rules) handles obvious cases with zero latency — preserves current `turn_classifier.py` behaviour.
+- Stage 1 (rules) handles obvious cases with zero latency — subsumes the former `turn_classifier.py` heuristics.
 - Stage 2 (embedding) classifies task type using a lightweight local embedding model or pre-computed centroids. ~5ms overhead.
 - Stage 3 (LLM) is a fallback for ambiguous cases only — uses the cheapest available model (Haiku/GPT-4o-mini). ~200ms but rare.
 
@@ -161,13 +161,13 @@ Routing policies live in `config.json` under a new `SemanticRouting` key, not ha
 | File | Change |
 |------|--------|
 | `semantic_classifier.py` (new) | Three-stage classifier: rules → embeddings → LLM fallback. Returns `TaskClassification(task_type, confidence, stage_used, reason)`. |
-| `turn_classifier.py` | Refactor: extract rule-matching into reusable functions. `classify_turn()` becomes Stage 1 of the semantic classifier. |
+| ~~`turn_classifier.py`~~ | Removed (2026-04-02). Stage 1 rules in `semantic_classifier.py` fully subsume the binary heuristics. |
 | `task_taxonomy.py` (new) | `TaskType` enum with the 9 types. Mapping from `TaskType` → routing policy key. |
 | `agent_config.py` | Add `SemanticRoutingStrategy` config (`"rules"`, `"rules+embeddings"`, `"rules+embeddings+llm"`). Embedding model config. |
 | `config-base.json` | `SemanticRoutingStrategy: "rules+embeddings"`. |
 
 **Stage 1 — Rule engine (< 1ms):**
-- Reuse existing `turn_classifier.py` heuristics.
+- Heuristic rules (message length, tool continuation, complexity keywords).
 - Add new rules: greeting patterns → `trivial`, `summarize/summarise` → `summarization`, code fences or file paths → `code_generation`.
 - If confidence > 0.9, return immediately.
 
@@ -196,7 +196,7 @@ Routing policies live in `config.json` under a new `SemanticRouting` key, not ha
 
 | File | Change |
 |------|--------|
-| `turn_engine.py` | Replace binary `turn_classifier` with `semantic_classifier`. Use `ProviderPool` for dispatch. Track active-cache provider. Apply cache-switch penalty logic. |
+| `turn_engine.py` | Use `semantic_classifier` via `RoutingStrategy`. Use `ProviderPool` for dispatch. Track active-cache provider. Apply cache-switch penalty logic. |
 | `provider_pool.py` | Add `active_cache_provider` tracking. `estimate_cache_penalty(from_provider, to_provider)` method. |
 | `metrics.py` | Extend `SessionAccumulator` to track per-task-type cost breakdown. New fields: `task_type`, `routing_stage` on API call records. |
 | `usage.py` | Add `task_type` and `routing_stage` fields to `UsageResult`. |
@@ -264,7 +264,7 @@ if best_route.provider != active_cache_provider:
 
 - **Cost Metrics Logging** (complete) — required for measuring routing ROI.
 - **Multi-Provider Support** (complete) — Gemini + DeepSeek providers already exist.
-- **Per-Turn Routing** (complete) — Phase 1 refactors this into the semantic classifier.
+- **Per-Turn Routing** (removed 2026-04-02) — Fully subsumed by semantic classifier Stage 1 rules.
 - **Externalise Pricing Data** (complete) — pricing in config enables cost-aware routing math.
 - **sentence-transformers** (new dependency, Phase 2 only) — or Ollama embeddings as alternative.
 

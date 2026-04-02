@@ -104,7 +104,7 @@ Each instance is independent: separate API client, separate retry state, no shar
 
 - Reducing session cost by 40-50% with no code changes — just config
 - Measuring the impact of each feature independently via metrics
-- Adding future cost levers (per-turn model routing, sub-agent delegation) as additional layers without modifying existing ones
+- Adding future cost levers (semantic model routing, sub-agent delegation) as additional layers without modifying existing ones
 - A/B testing cost configurations by comparing metrics across sessions
 
 **Harder:**
@@ -124,8 +124,8 @@ Each instance is independent: separate API client, separate retry state, no shar
 
 **Future layers (Phase 3):**
 
-- ~~Per-turn model routing — route simple turns to Haiku~~ ✅ Implemented (PLAN-cost-reduction Phase 3b)
+- ~~Per-turn model routing — route simple turns to Haiku~~ ❌ Removed (2026-04-02). Superseded by semantic routing (ADR-020).
 - ~~Sub-agent delegation — spawn cheaper sub-agents for research tasks~~ ✅ Implemented (PLAN-sub-agents)
 - Tool schema optimization — reduce per-turn schema token overhead
 
-**Extension:** [ADR-020](ADR-020-semantic-model-routing.md) — Semantic model routing across providers. Supersedes per-turn routing with a three-stage classifier (rules → keywords → LLM), multi-provider dispatch pool, and adaptive feedback loop. Accepted 2026-03-21.
+**Extension:** [ADR-020](ADR-020-semantic-model-routing.md) — Semantic model routing across providers. Three-stage classifier (rules → keywords → LLM), multi-provider dispatch pool, and adaptive feedback loop. Accepted 2026-03-21. Per-turn routing removed 2026-04-02 as semantic routing's Stage 1 rules fully subsume the binary heuristics while adding task-type granularity and multi-provider support.

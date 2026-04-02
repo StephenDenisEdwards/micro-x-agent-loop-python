@@ -357,7 +357,6 @@ src/micro_x_agent_loop/
   provider_pool.py         -- Multi-provider dispatch, health tracking, same-family fallback
   semantic_classifier.py   -- Three-stage classifier: rules → keywords → LLM
   task_taxonomy.py         -- TaskType enum (9 types), cost tier classification
-  turn_classifier.py       -- Legacy per-turn binary classifier (superseded by semantic routing)
   routing_feedback.py      -- SQLite-backed routing outcome recording, adaptive thresholds
   embedding.py             -- Ollama embedding client, vector index, cosine similarity
   sub_agent.py             -- SubAgentRunner: agent types (explore/summarize/general)
