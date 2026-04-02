@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from micro_x_agent_loop.tool import Tool, canonicalise_tools
+from micro_x_agent_loop.tool import Tool, canonicalise_tools, normalize_tool_content
 from micro_x_agent_loop.usage import UsageResult
 
 if TYPE_CHECKING:
@@ -84,17 +84,10 @@ def _to_gemini_contents(messages: list[dict]) -> list[Any]:
                         elif block.get("type") == "tool_result":
                             tool_use_id = block.get("tool_use_id", "")
                             tool_name = id_to_name.get(tool_use_id, tool_use_id)
-                            tool_content = block.get("content", "")
-                            if isinstance(tool_content, list):
-                                tool_content = "\n".join(
-                                    sub.get("text", "")
-                                    for sub in tool_content
-                                    if isinstance(sub, dict) and sub.get("type") == "text"
-                                )
                             tool_result_parts.append(types.Part(
                                 function_response=types.FunctionResponse(
                                     name=tool_name,
-                                    response={"result": str(tool_content)},
+                                    response={"result": normalize_tool_content(block.get("content", ""))},
                                 )
                             ))
                 if text_parts:

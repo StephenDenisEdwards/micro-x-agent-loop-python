@@ -39,6 +39,22 @@ def _sort_schema(value: Any) -> Any:
     return value
 
 
+def normalize_tool_content(content: str | list) -> str:
+    """Normalize tool_result content to a plain string.
+
+    Tool result content may be a string or a list of typed blocks
+    (e.g. ``[{"type": "text", "text": "..."}]``). This function
+    extracts and joins the text from list-form content.
+    """
+    if isinstance(content, list):
+        return "\n".join(
+            sub.get("text", "")
+            for sub in content
+            if isinstance(sub, dict) and sub.get("type") == "text"
+        )
+    return str(content)
+
+
 def canonicalise_tools(tools: list[Tool]) -> list[dict]:
     """Produce a deterministic, stable tool list for the API.
 

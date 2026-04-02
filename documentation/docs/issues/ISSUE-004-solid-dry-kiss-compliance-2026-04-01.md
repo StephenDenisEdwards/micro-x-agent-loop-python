@@ -6,7 +6,7 @@
 
 ## Status
 
-**In Progress** — Section 1 (SRP) complete, Section 3.1 (KISS — per-turn routing removal) in progress.
+**In Progress** — Sections 1 (SRP), 3.1 (KISS), 4.1 (LSP) complete. DRY §2.1 addressed (shared helper). Remaining: §2.2, §2.4, §3.2–3.3, §4.2–4.3.
 
 ## Summary
 
@@ -84,15 +84,9 @@ Similar routing logic appears in both `turn_engine.py` (runtime resolution) and 
 
 ## 3. KISS Violations
 
-### 3.1 Redundant Per-Turn Routing System — In Progress
+### 3.1 Redundant Per-Turn Routing System — ✅ Complete
 
-Three routing systems exist simultaneously but are mutually exclusive:
-
-1. **Per-turn routing** (`turn_classifier.py`) — Legacy binary classifier (cheap vs. main model). Fully superseded by semantic routing.
-2. **Semantic routing** (`semantic_classifier.py` + `task_taxonomy.py`) — 9 task types mapped to routing policies. Active system.
-3. **Mode analysis** (`mode_selector.py`) — Stage 1 pattern matching + Stage 2 LLM classification. Currently diagnostic only but retained for future compiled-mode execution.
-
-**Decision:** Remove per-turn routing only. Keep mode analysis — it is a distinct feature (prompt vs. compiled mode detection) that will be implemented in a future iteration. Saves ~500 lines.
+Per-turn routing (`turn_classifier.py`) removed. Mode analysis retained for future compiled-mode execution. Saved ~500 lines. See commit `e26c031`.
 
 ### 3.2 Four Separate Message Format Converters
 
@@ -121,11 +115,9 @@ Four strategies (resume/continue/new/fork) spread across `bootstrap.py` with mul
 
 ## 4. Minor Issues
 
-### 4.1 LSP — `ProviderStatus.is_available()` Mutates State
+### 4.1 LSP — `ProviderStatus.is_available()` Mutates State — ✅ Complete
 
-In `provider_pool.py`, calling `is_available()` may reset `self.available` if the cooldown has expired. Getters should not have side effects.
-
-**Fix:** Separate into pure `is_available()` and `check_and_reset_availability()`.
+Separated into pure `is_available()` (no side effects) and `check_and_reset_availability()` (resets cooldown state). `ProviderPool.resolve_target()` uses `_check_and_reset()` before dispatch; `is_available()` remains pure for queries. GitHub issue #9.
 
 ### 4.2 ISP — `LLMProvider` Protocol Could Be Narrower
 
@@ -155,12 +147,13 @@ These patterns should be preserved:
 
 | Priority | Refactoring | Impact | Status |
 |----------|-------------|--------|--------|
-| 1 | Remove per-turn routing system | KISS §3.1 | In progress |
-| 2 | Extract `MessageConverter` Protocol | DRY §2.1 | Open |
+| 1 | Remove per-turn routing system | KISS §3.1 | ✅ Done (commit e26c031) |
+| 2 | Extract shared `normalize_tool_content` | DRY §2.1 | ✅ Done — shared helper extracted. Full Protocol deemed over-engineering (conversions are necessarily provider-specific). GH #5 |
 | 3 | Extract `SystemPromptBuilder` | DRY §2.3, SRP | ✅ Done (commit 9a4a41b) |
 | 4 | Extract `RoutingEngine` from TurnEngine | SRP §1.2 | ✅ Done as `RoutingStrategy` (commit 9a4a41b) |
-| 5 | Extract `ProviderFactory` | DIP §4.3 | Open |
+| 5 | Extract `ProviderFactory` | DIP §4.3 | Open (GH #6) |
 | 6 | Split `AgentConfig` into sub-configs | ISP §1.3 | ✅ Done (commit 9a4a41b) |
 | 7 | Extract `__main__.py` dispatch modules | SRP §1.4 | ✅ Done as `cli/` package (commit 9a4a41b) |
+| — | Fix `ProviderStatus.is_available()` mutation | LSP §4.1 | ✅ Done. GH #9 |
 
 Each remaining refactoring is independent and can be done incrementally.

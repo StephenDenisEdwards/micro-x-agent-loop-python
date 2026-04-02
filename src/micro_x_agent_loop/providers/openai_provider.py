@@ -9,7 +9,7 @@ from loguru import logger
 from tenacity import retry
 
 from micro_x_agent_loop.providers.common import default_retry_kwargs
-from micro_x_agent_loop.tool import Tool, canonicalise_tools
+from micro_x_agent_loop.tool import Tool, canonicalise_tools, normalize_tool_content
 from micro_x_agent_loop.usage import UsageResult
 
 if TYPE_CHECKING:
@@ -85,17 +85,10 @@ def _to_openai_messages(
                 elif block.get("type") == "text":
                     text_parts_user.append(block["text"])
                 elif block.get("type") == "tool_result":
-                    tool_content = block.get("content", "")
-                    if isinstance(tool_content, list):
-                        tool_content = "\n".join(
-                            sub.get("text", "")
-                            for sub in tool_content
-                            if isinstance(sub, dict) and sub.get("type") == "text"
-                        )
                     out.append({
                         "role": "tool",
                         "tool_call_id": block["tool_use_id"],
-                        "content": str(tool_content),
+                        "content": normalize_tool_content(block.get("content", "")),
                     })
 
             if text_parts_user:

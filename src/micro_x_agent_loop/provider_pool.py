@@ -63,10 +63,15 @@ class ProviderStatus:
         self.cooldown_until = 0.0
 
     def is_available(self) -> bool:
-        """Check if the provider is currently available."""
+        """Check if the provider is currently available (pure query, no side effects)."""
         if self.available:
             return True
-        # Check if cooldown has expired
+        return time.monotonic() >= self.cooldown_until
+
+    def check_and_reset_availability(self) -> bool:
+        """Check availability and reset state if cooldown has expired."""
+        if self.available:
+            return True
         if time.monotonic() >= self.cooldown_until:
             self.available = True
             return True
@@ -114,11 +119,18 @@ class ProviderPool:
         return self._providers.get(name)
 
     def is_available(self, provider_name: str) -> bool:
-        """Check if a provider is currently available."""
+        """Check if a provider is currently available (pure query, no side effects)."""
         status = self._status.get(provider_name)
         if status is None:
             return False
         return status.is_available()
+
+    def _check_and_reset(self, provider_name: str) -> bool:
+        """Check availability and reset cooldown state if expired (used before dispatch)."""
+        status = self._status.get(provider_name)
+        if status is None:
+            return False
+        return status.check_and_reset_availability()
 
     def _same_family(self, name_a: str, name_b: str) -> bool:
         """Check if two providers belong to the same format family."""
@@ -140,8 +152,8 @@ class ProviderPool:
         Raises:
             ValueError: If no same-family provider is available.
         """
-        # Try the requested provider
-        if target.provider in self._providers and self.is_available(target.provider):
+        # Try the requested provider (reset cooldown if expired — we're about to dispatch)
+        if target.provider in self._providers and self._check_and_reset(target.provider):
             return self._providers[target.provider], target.model
 
         target_family = self._families.get(target.provider, target.provider)
@@ -150,7 +162,7 @@ class ProviderPool:
         if (
             self._fallback_provider
             and self._fallback_provider in self._providers
-            and self.is_available(self._fallback_provider)
+            and self._check_and_reset(self._fallback_provider)
             and self._families.get(self._fallback_provider) == target_family
         ):
             logger.warning(
@@ -163,7 +175,7 @@ class ProviderPool:
         for name, provider in self._providers.items():
             if name == target.provider:
                 continue
-            if self.is_available(name) and self._families.get(name) == target_family:
+            if self._check_and_reset(name) and self._families.get(name) == target_family:
                 logger.warning(
                     f"Using first available same-family provider: {name!r} "
                     f"(family: {target_family})"
