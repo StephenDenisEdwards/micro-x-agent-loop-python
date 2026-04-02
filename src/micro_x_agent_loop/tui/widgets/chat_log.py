@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from rich.markup import escape
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
@@ -17,6 +19,33 @@ class _MessageBlock(Static):
         padding: 0 1;
     }
     """
+
+
+def _extract_text(content: object) -> str:
+    """Extract plain text from a message content field.
+
+    Content can be a string or a list of blocks (Anthropic format):
+    ``[{"type": "text", "text": "..."}, {"type": "tool_use", "name": "..."}]``
+    """
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return str(content)
+
+    parts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        block_type = block.get("type")
+        if block_type == "text":
+            parts.append(str(block.get("text", "")))
+        elif block_type == "tool_use":
+            name = block.get("name", "tool")
+            parts.append(f"[tool: {name}]")
+        elif block_type == "tool_result":
+            # Skip tool results in history — too verbose
+            continue
+    return "\n".join(parts)
 
 
 class ChatLog(VerticalScroll):
@@ -41,6 +70,11 @@ class ChatLog(VerticalScroll):
         block.update(f"[bold cyan]you>[/bold cyan] {escape(text)}")
         self.mount(block)
         self.scroll_end(animate=False)
+
+    def add_assistant_history(self, text: str) -> None:
+        """Append a completed assistant message from history (rendered as markdown)."""
+        md = Markdown(text, classes="assistant-message")
+        self.mount(md)
 
     def begin_assistant_message(self) -> None:
         """Start an assistant response — show thinking spinner."""
@@ -89,6 +123,26 @@ class ChatLog(VerticalScroll):
         """Append an error message."""
         block = Static(f"[bold red]Error:[/bold red] {escape(text)}", classes="error-message")
         self.mount(block)
+        self.scroll_end(animate=False)
+
+    def load_history(self, messages: list[dict[str, Any]]) -> None:
+        """Clear the chat log and populate it with historical messages."""
+        # Remove all existing children
+        for child in list(self.children):
+            child.remove()
+
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            text = _extract_text(content)
+            if not text.strip():
+                continue
+
+            if role == "user":
+                self.add_user_message(text)
+            elif role == "assistant":
+                self.add_assistant_history(text)
+
         self.scroll_end(animate=False)
 
     def compose(self) -> ComposeResult:

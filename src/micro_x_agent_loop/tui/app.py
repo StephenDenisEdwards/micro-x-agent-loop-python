@@ -269,6 +269,12 @@ class AgentTUI(App[None]):
             chat_log.add_system_message(
                 f"Tools: {len(self._runtime.mcp_tools)} MCP tools loaded"
             )
+        # Load existing conversation history if resuming a session
+        if self._app_config.memory_enabled and self._agent.active_session_id:
+            history = self._agent._memory.load_messages(self._agent.active_session_id)
+            if history:
+                chat_log.load_history(history)
+                chat_log.add_system_message(f"--- {len(history)} messages loaded ---")
         chat_log.add_system_message("")
 
         # Wire loguru to the log panel
@@ -383,8 +389,9 @@ class AgentTUI(App[None]):
         self._agent._on_session_reset(resolved_id, new_messages)
 
         chat_log = self.query_one("#chat-log", ChatLog)
+        chat_log.load_history(new_messages)
         chat_log.add_system_message(
-            f"Resumed session: {session.get('title', resolved_id)} ({len(new_messages)} messages)"
+            f"--- Resumed: {session.get('title', resolved_id)} ({len(new_messages)} messages) ---"
         )
         self._refresh_session_sidebar()
         self.query_one("#status-bar", StatusBar).refresh_metrics()
@@ -401,9 +408,10 @@ class AgentTUI(App[None]):
         self._agent._on_session_reset(new_id, [])
 
         chat_log = self.query_one("#chat-log", ChatLog)
+        chat_log.load_history([])  # Clear chat log
         session = sm.get_session(new_id)
         title = session.get("title", new_id) if session else new_id
-        chat_log.add_system_message(f"New session: {title}")
+        chat_log.add_system_message(f"--- New session: {title} ---")
         self._refresh_session_sidebar()
         self.query_one("#status-bar", StatusBar).refresh_metrics()
 
@@ -417,10 +425,12 @@ class AgentTUI(App[None]):
         source_id = self._agent.active_session_id
         fork_id = sm.fork_session(source_id)
         memory.active_session_id = fork_id
-        self._agent._on_session_reset(fork_id, memory.load_messages(fork_id))
+        fork_messages = memory.load_messages(fork_id)
+        self._agent._on_session_reset(fork_id, fork_messages)
 
         chat_log = self.query_one("#chat-log", ChatLog)
-        chat_log.add_system_message(f"Forked session {source_id[:8]} -> {fork_id[:8]}")
+        chat_log.load_history(fork_messages)
+        chat_log.add_system_message(f"--- Forked: {source_id[:8]} -> {fork_id[:8]} ({len(fork_messages)} messages) ---")
         self._refresh_session_sidebar()
         self.query_one("#status-bar", StatusBar).refresh_metrics()
 
