@@ -1,6 +1,6 @@
 # Plan: Textual TUI for CLI
 
-**Status:** Planned
+**Status:** Completed
 **Date:** 2026-04-02
 **ADR:** [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md)
 **Goal:** Add an opt-in Textual-based TUI (`--tui` flag) that provides a richer interactive experience — scrollable chat, tool visibility panel, modal ask_user, session sidebar — while keeping the existing REPL as the default.

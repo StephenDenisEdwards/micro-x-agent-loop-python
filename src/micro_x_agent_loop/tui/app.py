@@ -8,8 +8,9 @@ from typing import Any
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.command import Hit, Hits, Provider
 from textual.containers import Horizontal
-from textual.widgets import Header, Input
+from textual.widgets import Header, Input, Static
 
 from micro_x_agent_loop.app_config import AppConfig
 from micro_x_agent_loop.bootstrap import AppRuntime
@@ -25,6 +26,83 @@ _NO_RESPONSE_MSG = (
     "No response from human — question timed out. "
     "Proceed with your best judgement or report that you cannot continue."
 )
+
+# -- 5.1: Command Palette Provider --
+
+# Slash commands available in the palette
+_SLASH_COMMANDS: list[tuple[str, str]] = [
+    ("/help", "Show available commands"),
+    ("/cost", "Show session cost breakdown"),
+    ("/cost reconcile", "Reconcile costs with provider API"),
+    ("/session", "Show current session info"),
+    ("/session list", "List recent sessions"),
+    ("/session new", "Start a new session"),
+    ("/session fork", "Fork the current session"),
+    ("/tools mcp", "List loaded MCP tools"),
+    ("/routing", "Show routing configuration"),
+    ("/routing tasks", "Show task type statistics"),
+    ("/routing recent", "Show recent routing decisions"),
+    ("/compact", "Force conversation compaction"),
+    ("/memory", "Show user memory status"),
+    ("/memory list", "List user memory files"),
+    ("/debug show-api-payload", "Show last API payload"),
+]
+
+# Available Textual themes
+_THEMES: list[str] = [
+    "textual-dark",
+    "textual-light",
+    "nord",
+    "gruvbox",
+    "catppuccin-mocha",
+    "catppuccin-latte",
+    "dracula",
+    "tokyo-night",
+    "monokai",
+    "solarized-light",
+]
+
+
+class SlashCommandProvider(Provider):
+    """Command palette provider for slash commands."""
+
+    async def search(self, query: str) -> Hits:
+        matcher = self.matcher(query)
+        # Slash commands
+        for cmd, description in _SLASH_COMMANDS:
+            score = matcher.match(f"{cmd} {description}")
+            if score > 0:
+                yield Hit(
+                    score,
+                    matcher.highlight(f"{cmd} — {description}"),
+                    command=self._make_command_callback(cmd),
+                    help=description,
+                )
+        # Theme switcher
+        for theme_name in _THEMES:
+            label = f"Theme: {theme_name}"
+            score = matcher.match(label)
+            if score > 0:
+                yield Hit(
+                    score,
+                    matcher.highlight(label),
+                    command=self._make_theme_callback(theme_name),
+                    help=f"Switch to {theme_name} theme",
+                )
+
+    def _make_command_callback(self, cmd: str) -> Any:
+        """Return a callable that submits the slash command."""
+        async def _run() -> None:
+            app = self.app
+            if isinstance(app, AgentTUI):
+                app._submit_slash_command(cmd)
+        return _run
+
+    def _make_theme_callback(self, theme_name: str) -> Any:
+        """Return a callable that switches the theme."""
+        async def _run() -> None:
+            self.app.theme = theme_name
+        return _run
 
 
 class AgentTUI(App[None]):
@@ -108,16 +186,29 @@ class AgentTUI(App[None]):
         padding: 0 1;
         text-style: bold;
     }
+
+    #keyhints {
+        height: 1;
+        background: $surface;
+        color: yellow;
+        padding: 0 1;
+    }
+
     """
 
     TITLE = "MICRO-X AGENT"
 
+    # 5.1: Register the slash command provider for the command palette
+    COMMANDS = {SlashCommandProvider}
+
     BINDINGS = [
-        Binding("escape", "cancel_task", "Cancel", show=True),
-        Binding("ctrl+s", "toggle_sessions", "Sessions", show=True),
-        Binding("ctrl+t", "toggle_tools", "Tools", show=True),
-        Binding("ctrl+l", "toggle_logs", "Logs", show=True),
-        Binding("ctrl+c", "quit", "Quit", show=True),
+        Binding("escape", "cancel_task", "Cancel", show=False),
+        Binding("ctrl+s", "toggle_sessions", "Sessions", show=False),
+        Binding("ctrl+t", "toggle_tools", "Tools", show=False),
+        Binding("ctrl+l", "toggle_logs", "Logs", show=False),
+        Binding("ctrl+p", "command_palette", "Commands", show=False),
+        Binding("ctrl+d", "toggle_dark", "Theme", show=False),
+        Binding("ctrl+c", "quit", "Quit", show=False),
     ]
 
     def __init__(
@@ -147,11 +238,16 @@ class AgentTUI(App[None]):
             yield ChatLog(id="chat-log")
             yield ToolPanel(id="tool-panel")
         yield LogPanel(id="log-panel")
-        yield Input(placeholder="Type a message... (Enter to send, Escape to cancel)", id="prompt-input")
+        yield Input(placeholder="Type a message... (Enter to send, Ctrl+P for commands)", id="prompt-input")
         yield StatusBar(
             self._agent.session_accumulator,
             budget_usd=self._app_config.session_budget_usd,
             id="status-bar",
+        )
+        yield Static(
+            "Esc:Cancel  Ctrl+S:Sessions  Ctrl+T:Tools  Ctrl+L:Logs  "
+            "Ctrl+P:Commands  Ctrl+D:Theme  Ctrl+C:Quit",
+            id="keyhints",
         )
 
     def on_mount(self) -> None:
@@ -163,7 +259,7 @@ class AgentTUI(App[None]):
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.add_system_message(f"Config: {self._config_source}")
         chat_log.add_system_message(
-            f"[{model_label}] (type 'exit' to quit, '/help' for commands)"
+            f"[{model_label}] (type 'exit' to quit, Ctrl+P for command palette)"
         )
         if self._app_config.memory_enabled and self._agent.active_session_id:
             chat_log.add_system_message(
@@ -208,6 +304,16 @@ class AgentTUI(App[None]):
 
         self._running_task = asyncio.create_task(self._run_agent(text))
 
+    def _submit_slash_command(self, cmd: str) -> None:
+        """Submit a slash command from the command palette."""
+        chat_log = self.query_one("#chat-log", ChatLog)
+        chat_log.add_user_message(cmd)
+
+        prompt_input = self.query_one("#prompt-input", Input)
+        prompt_input.disabled = True
+
+        self._running_task = asyncio.create_task(self._run_agent(cmd))
+
     def action_cancel_task(self) -> None:
         """Handle Escape — cancel the running agent task."""
         if self._running_task is not None and not self._running_task.done():
@@ -231,6 +337,21 @@ class AgentTUI(App[None]):
         """Toggle the log panel visibility."""
         log_panel = self.query_one("#log-panel", LogPanel)
         log_panel.display = not log_panel.display
+
+    # 5.2: Responsive layout — hide sidebars on narrow terminals
+    def on_resize(self, event: object) -> None:
+        """Auto-hide sidebars when terminal is narrow."""
+        width = self.size.width
+        tool_panel = self.query_one("#tool-panel", ToolPanel)
+        sidebar = self.query_one("#session-sidebar", SessionSidebar)
+        if width < 80:
+            tool_panel.display = False
+            sidebar.display = False
+
+    # 5.4: Theme toggle
+    def action_toggle_dark(self) -> None:
+        """Toggle between dark and light theme."""
+        self.theme = "textual-light" if self.theme == "textual-dark" else "textual-dark"
 
     # -- Session sidebar events --
 
@@ -261,7 +382,6 @@ class AgentTUI(App[None]):
         new_messages = memory.load_messages(resolved_id)
         self._agent._on_session_reset(resolved_id, new_messages)
 
-        # Clear the chat log and show the resumed session
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.add_system_message(
             f"Resumed session: {session.get('title', resolved_id)} ({len(new_messages)} messages)"
@@ -345,9 +465,14 @@ class AgentTUI(App[None]):
 
     def on_agent_error(self, message: str) -> None:
         self.query_one("#chat-log", ChatLog).add_error_message(message)
+        # 5.5: Toast notification for errors
+        self.notify(message, title="Error", severity="error", timeout=5)
 
     def on_system_message(self, text: str) -> None:
         self.query_one("#chat-log", ChatLog).add_system_message(text)
+        # 5.5: Toast for budget warnings
+        if "[Budget]" in text:
+            self.notify(text, title="Budget Warning", severity="warning", timeout=8)
 
     def on_ask_user(
         self,
@@ -364,6 +489,26 @@ class AgentTUI(App[None]):
                 future.set_result(answer if answer else _NO_RESPONSE_MSG)
 
         self.push_screen(AskUserModal(question, options), callback=_on_dismiss)
+
+    # 5.3: Mode analysis — called from agent when mode signals are detected
+    def on_mode_choice(
+        self,
+        signals: list[str],
+        recommended: str,
+        reasoning: str,
+        future: asyncio.Future[str],
+    ) -> None:
+        """Show a modal for PROMPT/COMPILED mode selection."""
+        from micro_x_agent_loop.tui.screens.mode_choice_modal import ModeChoiceModal
+
+        def _on_dismiss(answer: str | None) -> None:
+            if not future.done():
+                future.set_result(answer if answer else recommended)
+
+        self.push_screen(
+            ModeChoiceModal(signals, recommended, reasoning),
+            callback=_on_dismiss,
+        )
 
     # -- Shutdown --
 

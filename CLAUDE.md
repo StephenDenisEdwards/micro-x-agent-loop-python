@@ -20,6 +20,10 @@
 run.bat                           # Windows
 python -m micro_x_agent_loop      # Direct
 
+# Run the agent (Textual TUI — optional)
+run-tui.bat                       # Windows (installs textual extra)
+python -m micro_x_agent_loop --tui  # Direct (requires: pip install -e ".[tui]")
+
 # One-shot autonomous execution
 python -m micro_x_agent_loop --run "prompt text" [--session <id>] [--config path]
 
@@ -110,6 +114,10 @@ API Server (--server start):
 | `server/ws_channel.py` | WebSocketChannel: AgentChannel for real-time streaming |
 | `server/broker_routes.py` | Broker endpoints (jobs, runs, HITL, webhooks) as APIRouter |
 | `server/client.py` | WebSocket CLI client for `--server http://...` mode |
+| `tui/app.py` | Textual TUI app (`--tui`): chat, tool panel, session sidebar, command palette |
+| `tui/channel.py` | TextualChannel: AgentChannel for the Textual TUI |
+| `tui/widgets/` | TUI widgets: ChatLog, ToolPanel, SessionSidebar, StatusBar, LogPanel |
+| `tui/screens/` | TUI modal screens: AskUserModal, ModeChoiceModal |
 
 ## Conventions
 
