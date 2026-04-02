@@ -297,7 +297,8 @@ class Agent:
         if isinstance(command_result, str):
             user_message = command_result
 
-        if self._mode_analysis_enabled and not self._autonomous:
+        _suppress = getattr(self._channel, "suppress_interactive_prompts", False)
+        if self._mode_analysis_enabled and not self._autonomous and not _suppress:
             analysis = analyze_prompt(user_message)
             stage2: Stage2Result | None = None
 

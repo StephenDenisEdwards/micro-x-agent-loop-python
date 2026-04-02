@@ -134,13 +134,13 @@ async def dispatch(cli_args: dict, raw_config: dict, config_source: str) -> None
             print("Textual is not installed. Install with: pip install -e \".[tui]\"")
             sys.exit(1)
 
-        # Redirect stderr to a file BEFORE bootstrap — Textual owns the terminal.
-        # MCP server subprocesses write JSON logs to stderr, and the console
-        # log consumer writes to stderr via loguru.  Both are harmless once
-        # stderr points to a file instead of the terminal.
+        # Redirect stderr AND stdout to a file BEFORE bootstrap — Textual owns
+        # the terminal.  Any direct print() or sys.stderr.write() from the agent,
+        # MCP subprocesses, or loguru would corrupt the Textual display or hang.
         os.makedirs(".micro_x", exist_ok=True)
-        _stderr_log = open(os.path.join(".micro_x", "tui.log"), "a", encoding="utf-8")  # noqa: SIM115
-        sys.stderr = _stderr_log
+        _tui_log = open(os.path.join(".micro_x", "tui.log"), "a", encoding="utf-8")  # noqa: SIM115
+        sys.stderr = _tui_log
+        sys.stdout = _tui_log
 
         try:
             runtime = await bootstrap_runtime(app, env, resolved_config=raw_config)

@@ -16,6 +16,10 @@ class TextualChannel:
     as the Textual app, so all calls are direct (no ``call_from_thread``).
     """
 
+    # Signal to the agent that interactive terminal prompts (questionary,
+    # input()) must not be used — the TUI owns the terminal.
+    suppress_interactive_prompts: bool = True
+
     def __init__(self, app: AgentTUI) -> None:
         self._app = app
 
