@@ -110,6 +110,29 @@ The agent can spawn sub-agents for parallel research and exploration via the `sp
 
 Sub-agents protect the main context window from excessive intermediate results and enable parallel independent queries.
 
+### Textual TUI (Terminal User Interface)
+
+An opt-in rich terminal interface launched via `--tui` or `run-tui.bat`, built on [Textual](https://textual.textualize.io/) ([ADR-022](documentation/docs/architecture/decisions/ADR-022-textual-tui-for-cli.md)). Provides a full-screen, widget-based experience while the existing REPL remains the default.
+
+```bash
+run-tui.bat --config config-optimal-anthropic.json   # Windows
+python -m micro_x_agent_loop --tui                    # Direct (requires: pip install -e ".[tui]")
+```
+
+| Feature | Key | Description |
+|---------|-----|-------------|
+| **Scrollable chat log** | — | Persistent conversation history with markdown rendering |
+| **Tool panel** | `Ctrl+T` | Right sidebar showing tool executions with name, duration, and status |
+| **Session sidebar** | `Ctrl+S` | Left sidebar with click-to-switch, new, fork, and paginated session list |
+| **Log panel** | `Ctrl+L` | Live loguru events in a toggleable bottom panel |
+| **Command palette** | `Ctrl+P` | Fuzzy search across slash commands and theme switcher |
+| **Ask-user modal** | — | Centered modal dialog for human-in-the-loop questions |
+| **Theme toggle** | `Ctrl+D` | Switch between dark/light and 10+ built-in themes |
+| **Cost restoration** | — | Session costs and metrics restored from SQLite on resume |
+| **Responsive layout** | — | Sidebars auto-hide on terminals narrower than 80 columns |
+
+The TUI uses the same `AgentChannel` protocol as the REPL, WebSocket, and broker channels — zero changes to the agent core.
+
 ### Voice Mode
 
 Continuous speech-to-text input via Deepgram STT. Speak your prompts instead of typing — the agent processes `utterance_final` events and responds as normal. Configurable endpointing, device selection, and tuning profiles for balanced, fast, or conservative finalization.
@@ -414,6 +437,19 @@ src/micro_x_agent_loop/
     broker_routes.py       -- Broker endpoints as APIRouter (jobs, runs, HITL, webhooks)
     client.py              -- WebSocket CLI client for --server http://... mode
     sdk.py                 -- SDK utilities
+  tui/
+    app.py                 -- Textual TUI app: chat, panels, command palette, theming
+    channel.py             -- TextualChannel: AgentChannel for the TUI
+    widgets/
+      chat_log.py          -- Scrollable conversation with markdown rendering
+      tool_panel.py        -- Right sidebar: tool executions with timing/status
+      session_sidebar.py   -- Left sidebar: session list, switch, new, fork
+      status_bar.py        -- Footer: cost, tokens, session metrics
+      log_panel.py         -- Toggleable log viewer (RichLog + loguru sink)
+      input_area.py        -- Input widget (unused, kept for multi-line future)
+    screens/
+      ask_user_modal.py    -- Modal dialog for human-in-the-loop questions
+      mode_choice_modal.py -- Modal for PROMPT/COMPILED mode selection
 
 mcp_servers/ts/            -- TypeScript MCP servers (npm workspaces monorepo)
   packages/
@@ -459,6 +495,7 @@ All tools are TypeScript MCP servers — the Python agent loop is a pure MCP orc
 |---------|---------|
 | [questionary](https://pypi.org/project/questionary/) | Interactive prompts (ask_user UI) |
 | [rich](https://pypi.org/project/rich/) | Terminal formatting |
+| [textual](https://pypi.org/project/textual/) | TUI framework (optional — `pip install -e ".[tui]"`) |
 | [httpx](https://pypi.org/project/httpx/) | Async HTTP client |
 | [python-docx](https://pypi.org/project/python-docx/) | DOCX reading |
 | [beautifulsoup4](https://pypi.org/project/beautifulsoup4/) | HTML parsing |
@@ -479,7 +516,7 @@ Full documentation is available in [documentation/docs/](documentation/docs/inde
 - [WhatsApp MCP Setup](documentation/docs/design/tools/whatsapp-mcp/README.md) — WhatsApp integration guide
 - [Configuration Reference](documentation/docs/operations/config.md) — all settings with types and defaults
 - [Semantic Routing Design](documentation/docs/design/DESIGN-semantic-model-routing.md) — classifier pipeline, routing policies, feedback loop
-- [Architecture Decision Records](documentation/docs/architecture/decisions/README.md) — index of all 21 ADRs
+- [Architecture Decision Records](documentation/docs/architecture/decisions/README.md) — index of all 22 ADRs
 
 ## See Also
 
