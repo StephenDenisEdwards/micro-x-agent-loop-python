@@ -206,6 +206,70 @@ class SessionAccumulator:
             "duration_ms": usage.duration_ms,
         })
 
+    def restore_from_events(self, events: list[dict]) -> None:
+        """Replay persisted metric events to restore session cost state.
+
+        Each event dict has ``type`` and ``payload_json`` (parsed) fields
+        from the events table.
+        """
+        max_turn = 0
+        for evt in events:
+            etype = evt.get("type", "")
+            payload = evt.get("payload", {})
+
+            if etype == "metric.api_call":
+                self.total_api_calls += 1
+                self.total_input_tokens += int(payload.get("input_tokens", 0))
+                self.total_output_tokens += int(payload.get("output_tokens", 0))
+                self.total_cache_creation_tokens += int(payload.get("cache_creation_input_tokens", 0))
+                self.total_cache_read_tokens += int(payload.get("cache_read_input_tokens", 0))
+                self.total_cost_usd += float(payload.get("estimated_cost_usd", 0))
+                self.total_duration_ms += float(payload.get("duration_ms", 0))
+                turn = int(payload.get("turn_number", 0))
+                if turn > max_turn:
+                    max_turn = turn
+                provider = payload.get("provider", "unknown")
+                model = payload.get("model", "unknown")
+                if not self.model and model:
+                    self.provider = provider
+                    self.model = model
+                key = f"{provider}/{model}"
+                sub = self.model_subtotals.get(key)
+                if sub is None:
+                    sub = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
+                           "provider": provider, "model": model}
+                    self.model_subtotals[key] = sub
+                sub["calls"] += 1
+                sub["input_tokens"] += int(payload.get("input_tokens", 0))
+                sub["output_tokens"] += int(payload.get("output_tokens", 0))
+                sub["cost_usd"] += float(payload.get("estimated_cost_usd", 0))
+                self.api_call_log.append({
+                    "call_number": self.total_api_calls,
+                    "turn": turn,
+                    "call_type": payload.get("call_type", ""),
+                    "provider": provider,
+                    "model": model,
+                    "input_tokens": int(payload.get("input_tokens", 0)),
+                    "output_tokens": int(payload.get("output_tokens", 0)),
+                    "cache_read": int(payload.get("cache_read_input_tokens", 0)),
+                    "cache_create": int(payload.get("cache_creation_input_tokens", 0)),
+                    "cost_usd": float(payload.get("estimated_cost_usd", 0)),
+                    "duration_ms": float(payload.get("duration_ms", 0)),
+                })
+
+            elif etype == "metric.compaction":
+                self.total_compaction_events += 1
+                self.total_cost_usd += float(payload.get("compaction_cost_usd", 0))
+
+            elif etype == "metric.tool_execution":
+                self.total_tool_calls += 1
+                if payload.get("is_error"):
+                    self.total_tool_errors += 1
+                tool_name = payload.get("tool_name", "unknown")
+                self.tool_call_counts[tool_name] = self.tool_call_counts.get(tool_name, 0) + 1
+
+        self.total_turns = max_turn
+
     def add_tool_call(self, tool_name: str, is_error: bool) -> None:
         self.total_tool_calls += 1
         if is_error:

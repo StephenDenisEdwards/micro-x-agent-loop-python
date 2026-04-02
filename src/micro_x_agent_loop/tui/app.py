@@ -269,12 +269,13 @@ class AgentTUI(App[None]):
             chat_log.add_system_message(
                 f"Tools: {len(self._runtime.mcp_tools)} MCP tools loaded"
             )
-        # Load existing conversation history if resuming a session
+        # Load existing conversation history and costs if resuming a session
         if self._app_config.memory_enabled and self._agent.active_session_id:
             history = self._agent._memory.load_messages(self._agent.active_session_id)
             if history:
                 chat_log.load_history(history)
                 chat_log.add_system_message(f"--- {len(history)} messages loaded ---")
+            self._restore_session_costs(self._agent.active_session_id)
         chat_log.add_system_message("")
 
         # Wire loguru to the log panel
@@ -361,6 +362,38 @@ class AgentTUI(App[None]):
 
     # -- Session sidebar events --
 
+    def _restore_session_costs(self, session_id: str) -> None:
+        """Restore the session accumulator from persisted metric events."""
+        import json as _json
+
+        store = getattr(self._agent._memory, "store", None)
+        if store is None:
+            return
+
+        rows = store.execute(
+            """
+            SELECT type, payload_json
+            FROM events
+            WHERE session_id = ?
+              AND type IN ('metric.api_call', 'metric.compaction', 'metric.tool_execution')
+            ORDER BY created_at ASC
+            """,
+            (session_id,),
+        ).fetchall()
+
+        if not rows:
+            return
+
+        events = []
+        for row in rows:
+            try:
+                payload = _json.loads(row["payload_json"])
+            except Exception:
+                continue
+            events.append({"type": row["type"], "payload": payload})
+
+        self._agent._session_accumulator.restore_from_events(events)
+
     def _refresh_session_sidebar(self) -> None:
         """Refresh the session sidebar from the memory store."""
         sidebar = self.query_one("#session-sidebar", SessionSidebar)
@@ -387,6 +420,7 @@ class AgentTUI(App[None]):
         memory.active_session_id = resolved_id
         new_messages = memory.load_messages(resolved_id)
         self._agent._on_session_reset(resolved_id, new_messages)
+        self._restore_session_costs(resolved_id)
 
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.load_history(new_messages)
