@@ -112,6 +112,15 @@ class AppConfig:
     status_bar_enabled: bool
 
 
+def _expand_config(data: dict, config_dir: Path) -> dict:
+    """Apply the full config expansion pipeline: base inheritance → self-refs → env vars."""
+    data = _resolve_config_with_base(data, config_dir)
+    data = _expand_config_refs(data)
+    result = _expand_env_vars(data)
+    assert isinstance(result, dict)
+    return result
+
+
 def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
     """Load application config, supporting file indirection, base inheritance, and env var expansion.
 
@@ -134,10 +143,7 @@ def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
             raise FileNotFoundError(f"Config file not found: {p}")
         with open(p) as f:
             data = json.load(f)
-        data = _resolve_config_with_base(data, p.parent)
-        data = _expand_config_refs(data)
-        data = _expand_env_vars(data)
-        assert isinstance(data, dict)
+        data = _expand_config(data, p.parent)
         return data, str(p)
 
     default_path = Path.cwd() / "config.json"
@@ -157,16 +163,10 @@ def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
             )
         with open(target) as f:
             data = json.load(f)
-        data = _resolve_config_with_base(data, target.parent)
-        data = _expand_config_refs(data)
-        data = _expand_env_vars(data)
-        assert isinstance(data, dict)
+        data = _expand_config(data, target.parent)
         return data, str(config_file)
 
-    data = _resolve_config_with_base(data, default_path.parent)
-    data = _expand_config_refs(data)
-    data = _expand_env_vars(data)
-    assert isinstance(data, dict)
+    data = _expand_config(data, default_path.parent)
     return data, "config.json"
 
 

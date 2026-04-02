@@ -6,7 +6,7 @@
 
 ## Status
 
-**In Progress** — Sections 1 (SRP), 3.1 (KISS), 4.1 (LSP) complete. DRY §2.1 addressed (shared helper). Remaining: §2.2, §2.4, §3.2–3.3, §4.2–4.3.
+**Near Complete** — All priority items done. Remaining: §2.4 (routing duplication), §3.2 (format converters — addressed by shared helper), §3.3 (session mgmt — extracted `_resolve_session`).
 
 ## Summary
 
@@ -58,11 +58,9 @@ Extracted `terminal_renderer.py` and `terminal_prompter.py`. `agent_channel.py` 
 
 **Recommendation:** Extract a `MessageConverter` Protocol with provider-specific implementations.
 
-### 2.2 Config Expansion Pipeline (3x repetition)
+### 2.2 Config Expansion Pipeline (3x repetition) — ✅ Complete
 
-The sequence `_resolve_config_with_base()` → `_expand_config_refs()` → `_expand_env_vars()` is repeated in 3 code paths within `app_config.py`.
-
-**Recommendation:** Extract `_apply_expansions(data: dict) -> dict` function.
+Extracted `_expand_config(data, config_dir)` helper in `app_config.py`. Three call sites in `load_json_config()` now delegate to a single pipeline. GH #7.
 
 ### 2.3 System Prompt Directive Appending (6+ repetitions)
 
@@ -119,15 +117,13 @@ Four strategies (resume/continue/new/fork) spread across `bootstrap.py` with mul
 
 Separated into pure `is_available()` (no side effects) and `check_and_reset_availability()` (resets cooldown state). `ProviderPool.resolve_target()` uses `_check_and_reset()` before dispatch; `is_available()` remains pure for queries. GitHub issue #9.
 
-### 4.2 ISP — `LLMProvider` Protocol Could Be Narrower
+### 4.2 ISP — `LLMProvider` Protocol Could Be Narrower — ✅ Complete
 
-`LLMProvider` bundles `stream_chat`, `create_message`, and `convert_tools`. Not all providers need all three — `create_message` is only used for compaction.
+Extracted `LLMCompactor` Protocol (`create_message` only). `LLMProvider` now extends `LLMCompactor`. Compaction callers (`SummarizeCompactionStrategy`, `_summarize`) type-annotated with `LLMCompactor`. GH #10.
 
-**Fix:** Split into `LLMProvider` (stream_chat, family) and optional `LLMCompactor` (create_message).
+### 4.3 DIP — Provider Creation Scattered — ✅ Complete
 
-### 4.3 DIP — Provider Creation Scattered
-
-Provider instances are created directly in `agent.py`, `bootstrap.py`, `sub_agent.py`, and others. A centralized `ProviderFactory` would improve this.
+Added `ProviderFactory` class in `provider.py`. Encapsulates shared config (prompt caching, Ollama URL) and automatic API key resolution via `resolve_runtime_env`. Existing `create_provider()` retained as low-level factory. GH #6.
 
 ---
 
@@ -151,7 +147,7 @@ These patterns should be preserved:
 | 2 | Extract shared `normalize_tool_content` | DRY §2.1 | ✅ Done — shared helper extracted. Full Protocol deemed over-engineering (conversions are necessarily provider-specific). GH #5 |
 | 3 | Extract `SystemPromptBuilder` | DRY §2.3, SRP | ✅ Done (commit 9a4a41b) |
 | 4 | Extract `RoutingEngine` from TurnEngine | SRP §1.2 | ✅ Done as `RoutingStrategy` (commit 9a4a41b) |
-| 5 | Extract `ProviderFactory` | DIP §4.3 | Open (GH #6) |
+| 5 | Extract `ProviderFactory` | DIP §4.3 | ✅ Done (GH #6) |
 | 6 | Split `AgentConfig` into sub-configs | ISP §1.3 | ✅ Done (commit 9a4a41b) |
 | 7 | Extract `__main__.py` dispatch modules | SRP §1.4 | ✅ Done as `cli/` package (commit 9a4a41b) |
 | — | Fix `ProviderStatus.is_available()` mutation | LSP §4.1 | ✅ Done. GH #9 |

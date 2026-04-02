@@ -37,6 +37,32 @@ def _load_user_memory(memory_dir: Path, max_lines: int) -> str:
     return "\n".join(lines[:max_lines])
 
 
+def _resolve_session(
+    session_manager: SessionManager,
+    app: AppConfig,
+    *,
+    autonomous: bool = False,
+) -> str:
+    """Determine which session to use: resume, continue, new, or fork."""
+    if app.resume_session_id:
+        if autonomous:
+            active = session_manager.load_or_create(app.resume_session_id)
+        else:
+            resolved = session_manager.resolve_session_identifier(app.resume_session_id)
+            if resolved is None:
+                raise ValueError(f"Resume session not found: {app.resume_session_id}")
+            active = resolved["id"]
+    elif app.continue_conversation and app.configured_session_id:
+        active = session_manager.load_or_create(app.configured_session_id)
+    else:
+        active = session_manager.create_session()
+
+    if app.fork_session and active is not None:
+        active = session_manager.fork_session(active)
+
+    return active
+
+
 async def bootstrap_runtime(
     app: AppConfig,
     env: RuntimeEnv,
@@ -110,22 +136,9 @@ async def bootstrap_runtime(
             write_tools_only=app.checkpoint_write_tools_only,
         )
 
-        if app.resume_session_id:
-            if autonomous:
-                # In --run mode, create the session if it doesn't exist yet
-                active_session_id = session_manager.load_or_create(app.resume_session_id)
-            else:
-                resolved = session_manager.resolve_session_identifier(app.resume_session_id)
-                if resolved is None:
-                    raise ValueError(f"Resume session not found: {app.resume_session_id}")
-                active_session_id = resolved["id"]
-        elif app.continue_conversation and app.configured_session_id:
-            active_session_id = session_manager.load_or_create(app.configured_session_id)
-        else:
-            active_session_id = session_manager.create_session()
-
-        if app.fork_session and active_session_id is not None:
-            active_session_id = session_manager.fork_session(active_session_id)
+        active_session_id = _resolve_session(
+            session_manager, app, autonomous=autonomous,
+        )
 
         prune_memory(
             memory_store,

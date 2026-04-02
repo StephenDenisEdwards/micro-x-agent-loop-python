@@ -1,6 +1,11 @@
+from __future__ import annotations
+
 import json
 from collections.abc import Callable
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from micro_x_agent_loop.provider import LLMCompactor
 
 import tiktoken
 from loguru import logger
@@ -32,14 +37,14 @@ class NoneCompactionStrategy:
 class SummarizeCompactionStrategy:
     def __init__(
         self,
-        provider: Any,
+        provider: LLMCompactor,
         model: str,
         threshold_tokens: int = DEFAULT_COMPACTION_THRESHOLD_TOKENS,
         protected_tail_messages: int = DEFAULT_PROTECTED_TAIL_MESSAGES,
         on_compaction_completed: Callable[[UsageResult, int, int, int], None] | None = None,
         smart_trigger_enabled: bool = False,
     ):
-        self._provider = provider
+        self._provider: LLMCompactor = provider
         self._model = model
         self._threshold_tokens = threshold_tokens
         self._protected_tail_messages = protected_tail_messages
@@ -198,7 +203,7 @@ CONVERSATION HISTORY:
 
 
 async def _summarize(
-    provider: Any,
+    provider: LLMCompactor,
     model: str,
     messages: list[dict],
 ) -> tuple[str, UsageResult]:
