@@ -26,6 +26,7 @@ def _parse_cli_args() -> dict:
         --broker <subcommand>   Broker daemon management (start/stop/status)
         --job <subcommand> ...  Job management (add/list/remove/enable/disable/run-now/runs)
         --server <subcommand>   API server management (start)
+        --tui                   Launch Textual TUI (requires: pip install -e ".[tui]")
     """
     args: dict = {
         "config": None,
@@ -34,6 +35,7 @@ def _parse_cli_args() -> dict:
         "broker": None,
         "job": None,
         "server": None,
+        "tui": False,
     }
     argv = sys.argv[1:]
     i = 0
@@ -56,6 +58,9 @@ def _parse_cli_args() -> dict:
         elif argv[i] == "--server":
             args["server"] = argv[i + 1 :]
             break
+        elif argv[i] == "--tui":
+            args["tui"] = True
+            i += 1
         else:
             i += 1
     return args
@@ -102,7 +107,7 @@ async def main() -> None:
 
     cli_args = _parse_cli_args()
 
-    if not cli_args["run"]:
+    if not cli_args["run"] and not cli_args.get("tui"):
         _print_startup_banner()
 
     raw_config, config_source = load_json_config(config_path=cli_args["config"])

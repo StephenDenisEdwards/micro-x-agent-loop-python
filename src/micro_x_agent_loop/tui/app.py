@@ -1,0 +1,264 @@
+"""AgentTUI — Textual-based terminal UI for the micro-x agent."""
+
+from __future__ import annotations
+
+import asyncio
+import signal
+from typing import Any
+
+from textual.app import App, ComposeResult
+from textual.binding import Binding
+from textual.widgets import Header, Input
+
+from micro_x_agent_loop.app_config import AppConfig
+from micro_x_agent_loop.bootstrap import AppRuntime
+from micro_x_agent_loop.tui.channel import TextualChannel
+from micro_x_agent_loop.tui.widgets.chat_log import ChatLog
+from micro_x_agent_loop.tui.widgets.status_bar import StatusBar
+
+
+class AgentTUI(App[None]):
+    """Main Textual application for the micro-x agent."""
+
+    CSS = """
+    Screen {
+        layout: vertical;
+    }
+
+    #chat-log {
+        height: 1fr;
+        border-bottom: solid $primary;
+    }
+
+    .user-message {
+        margin: 1 1 0 1;
+        color: $text;
+    }
+
+    .assistant-message {
+        margin: 0 1 0 3;
+    }
+
+    .thinking-spinner {
+        margin: 0 1 0 1;
+    }
+
+    .tool-inline {
+        margin: 0 1 0 3;
+    }
+
+    .system-message {
+        margin: 0 1 0 1;
+    }
+
+    .error-message {
+        margin: 0 1 0 1;
+    }
+
+    #prompt-input {
+        margin: 0 1;
+        height: 3;
+    }
+
+    #status-bar {
+        height: 1;
+        background: $surface;
+        color: $text-muted;
+        padding: 0 1;
+        text-style: bold;
+    }
+    """
+
+    TITLE = "MICRO-X AGENT"
+
+    BINDINGS = [
+        Binding("escape", "cancel_task", "Cancel", show=True),
+        Binding("ctrl+c", "quit", "Quit", show=True),
+    ]
+
+    def __init__(
+        self,
+        app_config: AppConfig,
+        runtime: AppRuntime,
+        config_source: str,
+    ) -> None:
+        super().__init__()
+        self._app_config = app_config
+        self._runtime = runtime
+        self._config_source = config_source
+        self._agent = runtime.agent
+        self._channel = TextualChannel(self)
+        self._running_task: asyncio.Task[None] | None = None
+
+        # Inject our channel into the agent and all components that captured
+        # a reference to the original channel's methods at construction time.
+        self._agent._channel = self._channel
+        self._agent._turn_engine._channel = self._channel
+        self._agent._command_handler._print = self._channel.emit_system_message
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield ChatLog(id="chat-log")
+        yield Input(placeholder="Type a message... (Enter to send, Escape to cancel)", id="prompt-input")
+        yield StatusBar(
+            self._agent.session_accumulator,
+            budget_usd=self._app_config.session_budget_usd,
+            id="status-bar",
+        )
+
+    def on_mount(self) -> None:
+        """Show startup info and focus input."""
+        self.title = "MICRO-X AGENT"
+        model_label = f"{self._app_config.provider_name}:{self._app_config.model}"
+        self.sub_title = model_label
+
+        chat_log = self.query_one("#chat-log", ChatLog)
+        chat_log.add_system_message(f"Config: {self._config_source}")
+        chat_log.add_system_message(
+            f"[{model_label}] (type 'exit' to quit, '/help' for commands)"
+        )
+        if self._app_config.memory_enabled and self._agent.active_session_id:
+            chat_log.add_system_message(
+                f"Memory: enabled (session: {self._agent.active_session_id})"
+            )
+        if self._runtime.mcp_tools:
+            chat_log.add_system_message(
+                f"Tools: {len(self._runtime.mcp_tools)} MCP tools loaded"
+            )
+        chat_log.add_system_message("")
+
+        self.query_one("#status-bar", StatusBar).refresh_metrics()
+        self.query_one("#prompt-input", Input).focus()
+
+    # -- Input handling --
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle user message submission via Enter."""
+        text = event.value.strip()
+        if not text:
+            return
+
+        # Clear input immediately
+        event.input.value = ""
+
+        if text.lower() in ("exit", "quit"):
+            self.exit()
+            return
+
+        chat_log = self.query_one("#chat-log", ChatLog)
+        chat_log.add_user_message(text)
+
+        # Disable input while agent is running
+        prompt_input = self.query_one("#prompt-input", Input)
+        prompt_input.disabled = True
+
+        self._running_task = asyncio.create_task(self._run_agent(text))
+
+    def action_cancel_task(self) -> None:
+        """Handle Escape — cancel the running agent task."""
+        if self._running_task is not None and not self._running_task.done():
+            self._running_task.cancel()
+            chat_log = self.query_one("#chat-log", ChatLog)
+            chat_log.add_system_message("[Interrupted]")
+
+    async def _run_agent(self, text: str) -> None:
+        """Run the agent in the background and re-enable input when done."""
+        try:
+            await self._agent.run(text)
+        except asyncio.CancelledError:
+            pass
+        except Exception as ex:
+            chat_log = self.query_one("#chat-log", ChatLog)
+            chat_log.add_error_message(str(ex))
+        finally:
+            prompt_input = self.query_one("#prompt-input", Input)
+            prompt_input.disabled = False
+            prompt_input.focus()
+            status_bar = self.query_one("#status-bar", StatusBar)
+            status_bar.refresh_metrics()
+
+    # -- TextualChannel callbacks (called from same event loop) --
+
+    def on_begin_streaming(self) -> None:
+        self.query_one("#chat-log", ChatLog).begin_assistant_message()
+
+    def on_end_streaming(self) -> None:
+        self.query_one("#chat-log", ChatLog).finalize_assistant_message()
+
+    def on_text_delta(self, text: str) -> None:
+        self.query_one("#chat-log", ChatLog).append_text(text)
+
+    def on_tool_started(self, tool_use_id: str, tool_name: str) -> None:
+        self.query_one("#chat-log", ChatLog).add_tool_message(tool_name, "Running")
+
+    def on_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
+        status = "Error" if is_error else "Done"
+        self.query_one("#chat-log", ChatLog).add_tool_message(tool_name, status)
+
+    def on_turn_complete(self, usage: dict[str, Any]) -> None:
+        self.query_one("#status-bar", StatusBar).refresh_metrics()
+
+    def on_agent_error(self, message: str) -> None:
+        self.query_one("#chat-log", ChatLog).add_error_message(message)
+
+    def on_system_message(self, text: str) -> None:
+        self.query_one("#chat-log", ChatLog).add_system_message(text)
+
+    def on_ask_user(
+        self,
+        question: str,
+        options: list[dict[str, str]] | None,
+        future: asyncio.Future[str],
+    ) -> None:
+        """Handle ask_user — Phase 1: show in chat, use default answer."""
+        chat_log = self.query_one("#chat-log", ChatLog)
+        chat_log.add_system_message(f"Question: {question}")
+        if options:
+            for opt in options:
+                label = opt.get("label", "")
+                desc = opt.get("description", "")
+                chat_log.add_system_message(f"  - {label}: {desc}")
+            chat_log.add_system_message("[ask_user modal not yet implemented]")
+        if not future.done():
+            future.set_result(
+                "No response from human — question timed out. "
+                "Proceed with your best judgement or report that you cannot continue."
+            )
+
+    # -- Shutdown --
+
+    async def action_quit(self) -> None:
+        """Clean shutdown."""
+        if self._running_task is not None and not self._running_task.done():
+            self._running_task.cancel()
+            try:
+                await self._running_task
+            except asyncio.CancelledError:
+                pass
+        await _shutdown_runtime(self._runtime)
+        self.exit()
+
+
+async def _shutdown_runtime(runtime: AppRuntime) -> None:
+    """Clean up all runtime resources."""
+    prev_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    try:
+        await runtime.agent.shutdown()
+        if runtime.mcp_manager:
+            await runtime.mcp_manager.close()
+        if runtime.event_sink:
+            await runtime.event_sink.close()
+        if runtime.memory_store:
+            runtime.memory_store.close()
+    finally:
+        signal.signal(signal.SIGINT, prev_handler)
+
+
+async def run_tui(
+    app_config: AppConfig,
+    runtime: AppRuntime,
+    config_source: str,
+) -> None:
+    """Entry point — create and run the Textual TUI."""
+    tui = AgentTUI(app_config, runtime, config_source)
+    await tui.run_async()

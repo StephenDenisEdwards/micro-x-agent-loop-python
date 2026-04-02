@@ -126,6 +126,33 @@ async def dispatch(cli_args: dict, raw_config: dict, config_source: str) -> None
         )
         return
 
+    # Textual TUI mode.
+    if cli_args.get("tui"):
+        try:
+            from micro_x_agent_loop.tui.app import run_tui
+        except ImportError:
+            print("Textual is not installed. Install with: pip install -e \".[tui]\"")
+            sys.exit(1)
+
+        # Suppress log output to stderr — Textual owns the terminal
+        import logging as _logging
+
+        _logging.disable(_logging.CRITICAL)
+        logger.remove()
+        logger.add(os.path.join(".micro_x", "tui.log"), level="DEBUG", rotation="5 MB")
+
+        try:
+            runtime = await bootstrap_runtime(app, env, resolved_config=raw_config)
+        except ValueError as ex:
+            logger.error(str(ex))
+            sys.exit(1)
+
+        agent = runtime.agent
+        await agent.initialize_session()
+
+        await run_tui(app, runtime, config_source)
+        return
+
     # Interactive REPL.
     try:
         runtime = await bootstrap_runtime(app, env, resolved_config=raw_config)

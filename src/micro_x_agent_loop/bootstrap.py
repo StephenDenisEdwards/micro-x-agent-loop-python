@@ -43,6 +43,7 @@ async def bootstrap_runtime(
     *,
     autonomous: bool = False,
     resolved_config: dict[str, Any] | None = None,
+    channel_override: Any = None,
 ) -> AppRuntime:
     log_descriptions = setup_logging(level=app.log_level, consumers=app.log_consumers)
 
@@ -143,8 +144,10 @@ async def bootstrap_runtime(
     hitl_enabled = autonomous and bool(os.environ.get("MICRO_X_BROKER_URL"))
 
     # Create the appropriate AgentChannel based on context
-    channel: BrokerChannel | BufferedChannel | TerminalChannel
-    if autonomous:
+    channel: Any  # AgentChannel
+    if channel_override is not None:
+        channel = channel_override
+    elif autonomous:
         broker_url = os.environ.get("MICRO_X_BROKER_URL")
         run_id = os.environ.get("MICRO_X_RUN_ID")
         if broker_url and run_id:

@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-03-22
+Last updated: 2026-04-02
 
 ## Priority Queue
 
@@ -29,6 +29,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | **19** | [Semantic Model Routing](PLAN-semantic-model-routing.md) | **Completed** | [semantic-routing](../testing/MANUAL-TEST-semantic-routing.md) | 🔴 | Cross-provider semantic routing: rule→keywords→LLM classifier, provider pool, cache-aware dispatch, feedback loop |
 | **20** | [Routing Simplification](PLAN-routing-simplification.md) | **In Progress** | — | — | Bug fixes applied (5 of 10 critical issues fixed). Architectural simplification (Options A–D) still pending. |
 | — | [Reddit MCP](PLAN-reddit-mcp.md) | **Blocked** | — | — | Reddit dev registration inaccessible |
+| **21** | [Textual TUI](PLAN-textual-tui.md) | Planned | — | — | Opt-in Textual-based TUI (`--tui`), 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md) |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
 <details>
@@ -66,7 +67,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | Superseded | 1 |
 | Draft | 1 |
 | Dropped | 1 |
-| Planned | 4 |
+| Planned | 5 |
 
 ## All Plans
 
@@ -112,3 +113,4 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | [Multi-Provider Support](PLAN-multi-provider.md) | Completed | Gemini + DeepSeek providers. Completed 2026-03-13 |
 | [Semantic Model Routing](PLAN-semantic-model-routing.md) | Completed | Cross-provider semantic routing with 3-stage classifier, provider pool, cache-aware dispatch, feedback loop. Completed 2026-03-21 |
 | [Routing Simplification](PLAN-routing-simplification.md) | In Progress | Bug fixes applied 2026-03-22; architectural simplification pending |
+| [Textual TUI](PLAN-textual-tui.md) | Planned | Opt-in Textual-based TUI (`--tui`), 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md) |

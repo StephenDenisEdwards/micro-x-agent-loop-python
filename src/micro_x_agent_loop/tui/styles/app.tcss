@@ -1,0 +1,74 @@
+/* Textual TUI stylesheet for micro-x agent */
+
+Screen {
+    layout: vertical;
+}
+
+#header-bar {
+    dock: top;
+    height: 1;
+    background: $primary;
+    color: $text;
+    text-style: bold;
+    padding: 0 1;
+}
+
+ChatLog {
+    height: 1fr;
+    border-top: solid $primary;
+    padding: 0;
+}
+
+.user-message {
+    margin: 1 1 0 1;
+    color: $text;
+}
+
+.assistant-message {
+    margin: 0 1 0 3;
+}
+
+.thinking-spinner {
+    margin: 0 1 0 1;
+}
+
+.tool-inline {
+    margin: 0 1 0 3;
+}
+
+.system-message {
+    margin: 0 1 0 1;
+}
+
+.error-message {
+    margin: 0 1 0 1;
+}
+
+InputArea {
+    border-top: solid $primary;
+    height: auto;
+    max-height: 10;
+    padding: 0 1;
+}
+
+InputArea TextArea {
+    height: auto;
+    max-height: 6;
+    min-height: 1;
+    border: none;
+    background: $surface;
+}
+
+StatusBar {
+    dock: bottom;
+    height: 1;
+    background: $surface;
+    color: $text-muted;
+    padding: 0 1;
+    text-style: bold;
+}
+
+/* Ask user modal (Phase 3) */
+AskUserModal {
+    align: center middle;
+}
