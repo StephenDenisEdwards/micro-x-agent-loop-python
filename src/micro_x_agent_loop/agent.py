@@ -68,8 +68,9 @@ class Agent:
         self._channel = c.channel
         self._line_prefix = c.line_prefix
 
-        # --- Sub-agents & compact prompt ---
+        # --- Sub-agents, tasks & compact prompt ---
         self._sub_agent_runner = c.sub_agent_runner
+        self._task_manager = c.task_manager
         self._compact_system_prompt = c.compact_system_prompt
 
         # --- Tool result & conversation limits ---
@@ -182,6 +183,7 @@ class Agent:
             tool_search_globally_active=self._tool_search_active,
             compact_system_prompt=self._compact_system_prompt,
             sub_agent_runner=self._sub_agent_runner,
+            task_manager=self._task_manager,
             provider_pool=c.provider_pool,
             semantic_classifier=c.semantic_classifier,
             routing_policies=c.routing_policies,

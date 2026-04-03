@@ -105,6 +105,8 @@ class AppConfig:
     routing_confidence_threshold: float
     routing_feedback_enabled: bool
     routing_feedback_db_path: str
+    # Task decomposition
+    task_decomposition_enabled: bool
     # Budget
     session_budget_usd: float
     # Display
@@ -335,6 +337,7 @@ def parse_app_config(config: dict) -> AppConfig:
         routing_confidence_threshold=float(config.get("RoutingConfidenceThreshold", 0.6)),
         routing_feedback_enabled=_to_bool(config.get("RoutingFeedbackEnabled", False), default=False),
         routing_feedback_db_path=str(config.get("RoutingFeedbackDbPath", ".micro_x/routing.db")),
+        task_decomposition_enabled=_to_bool(config.get("TaskDecompositionEnabled", False), default=False),
         session_budget_usd=float(config.get("SessionBudgetUSD", DEFAULT_SESSION_BUDGET_USD)),
         markdown_rendering_enabled=_to_bool(config.get("MarkdownRenderingEnabled", True), default=True),
         status_bar_enabled=_to_bool(config.get("StatusBarEnabled", True), default=True),

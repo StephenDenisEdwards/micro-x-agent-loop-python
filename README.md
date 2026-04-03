@@ -36,6 +36,7 @@ The agent figures out which tools to call, in what order, and streams results ba
 - **Human-in-the-loop** — the LLM pauses to ask clarifying questions when your request is ambiguous, presents structured choices, and continues after you answer ([ADR-017](documentation/docs/architecture/decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md))
 - **Multi-provider LLM support** — pluggable provider architecture supporting Anthropic Claude, OpenAI GPT, DeepSeek, Gemini, and Ollama (local), with a provider pool for health tracking and same-family fallback
 - **Semantic model routing** — three-stage classifier routes each turn to the most cost-effective provider/model pair ([ADR-020](documentation/docs/architecture/decisions/ADR-020-semantic-model-routing.md))
+- **Task decomposition** — the agent breaks complex work into trackable subtasks with dependency management, progress tracking, lifecycle hooks, and multi-agent coordination
 - **Sub-agents** — spawn parallel sub-agents for exploration, summarization, or general reasoning without polluting the main context
 - **Automatic retry and resilience** — exponential backoff on API rate limits and transient errors ([ADR-016](documentation/docs/architecture/decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md))
 
@@ -110,6 +111,26 @@ The agent can spawn sub-agents for parallel research and exploration via the `sp
 
 Sub-agents protect the main context window from excessive intermediate results and enable parallel independent queries.
 
+### Task Decomposition
+
+When enabled (`TaskDecompositionEnabled: true`), the agent can break complex multi-step requests into structured subtasks via four pseudo-tools:
+
+| Tool | Purpose |
+|------|---------|
+| `task_create` | Create a new pending task with subject, description, and optional metadata |
+| `task_update` | Update status, set dependencies, assign owner, or delete a task |
+| `task_list` | List all tasks with status, owner, and active blockers |
+| `task_get` | Retrieve full details of a single task |
+
+Tasks form a **dependency DAG** via bidirectional `blocks`/`blockedBy` edges and progress through `pending → in_progress → completed`. The system includes:
+
+- **Lifecycle hooks** — async `taskCreated`/`taskCompleted` hooks with blocking error rollback
+- **Multi-agent coordination** — atomic task claiming with 5 safety checks, auto-owner assignment, agent status tracking, and exit cleanup
+- **TUI integration** — live TaskPanel widget (toggle with `/tasks`) showing real-time task progress
+- **Session-scoped** — each session gets its own task list, stored in `.micro_x/tasks.db`
+
+See [Task Decomposition Design](documentation/docs/design/DESIGN-task-decomposition.md).
+
 ### Textual TUI (Terminal User Interface)
 
 An opt-in rich terminal interface launched via `--tui` or `run-tui.bat`, built on [Textual](https://textual.textualize.io/) ([ADR-022](documentation/docs/architecture/decisions/ADR-022-textual-tui-for-cli.md)). Provides a full-screen, widget-based experience while the existing REPL remains the default.
@@ -126,6 +147,7 @@ python -m micro_x_agent_loop --tui                    # Direct (requires: pip in
 | **Scrollable chat log** | — | Persistent conversation history with markdown rendering |
 | **Tool panel** | `Ctrl+T` | Right sidebar showing tool executions with name, duration, and status |
 | **Session sidebar** | `Ctrl+S` | Left sidebar with click-to-switch, new, fork, and paginated session list |
+| **Task panel** | `/tasks` | Right sidebar showing task decomposition progress with status icons and blockers |
 | **Log panel** | `Ctrl+L` | Live loguru events in a toggleable bottom panel |
 | **Command palette** | `Ctrl+P` | Fuzzy search across slash commands and theme switcher |
 | **Ask-user modal** | — | Centered modal dialog for human-in-the-loop questions |
@@ -209,6 +231,9 @@ graph TD
     Agent --> ToolSearch["ToolSearchManager<br/>On-Demand Discovery"]
     Agent --> ModeSelect["ModeSelector<br/>Prompt vs Compiled"]
     Agent --> SubAgent["SubAgentRunner<br/>Parallel Sub-Agents"]
+    Agent --> TaskMgr["TaskManager<br/>Task Decomposition"]
+
+    TaskMgr --> TaskStore["TaskStore<br/>SQLite tasks.db"]
 
     TurnEngine --> Classifier["SemanticClassifier<br/>Rules → Keywords → LLM"]
     TurnEngine --> ProvPool["ProviderPool<br/>Multi-Provider Dispatch"]
@@ -308,7 +333,7 @@ sequenceDiagram
     P-->>TE: (message, tool_use_blocks, stop_reason)
     TE->>Mem: append_message(assistant)
 
-    Note over TE: Classify blocks: search / ask_user / regular
+    Note over TE: Classify blocks: search / ask_user / subagent / task / regular
 
     alt tool_search blocks
         TE->>TE: ToolSearchManager.handle_tool_search(query)
@@ -319,6 +344,16 @@ sequenceDiagram
         TE->>U: AskUserHandler.handle() — display question + options
         U-->>TE: User selects option or types answer
         Note over TE: Return {"answer": "..."} as tool_result
+    end
+
+    alt subagent blocks
+        TE->>TE: SubAgentRunner.run(task, type)
+        Note over TE: Disposable context, returns summary
+    end
+
+    alt task blocks
+        TE->>TE: TaskManager.handle_tool_call(name, input)
+        Note over TE: task_create/update/list/get inline
     end
 
     alt No regular tools (pseudo-tools only)
@@ -349,8 +384,8 @@ sequenceDiagram
 1. You type a prompt at the `you>` prompt
 2. The prompt is sent to the LLM via the streaming API
 3. The response streams word-by-word to your terminal
-4. If the LLM returns tool calls, TurnEngine classifies each block as **tool_search**, **ask_user**, or **regular**
-5. Pseudo-tool blocks (search/ask_user) are handled inline — no MCP execution needed
+4. If the LLM returns tool calls, TurnEngine classifies each block as **tool_search**, **ask_user**, **subagent**, **task**, or **regular**
+5. Pseudo-tool blocks (search/ask_user/subagent/task) are handled inline — no MCP execution needed
 6. Regular tool calls are executed **in parallel** via `asyncio.gather`
 7. All results (inline + regular) are merged in original order and sent back to the LLM
 8. Steps 3-7 repeat until the LLM responds with text only (no tool calls)
@@ -385,6 +420,11 @@ src/micro_x_agent_loop/
   routing_feedback.py      -- SQLite-backed routing outcome recording, adaptive thresholds
   embedding.py             -- Ollama embedding client, vector index, cosine similarity
   sub_agent.py             -- SubAgentRunner: agent types (explore/summarize/general)
+  tasks/
+    models.py              -- Task, TaskStatus, ClaimResult, AgentStatus dataclasses
+    store.py               -- TaskStore: SQLite CRUD, deps, HWM, claiming (.micro_x/tasks.db)
+    schemas.py             -- 4 task tool schemas + is_task_tool() helper
+    manager.py             -- TaskManager: routing, formatting, hooks, mutation listeners
   cost_reconciliation.py   -- Cost reconciliation utilities
   manifest.py              -- Build manifest
   metrics.py               -- Structured metrics emission (cost tracking, API call analysis)
@@ -444,6 +484,7 @@ src/micro_x_agent_loop/
     channel.py             -- TextualChannel: AgentChannel for the TUI
     widgets/
       chat_log.py          -- Scrollable conversation with markdown rendering
+      task_panel.py        -- Right sidebar: task decomposition progress with status icons
       tool_panel.py        -- Right sidebar: tool executions with timing/status
       session_sidebar.py   -- Left sidebar: session list, switch, new, fork
       status_bar.py        -- Footer: cost, tokens, session metrics
@@ -517,6 +558,7 @@ Full documentation is available in [documentation/docs/](documentation/docs/inde
 - [Cost-Aware Task Compilation](documentation/docs/research-papers/cost-aware-task-compilation-for-llm-agents/research-paper.md) — research paper on prompt/compile mode
 - [WhatsApp MCP Setup](documentation/docs/design/tools/whatsapp-mcp/README.md) — WhatsApp integration guide
 - [Configuration Reference](documentation/docs/operations/config.md) — all settings with types and defaults
+- [Task Decomposition Design](documentation/docs/design/DESIGN-task-decomposition.md) — task tools, storage, hooks, multi-agent coordination, TUI
 - [Semantic Routing Design](documentation/docs/design/DESIGN-semantic-model-routing.md) — classifier pipeline, routing policies, feedback loop
 - [Architecture Decision Records](documentation/docs/architecture/decisions/README.md) — index of all 22 ADRs
 

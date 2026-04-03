@@ -149,6 +149,7 @@ class AgentManager:
 
         system_prompt = get_system_prompt(
             concise_output_enabled=app.concise_output_enabled,
+            task_decomposition_enabled=app.task_decomposition_enabled,
             working_directory=app.working_directory,
             compact=app.provider_name == "ollama",
         )
@@ -180,6 +181,7 @@ class AgentManager:
                 tool_result_summarization_model=summarization_model,
                 tool_result_summarization_threshold=app.tool_result_summarization_threshold,
                 tool_search_enabled=app.tool_search_enabled,
+                task_decomposition_enabled=app.task_decomposition_enabled,
                 working_directory=app.working_directory,
                 tool_formatting=app.tool_formatting,
                 default_format=app.default_format,

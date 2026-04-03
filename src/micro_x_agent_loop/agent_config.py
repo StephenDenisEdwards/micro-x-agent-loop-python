@@ -169,6 +169,8 @@ class AgentConfig:
     routing_feedback_db_path: str = ".micro_x/routing.db"
     # Budget
     session_budget_usd: float = DEFAULT_SESSION_BUDGET_USD
+    # Task decomposition
+    task_decomposition_enabled: bool = False
     # Display
     markdown_rendering_enabled: bool = True
     # AgentChannel for bidirectional client communication

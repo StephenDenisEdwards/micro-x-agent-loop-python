@@ -209,6 +209,64 @@ Constants (hardcoded in app):
 """
 
 
+_TASK_DECOMPOSITION_DIRECTIVE = """\
+
+
+# Task Decomposition
+
+You have four task tools to break down complex work into trackable subtasks: \
+`task_create`, `task_update`, `task_list`, and `task_get`.
+
+## task_create — When to Use
+
+Use this tool proactively in these scenarios:
+
+- Complex multi-step tasks — when a task requires 3 or more distinct steps or actions
+- Non-trivial and complex tasks — tasks that require careful planning or multiple operations
+- User explicitly requests a todo list
+- User provides multiple tasks (numbered or comma-separated)
+- After receiving new instructions — immediately capture user requirements as tasks
+- When you start working on a task — mark it as in_progress BEFORE beginning work
+- After completing a task — mark it as completed and add any new follow-up tasks \
+discovered during implementation
+
+Skip task decomposition when:
+- There is only a single, straightforward task
+- The task is trivial and can be completed in less than 3 steps
+- The task is purely conversational or informational
+
+Fields: **subject** (imperative title), **description** (what needs to be done), \
+**activeForm** (optional present-continuous form for spinner, e.g. "Running tests").
+
+## task_update — Usage
+
+- Set status to `in_progress` when starting work, `completed` when done, `deleted` to remove
+- ONLY mark a task as completed when you have FULLY accomplished it
+- If you encounter errors or blockers, keep the task as in_progress
+- Never mark a task as completed if tests are failing or implementation is partial
+- Use `addBlocks`/`addBlockedBy` to establish task dependencies
+- After completing, call task_list to find your next task
+
+Examples:
+  {"taskId": "1", "status": "in_progress"}
+  {"taskId": "1", "status": "completed"}
+  {"taskId": "2", "addBlockedBy": ["1"]}
+
+## task_list — Usage
+
+- Check what tasks are available (status: 'pending', not blocked)
+- Check overall progress
+- After completing a task, check for newly unblocked work
+- **Prefer working on tasks in ID order** (lowest ID first) — earlier tasks often set \
+up context for later ones
+
+## task_get — Usage
+
+- When you need the full description and context before starting work on a task
+- To understand task dependencies (what it blocks, what blocks it)\
+"""
+
+
 _CONCISE_OUTPUT_DIRECTIVE = """\
 
 
@@ -224,6 +282,7 @@ def get_system_prompt(
     user_memory_enabled: bool = False,
     concise_output_enabled: bool = False,
     tool_search_active: bool = False,
+    task_decomposition_enabled: bool = False,
     working_directory: str | None = None,
     autonomous: bool = False,
     hitl_enabled: bool = False,
@@ -277,6 +336,8 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
         prompt += _USER_MEMORY_GUIDANCE
     if tool_search_active:
         prompt += _TOOL_SEARCH_DIRECTIVE
+    if task_decomposition_enabled and not compact:
+        prompt += _TASK_DECOMPOSITION_DIRECTIVE
     if not compact:
         prompt += _CODEGEN_DIRECTIVE
     if concise_output_enabled:

@@ -20,6 +20,7 @@ from micro_x_agent_loop.tui.widgets.chat_log import ChatLog
 from micro_x_agent_loop.tui.widgets.log_panel import LogPanel
 from micro_x_agent_loop.tui.widgets.session_sidebar import SessionSidebar
 from micro_x_agent_loop.tui.widgets.status_bar import StatusBar
+from micro_x_agent_loop.tui.widgets.task_panel import TaskPanel
 from micro_x_agent_loop.tui.widgets.tool_panel import ToolPanel
 
 _NO_RESPONSE_MSG = (
@@ -46,6 +47,7 @@ _SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/memory", "Show user memory status"),
     ("/memory list", "List user memory files"),
     ("/debug show-api-payload", "Show last API payload"),
+    ("/tasks", "Toggle task decomposition panel"),
 ]
 
 # Available Textual themes
@@ -132,7 +134,7 @@ class AgentTUI(App[None]):
         border-left: solid $primary;
     }
 
-    .tool-panel-title {
+    .tool-panel-title, .task-panel-title {
         text-style: bold;
         padding: 0 1;
         color: $text-muted;
@@ -231,11 +233,16 @@ class AgentTUI(App[None]):
         self._agent._turn_engine._channel = self._channel
         self._agent._command_handler._print = self._channel.emit_system_message
 
+        # Subscribe to task mutations to update the TaskPanel
+        if self._agent._task_manager is not None:
+            self._agent._task_manager.register_mutation_listener(self._on_task_mutation)
+
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal(id="main-area"):
             yield SessionSidebar(id="session-sidebar")
             yield ChatLog(id="chat-log")
+            yield TaskPanel(id="task-panel")
             yield ToolPanel(id="tool-panel")
         yield LogPanel(id="log-panel")
         yield Input(placeholder="Type a message... (Enter to send, Ctrl+P for commands)", id="prompt-input")
@@ -314,6 +321,11 @@ class AgentTUI(App[None]):
 
     def _submit_slash_command(self, cmd: str) -> None:
         """Submit a slash command from the command palette."""
+        # TUI-local commands handled without sending to agent
+        if cmd.strip() == "/tasks":
+            self.action_toggle_tasks()
+            return
+
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.add_user_message(cmd)
 
@@ -340,6 +352,24 @@ class AgentTUI(App[None]):
         """Toggle the tool panel visibility."""
         tool_panel = self.query_one("#tool-panel", ToolPanel)
         tool_panel.display = not tool_panel.display
+
+    def action_toggle_tasks(self) -> None:
+        """Toggle the task panel visibility."""
+        task_panel = self.query_one("#task-panel", TaskPanel)
+        task_panel.set_visible(not task_panel.display)
+
+    def _on_task_mutation(self) -> None:
+        """Called by TaskManager after any task mutation — refresh the TaskPanel."""
+        if self._agent._task_manager is None:
+            return
+        tasks = self._agent._task_manager._store.list_tasks(
+            self._agent._task_manager._list_id,
+        )
+        try:
+            task_panel = self.query_one("#task-panel", TaskPanel)
+            self.call_from_thread(task_panel.update_tasks, tasks)
+        except Exception:
+            pass  # Panel not mounted yet or app shutting down
 
     def action_toggle_logs(self) -> None:
         """Toggle the log panel visibility."""

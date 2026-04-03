@@ -1,8 +1,8 @@
 # Software Architecture Document
 
 **Project:** micro-x-agent-loop-python
-**Version:** 3.2
-**Last Updated:** 2026-03-22
+**Version:** 3.3
+**Last Updated:** 2026-04-03
 
 ## 1. Introduction and Goals
 
@@ -141,6 +141,7 @@ graph TD
     Agent --> AskUser["AskUserHandler<br/>Human-in-the-Loop"]
     Agent --> ToolSearch["ToolSearchManager<br/>On-Demand Discovery"]
     Agent --> SubAgent["SubAgentRunner<br/>Delegated Tasks"]
+    Agent --> TaskMgr["TaskManager<br/>Task Decomposition"]
     Agent --> ModeSelect["ModeSelector<br/>Prompt vs Compiled"]
 
     TurnEngine --> Provider["LLMProvider<br/>Protocol"]
@@ -164,6 +165,8 @@ graph TD
     OpenAIProv --> OpenAISDK["openai SDK"]
     AnthropicProv --> Tenacity["tenacity<br/>Retry on 429"]
     OpenAIProv --> Tenacity
+
+    TaskMgr --> TaskStore["TaskStore<br/>SQLite tasks.db"]
 
     McpMgr --> McpSDK["mcp SDK"]
     McpMgr --> McpTools
@@ -209,8 +212,12 @@ graph TD
 | `app_config` | Parses `config.json` into `AppConfig` dataclass; resolves runtime environment variables into `RuntimeEnv` |
 | `Agent` | Top-level orchestrator: holds conversation state, routes commands, delegates turns to `TurnEngine` |
 | `AgentConfig` | Dataclass holding all agent configuration (model, tools, memory components, compaction) |
-| `TurnEngine` | Executes a single LLM turn: streams response, classifies tool blocks (search/ask_user/subagent/regular), dispatches tools in parallel, handles retries. Routes each LLM call via `RoutingStrategy` (semantic classifier) to select the provider and model. |
+| `TurnEngine` | Executes a single LLM turn: streams response, classifies tool blocks (search/ask_user/subagent/task/regular), dispatches tools in parallel, handles retries. Routes each LLM call via `RoutingStrategy` (semantic classifier) to select the provider and model. |
 | `SubAgentRunner` | Creates lightweight, disposable in-process agent instances for focused tasks. Three types: explore (read-only, cheap), summarize (no tools), general (full capability). Results return as tool_result to parent. |
+| `tasks/manager` | `TaskManager` — orchestrates 4 task pseudo-tools (`task_create`, `task_update`, `task_list`, `task_get`). Handles result formatting, lifecycle hooks (created/completed with blocking rollback), mutation listeners, auto-owner assignment. |
+| `tasks/store` | `TaskStore` — SQLite-backed CRUD for tasks (`.micro_x/tasks.db`). Manages dependency DAG (bidirectional blocks/blockedBy), high-water-mark for ID non-reuse, cascading delete, multi-agent claiming, agent status tracking. |
+| `tasks/schemas` | 4 tool JSON schemas for the LLM API, `is_task_tool()` classifier, `ALL_TASK_SCHEMAS` list. Same dict format as `SPAWN_SUBAGENT_SCHEMA`. |
+| `tasks/models` | `Task`, `TaskStatus` (StrEnum), `ClaimResult`, `AgentStatus` dataclasses. |
 | `TurnEvents` | Protocol defining lifecycle callbacks: `on_append_message`, `on_api_call_completed`, `on_tool_executed`, `on_ensure_checkpoint_for_turn`, etc. `BaseTurnEvents` provides no-op defaults. |
 | `AskUserHandler` | Pseudo-tool handler for human-in-the-loop questioning. Presents structured choices via `questionary` with "Other" free-text escape; falls back to plain `input()` for non-interactive terminals. |
 | `ToolSearchManager` | On-demand tool discovery pseudo-tool. Replaces large schema payloads with a single search tool when schema size exceeds a threshold. Uses `tiktoken` for token counting. |
@@ -243,7 +250,7 @@ graph TD
 | `logging_config` | `LogConsumer` Protocol with `ConsoleLogConsumer` and `FileLogConsumer` implementations for loguru setup |
 | `Tool` | Protocol class: `name`, `description`, `input_schema`, `is_mutating`, `predict_touched_paths`, `execute` |
 | `ToolResult` | Dataclass: `text`, `structured` (dict or None), `is_error` — returned by `Tool.execute()` |
-| `system_prompt` | System prompt text with conditional directives for tool search, ask_user, and sub-agent delegation |
+| `system_prompt` | System prompt text with conditional directives for tool search, ask_user, sub-agent delegation, and task decomposition |
 | `compaction` | Conversation compaction strategies: `NoOpCompaction` and `SummarizeCompaction` (LLM-based) |
 | `memory/store` | SQLite connection, schema bootstrap (6 tables), transaction context manager |
 | `memory/session_manager` | Session CRUD, message persistence with monotonic sequencing, fork, tool call recording |
@@ -300,7 +307,7 @@ sequenceDiagram
     P-->>TE: (message, tool_use_blocks, stop_reason)
     TE->>Mem: append_message(assistant)
 
-    Note over TE: Classify blocks: search / ask_user / subagent / regular
+    Note over TE: Classify blocks: search / ask_user / subagent / task / regular
 
     alt tool_search blocks
         TE->>TE: ToolSearchManager.handle_tool_search(query)
@@ -317,6 +324,11 @@ sequenceDiagram
         TE->>TE: SubAgentRunner.run(task, type)
         Note over TE: Fresh TurnEngine with filtered tools,<br/>cheap model, disposable context
         Note over TE: Return summary as tool_result
+    end
+
+    alt task blocks
+        TE->>TE: TaskManager.handle_tool_call(name, input)
+        Note over TE: task_create / task_update / task_list / task_get<br/>Returns formatted text as tool_result
     end
 
     alt No regular tools (pseudo-tools only)
@@ -397,6 +409,22 @@ When `MemoryEnabled=true`, the agent persists all conversation state to a local 
 
 See [Memory System Design](../design/DESIGN-memory-system.md) and [ADR-009](decisions/ADR-009-sqlite-memory-sessions-and-file-checkpoints.md).
 
+### Task Decomposition
+
+When `TaskDecompositionEnabled=true`, the agent can break complex work into trackable subtasks via four pseudo-tools (`task_create`, `task_update`, `task_list`, `task_get`). Tasks form a dependency DAG with bidirectional `blocks`/`blockedBy` edges and progress through `pending → in_progress → completed`.
+
+Key design decisions:
+
+- **Pseudo-tool pattern** — task tools are handled inline in `TurnEngine` (same as `ask_user`, `tool_search`, `spawn_subagent`), not via MCP execution
+- **SQLite storage** — `.micro_x/tasks.db` with `BEGIN IMMEDIATE` transactions for concurrency (adapted from the reference implementation's file-based JSON + file locking)
+- **Non-error responses** — "not found" and other benign errors return normal `tool_result` text, never `is_error: True`, to avoid sibling tool cancellation in parallel execution
+- **Session-scoped** — each session gets its own task list (`list_id = session_id`)
+- **Lifecycle hooks** — async `taskCreated`/`taskCompleted` hooks with blocking error rollback support
+- **Multi-agent coordination** — atomic `claim_task()` with 5 checks, auto-owner assignment on `in_progress`, `unassign_agent_tasks()` for exit cleanup
+- **TUI integration** — `TaskPanel` widget with real-time updates via mutation listener callbacks
+
+See [Task Decomposition Design](../design/DESIGN-task-decomposition.md).
+
 ### Security
 
 - API keys stored in `.env`, loaded at startup, never logged
@@ -411,8 +439,9 @@ See [Memory System Design](../design/DESIGN-memory-system.md) and [ADR-009](deci
 |-------|--------|---------|
 | Secrets | `.env` | LLM provider API key (Anthropic or OpenAI) |
 | MCP server env | `config.json` `McpServers.*.env` | Per-server credentials (Google, Brave, GitHub, etc.) |
-| App settings | `config.json` | Model, tokens, temperature, limits, paths, memory, MCP servers |
+| App settings | `config.json` | Model, tokens, temperature, limits, paths, memory, task decomposition, MCP servers |
 | Defaults | Code (`constants.py`) | Fallback values when config is missing |
+| SQLite databases | `.micro_x/` | `memory.db` (sessions), `broker.db` (cron jobs), `tasks.db` (task decomposition), `routing.db` (feedback) |
 
 See [Configuration Reference](../operations/config.md) for the full settings table.
 
@@ -466,6 +495,8 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | Checkpoint | A snapshot of file state before mutating tools execute within a user turn |
 | Rewind | Restoring files to their state at a given checkpoint |
 | MCP | Model Context Protocol; standard for connecting LLM agents to external tool servers |
-| Pseudo-tool | A tool handled inline by the agent (not via MCP execution) — e.g. `tool_search`, `ask_user`, `spawn_subagent` |
+| Pseudo-tool | A tool handled inline by the agent (not via MCP execution) — e.g. `tool_search`, `ask_user`, `spawn_subagent`, `task_create`/`task_update`/`task_list`/`task_get` |
 | Sub-agent | A lightweight, disposable in-process agent instance that runs a focused task in its own context window and returns a summary |
+| Task decomposition | System that breaks complex work into trackable subtasks with status lifecycle, dependency DAG, lifecycle hooks, and multi-agent coordination |
+| High-water-mark | Counter tracking the highest task ID ever assigned in a list, preventing ID reuse after deletion |
 | Compiled mode | Cost-aware execution mode that generates code for batch-processing tasks instead of running them conversationally |

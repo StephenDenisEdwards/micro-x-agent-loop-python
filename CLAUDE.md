@@ -61,9 +61,9 @@ __main__.py → app_config → bootstrap_runtime → Agent → REPL loop
                                    Provider  Semantic    Tool dispatch     SubAgentRunner
                                  (Anthropic/ Classifier  (MCP servers)     (spawn_subagent
                                    OpenAI)   ↓                             pseudo-tool)
-                                          ProviderPool
-                                        (multi-provider
-                                          dispatch)
+                                          ProviderPool       TaskManager
+                                        (multi-provider    (task_create/update/
+                                          dispatch)         list/get pseudo-tools)
 
 Trigger Broker (always-on daemon):
   broker/service.py → scheduler.py ──→ dispatcher.py → runner.py (subprocess: --run)
@@ -102,7 +102,11 @@ API Server (--server start):
 | `tool_search.py` | On-demand tool discovery for large tool sets (keyword or semantic via embeddings) |
 | `embedding.py` | Ollama embedding client, vector index, cosine similarity for semantic tool search |
 | `sub_agent.py` | SubAgentRunner, agent types (explore/summarize/general), spawn_subagent pseudo-tool |
-| `system_prompt.py` | LLM system prompt and directives (`_ASK_USER_DIRECTIVE`, `_SUBAGENT_DIRECTIVE`, etc.) |
+| `tasks/store.py` | TaskStore: SQLite CRUD, dependency DAG, HWM, claiming, agent status (.micro_x/tasks.db) |
+| `tasks/manager.py` | TaskManager: tool routing, formatting, lifecycle hooks, mutation listeners, auto-owner |
+| `tasks/schemas.py` | 4 task tool schemas (task_create/update/list/get), is_task_tool() helper |
+| `tasks/models.py` | Task, TaskStatus, ClaimResult, AgentStatus dataclasses |
+| `system_prompt.py` | LLM system prompt and directives (`_ASK_USER_DIRECTIVE`, `_SUBAGENT_DIRECTIVE`, `_TASK_DECOMPOSITION_DIRECTIVE`, etc.) |
 | `metrics.py` | Metric builders, `SessionAccumulator`, cost tracking |
 | `memory/` | SQLite session persistence, checkpoints, events, pruning |
 | `mcp/` | MCP server lifecycle, tool proxying |

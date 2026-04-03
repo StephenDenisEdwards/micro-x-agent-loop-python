@@ -12,6 +12,8 @@ from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
 from micro_x_agent_loop.provider_pool import ProviderPool, RoutingTarget
 from micro_x_agent_loop.routing_strategy import RoutingStrategy
 from micro_x_agent_loop.sub_agent import SPAWN_SUBAGENT_SCHEMA, SubAgentRunner, SubAgentType
+from micro_x_agent_loop.tasks.manager import TaskManager
+from micro_x_agent_loop.tasks.schemas import ALL_TASK_SCHEMAS, is_task_tool
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
 
 if TYPE_CHECKING:
@@ -48,6 +50,7 @@ class TurnEngine:
         tool_search_globally_active: bool = False,
         compact_system_prompt: str = "",
         sub_agent_runner: SubAgentRunner | None = None,
+        task_manager: TaskManager | None = None,
         routing: RoutingStrategy | None = None,
         # Legacy params — used when `routing` is None (backward compat for tests)
         provider_pool: ProviderPool | None = None,
@@ -80,6 +83,7 @@ class TurnEngine:
         self._tool_search_globally_active = tool_search_globally_active
         self._compact_system_prompt = compact_system_prompt
         self._sub_agent_runner = sub_agent_runner
+        self._task_manager = task_manager
         # Build RoutingStrategy from legacy params if not provided directly
         resolved_routing: RoutingStrategy | None = None
         if routing is not None:
@@ -139,6 +143,8 @@ class TurnEngine:
             )
             if self._sub_agent_runner is not None:
                 api_tools.append(SPAWN_SUBAGENT_SCHEMA)
+            if self._task_manager is not None:
+                api_tools.extend(ALL_TASK_SCHEMAS)
             if self._channel is not None:
                 api_tools.append(ASK_USER_SCHEMA)
 
@@ -241,10 +247,11 @@ class TurnEngine:
             if not tool_use_blocks:
                 return current_user_message_id, last_assistant_message_id
 
-            # Classify blocks: search / ask_user / subagent / regular
+            # Classify blocks: search / ask_user / subagent / task / regular
             search_blocks: list[dict] = []
             ask_user_blocks: list[dict] = []
             subagent_blocks: list[dict] = []
+            task_blocks: list[dict] = []
             regular_blocks: list[dict] = []
             for block in tool_use_blocks:
                 name = block["name"]
@@ -254,6 +261,8 @@ class TurnEngine:
                     ask_user_blocks.append(block)
                 elif self._sub_agent_runner is not None and name == "spawn_subagent":
                     subagent_blocks.append(block)
+                elif self._task_manager is not None and is_task_tool(name):
+                    task_blocks.append(block)
                 else:
                     regular_blocks.append(block)
 
@@ -283,6 +292,19 @@ class TurnEngine:
                     "content": result_text,
                 })
                 logger.info(f"ask_user question={question!r}")
+
+            # Handle task decomposition calls inline
+            for block in task_blocks:
+                assert self._task_manager is not None
+                result_text = await self._task_manager.handle_tool_call(
+                    block["name"], block["input"],
+                )
+                inline_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block["id"],
+                    "content": result_text,
+                })
+                logger.info(f"task tool={block['name']}")
 
             # Handle spawn_subagent calls (run sub-agents concurrently)
             if subagent_blocks:

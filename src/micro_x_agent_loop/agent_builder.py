@@ -23,6 +23,8 @@ from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.sub_agent import SubAgentRunner
 from micro_x_agent_loop.system_prompt import get_system_prompt
 from micro_x_agent_loop.system_prompt_builder import build_system_prompt
+from micro_x_agent_loop.tasks.manager import TaskManager
+from micro_x_agent_loop.tasks.store import TaskStore
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
 from micro_x_agent_loop.tool_search import ToolSearchManager, should_activate_tool_search
@@ -45,6 +47,7 @@ class AgentComponents:
     channel: Any
     line_prefix: str
     sub_agent_runner: SubAgentRunner | None
+    task_manager: TaskManager | None
     compact_system_prompt: str
     max_tool_result_chars: int
     max_conversation_messages: int
@@ -205,13 +208,21 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
             _build_semantic_routing(rc, llm, ts, provider)
         )
 
+    # --- Task decomposition ---
+    task_manager: TaskManager | None = None
+    if config.task_decomposition_enabled:
+        task_store = TaskStore(str(Path(".micro_x") / "tasks.db"))
+        list_id = config.session_id or "default"
+        task_manager = TaskManager(task_store, list_id)
+
     return AgentComponents(
         provider=provider, model=config.model, max_tokens=config.max_tokens,
         temperature=config.temperature, system_prompt=system_prompt,
         tool_map=tool_map, converted_tools=converted_tools,
         tool_search_active=tool_search_active, tool_search_manager=tool_search_manager,
         autonomous=autonomous, channel=channel, line_prefix=line_prefix,
-        sub_agent_runner=sub_agent_runner, compact_system_prompt=compact_system_prompt,
+        sub_agent_runner=sub_agent_runner, task_manager=task_manager,
+        compact_system_prompt=compact_system_prompt,
         max_tool_result_chars=config.max_tool_result_chars,
         max_conversation_messages=config.max_conversation_messages,
         compaction_strategy=config.compaction_strategy,

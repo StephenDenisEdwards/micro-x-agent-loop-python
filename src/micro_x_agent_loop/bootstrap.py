@@ -186,6 +186,7 @@ async def bootstrap_runtime(
                 user_memory=user_memory,
                 user_memory_enabled=app.user_memory_enabled,
                 concise_output_enabled=app.concise_output_enabled,
+                task_decomposition_enabled=app.task_decomposition_enabled,
                 working_directory=app.working_directory,
                 autonomous=autonomous,
                 hitl_enabled=hitl_enabled,
@@ -234,6 +235,7 @@ async def bootstrap_runtime(
             routing_fallback_model=app.routing_fallback_model or app.model,
             routing_feedback_enabled=app.routing_feedback_enabled,
             routing_feedback_db_path=app.routing_feedback_db_path,
+            task_decomposition_enabled=app.task_decomposition_enabled,
             session_budget_usd=app.session_budget_usd,
             channel=channel,
         )
