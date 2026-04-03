@@ -19,6 +19,7 @@ uv.lock
 .micro_x/
 store/
 node_modules/
+mcp_servers/ts/package-lock.json
 .vscode/
 
 # Agent-generated task apps (only tools/template/ and tools/windows-vhs/ are tracked)
