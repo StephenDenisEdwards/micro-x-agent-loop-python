@@ -67,7 +67,7 @@
   "RoutingFallbackModel": "#Model",
   "RoutingFeedbackEnabled": false,
   "RoutingFeedbackDbPath": ".micro_x/routing.db",
-  "TaskDecompositionEnabled": false,
+  "TaskDecompositionEnabled": true,
   "SessionBudgetUSD": 0.0,
   "BrokerDatabase": ".micro_x/broker.db",
   "BrokerPollIntervalSeconds": 5,
