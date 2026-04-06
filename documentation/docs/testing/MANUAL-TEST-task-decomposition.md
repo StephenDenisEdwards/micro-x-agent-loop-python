@@ -350,70 +350,119 @@ you> Create a task "Test auto-owner" and start working on it.
 
 ## 8. TUI Display (Phase 6)
 
+Task operations are visible in two places in the TUI:
+
+1. **Inline in the chat log** (primary) — every `task_create`, `task_update`, `task_list`, and `task_get` call appears as a tool-use block in the conversation stream, just like any MCP tool. The result text (e.g., "Task #1 created successfully: Design API") renders inline. This is how you see task operations happen in real time.
+
+2. **TaskPanel sidebar** (secondary, at-a-glance summary) — a 30-character-wide right sidebar between the chat log and the tool panel. It shows a compact status overview of all tasks with icons, owners, and blockers. It starts hidden and auto-appears when the first task is created. A bold **Tasks** header sits at the top; task entries are listed below in a scrollable area.
+
+The tests below focus on the TaskPanel sidebar behaviour since the inline chat rendering is covered by the turn engine tests in section 10.
+
 Start the agent in TUI mode with task decomposition enabled:
 
 ```bash
 python -m micro_x_agent_loop --tui
 ```
 
-### Test 8.1: Task panel auto-shows when tasks exist
+### Test 8.1: Panel is hidden on startup, auto-shows on first task
+
+Before creating any tasks, verify the panel is not visible — the chat log should span the full width (minus the session sidebar and tool panel).
 
 ```
 you> Break this into tasks: implement login, implement logout, write tests.
 ```
 
 **Expected:**
-- The TaskPanel widget appears automatically when the first task is created
-- Panel was hidden (`display: none`) before any tasks existed
-- Panel shows all tasks with status icons
+- **Before the prompt:** TaskPanel is invisible (`display: none`). No "Tasks" header anywhere on screen.
+- **After the agent creates the first task:** The TaskPanel appears on the right side of the screen with a bold "Tasks" heading. The chat log narrows to make room.
+- The panel renders all three tasks immediately — you should see three lines with status icons.
 
-### Test 8.2: Status icons render correctly
+**How it works:** Each `task_create` call fires a mutation listener (`_on_task_mutation`) which calls `update_tasks()`. That method sets `self.display = True` when the task list is non-empty.
 
-**Expected:**
-- `[dim]○[/dim]` — pending tasks (dim circle)
-- `[yellow]●[/yellow]` — in_progress tasks (yellow filled circle)
-- `[green]✓[/green]` — completed tasks (green check mark)
+### Test 8.2: Verify status icons and line format
 
-### Test 8.3: Task metadata in panel
-
-**Expected:**
-- Owner shown in dim parentheses after the subject: `● Implement login (agent-1)`
-- Active blockers shown in red: `[blocked by #1]`
-- Completed blockers are **not** shown
-
-### Test 8.4: Live updates via mutation listener
+After test 8.1, the panel should show three pending tasks. Now advance one:
 
 ```
-you> Start working on task #1.
+you> Start working on the login task.
+```
+
+Then after the agent completes it:
+
+```
+you> Mark the login task as done.
+```
+
+**Expected line format for each status:**
+
+| Status | Icon | Example line |
+|--------|------|-------------|
+| pending | `○` (dim hollow circle) | `○ #3 Write tests` |
+| in_progress | `●` (yellow filled circle) | `●  #1 Implement login` |
+| completed | `✓` (green check mark) | `✓ #1 Implement login` |
+
+Each line reads: `<icon> #<id> <subject>`, with optional owner and blocker suffixes (see test 8.3).
+
+### Test 8.3: Owner and blocker display
+
+Create tasks with dependencies and an owner:
+
+```
+you> Create two tasks: "Design API" and "Implement API". The second depends on the first. Start working on the first one.
+```
+
+**Expected panel lines:**
+
+```
+● #1 Design API (main)         ← owner in dim parens
+○ #2 Implement API [blocked by #1]  ← active blocker in red
+```
+
+- **Owner** appears after the subject in dim parentheses — only shown if the task has an owner (auto-assigned when the agent marks it `in_progress`)
+- **Blockers** appear at the end in red — only **active** (non-completed) blockers are shown
+- After completing task #1, the `[blocked by #1]` suffix disappears from task #2
+
+### Test 8.4: Live updates without manual refresh
+
+This test verifies the mutation listener pipeline works end-to-end.
+
+```
+you> Create a task "Demo live update" and immediately start it.
 ```
 
 **Expected:**
-- TaskPanel updates immediately when the agent marks #1 as `in_progress`
-- No manual refresh needed — the mutation listener fires `call_from_thread()` to update the TUI
-- Status icon changes from `○` to `●` in real time
+1. Agent calls `task_create` → panel shows `○ #N Demo live update`
+2. Agent calls `task_update` (status: in_progress) → panel updates to `● #N Demo live update` **without any user action**
+3. Agent calls `task_update` (status: completed) → panel updates to `✓ #N Demo live update`
 
-### Test 8.5: Maximum visible tasks
+**How it works:** `TaskManager.register_mutation_listener()` registers `_on_task_mutation()` at TUI startup (in `on_ready()`). After every task CRUD operation, the listener fires, reads the full task list from SQLite, and calls `self.call_from_thread(task_panel.update_tasks, tasks)` — this is necessary because the agent runs on a background thread while Textual's UI runs on the main thread.
 
-Create more than 10 tasks:
+### Test 8.5: Maximum 10 visible tasks
 
 ```
-you> Create 12 tasks numbered "Task 1" through "Task 12" with descriptions.
+you> Create tasks for items 1 through 12: "Task 1", "Task 2", ... "Task 12", each with a brief description.
 ```
+
+> **Note:** The LLM may not create exactly 12 tasks — check `task_list` output to confirm the actual count.
 
 **Expected:**
-- TaskPanel displays at most 10 tasks (`_MAX_VISIBLE_TASKS`)
-- Remaining tasks are accessible via `task_list` but not shown in the panel
+- The TaskPanel shows at most **10** task entries (`_MAX_VISIBLE_TASKS = 10`)
+- Tasks beyond the 10th are silently truncated from the panel display
+- All tasks (including 11th, 12th) remain accessible via `task_list` and `task_get` — the cap is display-only
+- Internal tasks (those with `metadata._internal` flag) are filtered out **before** the 10-task cap is applied
 
-### Test 8.6: Toggle visibility with /tasks
+### Test 8.6: Toggle panel with /tasks
 
 ```
 you> /tasks
 ```
 
 **Expected:**
-- The `/tasks` command toggles the TaskPanel visibility
-- First invocation hides the panel; second invocation shows it again
-- This is handled locally by the TUI (not sent to the agent)
+- `/tasks` is a TUI-local slash command — it is **not** sent to the agent
+- It calls `action_toggle_tasks()`, which flips the panel's `display` property
+- **First `/tasks`:** hides the panel (if currently visible) — chat log expands to fill the space
+- **Second `/tasks`:** shows the panel again with the current task state
+- The panel retains its task data while hidden — no re-fetch needed on show
 
 ---
 
