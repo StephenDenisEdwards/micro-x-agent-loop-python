@@ -207,6 +207,7 @@ class AgentTUI(App[None]):
         Binding("escape", "cancel_task", "Cancel", show=False),
         Binding("ctrl+s", "toggle_sessions", "Sessions", show=False),
         Binding("ctrl+t", "toggle_tools", "Tools", show=False),
+        Binding("ctrl+k", "toggle_tasks", "Tasks", show=False),
         Binding("ctrl+l", "toggle_logs", "Logs", show=False),
         Binding("ctrl+p", "command_palette", "Commands", show=False),
         Binding("ctrl+d", "toggle_dark", "Theme", show=False),
@@ -252,8 +253,8 @@ class AgentTUI(App[None]):
             id="status-bar",
         )
         yield Static(
-            "Esc:Cancel  Ctrl+S:Sessions  Ctrl+T:Tools  Ctrl+L:Logs  "
-            "Ctrl+P:Commands  Ctrl+D:Theme  Ctrl+C:Quit",
+            "Esc:Cancel  Ctrl+S:Sessions  Ctrl+T:Tools  Ctrl+K:Tasks  "
+            "Ctrl+L:Logs  Ctrl+P:Commands  Ctrl+D:Theme  Ctrl+C:Quit",
             id="keyhints",
         )
 
@@ -359,7 +360,13 @@ class AgentTUI(App[None]):
         task_panel.set_visible(not task_panel.display)
 
     def _on_task_mutation(self) -> None:
-        """Called by TaskManager after any task mutation — refresh the TaskPanel."""
+        """Called by TaskManager after any task mutation — refresh the TaskPanel.
+
+        The agent runs as an ``asyncio.create_task`` on the same event loop as
+        the Textual app (see TextualChannel), so we call ``update_tasks``
+        directly — ``call_from_thread`` is for different OS threads and would
+        silently fail here.
+        """
         if self._agent._task_manager is None:
             return
         tasks = self._agent._task_manager._store.list_tasks(
@@ -367,7 +374,7 @@ class AgentTUI(App[None]):
         )
         try:
             task_panel = self.query_one("#task-panel", TaskPanel)
-            self.call_from_thread(task_panel.update_tasks, tasks)
+            task_panel.update_tasks(tasks)
         except Exception:
             pass  # Panel not mounted yet or app shutting down
 
