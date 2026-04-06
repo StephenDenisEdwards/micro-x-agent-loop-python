@@ -245,7 +245,7 @@ Fields: **subject** (imperative title), **description** (what needs to be done),
 - If you encounter errors or blockers, keep the task as in_progress
 - Never mark a task as completed if tests are failing or implementation is partial
 - Use `addBlocks`/`addBlockedBy` to establish task dependencies
-- After completing, call task_list to find your next task
+- After completing a wave of parallel tasks, call task_list to find newly unblocked work
 
 Examples:
   {"taskId": "1", "status": "in_progress"}
@@ -256,14 +256,66 @@ Examples:
 
 - Check what tasks are available (status: 'pending', not blocked)
 - Check overall progress
-- After completing a task, check for newly unblocked work
-- **Prefer working on tasks in ID order** (lowest ID first) — earlier tasks often set \
-up context for later ones
+- After completing a task or wave, check for newly unblocked work
 
 ## task_get — Usage
 
 - When you need the full description and context before starting work on a task
-- To understand task dependencies (what it blocks, what blocks it)\
+- To understand task dependencies (what it blocks, what blocks it)
+
+## Parallel Execution via Sub-Agents
+
+When you have multiple independent tasks (no dependency between them), execute them \
+in parallel using `spawn_subagent` instead of working through them one at a time.
+
+### Workflow
+
+1. **Decompose** — create all tasks with dependencies (`addBlockedBy`/`addBlocks`)
+2. **Identify independent tasks** — call `task_list` and find all pending tasks with \
+no active blockers
+3. **Spawn parallel sub-agents** — for each independent task, spawn a sub-agent in the \
+same turn. They run concurrently via asyncio.gather.
+4. **Collect results** — as each sub-agent returns, mark its task as `completed`
+5. **Next wave** — call `task_list` again to find newly unblocked tasks, repeat from step 3
+6. **Synthesize** — once all tasks are complete, combine results into a final response
+
+### Choosing the Sub-Agent Type
+
+- **explore** — research, reading, searching, analysis (cheap, fast, read-only tools)
+- **general** — coding, writing files, creating documents, any task that mutates files \
+(uses your model, has all tools)
+
+Use `explore` whenever the task produces information rather than files. Use `general` \
+only when the task needs to write, create, or modify something.
+
+### Example
+
+User asks: "Research A, B, C and then write a summary comparing them"
+
+```
+task_create: "Research A"          → #1
+task_create: "Research B"          → #2
+task_create: "Research C"          → #3
+task_create: "Write comparison"    → #4, addBlockedBy: ["1","2","3"]
+
+Wave 1 — #1, #2, #3 are independent:
+  spawn_subagent(explore): "Research A — [description from task #1]"
+  spawn_subagent(explore): "Research B — [description from task #2]"
+  spawn_subagent(explore): "Research C — [description from task #3]"
+  [all 3 run concurrently]
+
+Mark #1, #2, #3 completed → #4 now unblocked
+
+Wave 2 — #4:
+  Work on it directly (needs synthesis across all results)
+  Mark #4 completed
+```
+
+### When NOT to Parallelise
+
+- Tasks that depend on each other (the DAG handles this — blocked tasks cannot run)
+- A single simple task — just do it directly, no sub-agent overhead
+- Tasks where you need intermediate results in your context to plan the next step\
 """
 
 

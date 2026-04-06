@@ -218,6 +218,13 @@ class TaskManager:
         self._notify_mutation()
         return f"Updated task #{task_id} {fields_str}"
 
+    def format_task_summary(self) -> str | None:
+        """Return a formatted summary of all tasks, or ``None`` if empty.
+
+        Used to inject task state into the conversation when resuming a session.
+        """
+        return self._handle_list({}) if self._store.list_tasks(self._list_id) else None
+
     def _handle_list(self, inp: dict[str, Any]) -> str:
         """Section 5.3: list tasks with resolved-blocker filtering."""
         tasks = self._store.list_tasks(self._list_id)

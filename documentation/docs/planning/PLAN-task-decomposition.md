@@ -1,9 +1,9 @@
 # Plan: Task Decomposition System
 
-**Status:** All 6 Phases Completed
-**Date:** 2026-04-03
+**Status:** All 8 Phases Completed
+**Date:** 2026-04-06
 
-**Goal:** Enable the agent to break complex work into trackable, dependency-aware subtasks with progress tracking, lifecycle hooks, multi-agent coordination, and real-time UI.
+**Goal:** Enable the agent to break complex work into trackable, dependency-aware subtasks with progress tracking, lifecycle hooks, multi-agent coordination, real-time UI, session persistence, and parallel execution via sub-agents.
 
 **Reference:** [`task-decomposition-implementation-guide.md`](../task-decomposition-implementation-guide.md) — the full specification (Sections 1-14) from the Claude Code reference implementation.
 
@@ -32,6 +32,8 @@ From the guide (Section 1.1):
 | **Enhancement** | 4 | Lifecycle hooks (taskCreated, taskCompleted) with blocking error rollback | **Completed** |
 | **Multi-Agent** | 5 | Swarm support — atomic claiming, ownership, agent status, exit cleanup | **Completed** |
 | **Polish** | 6 | Real-time TUI panel, auto-hide, slash commands | **Completed** |
+| **Persistence** | 7 | Session resume restores tasks, mid-session switch preserves status | **Completed** |
+| **Parallelism** | 8 | Parallel task execution via concurrent sub-agents, wave-based dispatch | **Completed** |
 
 ---
 
@@ -336,6 +338,63 @@ Default: `false` in `config-base.json`.
 
 ---
 
+## Phase 7: Session Persistence (Completed)
+
+**Date:** 2026-04-06
+
+Tasks persist across session boundaries. When a session is resumed (via `--session`, `/session resume`, or TUI sidebar), the agent sees existing tasks and can continue.
+
+### Changes
+
+| File | Change |
+|------|--------|
+| `agent.py` | `_inject_task_summary()` — appends synthetic user message with task state on resume |
+| `agent.py` | `_on_session_reset()` — updates `TaskManager._list_id` on mid-session switch |
+| `tasks/manager.py` | `format_task_summary()` — returns formatted task list for injection |
+| `tui/app.py` | `_refresh_task_panel()` — called on resume/new/fork to sync TUI TaskPanel |
+
+### Key decisions
+
+- **No automatic status reset** — `in_progress` tasks keep their status on resume. The LLM can evaluate whether to continue or restart. Resetting would cause data loss when switching between sessions.
+- **Injected as user message** — the task summary is appended as a synthetic `user` role message so it appears naturally in the conversation and the LLM responds to it.
+- **TaskPanel refresh on switch** — all three TUI session operations (resume, new, fork) call `_refresh_task_panel()` to update the sidebar.
+
+---
+
+## Phase 8: Parallel Execution via Sub-Agents (Completed)
+
+**Date:** 2026-04-06
+
+Independent tasks execute concurrently using the existing sub-agent infrastructure. No architecture changes — this is purely a prompt directive update.
+
+### Changes
+
+| File | Change |
+|------|--------|
+| `system_prompt.py` | Extended `_TASK_DECOMPOSITION_DIRECTIVE` with "Parallel Execution via Sub-Agents" section |
+
+### How it works
+
+The directive guides the LLM through wave-based parallel execution:
+
+1. **Decompose** — create all tasks with dependency edges
+2. **Identify** — call `task_list`, find all unblocked pending tasks
+3. **Dispatch** — spawn concurrent sub-agents (one per independent task) in a single turn
+4. **Collect** — mark tasks complete as sub-agents return
+5. **Next wave** — check for newly unblocked tasks, repeat
+6. **Synthesize** — combine results once all tasks are complete
+
+Sub-agent type selection:
+- `explore` for research/read-only tasks (cheap, Haiku)
+- `general` for coding/file-writing tasks (same model, full tools)
+- `summarize` for pure text transformation (cheapest, no tools)
+
+### Why prompt-only
+
+The dependency DAG (`TaskStore`), concurrent sub-agent execution (`SubAgentRunner` via `asyncio.gather`), and task status tracking (`TaskManager`) already exist. The missing piece was telling the LLM to use them together. No new code paths, no shared task state between agents — the parent orchestrates, sub-agents execute, the parent updates status.
+
+---
+
 ## 9. Testing Strategy
 
 ### Automated
@@ -343,7 +402,7 @@ Default: `false` in `config-base.json`.
   - `test_task_store.py` — 24 tests (CRUD, HWM, deps, cascade, reset, concurrency, isolation)
   - `test_task_manager.py` — 31 tests (4 handlers, formatting, errors, hooks, rollback)
   - `test_task_claiming.py` — 21 tests (claim checks, agent status, unassign, auto-owner)
-- **Full suite: 1548 tests passing**, zero regressions
+- **Full suite: 1550 tests passing**, zero regressions
 - Covers all guide integration test scenarios (Sections 13.1-13.6)
 
 ### Manual verification

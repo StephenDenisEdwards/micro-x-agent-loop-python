@@ -357,6 +357,124 @@ task_create {subject: "Deploy to prod"}
     └─ return "Task creation blocked: Deployment freeze until Thursday"
 ```
 
+## Parallel Execution via Sub-Agents
+
+Tasks with no dependency between them can execute concurrently using the existing sub-agent infrastructure. The parent agent acts as an orchestrator — it creates tasks, identifies independent ones, spawns parallel sub-agents, and collects results.
+
+### Architecture
+
+No new components are required. Parallel execution combines two existing systems:
+
+| Component | Role | Already exists |
+|-----------|------|----------------|
+| Task dependency DAG | Determines which tasks are independent | `TaskStore` (`blocked_by` / `blocks`) |
+| Concurrent sub-agents | Executes tasks in parallel | `SubAgentRunner` via `asyncio.gather` |
+| Task status tracking | Marks tasks complete, unblocks dependents | `TaskManager` (`task_update`) |
+| Mutation listeners | Updates TUI in real-time | `TaskManager._notify_mutation()` |
+
+The parallelism is **prompt-driven**, not automatic. The `_TASK_DECOMPOSITION_DIRECTIVE` in `system_prompt.py` guides the LLM through a wave-based execution pattern.
+
+### Execution Model
+
+```
+User prompt
+    │
+    ▼
+Agent (LLM)
+    │── task_create "Research A"                        → #1
+    │── task_create "Research B"                        → #2
+    │── task_create "Research C"                        → #3
+    │── task_create "Write comparison" addBlockedBy [1,2,3] → #4
+    │
+    │── task_list → #1, #2, #3 unblocked; #4 blocked
+    │
+    │   ┌─ Wave 1 (concurrent via asyncio.gather) ─────────────┐
+    │   │ spawn_subagent(explore): "Research A — ..."           │
+    │   │ spawn_subagent(explore): "Research B — ..."           │
+    │   │ spawn_subagent(explore): "Research C — ..."           │
+    │   └──────────────────────────────────────────────────────┘
+    │
+    │── task_update #1 completed
+    │── task_update #2 completed
+    │── task_update #3 completed
+    │── task_list → #4 now unblocked
+    │
+    │   Wave 2 (sequential — needs synthesis)
+    │── task_update #4 in_progress
+    │   [writes comparison directly]
+    │── task_update #4 completed
+```
+
+### Sub-Agent Type Selection
+
+| Task type | Sub-agent | Why |
+|-----------|-----------|-----|
+| Research, reading, searching, analysis | `explore` | Cheap (Haiku), read-only tools, protects main context |
+| Writing files, coding, creating documents | `general` | Same model as parent, full tool access |
+| Pure text transformation | `summarize` | Cheapest, no tools needed |
+
+### Design Decisions
+
+**Why not task-aware sub-agents?** Sub-agents do not receive a `TaskManager`. The parent assigns work via the sub-agent prompt, the sub-agent does it, and the parent updates task status. This is simpler than sharing task state across agents and avoids coordination complexity.
+
+**Why not automatic dispatch?** The LLM decides what to parallelise. It can see the dependency graph and make judgment calls about which tasks are truly independent vs which share implicit dependencies not captured in the DAG. Automatic dispatch would require the system to make these decisions, which is brittle.
+
+**Why waves, not a thread pool?** The LLM processes one turn at a time. Within a turn it can spawn N sub-agents (one wave). After the wave completes, it checks what's newly unblocked and spawns the next wave. This fits naturally into the turn-based execution model.
+
+## Session Persistence
+
+Tasks persist across session boundaries. When a session is resumed, the agent sees the current task state and can continue where it left off.
+
+### Storage
+
+Tasks are stored in `.micro_x/tasks.db` (SQLite), keyed by `list_id = session_id`. This is a separate database from the session/message store (`.micro_x/memory.db`). Tasks are never deleted by session pruning — they persist as long as the database file exists.
+
+### Resume Flow
+
+```
+Session resume (startup --session or /session resume)
+    │
+    ▼
+_resolve_session() → resolved session ID
+    │
+    ▼
+AgentConfig.session_id = resolved ID
+    │
+    ▼
+TaskManager._list_id = session_id    ← tasks scoped to this session
+    │
+    ▼
+_inject_task_summary()
+    │── TaskManager.format_task_summary()
+    │── Appends synthetic user message with current task state
+    └── LLM sees tasks on next turn
+```
+
+### Mid-Session Switch
+
+When the user switches sessions via `/session resume` or the TUI sidebar:
+
+1. `_on_session_reset()` updates `TaskManager._list_id` to the new session ID
+2. `_inject_task_summary()` appends the new session's task state to messages
+3. The TUI `TaskPanel` refreshes via `_refresh_task_panel()`
+
+Task status is preserved exactly — switching from session A to B and back to A restores all tasks with their original statuses (pending, in_progress, completed). No status is reset on switch.
+
+### Injected Message Format
+
+When a resumed session has existing tasks, a synthetic user message is appended:
+
+```
+[Session resumed — existing tasks from previous session]
+
+#1 [completed] Set up JWT deps
+#2 [in_progress] Implement auth middleware (main)
+#3 [pending] Write tests [blocked by #2]
+
+Review these tasks and continue where you left off.
+Use task_list / task_get to check details before proceeding.
+```
+
 ## Test Coverage
 
 76 tests across 3 files:

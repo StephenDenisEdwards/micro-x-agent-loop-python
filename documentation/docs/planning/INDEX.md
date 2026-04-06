@@ -30,7 +30,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | **20** | [Routing Simplification](PLAN-routing-simplification.md) | **In Progress** | — | — | Bug fixes applied (5 of 10 critical issues fixed). Architectural simplification (Options A–D) still pending. |
 | — | [Reddit MCP](PLAN-reddit-mcp.md) | **Blocked** | — | — | Reddit dev registration inaccessible |
 | **21** | [Textual TUI](PLAN-textual-tui.md) | **Completed** | — | — | Opt-in Textual-based TUI (`--tui`), all 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md) |
-| **22** | [Task Decomposition](PLAN-task-decomposition.md) | **Completed** | — | — | All 6 phases: MVP, hooks, multi-agent, TUI |
+| **22** | [Task Decomposition](PLAN-task-decomposition.md) | **Completed** | — | — | All 8 phases: MVP, hooks, multi-agent, TUI, session persistence, parallel execution |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
 <details>

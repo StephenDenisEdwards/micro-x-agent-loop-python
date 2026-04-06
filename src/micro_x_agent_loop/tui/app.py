@@ -359,14 +359,8 @@ class AgentTUI(App[None]):
         task_panel = self.query_one("#task-panel", TaskPanel)
         task_panel.set_visible(not task_panel.display)
 
-    def _on_task_mutation(self) -> None:
-        """Called by TaskManager after any task mutation — refresh the TaskPanel.
-
-        The agent runs as an ``asyncio.create_task`` on the same event loop as
-        the Textual app (see TextualChannel), so we call ``update_tasks``
-        directly — ``call_from_thread`` is for different OS threads and would
-        silently fail here.
-        """
+    def _refresh_task_panel(self) -> None:
+        """Refresh the TaskPanel with current tasks for the active session."""
         if self._agent._task_manager is None:
             return
         tasks = self._agent._task_manager._store.list_tasks(
@@ -377,6 +371,16 @@ class AgentTUI(App[None]):
             task_panel.update_tasks(tasks)
         except Exception:
             pass  # Panel not mounted yet or app shutting down
+
+    def _on_task_mutation(self) -> None:
+        """Called by TaskManager after any task mutation — refresh the TaskPanel.
+
+        The agent runs as an ``asyncio.create_task`` on the same event loop as
+        the Textual app (see TextualChannel), so we call ``update_tasks``
+        directly — ``call_from_thread`` is for different OS threads and would
+        silently fail here.
+        """
+        self._refresh_task_panel()
 
     def action_toggle_logs(self) -> None:
         """Toggle the log panel visibility."""
@@ -482,6 +486,7 @@ class AgentTUI(App[None]):
         self._agent._on_session_reset(resolved_id, new_messages)
         self._restore_session_costs(resolved_id)
         self._restore_session_tools(resolved_id)
+        self._refresh_task_panel()
 
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.load_history(new_messages)
@@ -501,6 +506,7 @@ class AgentTUI(App[None]):
         new_id = sm.create_session()
         memory.active_session_id = new_id
         self._agent._on_session_reset(new_id, [])
+        self._refresh_task_panel()
 
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.load_history([])  # Clear chat log
@@ -523,6 +529,7 @@ class AgentTUI(App[None]):
         memory.active_session_id = fork_id
         fork_messages = memory.load_messages(fork_id)
         self._agent._on_session_reset(fork_id, fork_messages)
+        self._refresh_task_panel()
 
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.load_history(fork_messages)

@@ -245,6 +245,25 @@ class Agent:
         logger.info(
             f"Loaded {len(self._messages)} persisted messages for session {session_id}"
         )
+        self._inject_task_summary()
+
+    def _inject_task_summary(self) -> None:
+        """Append a task-state reminder when resuming a session with existing tasks."""
+        if self._task_manager is None:
+            return
+        summary = self._task_manager.format_task_summary()
+        if summary is None:
+            return
+        self._messages.append({
+            "role": "user",
+            "content": (
+                "[Session resumed — existing tasks from previous session]\n\n"
+                f"{summary}\n\n"
+                "Review these tasks and continue where you left off. "
+                "Use task_list / task_get to check details before proceeding."
+            ),
+        })
+        logger.info("Injected task summary into resumed session")
 
     async def run(self, user_message: str) -> None:
         async with self._run_lock:
@@ -651,6 +670,9 @@ class Agent:
         self._session_accumulator.reset(session_id=session_id)
         self._turn_number = 0
         self._budget_warning_emitted = False
+        if self._task_manager is not None:
+            self._task_manager._list_id = session_id
+        self._inject_task_summary()
 
     def _on_tools_deleted(self, tool_names: list[str]) -> None:
         if not tool_names:
