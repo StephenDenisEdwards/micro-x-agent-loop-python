@@ -8,6 +8,7 @@ This folder contains code review documents for micro-x-agent-loop-python. Each r
 |----------|-------|------|------------|
 | [cost-reduction-review.md](cost-reduction-review.md) | Cost reduction strategies across all LLM API spend levers | 2026-03-12 | 6 high-priority items unaddressed (see summary table) |
 | [tool-result-summarisation-investigation.md](tool-result-summarisation-investigation.md) | Deep investigation — tool result summarisation with structured results | 2026-03-12 | Phase 1 formatter extensions not yet built |
+| [claude-code-feature-comparison.md](claude-code-feature-comparison.md) | Feature-by-feature comparison against Claude Code agent infrastructure | 2026-04-06 | 3 priority gaps: lifecycle hooks, permissions, typed memory |
 
 ### Manual Test Plans
 
