@@ -26,6 +26,7 @@ Research notes exploring agent loop frameworks and patterns, gathered as referen
 | [gsd-context-engineering-framework.md](gsd-context-engineering-framework.md) | **GSD (Get Shit Done)** | Context isolation via subagent spawning, decompose→execute→verify workflow, wave-based parallel execution, applicability to compiled mode |
 | [key-insights-and-takeaways.md](key-insights-and-takeaways.md) | *(synthesis)* | Key insights, best-in-class references, and practical lessons across all research |
 | [local-model-hardware-options.md](local-model-hardware-options.md) | *(infrastructure)* | Local model inference: hardware options, cloud GPU pricing, qwen2.5:7b findings, cost comparison |
+| [1-bit-llm-research.md](1-bit-llm-research.md) | *(quantization / inference)* | 1-bit and ultra-low-bit LLMs: BitNet, Bonsai, training techniques, hardware, energy, speculative decoding, and implications for cost-aware agent routing |
 
 ## Related
 
