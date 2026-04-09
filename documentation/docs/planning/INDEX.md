@@ -31,6 +31,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | — | [Reddit MCP](PLAN-reddit-mcp.md) | **Blocked** | — | — | Reddit dev registration inaccessible |
 | **21** | [Textual TUI](PLAN-textual-tui.md) | **Completed** | — | — | Opt-in Textual-based TUI (`--tui`), all 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md) |
 | **22** | [Task Decomposition](PLAN-task-decomposition.md) | **Completed** | — | — | All 8 phases: MVP, hooks, multi-agent, TUI, session persistence, parallel execution |
+| **23** | [Local Model Ecosystems](PLAN-local-model-ecosystems.md) | Planned | — | — | Generic openai-compatible provider + named shortcuts for vLLM, LM Studio, LocalAI, etc. |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
 <details>
@@ -68,7 +69,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | Superseded | 1 |
 | Draft | 1 |
 | Dropped | 1 |
-| Planned | 4 |
+| Planned | 5 |
 
 ## All Plans
 
@@ -114,4 +115,5 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | [Multi-Provider Support](PLAN-multi-provider.md) | Completed | Gemini + DeepSeek providers. Completed 2026-03-13 |
 | [Semantic Model Routing](PLAN-semantic-model-routing.md) | Completed | Cross-provider semantic routing with 3-stage classifier, provider pool, cache-aware dispatch, feedback loop. Completed 2026-03-21 |
 | [Routing Simplification](PLAN-routing-simplification.md) | In Progress | Bug fixes applied 2026-03-22; architectural simplification pending |
+| [Local Model Ecosystems](PLAN-local-model-ecosystems.md) | Planned | Generic openai-compatible provider for vLLM, LM Studio, LocalAI, llama.cpp, Jan, TGI, MLX |
 | [Textual TUI](PLAN-textual-tui.md) | Completed | Opt-in Textual-based TUI (`--tui`), all 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md). Completed 2026-04-02 |
