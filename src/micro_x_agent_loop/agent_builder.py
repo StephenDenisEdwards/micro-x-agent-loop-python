@@ -16,7 +16,7 @@ from loguru import logger
 
 from micro_x_agent_loop.agent_config import AgentConfig, LLMConfig, RoutingConfig, ToolSearchConfig
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
-from micro_x_agent_loop.app_config import resolve_runtime_env
+from micro_x_agent_loop.app_config import ToolResultOverride, resolve_runtime_env
 from micro_x_agent_loop.memory.facade import ActiveMemoryFacade, NullMemoryFacade
 from micro_x_agent_loop.metrics import SessionAccumulator
 from micro_x_agent_loop.provider import create_provider
@@ -74,6 +74,7 @@ class AgentComponents:
     summarization_model: str
     summarization_enabled: bool
     summarization_threshold: int
+    tool_result_overrides: dict[str, ToolResultOverride]
     provider_pool: Any
     semantic_classifier: Any
     routing_policies: dict
@@ -156,6 +157,7 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
             timeout=config.sub_agent_timeout, max_turns=config.sub_agent_max_turns,
             max_tokens=config.sub_agent_max_tokens,
             max_tool_result_chars=config.max_tool_result_chars,
+            tool_result_overrides=config.tool_result_overrides,
         )
 
     # --- Memory facade ---
@@ -245,6 +247,7 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
         summarization_model=summarization_model,
         summarization_enabled=config.tool_result_summarization_enabled,
         summarization_threshold=config.tool_result_summarization_threshold,
+        tool_result_overrides=config.tool_result_overrides,
         provider_pool=provider_pool, semantic_classifier=semantic_classifier,
         routing_policies=config.routing_policies,
         routing_fallback_provider=config.routing_fallback_provider or config.provider,

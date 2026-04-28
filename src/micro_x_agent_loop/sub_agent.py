@@ -15,7 +15,7 @@ from typing import Any
 from loguru import logger
 
 from micro_x_agent_loop.agent_channel import BufferedChannel
-from micro_x_agent_loop.app_config import resolve_runtime_env
+from micro_x_agent_loop.app_config import ToolResultOverride, resolve_runtime_env
 from micro_x_agent_loop.constants import (
     DEFAULT_SUBAGENT_MAX_TOKENS,
     DEFAULT_SUBAGENT_MAX_TURNS,
@@ -212,6 +212,7 @@ class SubAgentRunner:
         max_turns: int = DEFAULT_SUBAGENT_MAX_TURNS,
         max_tokens: int = DEFAULT_SUBAGENT_MAX_TOKENS,
         max_tool_result_chars: int = 40_000,
+        tool_result_overrides: dict[str, ToolResultOverride] | None = None,
     ) -> None:
         self._parent_tools = parent_tools
         self._provider_name = provider_name
@@ -223,6 +224,7 @@ class SubAgentRunner:
         self._max_turns = max_turns
         self._max_tokens = max_tokens
         self._max_tool_result_chars = max_tool_result_chars
+        self._tool_result_overrides: dict[str, ToolResultOverride] = tool_result_overrides or {}
 
     async def run(self, task: str, agent_type: SubAgentType = SubAgentType.EXPLORE) -> SubAgentResult:
         """Execute a sub-agent task and return the result."""
@@ -270,6 +272,7 @@ class SubAgentRunner:
             events=events,
             channel=BufferedChannel(),
             formatter=ToolResultFormatter(),
+            tool_result_overrides=self._tool_result_overrides,
         )
 
         logger.info(

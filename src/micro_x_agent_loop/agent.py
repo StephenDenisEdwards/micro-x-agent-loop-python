@@ -177,6 +177,7 @@ class Agent:
             summarization_model=c.summarization_model,
             summarization_enabled=c.summarization_enabled,
             summarization_threshold=c.summarization_threshold,
+            tool_result_overrides=c.tool_result_overrides,
             formatter=self._tool_result_formatter,
             api_payload_store=self._api_payload_store,
             tool_search_manager=self._tool_search_manager,

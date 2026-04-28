@@ -18,6 +18,7 @@ from micro_x_agent_loop.usage import UsageResult, estimate_cost
 
 if TYPE_CHECKING:
     from micro_x_agent_loop.agent_channel import AgentChannel
+    from micro_x_agent_loop.app_config import ToolResultOverride
 from micro_x_agent_loop.system_prompt import resolve_system_prompt
 from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
@@ -61,6 +62,7 @@ class TurnEngine:
         routing_feedback_callback: Any | None = None,
         routing_confidence_threshold: float = 0.6,
         task_embedding_index: Any | None = None,
+        tool_result_overrides: dict[str, ToolResultOverride] | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -77,6 +79,7 @@ class TurnEngine:
         self._summarization_model = summarization_model
         self._summarization_enabled = summarization_enabled
         self._summarization_threshold = summarization_threshold
+        self._tool_result_overrides = tool_result_overrides or {}
         self._formatter = formatter or ToolResultFormatter()
         self._api_payload_store = api_payload_store
         self._tool_search_manager = tool_search_manager
@@ -393,8 +396,11 @@ class TurnEngine:
                 if tool_result.is_error:
                     raise RuntimeError(tool_result.text)
                 formatted = self._formatter.format(tool_name, tool_result.text, tool_result.structured)
-                result_text = self._truncate_tool_result(formatted, tool_name)
-                result_text, was_summarized = await self._summarize_tool_result(result_text, tool_name)
+                summarize, threshold, max_chars = self._resolve_tool_result_overrides(tool_name)
+                result_text = self._truncate_tool_result(formatted, tool_name, max_chars)
+                result_text, was_summarized = await self._summarize_tool_result(
+                    result_text, tool_name, summarize, threshold
+                )
                 t_end = time.monotonic()
                 duration_ms = (t_end - t_start) * 1000
                 self._events.on_record_tool_call(
@@ -495,21 +501,48 @@ class TurnEngine:
 
         return list(await asyncio.gather(*(_run_one(b) for b in blocks)))
 
-    async def _summarize_tool_result(self, result: str, tool_name: str) -> tuple[str, bool]:
+    def _resolve_tool_result_overrides(self, tool_name: str) -> tuple[bool, int, int]:
+        """Resolve effective (summarize_enabled, threshold, max_chars) for a tool.
+
+        Per-tool ``ToolResultOverrides`` win over the global defaults; any field the
+        override leaves as ``None`` falls through. Truncation always runs (with the
+        resolved cap); summarization runs only when ``summarize_enabled`` is True
+        and the result length exceeds ``threshold``.
+        """
+        summarize = self._summarization_enabled
+        threshold = self._summarization_threshold
+        max_chars = self._max_tool_result_chars
+        override = self._tool_result_overrides.get(tool_name)
+        if override is not None:
+            if override.summarize is not None:
+                summarize = override.summarize
+            if override.threshold is not None:
+                threshold = override.threshold
+            if override.max_chars is not None:
+                max_chars = override.max_chars
+        return summarize, threshold, max_chars
+
+    async def _summarize_tool_result(
+        self,
+        result: str,
+        tool_name: str,
+        summarize_enabled: bool,
+        threshold: int,
+    ) -> tuple[str, bool]:
         """Summarize a large tool result using a cheaper model.
 
         Returns (possibly-summarized result, was_summarized).
         """
         if (
-            not self._summarization_enabled
+            not summarize_enabled
             or self._summarization_provider is None
-            or len(result) <= self._summarization_threshold
+            or len(result) <= threshold
         ):
             return result, False
 
         prompt = (
             "Summarize this tool output concisely, preserving all decision-relevant "
-            "data (names, numbers, IDs, paths, errors). "
+            "data (names, numbers, IDs, paths, errors) and all URLs verbatim. "
             f"Tool: {tool_name}\n\n{result}"
         )
         try:
@@ -547,19 +580,19 @@ class TurnEngine:
         )
         self._events.on_api_call_completed(usage, f"nested:{tool_name}")
 
-    def _truncate_tool_result(self, result: str, tool_name: str) -> str:
-        if self._max_tool_result_chars <= 0 or len(result) <= self._max_tool_result_chars:
+    def _truncate_tool_result(self, result: str, tool_name: str, max_chars: int) -> str:
+        if max_chars <= 0 or len(result) <= max_chars:
             return result
 
         original_length = len(result)
-        truncated = result[: self._max_tool_result_chars]
+        truncated = result[:max_chars]
         message = (
-            f"\n\n[OUTPUT TRUNCATED: Showing {self._max_tool_result_chars:,} "
+            f"\n\n[OUTPUT TRUNCATED: Showing {max_chars:,} "
             f"of {original_length:,} characters from {tool_name}]"
         )
         logger.warning(
             f"{tool_name} output truncated from {original_length:,} "
-            f"to {self._max_tool_result_chars:,} chars"
+            f"to {max_chars:,} chars"
         )
         return truncated + message
 

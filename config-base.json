@@ -36,6 +36,10 @@
   "ToolResultSummarizationEnabled": false,
   "ToolResultSummarizationModel": "#Model",
   "ToolResultSummarizationThreshold": 4000,
+  "ToolResultOverrides": {
+    "google__gmail_read": { "Summarize": false, "MaxChars": 200000 },
+    "web__web_fetch": { "Summarize": false, "MaxChars": 200000 }
+  },
   "SmartCompactionTriggerEnabled": true,
   "ConciseOutputEnabled": true,
   "ModeAnalysisEnabled": true,
@@ -282,6 +286,11 @@
       "env": {
         "DEV_TO_API_KEY": "${DEV_TO_API_KEY}"
       }
+    },
+    "playwright": {
+      "transport": "stdio",
+      "command": "npx.cmd",
+      "args": ["-y", "@playwright/mcp@latest", "--browser", "msedge"]
     }
   }
 }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -28,6 +29,22 @@ from micro_x_agent_loop.constants import (
     TOOL_SEARCH_DEFAULT_STRATEGY,
     TOOL_SEARCH_SEMANTIC_MAX_LOAD,
 )
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ToolResultOverride:
+    """Per-tool override for result-handling settings.
+
+    Any field left as None inherits the corresponding global default
+    (``ToolResultSummarizationEnabled``, ``ToolResultSummarizationThreshold``,
+    ``MaxToolResultChars``).
+    """
+
+    summarize: bool | None = None
+    threshold: int | None = None
+    max_chars: int | None = None
 
 
 @dataclass
@@ -73,6 +90,7 @@ class AppConfig:
     tool_result_summarization_enabled: bool
     tool_result_summarization_model: str
     tool_result_summarization_threshold: int
+    tool_result_overrides: dict[str, ToolResultOverride]
     smart_compaction_trigger_enabled: bool
     concise_output_enabled: bool
     mode_analysis_enabled: bool
@@ -264,6 +282,79 @@ def _to_bool(value: object, default: bool = False) -> bool:
     return bool(value)  # int, etc. — keep Python truthiness for non-strings
 
 
+_KNOWN_OVERRIDE_KEYS = {"Summarize", "Threshold", "MaxChars"}
+
+
+def _parse_tool_result_overrides(raw: object) -> dict[str, ToolResultOverride]:
+    """Parse a ``ToolResultOverrides`` config block.
+
+    Expected shape::
+
+        {
+          "tool_name": {"Summarize": false, "Threshold": 10000, "MaxChars": 200000},
+          ...
+        }
+
+    All three inner keys are optional. Unknown inner keys are ignored with a warning.
+    Non-dict entries are skipped with a warning so a malformed config does not crash startup.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        logger.warning(
+            "ToolResultOverrides must be an object keyed by tool name; got %s — ignoring",
+            type(raw).__name__,
+        )
+        return {}
+
+    result: dict[str, ToolResultOverride] = {}
+    for tool_name, entry in raw.items():
+        if not isinstance(entry, dict):
+            logger.warning(
+                "ToolResultOverrides[%r] must be an object; got %s — ignoring",
+                tool_name,
+                type(entry).__name__,
+            )
+            continue
+        unknown = set(entry.keys()) - _KNOWN_OVERRIDE_KEYS
+        if unknown:
+            logger.warning(
+                "ToolResultOverrides[%r] has unknown keys %s — ignoring them",
+                tool_name,
+                sorted(unknown),
+            )
+
+        summarize_raw = entry.get("Summarize")
+        threshold_raw = entry.get("Threshold")
+        max_chars_raw = entry.get("MaxChars")
+
+        summarize = _to_bool(summarize_raw, default=False) if summarize_raw is not None else None
+        threshold = int(threshold_raw) if threshold_raw is not None else None
+        max_chars = int(max_chars_raw) if max_chars_raw is not None else None
+
+        if threshold is not None and threshold < 0:
+            logger.warning(
+                "ToolResultOverrides[%r].Threshold must be >= 0; got %d — ignoring",
+                tool_name,
+                threshold,
+            )
+            threshold = None
+        if max_chars is not None and max_chars < 0:
+            logger.warning(
+                "ToolResultOverrides[%r].MaxChars must be >= 0; got %d — ignoring",
+                tool_name,
+                max_chars,
+            )
+            max_chars = None
+
+        result[str(tool_name)] = ToolResultOverride(
+            summarize=summarize,
+            threshold=threshold,
+            max_chars=max_chars,
+        )
+    return result
+
+
 def parse_app_config(config: dict) -> AppConfig:
     return AppConfig(
         provider_name=config.get("Provider", "anthropic").strip().lower(),
@@ -304,6 +395,7 @@ def parse_app_config(config: dict) -> AppConfig:
         tool_result_summarization_threshold=int(
             config.get("ToolResultSummarizationThreshold", DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD),
         ),
+        tool_result_overrides=_parse_tool_result_overrides(config.get("ToolResultOverrides")),
         smart_compaction_trigger_enabled=_to_bool(config.get("SmartCompactionTriggerEnabled", True), default=True),
         concise_output_enabled=_to_bool(config.get("ConciseOutputEnabled", False), default=False),
         mode_analysis_enabled=_to_bool(config.get("ModeAnalysisEnabled", True), default=True),

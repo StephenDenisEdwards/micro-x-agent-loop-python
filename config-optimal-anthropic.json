@@ -27,6 +27,11 @@
 
   "ToolResultSummarizationEnabled": true,
   "ToolResultSummarizationThreshold": 4000,
+  "ToolResultOverrides": {
+    "google__gmail_read":   { "Summarize": false, "MaxChars": 200000 },
+    "google__gmail_search": { "Summarize": false, "MaxChars": 200000 },
+    "web__web_fetch":       { "Summarize": false, "MaxChars": 200000 }
+  },
 
   "LogLevel": "INFO"
 }

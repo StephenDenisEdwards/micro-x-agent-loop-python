@@ -180,6 +180,7 @@ class AgentManager:
                 tool_result_summarization_enabled=app.tool_result_summarization_enabled,
                 tool_result_summarization_model=summarization_model,
                 tool_result_summarization_threshold=app.tool_result_summarization_threshold,
+                tool_result_overrides=app.tool_result_overrides,
                 tool_search_enabled=app.tool_search_enabled,
                 task_decomposition_enabled=app.task_decomposition_enabled,
                 working_directory=app.working_directory,

@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
+from micro_x_agent_loop.app_config import ToolResultOverride
 from micro_x_agent_loop.routing_strategy import RoutingStrategy
 from micro_x_agent_loop.semantic_classifier import TaskClassification
 from micro_x_agent_loop.task_taxonomy import TaskType
@@ -394,6 +395,127 @@ class ToolResultIsErrorTests(unittest.TestCase):
 
         error_record = events.tool_call_records[0]
         self.assertTrue(error_record["is_error"])
+
+
+# ---------------------------------------------------------------------------
+# Per-tool result overrides
+# ---------------------------------------------------------------------------
+
+
+class ToolResultOverridesTests(unittest.TestCase):
+    """Tests for the per-tool ToolResultOverrides mechanism."""
+
+    def _make_tool_use_provider(self, tool_name: str) -> FakeStreamProvider:
+        provider = FakeStreamProvider()
+        provider.responses.append((
+            {"role": "assistant", "content": [{"type": "text", "text": "Reading."}]},
+            [{"name": tool_name, "id": "t1", "input": {}}],
+            "tool_use",
+            UsageResult(input_tokens=10, output_tokens=5, model="m"),
+        ))
+        provider.queue(text="Done.", stop_reason="end_turn")
+        return provider
+
+    def test_no_override_uses_globals(self) -> None:
+        """A tool not in the override map gets summarized using the global threshold."""
+        long_result = "x" * 5000
+        tool = FakeTool(name="search_tool", execute_result=long_result)
+
+        sum_provider = MagicMock()
+        sum_provider.create_message = AsyncMock(
+            return_value=("short summary", UsageResult(input_tokens=50, output_tokens=10, model="sm"))
+        )
+
+        events = RecordingEvents()
+        engine = _make_engine(
+            self._make_tool_use_provider("search_tool"), events, tools=[tool],
+            summarization_provider=sum_provider, summarization_model="sm",
+            summarization_enabled=True, summarization_threshold=100,
+            tool_result_overrides={},
+        )
+
+        asyncio.run(engine.run(messages=[], user_message="search"))
+
+        sum_provider.create_message.assert_called_once()
+        self.assertTrue(events.tool_exec_metrics[0][4])  # was_summarized
+
+    def test_override_summarize_false_skips_summarization(self) -> None:
+        """Per-tool Summarize:false bypasses the summarizer even when global is on."""
+        long_result = "x" * 5000
+        tool = FakeTool(name="gmail_read", execute_result=long_result)
+
+        sum_provider = MagicMock()
+        sum_provider.create_message = AsyncMock(
+            return_value=("nope", UsageResult(input_tokens=50, output_tokens=10, model="sm"))
+        )
+
+        events = RecordingEvents()
+        engine = _make_engine(
+            self._make_tool_use_provider("gmail_read"), events, tools=[tool],
+            summarization_provider=sum_provider, summarization_model="sm",
+            summarization_enabled=True, summarization_threshold=100,
+            tool_result_overrides={"gmail_read": ToolResultOverride(summarize=False)},
+        )
+
+        asyncio.run(engine.run(messages=[], user_message="read email"))
+
+        sum_provider.create_message.assert_not_called()
+        self.assertFalse(events.tool_exec_metrics[0][4])
+
+    def test_override_max_chars_raises_truncation_cap(self) -> None:
+        """Per-tool MaxChars override lets the tool's output exceed the global cap."""
+        long_result = "y" * 80_000
+        tool = FakeTool(name="gmail_read", execute_result=long_result)
+
+        events = RecordingEvents()
+        engine = _make_engine(
+            self._make_tool_use_provider("gmail_read"), events, tools=[tool],
+            tool_result_overrides={"gmail_read": ToolResultOverride(max_chars=200_000)},
+        )
+
+        asyncio.run(engine.run(messages=[], user_message="read email"))
+
+        recorded = events.tool_call_records[0]["result_text"]
+        self.assertNotIn("[OUTPUT TRUNCATED", recorded)
+        self.assertGreaterEqual(len(recorded), 80_000)
+
+    def test_override_max_chars_does_not_affect_other_tools(self) -> None:
+        """A non-overridden tool still hits the global truncation cap."""
+        long_result = "z" * 80_000
+        tool = FakeTool(name="other_tool", execute_result=long_result)
+
+        events = RecordingEvents()
+        engine = _make_engine(
+            self._make_tool_use_provider("other_tool"), events, tools=[tool],
+            tool_result_overrides={"gmail_read": ToolResultOverride(max_chars=200_000)},
+        )
+
+        asyncio.run(engine.run(messages=[], user_message="run"))
+
+        recorded = events.tool_call_records[0]["result_text"]
+        self.assertIn("[OUTPUT TRUNCATED", recorded)
+
+    def test_override_threshold_overrides_global(self) -> None:
+        """Per-tool Threshold beats global threshold even when global enabled is on."""
+        result = "x" * 500  # below the per-tool threshold of 1000
+        tool = FakeTool(name="gmail_search", execute_result=result)
+
+        sum_provider = MagicMock()
+        sum_provider.create_message = AsyncMock(
+            return_value=("summarized", UsageResult(input_tokens=10, output_tokens=5, model="sm"))
+        )
+
+        events = RecordingEvents()
+        engine = _make_engine(
+            self._make_tool_use_provider("gmail_search"), events, tools=[tool],
+            summarization_provider=sum_provider, summarization_model="sm",
+            summarization_enabled=True, summarization_threshold=100,
+            tool_result_overrides={"gmail_search": ToolResultOverride(threshold=1000)},
+        )
+
+        asyncio.run(engine.run(messages=[], user_message="search"))
+
+        sum_provider.create_message.assert_not_called()
 
 
 if __name__ == "__main__":

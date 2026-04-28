@@ -116,6 +116,7 @@ The required API key depends on the configured `Provider`. The `ollama` provider
 | `ToolResultSummarizationEnabled` | bool | `false` | Summarize large tool results before feeding back to the main model |
 | `ToolResultSummarizationModel` | string | `"#Model"` | Model for tool result summarization; `#Model` = use main Model |
 | `ToolResultSummarizationThreshold` | int | `4000` | Minimum tool result chars before summarization is attempted |
+| `ToolResultOverrides` | object | `{}` | Per-tool overrides for `Summarize` / `Threshold` / `MaxChars`. See [ToolResultOverrides](#toolresultoverrides-per-tool) |
 | `SmartCompactionTriggerEnabled` | bool | `true` | Use actual API token counts instead of estimates for compaction trigger |
 | `ConciseOutputEnabled` | bool | `false` | Adds a system prompt directive to minimize output token spend |
 | `ModeAnalysisEnabled` | bool | `true` | Enable Stage 1 pattern-matching mode analysis on user prompts |
@@ -500,9 +501,31 @@ When enabled, tool results longer than `ToolResultSummarizationThreshold` charac
 
 - `ToolResultSummarizationModel` — model for summarization; empty = use main `Model`. Haiku is recommended.
 - `ToolResultSummarizationThreshold` — minimum result size (in characters) before summarization kicks in. Default 4,000.
-- The summarization prompt preserves decision-relevant data: names, numbers, IDs, paths, errors.
+- The summarization prompt preserves decision-relevant data (names, numbers, IDs, paths, errors) and all URLs verbatim.
 - If summarization fails, the original (truncated) result is used as a fallback.
 - Summarized tool results are flagged as `was_summarized: true` in metrics.
+
+#### ToolResultOverrides (per-tool)
+
+`ToolResultOverrides` lets specific tools opt out of summarization or use a different truncation cap from the global defaults. Useful for tools whose output the model needs verbatim (email bodies, fetched HTML pages) where a Haiku summary would drop URLs or rewrite structure.
+
+```json
+"ToolResultOverrides": {
+  "google__gmail_read":  { "Summarize": false, "MaxChars": 200000 },
+  "web__web_fetch":      { "Summarize": false, "MaxChars": 200000 },
+  "google__gmail_search": { "Summarize": true,  "Threshold": 20000 }
+}
+```
+
+Per-entry fields (all optional — unset fields fall back to the global default):
+
+- `Summarize` — bool; overrides `ToolResultSummarizationEnabled` for this tool.
+- `Threshold` — int; overrides `ToolResultSummarizationThreshold` for this tool.
+- `MaxChars` — int; overrides `MaxToolResultChars` for this tool.
+
+Resolution order: per-tool override → global setting → built-in default. Tools not listed in the map use the globals unchanged. The keys are the namespaced tool names (`<server>__<tool>`).
+
+Truncation always runs (with the resolved cap); summarization runs only when `Summarize` is true and the result exceeds `Threshold`.
 
 #### SmartCompactionTriggerEnabled
 

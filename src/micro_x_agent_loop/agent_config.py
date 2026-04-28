@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from micro_x_agent_loop.compaction import CompactionStrategy, NoneCompactionStrategy
+
+if TYPE_CHECKING:
+    from micro_x_agent_loop.app_config import ToolResultOverride
 from micro_x_agent_loop.constants import (
     DEFAULT_MAX_CONVERSATION_MESSAGES,
     DEFAULT_MAX_TOKENS,
@@ -106,6 +109,7 @@ class ToolResultConfig:
     max_tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
     tool_formatting: dict = field(default_factory=dict)
     default_format: dict = field(default_factory=lambda: {"format": "json"})
+    tool_result_overrides: dict[str, ToolResultOverride] = field(default_factory=dict)
 
 
 @dataclass
@@ -147,6 +151,7 @@ class AgentConfig:
     # Tool result formatting
     tool_formatting: dict = field(default_factory=dict)
     default_format: dict = field(default_factory=lambda: {"format": "json"})
+    tool_result_overrides: dict[str, ToolResultOverride] = field(default_factory=dict)
     # Autonomous mode (broker/cron runs — no human interaction)
     autonomous: bool = False
     # Sub-agents
@@ -239,4 +244,5 @@ class AgentConfig:
             max_tool_result_chars=self.max_tool_result_chars,
             tool_formatting=self.tool_formatting,
             default_format=self.default_format,
+            tool_result_overrides=self.tool_result_overrides,
         )

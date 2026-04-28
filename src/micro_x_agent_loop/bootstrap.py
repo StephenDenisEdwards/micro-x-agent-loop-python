@@ -209,6 +209,7 @@ async def bootstrap_runtime(
             tool_result_summarization_enabled=app.tool_result_summarization_enabled,
             tool_result_summarization_model=app.tool_result_summarization_model,
             tool_result_summarization_threshold=app.tool_result_summarization_threshold,
+            tool_result_overrides=app.tool_result_overrides,
             mode_analysis_enabled=app.mode_analysis_enabled,
             stage2_classification_enabled=app.stage2_classification_enabled,
             stage2_provider=app.stage2_provider,

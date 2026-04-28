@@ -6,8 +6,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from micro_x_agent_loop.app_config import (
+    ToolResultOverride,
     _expand_config_refs,
     _expand_env_vars,
+    _parse_tool_result_overrides,
     _resolve_config_with_base,
     _to_bool,
     load_json_config,
@@ -48,6 +50,70 @@ class ToBoolTests(unittest.TestCase):
         self.assertIs(_to_bool(1), True)
         self.assertIs(_to_bool(0), False)
         self.assertIs(_to_bool(42), True)
+
+
+class ParseToolResultOverridesTests(unittest.TestCase):
+    """Tests for _parse_tool_result_overrides."""
+
+    def test_none_returns_empty(self) -> None:
+        self.assertEqual(_parse_tool_result_overrides(None), {})
+
+    def test_non_dict_returns_empty(self) -> None:
+        self.assertEqual(_parse_tool_result_overrides("not-a-dict"), {})
+        self.assertEqual(_parse_tool_result_overrides([1, 2, 3]), {})
+
+    def test_full_entry(self) -> None:
+        result = _parse_tool_result_overrides({
+            "gmail_read": {"Summarize": False, "Threshold": 10000, "MaxChars": 200000},
+        })
+        self.assertEqual(
+            result,
+            {"gmail_read": ToolResultOverride(summarize=False, threshold=10000, max_chars=200000)},
+        )
+
+    def test_partial_entry_leaves_other_fields_none(self) -> None:
+        result = _parse_tool_result_overrides({"web_fetch": {"Summarize": False}})
+        self.assertEqual(
+            result,
+            {"web_fetch": ToolResultOverride(summarize=False, threshold=None, max_chars=None)},
+        )
+
+    def test_summarize_accepts_string_bools(self) -> None:
+        result = _parse_tool_result_overrides({"x": {"Summarize": "true"}})
+        self.assertIs(result["x"].summarize, True)
+
+    def test_unknown_inner_keys_ignored(self) -> None:
+        result = _parse_tool_result_overrides({
+            "x": {"Summarize": False, "BogusKey": 42},
+        })
+        self.assertEqual(result["x"], ToolResultOverride(summarize=False))
+
+    def test_non_dict_entry_skipped(self) -> None:
+        result = _parse_tool_result_overrides({
+            "good": {"Summarize": False},
+            "bad": "should be a dict",
+        })
+        self.assertEqual(set(result.keys()), {"good"})
+
+    def test_negative_threshold_dropped(self) -> None:
+        result = _parse_tool_result_overrides({"x": {"Threshold": -5, "MaxChars": 100}})
+        self.assertEqual(result["x"], ToolResultOverride(threshold=None, max_chars=100))
+
+    def test_negative_max_chars_dropped(self) -> None:
+        result = _parse_tool_result_overrides({"x": {"MaxChars": -1}})
+        self.assertEqual(result["x"], ToolResultOverride(max_chars=None))
+
+    def test_multiple_tools(self) -> None:
+        result = _parse_tool_result_overrides({
+            "gmail_read": {"Summarize": False, "MaxChars": 200000},
+            "web_fetch": {"Summarize": False, "MaxChars": 200000},
+            "gmail_search": {"Summarize": True, "Threshold": 20000},
+        })
+        self.assertEqual(len(result), 3)
+        self.assertEqual(
+            result["gmail_search"],
+            ToolResultOverride(summarize=True, threshold=20000),
+        )
 
 
 class ExpandEnvVarsTests(unittest.TestCase):
