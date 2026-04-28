@@ -17,6 +17,7 @@ dist/
 .coverage
 uv.lock
 .micro_x/
+.playwright-mcp/
 store/
 node_modules/
 mcp_servers/ts/package-lock.json
