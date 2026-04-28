@@ -119,6 +119,12 @@ class ChatLog(VerticalScroll):
         self.mount(block)
         self.scroll_end(animate=False)
 
+    def add_banner(self, markup: str) -> None:
+        """Append pre-formatted Rich markup (no escaping). Used for the startup logo."""
+        block = Static(markup, classes="system-message")
+        self.mount(block)
+        self.scroll_end(animate=False)
+
     def add_error_message(self, text: str) -> None:
         """Append an error message."""
         block = Static(f"[bold red]Error:[/bold red] {escape(text)}", classes="error-message")

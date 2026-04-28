@@ -28,6 +28,25 @@ _NO_RESPONSE_MSG = (
     "Proceed with your best judgement or report that you cannot continue."
 )
 
+_STARTUP_BANNER_MARKUP = (
+    "[yellow]"
+    "  ███╗   ███╗██╗ ██████╗██████╗  ██████╗     ██╗  ██╗\n"
+    "  ████╗ ████║██║██╔════╝██╔══██╗██╔═══██╗    ╚██╗██╔╝\n"
+    "  ██╔████╔██║██║██║     ██████╔╝██║   ██║█████╗╚███╔╝\n"
+    "  ██║╚██╔╝██║██║██║     ██╔══██╗██║   ██║╚════╝██╔██╗\n"
+    "  ██║ ╚═╝ ██║██║╚██████╗██║  ██║╚██████╔╝    ██╔╝ ██╗\n"
+    "  ╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝    ╚═╝  ╚═╝\n"
+    "        █████╗  ██████╗ ███████╗███╗   ██╗████████╗\n"
+    "       ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝\n"
+    "       ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║\n"
+    "       ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║\n"
+    "       ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║\n"
+    "       ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝"
+    "[/yellow]\n"
+    "[blue]                        AI[/blue]\n"
+    "By Stephen Edwards"
+)
+
 # -- 5.1: Command Palette Provider --
 
 # Slash commands available in the palette
@@ -265,6 +284,7 @@ class AgentTUI(App[None]):
         self.sub_title = model_label
 
         chat_log = self.query_one("#chat-log", ChatLog)
+        chat_log.add_banner(_STARTUP_BANNER_MARKUP)
         chat_log.add_system_message(f"Config: {self._config_source}")
         chat_log.add_system_message(
             f"[{model_label}] (type 'exit' to quit, Ctrl+P for command palette)"
@@ -274,9 +294,15 @@ class AgentTUI(App[None]):
                 f"Memory: enabled (session: {self._agent.active_session_id})"
             )
         if self._runtime.mcp_tools:
-            chat_log.add_system_message(
-                f"Tools: {len(self._runtime.mcp_tools)} MCP tools loaded"
-            )
+            mcp_names: dict[str, list[str]] = {}
+            for t in self._runtime.mcp_tools:
+                server, _, tool_name = t.name.partition("__")
+                mcp_names.setdefault(server, []).append(tool_name or t.name)
+            chat_log.add_system_message("MCP servers:")
+            for server, tool_names in mcp_names.items():
+                chat_log.add_system_message(f"  {server}:")
+                for name in tool_names:
+                    chat_log.add_system_message(f"    - {name}")
         # Load existing conversation history and costs if resuming a session
         if self._app_config.memory_enabled and self._agent.active_session_id:
             history = self._agent._memory.load_messages(self._agent.active_session_id)
@@ -516,6 +542,31 @@ class AgentTUI(App[None]):
         chat_log.add_system_message(f"--- New session: {title} ---")
         self._refresh_session_sidebar()
         self.query_one("#status-bar", StatusBar).refresh_metrics()
+
+    def on_session_sidebar_rename_session_requested(
+        self, event: SessionSidebar.RenameSessionRequested
+    ) -> None:
+        """Handle Rename session button — open a modal to retitle the active session."""
+        from micro_x_agent_loop.tui.screens.rename_session_modal import RenameSessionModal
+
+        memory = self._agent._memory
+        sm = memory.session_manager
+        active_id = self._agent.active_session_id
+        if sm is None or active_id is None:
+            return
+
+        session = sm.get_session(active_id)
+        current_title = (session.get("title", active_id) if session else active_id) or active_id
+
+        def _on_dismiss(new_title: str | None) -> None:
+            if not new_title:
+                return
+            sm.set_session_title(active_id, new_title)
+            chat_log = self.query_one("#chat-log", ChatLog)
+            chat_log.add_system_message(f"--- Renamed session to: {new_title} ---")
+            self._refresh_session_sidebar()
+
+        self.push_screen(RenameSessionModal(current_title), callback=_on_dismiss)
 
     def on_session_sidebar_fork_session_requested(self, event: SessionSidebar.ForkSessionRequested) -> None:
         """Handle Fork session button."""

@@ -82,6 +82,9 @@ class SessionSidebar(Vertical):
     class ForkSessionRequested(Message):
         """Posted when the Fork button is clicked."""
 
+    class RenameSessionRequested(Message):
+        """Posted when the Rename button is clicked — targets the active session."""
+
     def __init__(self, *, id: str | None = None) -> None:  # noqa: A002
         super().__init__(id=id)
         self._active_session_id: str | None = None
@@ -93,6 +96,7 @@ class SessionSidebar(Vertical):
         yield VerticalScroll(classes="session-list", id="session-list-scroll")
         with Vertical(classes="sidebar-buttons"):
             yield Button("+ New", id="btn-new-session", variant="default")
+            yield Button("Rename", id="btn-rename-session", variant="default")
             yield Button("Fork", id="btn-fork-session", variant="default")
 
     def refresh_sessions(
@@ -159,6 +163,8 @@ class SessionSidebar(Vertical):
             self.post_message(self.NewSessionRequested())
         elif event.button.id == "btn-fork-session":
             self.post_message(self.ForkSessionRequested())
+        elif event.button.id == "btn-rename-session":
+            self.post_message(self.RenameSessionRequested())
 
     def _on_load_more_clicked(self) -> None:
         """Load the next page of sessions."""
