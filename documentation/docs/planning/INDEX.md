@@ -1,10 +1,12 @@
 # Planning Index
 
-Last updated: 2026-04-02
+Last updated: 2026-04-28
 
 ## Priority Queue
 
-What to work on next, in order. Rationale: infrastructure (metrics, broker, API server, publishing channels) is complete. Focus now shifts to **cost reduction** — the [cost reduction review](../review/cost-reduction-review.md) (2026-03-12) identified 14 strategies, 3 fully done, 6 partial, and 5 unstarted. Quick wins first, then architectural work.
+What to work on next, in order. **Next up:** [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) — turn the private monorepo of TypeScript MCP servers into `npx`-installable packages so other agents and clients can consume them without cloning this repo.
+
+Rationale: infrastructure (metrics, broker, API server, publishing channels) is complete. Focus now shifts to **cost reduction** — the [cost reduction review](../review/cost-reduction-review.md) (2026-03-12) identified 14 strategies, 3 fully done, 6 partial, and 5 unstarted. Quick wins first, then architectural work.
 
 | Priority | Plan | Status | Manual Test | Tested | Notes |
 |----------|------|--------|-------------|--------|-------|
@@ -32,6 +34,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | **21** | [Textual TUI](PLAN-textual-tui.md) | **Completed** | — | — | Opt-in Textual-based TUI (`--tui`), all 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md) |
 | **22** | [Task Decomposition](PLAN-task-decomposition.md) | **Completed** | — | — | All 8 phases: MVP, hooks, multi-agent, TUI, session persistence, parallel execution |
 | **23** | [Local Model Ecosystems](PLAN-local-model-ecosystems.md) | Planned | — | — | Generic openai-compatible provider + named shortcuts for vLLM, LM Studio, LocalAI, etc. |
+| **24** | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | **Planned — Next up** | — | — | Ship `@micro-x/mcp-*` packages so MCP clients can `npx -y` install. Worked example: [publishing-google-mcp.md](../guides/publishing-google-mcp.md) |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
 <details>
@@ -69,7 +72,7 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | Superseded | 1 |
 | Draft | 1 |
 | Dropped | 1 |
-| Planned | 5 |
+| Planned | 6 |
 
 ## All Plans
 
@@ -117,3 +120,4 @@ What to work on next, in order. Rationale: infrastructure (metrics, broker, API 
 | [Routing Simplification](PLAN-routing-simplification.md) | In Progress | Bug fixes applied 2026-03-22; architectural simplification pending |
 | [Local Model Ecosystems](PLAN-local-model-ecosystems.md) | Planned | Generic openai-compatible provider for vLLM, LM Studio, LocalAI, llama.cpp, Jan, TGI, MLX |
 | [Textual TUI](PLAN-textual-tui.md) | Completed | Opt-in Textual-based TUI (`--tui`), all 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md). Completed 2026-04-02 |
+| [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | Planned — Next up | Ship `@micro-x/mcp-*` packages. 6 phases: canary (`echo`), worked example (`google`), fan out, automate. Worked example: [publishing-google-mcp.md](../guides/publishing-google-mcp.md) |
