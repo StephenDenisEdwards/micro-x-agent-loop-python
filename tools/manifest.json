@@ -14,5 +14,37 @@
       ],
       "cwd": "tools/email_summary/"
     }
+  },
+  "daily_job_search": {
+    "tool_name": "daily_job_search",
+    "description": "Generates a daily job search report by searching Gmail and LinkedIn for AI contract roles, scoring them, and writing a markdown report.",
+    "created": "2026-04-14",
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/daily_job_search/"
+    }
+  },
+  "job_search": {
+    "tool_name": "job_search",
+    "description": "Search Gmail and LinkedIn for job alerts, score them, and generate a ranked markdown report.",
+    "created": "2026-04-14",
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/job_search/"
+    }
   }
 }
