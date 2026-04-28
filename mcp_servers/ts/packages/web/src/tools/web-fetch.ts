@@ -23,9 +23,11 @@ export function registerWebFetch(server: McpServer, logger: Logger): void {
     "web_fetch",
     {
       description:
-        "Fetch content from a URL and return it as readable text. " +
-        "Supports HTML pages (converted to plain text with links preserved), " +
-        "JSON APIs (pretty-printed), and plain text. GET requests only.",
+        "Fetch a STATIC resource via HTTP GET and return it as text. " +
+        "Use only for plain HTML with no JavaScript, JSON/REST APIs, RSS feeds, robots.txt, " +
+        "or other text endpoints. Does NOT execute JavaScript, follow auth flows, " +
+        "or render single-page apps — for those, use the browser_* tools (Playwright) instead. " +
+        "If the response from this tool looks empty or JS-skeleton, switch to browser_navigate.",
       inputSchema: {
         url: z.string().min(1).describe("The HTTP or HTTPS URL to fetch"),
         maxChars: z

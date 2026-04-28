@@ -328,6 +328,30 @@ For file operations, confirm success in one line. Target maximum 200 words per r
 the user asks for detail."""
 
 
+_WEB_ACCESS_DIRECTIVE = """\
+
+
+# Accessing web sites and web apps
+
+You have two ways to reach the web. Pick based on what the page actually is:
+
+- **`browser_*` tools (Playwright)** — DEFAULT for any real web site or web app. Use these \
+whenever the content depends on JavaScript, a login, interaction (clicking, typing, selecting), \
+a single-page app, infinite scroll, or anything you need to *see* as a user would. Typical flow: \
+`browser_navigate` → `browser_snapshot` (to get the ARIA tree with element refs) → \
+`browser_click` / `browser_type` using those refs → repeat. `browser_take_screenshot` when the \
+visual matters.
+
+- **`web_fetch`** — ONLY for plain static resources: raw HTML with no JS, JSON/REST APIs, \
+robots.txt, RSS feeds, plain-text endpoints. If you call `web_fetch` on a modern site and the \
+response looks empty, skeletal, or obviously JS-rendered, stop and switch to `browser_navigate` \
+instead of retrying.
+
+When the user says "open", "go to", "browse", "log in", "click", "fill in", "check the \
+dashboard", or names a well-known interactive site (Gmail, LinkedIn, GitHub UI, Twitter, \
+any SPA), use `browser_*`, not `web_fetch`."""
+
+
 def get_system_prompt(
     *,
     user_memory: str = "",
@@ -392,6 +416,7 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
         prompt += _TASK_DECOMPOSITION_DIRECTIVE
     if not compact:
         prompt += _CODEGEN_DIRECTIVE
+        prompt += _WEB_ACCESS_DIRECTIVE
     if concise_output_enabled:
         prompt += _CONCISE_OUTPUT_DIRECTIVE
     if autonomous and hitl_enabled:
