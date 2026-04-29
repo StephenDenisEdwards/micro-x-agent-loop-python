@@ -117,21 +117,21 @@ mcp_servers/ts/
   package.json                    # npm workspaces root
   tsconfig.base.json
   packages/
-    shared/                       # @micro-x/mcp-shared
+    shared/                       # @micro-x-ai/mcp-shared
       src/
         validation.ts             # Zod input/output validation
         logging.ts                # Structured JSON stderr logger
         errors.ts                 # ValidationError, UpstreamError, PermissionError
         server-factory.ts         # stdio/HTTP transport factory
-    filesystem/                   # @micro-x/mcp-filesystem
+    filesystem/                   # @micro-x-ai/mcp-filesystem
       src/index.ts
       src/tools/{bash,read-file,write-file,append-file,save-memory}.ts
-    web/                          # @micro-x/mcp-web
-    linkedin/                     # @micro-x/mcp-linkedin
-    github/                       # @micro-x/mcp-github
-    google/                       # @micro-x/mcp-google
-    anthropic-admin/              # @micro-x/mcp-anthropic-admin
-    interview-assist/             # @micro-x/mcp-interview-assist
+    web/                          # @micro-x-ai/mcp-web
+    linkedin/                     # @micro-x-ai/mcp-linkedin
+    github/                       # @micro-x-ai/mcp-github
+    google/                       # @micro-x-ai/mcp-google
+    anthropic-admin/              # @micro-x-ai/mcp-anthropic-admin
+    interview-assist/             # @micro-x-ai/mcp-interview-assist
 ```
 
 ### Best Practices
@@ -311,7 +311,7 @@ New tools are added as TypeScript MCP servers — no Python code changes are nee
 ### Option B: Create a new MCP server
 
 1. Create a new package under `mcp_servers/ts/packages/`
-2. Use `@micro-x/mcp-shared` for validation, logging, and server factory
+2. Use `@micro-x-ai/mcp-shared` for validation, logging, and server factory
 3. Register tools with tight schemas, `outputSchema`, and `structuredContent`
 4. Add the server to `config.json` under `McpServers` with the appropriate `command`, `args`, and `env`
 5. Add `ToolFormatting` entries for all tools in the new server

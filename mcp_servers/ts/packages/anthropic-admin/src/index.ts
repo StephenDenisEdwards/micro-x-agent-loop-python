@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createLogger, createServer, startStdioServer } from "@micro-x/mcp-shared";
+import { createLogger, createServer, startStdioServer } from "@micro-x-ai/mcp-shared";
 import { registerUsage } from "./tools/usage.js";
 
 const logger = createLogger("mcp-anthropic-admin");

@@ -1,8 +1,8 @@
 import { z } from "zod";
 import * as cheerio from "cheerio";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Logger } from "@micro-x/mcp-shared";
-import { UpstreamError, resilientFetch } from "@micro-x/mcp-shared";
+import type { Logger } from "@micro-x-ai/mcp-shared";
+import { UpstreamError, resilientFetch } from "@micro-x-ai/mcp-shared";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +

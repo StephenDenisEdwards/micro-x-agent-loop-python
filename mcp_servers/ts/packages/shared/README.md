@@ -1,10 +1,10 @@
-# @micro-x/mcp-shared
+# @micro-x-ai/mcp-shared
 
-Internal shared utilities for [`@micro-x/mcp-*`](https://github.com/StephenDenisEdwards/micro-x-agent-loop-python/tree/master/mcp_servers/ts/packages) servers.
+Internal shared utilities for [`@micro-x-ai/mcp-*`](https://github.com/StephenDenisEdwards/micro-x-agent-loop-python/tree/master/mcp_servers/ts/packages) servers.
 
 Provides logging, input/output validation, retry-aware HTTP fetch, Zod-to-JSON-Schema conversion, and a server factory for stdio-based MCP servers.
 
-**This package is not intended for direct consumption.** It is a dependency of the individual `@micro-x/mcp-*` server packages. You should install those instead.
+**This package is not intended for direct consumption.** It is a dependency of the individual `@micro-x-ai/mcp-*` server packages. You should install those instead.
 
 ## Exported modules
 

@@ -1,5 +1,5 @@
 {
-  "name": "@micro-x/mcp-github",
+  "name": "@micro-x-ai/mcp-github",
   "version": "0.1.0",
   "description": "GitHub MCP server (PRs, issues, repos, files, code search)",
   "type": "module",
@@ -13,7 +13,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@micro-x/mcp-shared": "*",
+    "@micro-x-ai/mcp-shared": "*",
     "@octokit/graphql": "^8.0.0",
     "@octokit/plugin-retry": "^8.1.0",
     "@octokit/plugin-throttling": "^11.0.3",

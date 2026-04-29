@@ -5,15 +5,15 @@ import {
   createLogger,
   createServer,
   startStdioServer,
-} from "@micro-x/mcp-shared";
+} from "@micro-x-ai/mcp-shared";
 
 // --help / -h flag
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log(`@micro-x/mcp-echo — Echo MCP server for connectivity testing
+  console.log(`@micro-x-ai/mcp-echo — Echo MCP server for connectivity testing
 
 Usage:
-  npx -y @micro-x/mcp-echo          Start the server (stdio transport)
-  npx -y @micro-x/mcp-echo --help   Show this message
+  npx -y @micro-x-ai/mcp-echo          Start the server (stdio transport)
+  npx -y @micro-x-ai/mcp-echo --help   Show this message
 
 Tools:
   echo   Echo back the provided message with a timestamp

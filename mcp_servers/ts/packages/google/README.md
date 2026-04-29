@@ -1,11 +1,11 @@
-# @micro-x/mcp-google
+# @micro-x-ai/mcp-google
 
 Google MCP server providing Gmail, Calendar, and Contacts tools over OAuth2. Works with any MCP-compatible client including Claude Desktop, Claude Code, and the micro-x agent loop.
 
 ## Install and run
 
 ```bash
-npx -y @micro-x/mcp-google
+npx -y @micro-x-ai/mcp-google
 ```
 
 On first run, a browser window opens for Google OAuth consent. Tokens are cached locally and refreshed automatically on subsequent runs.
@@ -73,7 +73,7 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "google": {
       "command": "npx",
-      "args": ["-y", "@micro-x/mcp-google"],
+      "args": ["-y", "@micro-x-ai/mcp-google"],
       "env": {
         "GOOGLE_CLIENT_ID": "your-client-id",
         "GOOGLE_CLIENT_SECRET": "your-client-secret"
@@ -92,7 +92,7 @@ Add to `.mcp.json`:
   "mcpServers": {
     "google": {
       "command": "npx",
-      "args": ["-y", "@micro-x/mcp-google"],
+      "args": ["-y", "@micro-x-ai/mcp-google"],
       "env": {
         "GOOGLE_CLIENT_ID": "your-client-id",
         "GOOGLE_CLIENT_SECRET": "your-client-secret"
@@ -111,7 +111,7 @@ Add to `config.json` under `McpServers`:
   "McpServers": {
     "google": {
       "Command": "npx",
-      "Args": ["-y", "@micro-x/mcp-google"],
+      "Args": ["-y", "@micro-x-ai/mcp-google"],
       "Env": {
         "GOOGLE_CLIENT_ID": "your-client-id",
         "GOOGLE_CLIENT_SECRET": "your-client-secret"

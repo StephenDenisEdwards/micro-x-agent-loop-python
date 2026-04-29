@@ -1,5 +1,5 @@
 {
-  "name": "@micro-x/mcp-devto",
+  "name": "@micro-x-ai/mcp-devto",
   "version": "0.1.0",
   "description": "Dev.to MCP server — article drafting, publishing, and management",
   "type": "module",
@@ -13,7 +13,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@micro-x/mcp-shared": "*",
+    "@micro-x-ai/mcp-shared": "*",
     "zod": "^3.24.0"
   },
   "devDependencies": {

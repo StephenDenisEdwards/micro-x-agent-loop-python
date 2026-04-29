@@ -1,8 +1,8 @@
 # Publishing the Google MCP Server (Worked Example)
 
-This guide documents everything we'd need to do to ship `@micro-x/mcp-google` to npm so that any MCP-compatible client (Claude Desktop, Claude Code, our own loop, etc.) can install it with a single `npx -y @micro-x/mcp-google` line.
+This guide documents everything we'd need to do to ship `@micro-x-ai/mcp-google` to npm so that any MCP-compatible client (Claude Desktop, Claude Code, our own loop, etc.) can install it with a single `npx -y @micro-x-ai/mcp-google` line.
 
-It uses the Google server as the worked example because it's the most complex case — OAuth credentials, multi-tool surface, and a transitive workspace dep on `@micro-x/mcp-shared`. Everything here generalises to the other servers in `mcp_servers/ts/packages/`.
+It uses the Google server as the worked example because it's the most complex case — OAuth credentials, multi-tool surface, and a transitive workspace dep on `@micro-x-ai/mcp-shared`. Everything here generalises to the other servers in `mcp_servers/ts/packages/`.
 
 ---
 
@@ -12,13 +12,13 @@ It uses the Google server as the worked example because it's the most complex ca
 mcp_servers/ts/
 ├── package.json              # private monorepo root
 └── packages/
-    ├── shared/               # @micro-x/mcp-shared  (workspace dep)
-    └── google/               # @micro-x/mcp-google  → depends on shared via "*"
+    ├── shared/               # @micro-x-ai/mcp-shared  (workspace dep)
+    └── google/               # @micro-x-ai/mcp-google  → depends on shared via "*"
 ```
 
 Blockers for `npm publish` today:
 
-1. `package.json` declares `"@micro-x/mcp-shared": "*"` — npm rejects unresolvable specifiers on publish, and even if accepted, consumers can't install a phantom workspace package.
+1. `package.json` declares `"@micro-x-ai/mcp-shared": "*"` — npm rejects unresolvable specifiers on publish, and even if accepted, consumers can't install a phantom workspace package.
 2. The `@micro-x` scope is not registered on the public npm registry under our control.
 3. No `README.md` inside `packages/google/` (npm publishes the package-level README, not the repo root one).
 4. No `files` allowlist — without one, npm ships `src/`, `tsconfig.json`, `node_modules` cruft.
@@ -29,23 +29,23 @@ Blockers for `npm publish` today:
 
 ---
 
-## Step 1 — Decide the dependency strategy for `@micro-x/mcp-shared`
+## Step 1 — Decide the dependency strategy for `@micro-x-ai/mcp-shared`
 
 Two viable options. Pick one and apply consistently across all servers.
 
-### Option A — Publish `@micro-x/mcp-shared` as a real package (recommended)
+### Option A — Publish `@micro-x-ai/mcp-shared` as a real package (recommended)
 
 - Pros: smaller per-server tarballs, single source of truth, normal semver upgrades for consumers.
-- Cons: every breaking change in `shared` needs a coordinated release across all `@micro-x/mcp-*` packages.
+- Cons: every breaking change in `shared` needs a coordinated release across all `@micro-x-ai/mcp-*` packages.
 
 Steps:
 
 1. Bump `packages/shared/package.json` to a real release version (`1.0.0`).
 2. Add `"publishConfig": { "access": "public" }` to `shared/package.json`.
-3. In `packages/google/package.json`, change `"@micro-x/mcp-shared": "*"` → `"@micro-x/mcp-shared": "^1.0.0"`.
+3. In `packages/google/package.json`, change `"@micro-x-ai/mcp-shared": "*"` → `"@micro-x-ai/mcp-shared": "^1.0.0"`.
 4. Publish `shared` first (Step 6 below), then `google`.
 
-### Option B — Bundle `@micro-x/mcp-shared` into each server with `tsup`
+### Option B — Bundle `@micro-x-ai/mcp-shared` into each server with `tsup`
 
 - Pros: each server is a single self-contained file; faster `npx` cold start; no cross-package version coordination.
 - Cons: duplicated `shared` code across packages; bigger tarballs; harder to patch a `shared` bug everywhere.
@@ -53,9 +53,9 @@ Steps:
 Steps:
 
 1. Add `tsup` as a dev dep in `packages/google/`.
-2. Add a `tsup.config.ts` that bundles `src/index.ts` with `noExternal: ["@micro-x/mcp-shared"]` and externalises everything else (`googleapis`, `google-auth-library`, etc. stay as runtime deps so consumers don't pay for native rebuilds).
+2. Add a `tsup.config.ts` that bundles `src/index.ts` with `noExternal: ["@micro-x-ai/mcp-shared"]` and externalises everything else (`googleapis`, `google-auth-library`, etc. stay as runtime deps so consumers don't pay for native rebuilds).
 3. Replace `"build": "tsc"` with `"build": "tsup"`.
-4. Drop `"@micro-x/mcp-shared"` from `dependencies` (it's now inlined). Keep it as a `devDependency` so the workspace link still works for development.
+4. Drop `"@micro-x-ai/mcp-shared"` from `dependencies` (it's now inlined). Keep it as a `devDependency` so the workspace link still works for development.
 
 For our case **Option A is recommended** — the servers genuinely share code (logger, server factory, retry helpers) and we want one bug fix to flow to all of them.
 
@@ -67,7 +67,7 @@ Target shape:
 
 ```json
 {
-  "name": "@micro-x/mcp-google",
+  "name": "@micro-x-ai/mcp-google",
   "version": "0.1.0",
   "description": "Google MCP server — Gmail, Calendar, and Contacts tools over OAuth2",
   "keywords": ["mcp", "model-context-protocol", "google", "gmail", "calendar", "contacts", "claude"],
@@ -93,7 +93,7 @@ Target shape:
   },
   "publishConfig": { "access": "public" },
   "dependencies": {
-    "@micro-x/mcp-shared": "^1.0.0",
+    "@micro-x-ai/mcp-shared": "^1.0.0",
     "google-auth-library": "^9.15.0",
     "googleapis": "^144.0.0",
     "html-to-text": "^9.0.5",
@@ -123,7 +123,7 @@ Key additions explained:
 This is what users see on npmjs.com. Required sections:
 
 1. **One-liner**: "Google MCP server — Gmail, Calendar, Contacts."
-2. **Install / run**: `npx -y @micro-x/mcp-google` and the equivalent Claude Desktop `claude_desktop_config.json` snippet.
+2. **Install / run**: `npx -y @micro-x-ai/mcp-google` and the equivalent Claude Desktop `claude_desktop_config.json` snippet.
 3. **Required environment variables**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_CACHE_PATH` (see Step 4).
 4. **OAuth setup walkthrough**: link to or inline the existing `google-mcp-setup.md` content (Cloud project creation, scopes, redirect URI).
 5. **Tool list**: copy the table from `google-mcp-setup.md`.
@@ -138,7 +138,7 @@ Right now `mcp_servers/ts/packages/google/src/index.ts` reads `GOOGLE_CLIENT_ID`
 
 Required change: introduce a `GOOGLE_TOKEN_CACHE_PATH` env var (default to `${XDG_DATA_HOME:-$HOME/.local/share}/mcp-google/tokens.json` on POSIX and `%APPDATA%/mcp-google/tokens.json` on Windows). Document the default in the README.
 
-Also add a `--help` / `-h` flag at the top of `index.ts` that prints required env vars and exits 0, so users running `npx @micro-x/mcp-google --help` get usable output instead of an OAuth flow.
+Also add a `--help` / `-h` flag at the top of `index.ts` that prints required env vars and exits 0, so users running `npx @micro-x-ai/mcp-google --help` get usable output instead of an OAuth flow.
 
 ---
 
@@ -176,7 +176,7 @@ npm publish -w packages/google
 
 # 6. Smoke test from a scratch directory
 cd /tmp && mkdir mcp-test && cd mcp-test
-GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... npx -y @micro-x/mcp-google --help
+GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... npx -y @micro-x-ai/mcp-google --help
 ```
 
 ---
@@ -205,7 +205,7 @@ This is the acceptance test for "it shipped correctly."
   "mcpServers": {
     "google": {
       "command": "npx",
-      "args": ["-y", "@micro-x/mcp-google"],
+      "args": ["-y", "@micro-x-ai/mcp-google"],
       "env": {
         "GOOGLE_CLIENT_ID": "...",
         "GOOGLE_CLIENT_SECRET": "..."
@@ -222,14 +222,14 @@ This is the acceptance test for "it shipped correctly."
   "mcpServers": {
     "google": {
       "command": "npx",
-      "args": ["-y", "@micro-x/mcp-google"],
+      "args": ["-y", "@micro-x-ai/mcp-google"],
       "env": { "GOOGLE_CLIENT_ID": "...", "GOOGLE_CLIENT_SECRET": "..." }
     }
   }
 }
 ```
 
-**Our own loop** (`config.json`'s `McpServers` section): same shape — `command: "npx"`, `args: ["-y", "@micro-x/mcp-google"]`.
+**Our own loop** (`config.json`'s `McpServers` section): same shape — `command: "npx"`, `args: ["-y", "@micro-x-ai/mcp-google"]`.
 
 If all three clients can list `gmail_search` etc. and successfully complete an OAuth flow against a test Google account, the publish is good.
 
@@ -275,7 +275,7 @@ Once `mcp-google` is published, replicating to `mcp-github`, `mcp-x-twitter`, `m
 - [ ] Add `LICENSE` files.
 - [ ] `npm pack --dry-run` and inspect tarball contents.
 - [ ] `npm login` and publish `shared` then `google`.
-- [ ] Smoke-test `npx -y @micro-x/mcp-google --help` from a clean directory.
+- [ ] Smoke-test `npx -y @micro-x-ai/mcp-google --help` from a clean directory.
 - [ ] Wire into Claude Desktop, Claude Code, and our loop and verify all three.
 - [ ] Add GitHub Actions workflow with `--provenance`.
 - [ ] (Optional) Ship a `.dxt` bundle.

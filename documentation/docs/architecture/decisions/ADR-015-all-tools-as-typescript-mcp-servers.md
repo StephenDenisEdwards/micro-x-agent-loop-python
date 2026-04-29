@@ -43,7 +43,7 @@ Convert all 29 built-in tools to 7 TypeScript MCP servers, grouped by credential
 
 ### Key design choices
 
-- **Shared package** (`@micro-x/mcp-shared`): Zod validation, structured JSON stderr logging (pino), categorized errors, server factory — enforces consistent quality across all servers.
+- **Shared package** (`@micro-x-ai/mcp-shared`): Zod validation, structured JSON stderr logging (pino), categorized errors, server factory — enforces consistent quality across all servers.
 - **`outputSchema`** on every tool: Enables client-side validation and format-aware result presentation.
 - **`structuredContent`** in every response: Machine-parseable JSON alongside human-readable `TextContent`. The orchestrator stores structured data for metrics/logging and formats it for the LLM context window using a configurable `ToolResultFormatter`.
 - **MCP annotations** (`destructiveHint`, `readOnlyHint`): Propagated to `McpToolProxy.is_mutating` for the checkpoint system.

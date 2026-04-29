@@ -272,7 +272,7 @@ No official rate limit numbers are published. Observed behavior:
 - dev.to account with API key generated
 - `DEV_TO_API_KEY` in `.env`
 - npm packages: `@modelcontextprotocol/sdk`, `zod`, `undici`
-- Existing `@micro-x/mcp-shared` package
+- Existing `@micro-x-ai/mcp-shared` package
 
 ## Risks
 

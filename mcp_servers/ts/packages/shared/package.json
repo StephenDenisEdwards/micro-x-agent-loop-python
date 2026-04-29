@@ -1,7 +1,7 @@
 {
-  "name": "@micro-x/mcp-shared",
+  "name": "@micro-x-ai/mcp-shared",
   "version": "1.0.0",
-  "description": "Shared utilities for @micro-x/mcp-* servers — logging, validation, retry, server factory",
+  "description": "Shared utilities for @micro-x-ai/mcp-* servers — logging, validation, retry, server factory",
   "keywords": ["mcp", "model-context-protocol", "shared", "utilities"],
   "homepage": "https://github.com/StephenDenisEdwards/micro-x-agent-loop-python/tree/master/mcp_servers/ts/packages/shared",
   "bugs": "https://github.com/StephenDenisEdwards/micro-x-agent-loop-python/issues",

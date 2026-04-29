@@ -1,5 +1,5 @@
 {
-  "name": "@micro-x/mcp-google",
+  "name": "@micro-x-ai/mcp-google",
   "version": "0.1.0",
   "description": "Google MCP server — Gmail, Calendar, and Contacts tools over OAuth2",
   "keywords": ["mcp", "model-context-protocol", "google", "gmail", "calendar", "contacts", "claude"],
@@ -27,7 +27,7 @@
   },
   "publishConfig": { "access": "public" },
   "dependencies": {
-    "@micro-x/mcp-shared": "^1.0.0",
+    "@micro-x-ai/mcp-shared": "^1.0.0",
     "google-auth-library": "^9.15.0",
     "googleapis": "^144.0.0",
     "html-to-text": "^9.0.5",

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Logger } from "@micro-x/mcp-shared";
+import type { Logger } from "@micro-x-ai/mcp-shared";
 
 const IS_WINDOWS = process.platform === "win32";
 const TIMEOUT_MS = 30_000;

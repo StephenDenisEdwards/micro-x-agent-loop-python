@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Logger } from "@micro-x/mcp-shared";
-import { ValidationError, UpstreamError } from "@micro-x/mcp-shared";
+import type { Logger } from "@micro-x-ai/mcp-shared";
+import { ValidationError, UpstreamError } from "@micro-x-ai/mcp-shared";
 
 const BASE_URL = "https://api.anthropic.com/v1/organizations";
 

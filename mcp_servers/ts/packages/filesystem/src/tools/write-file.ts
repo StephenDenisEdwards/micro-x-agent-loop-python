@@ -2,7 +2,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Logger } from "@micro-x/mcp-shared";
+import type { Logger } from "@micro-x-ai/mcp-shared";
 
 export function registerWriteFile(server: McpServer, logger: Logger, workingDir: string): void {
   server.registerTool(

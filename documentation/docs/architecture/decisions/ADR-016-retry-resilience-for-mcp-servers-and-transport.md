@@ -25,7 +25,7 @@ Implement two retry layers using established libraries — no hand-rolled retry 
 
 **Library: `p-retry`** (25M+ weekly downloads, exponential backoff, jitter, abort support)
 
-`resilientFetch()` in `@micro-x/mcp-shared` wraps `fetch()` with:
+`resilientFetch()` in `@micro-x-ai/mcp-shared` wraps `fetch()` with:
 - `AbortController` timeout (configurable, default 30s)
 - Automatic retry via `p-retry` on transient status codes (429, 500, 502, 503, 504), network `TypeError`s, and timeout `AbortError`s
 - `Retry-After` and `x-ratelimit-reset` header parsing on 429 responses — the retry delay respects server-requested wait times

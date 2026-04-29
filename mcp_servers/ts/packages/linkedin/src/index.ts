@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createLogger, createServer, startStdioServer } from "@micro-x/mcp-shared";
+import { createLogger, createServer, startStdioServer } from "@micro-x-ai/mcp-shared";
 import { registerLinkedInJobs } from "./tools/linkedin-jobs.js";
 import { registerLinkedInJobDetail } from "./tools/linkedin-job-detail.js";
 import { registerDraftPost } from "./tools/draft-post.js";

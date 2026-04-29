@@ -1,5 +1,5 @@
 {
-  "name": "@micro-x/mcp-echo",
+  "name": "@micro-x-ai/mcp-echo",
   "version": "0.1.0",
   "description": "Echo MCP server — simple connectivity test for MCP clients",
   "keywords": ["mcp", "model-context-protocol", "echo", "test", "claude"],
@@ -27,7 +27,7 @@
   },
   "publishConfig": { "access": "public" },
   "dependencies": {
-    "@micro-x/mcp-shared": "^1.0.0",
+    "@micro-x-ai/mcp-shared": "^1.0.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {

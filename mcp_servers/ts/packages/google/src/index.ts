@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createLogger, createServer, startStdioServer } from "@micro-x/mcp-shared";
+import { createLogger, createServer, startStdioServer } from "@micro-x-ai/mcp-shared";
 import { registerGmailSearch } from "./tools/gmail-search.js";
 import { registerGmailRead } from "./tools/gmail-read.js";
 import { registerGmailSend } from "./tools/gmail-send.js";
@@ -16,11 +16,11 @@ import { registerContactsDelete } from "./tools/contacts-delete.js";
 
 // --help / -h flag
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log(`@micro-x/mcp-google — Gmail, Calendar, and Contacts MCP server
+  console.log(`@micro-x-ai/mcp-google — Gmail, Calendar, and Contacts MCP server
 
 Usage:
-  npx -y @micro-x/mcp-google          Start the server (stdio transport)
-  npx -y @micro-x/mcp-google --help   Show this message
+  npx -y @micro-x-ai/mcp-google          Start the server (stdio transport)
+  npx -y @micro-x-ai/mcp-google --help   Show this message
 
 Required environment variables:
   GOOGLE_CLIENT_ID        OAuth2 client ID from Google Cloud Console

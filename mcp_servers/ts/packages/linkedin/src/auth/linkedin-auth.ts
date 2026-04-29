@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import http from "node:http";
 import { URL } from "node:url";
-import { resilientFetch } from "@micro-x/mcp-shared";
+import { resilientFetch } from "@micro-x-ai/mcp-shared";
 
 /**
  * LinkedIn OAuth 2.0 authentication module.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createLogger, createServer, startStdioServer } from "@micro-x/mcp-shared";
+import { createLogger, createServer, startStdioServer } from "@micro-x-ai/mcp-shared";
 import { getClient } from "./github-client.js";
 import { registerListPRs } from "./tools/list-prs.js";
 import { registerGetPR } from "./tools/get-pr.js";

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Logger } from "@micro-x/mcp-shared";
-import { UpstreamError, resilientFetch } from "@micro-x/mcp-shared";
+import type { Logger } from "@micro-x-ai/mcp-shared";
+import { UpstreamError, resilientFetch } from "@micro-x-ai/mcp-shared";
 import { getRedditAuth } from "../auth/reddit-auth.js";
 
 export function registerGetPost(

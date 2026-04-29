@@ -378,7 +378,7 @@ Key rules from Reddit API Terms and Responsible Builder Policy:
 - Reddit "script" app registered at `https://www.reddit.com/prefs/apps`
 - `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USERNAME`, `REDDIT_PASSWORD` in `.env`
 - npm packages: `@modelcontextprotocol/sdk`, `zod`, `undici`
-- Existing `@micro-x/mcp-shared` package
+- Existing `@micro-x-ai/mcp-shared` package
 
 ## Risks
 

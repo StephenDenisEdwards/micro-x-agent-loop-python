@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import type { Logger } from "@micro-x/mcp-shared";
-import { UpstreamError, resilientFetch } from "@micro-x/mcp-shared";
+import type { Logger } from "@micro-x-ai/mcp-shared";
+import { UpstreamError, resilientFetch } from "@micro-x-ai/mcp-shared";
 
 const MEDIA_UPLOAD_URL = "https://api.x.com/2/media/upload";
 

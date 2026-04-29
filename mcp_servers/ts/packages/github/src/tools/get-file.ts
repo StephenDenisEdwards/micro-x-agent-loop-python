@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Logger } from "@micro-x/mcp-shared";
+import type { Logger } from "@micro-x-ai/mcp-shared";
 import type { Octokit } from "@octokit/rest";
 
 const MAX_CONTENT_CHARS = 100_000;

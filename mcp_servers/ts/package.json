@@ -1,5 +1,5 @@
 {
-  "name": "@micro-x/mcp-servers",
+  "name": "@micro-x-ai/mcp-servers",
   "private": true,
   "workspaces": [
     "packages/*"

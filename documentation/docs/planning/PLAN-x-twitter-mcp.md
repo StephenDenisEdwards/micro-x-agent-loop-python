@@ -312,7 +312,7 @@ X uses weighted character counting (implemented in `twitter-text` npm package):
 - App created with OAuth 2.0 enabled (confidential client type)
 - `X_CLIENT_ID` and `X_CLIENT_SECRET` in `.env`
 - npm packages: `@modelcontextprotocol/sdk`, `zod`, `undici`, `twitter-text` (for character counting)
-- Existing `@micro-x/mcp-shared` package
+- Existing `@micro-x-ai/mcp-shared` package
 
 ## Risks
 

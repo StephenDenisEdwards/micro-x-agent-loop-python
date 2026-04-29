@@ -13,7 +13,7 @@
  * All API requests need: Authorization: Bearer {token}, User-Agent: {custom}
  */
 
-import { resilientFetch, UpstreamError } from "@micro-x/mcp-shared";
+import { resilientFetch, UpstreamError } from "@micro-x-ai/mcp-shared";
 
 const TOKEN_URL = "https://www.reddit.com/api/v1/access_token";
 

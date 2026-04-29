@@ -6,7 +6,7 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { z } from "zod";
-import { createLogger, createServer, startStdioServer } from "@micro-x/mcp-shared";
+import { createLogger, createServer, startStdioServer } from "@micro-x-ai/mcp-shared";
 import {
   resolveRepo,
   runInterviewAssist,

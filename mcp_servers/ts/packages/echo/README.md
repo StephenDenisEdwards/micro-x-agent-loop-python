@@ -1,11 +1,11 @@
-# @micro-x/mcp-echo
+# @micro-x-ai/mcp-echo
 
 A minimal MCP server that echoes back messages. Useful for testing MCP client connectivity and verifying your setup works end-to-end.
 
 ## Install and run
 
 ```bash
-npx -y @micro-x/mcp-echo
+npx -y @micro-x-ai/mcp-echo
 ```
 
 No environment variables or authentication required.
@@ -32,7 +32,7 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "echo": {
       "command": "npx",
-      "args": ["-y", "@micro-x/mcp-echo"]
+      "args": ["-y", "@micro-x-ai/mcp-echo"]
     }
   }
 }
@@ -47,7 +47,7 @@ Add to `.mcp.json`:
   "mcpServers": {
     "echo": {
       "command": "npx",
-      "args": ["-y", "@micro-x/mcp-echo"]
+      "args": ["-y", "@micro-x-ai/mcp-echo"]
     }
   }
 }
@@ -62,7 +62,7 @@ Add to `config.json` under `McpServers`:
   "McpServers": {
     "echo": {
       "Command": "npx",
-      "Args": ["-y", "@micro-x/mcp-echo"]
+      "Args": ["-y", "@micro-x-ai/mcp-echo"]
     }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@micro-x/mcp-x-twitter",
+  "name": "@micro-x-ai/mcp-x-twitter",
   "version": "0.1.0",
   "description": "X (Twitter) MCP server — tweet/thread drafting, publishing, and analytics",
   "type": "module",
@@ -13,7 +13,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@micro-x/mcp-shared": "*",
+    "@micro-x-ai/mcp-shared": "*",
     "open": "^10.1.0",
     "twitter-text": "^3.1.0",
     "zod": "^3.24.0"

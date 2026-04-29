@@ -97,7 +97,7 @@ mcp_servers/ts/
   package.json                    # npm workspaces root
   tsconfig.base.json              # shared TS compiler config
   packages/
-    shared/                       # @micro-x/mcp-shared
+    shared/                       # @micro-x-ai/mcp-shared
       package.json
       src/
         index.ts
@@ -189,7 +189,7 @@ mcp_servers/ts/
           stt-stop-session.ts
 ```
 
-## Shared Package Design (`@micro-x/mcp-shared`)
+## Shared Package Design (`@micro-x-ai/mcp-shared`)
 
 Implements the cross-cutting best practices from `mcp-servers.md`:
 
@@ -229,7 +229,7 @@ Create the TS monorepo, shared package, and a minimal "echo" MCP server to valid
 
 **Deliverables:**
 - `mcp_servers/ts/` monorepo with npm workspaces
-- `@micro-x/mcp-shared` package (validation, logging, errors, server-factory)
+- `@micro-x-ai/mcp-shared` package (validation, logging, errors, server-factory)
 - Echo MCP server: one dummy tool that returns structuredContent
 - Config entry added to verify McpManager discovers and calls it
 

@@ -496,7 +496,7 @@ src/micro_x_agent_loop/
 
 mcp_servers/ts/            -- TypeScript MCP servers (npm workspaces monorepo)
   packages/
-    shared/                -- @micro-x/mcp-shared (validation, logging, errors, retry)
+    shared/                -- @micro-x-ai/mcp-shared (validation, logging, errors, retry)
     filesystem/            -- bash, read_file, write_file, append_file, save_memory
     web/                   -- web_fetch, web_search
     linkedin/              -- linkedin_jobs, linkedin_job_detail

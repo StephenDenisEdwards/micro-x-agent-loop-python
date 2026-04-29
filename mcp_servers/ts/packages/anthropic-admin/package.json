@@ -1,5 +1,5 @@
 {
-  "name": "@micro-x/mcp-anthropic-admin",
+  "name": "@micro-x-ai/mcp-anthropic-admin",
   "version": "0.1.0",
   "description": "Anthropic Admin MCP server (usage/cost reporting)",
   "type": "module",
@@ -13,7 +13,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@micro-x/mcp-shared": "*",
+    "@micro-x-ai/mcp-shared": "*",
     "zod": "^3.24.0"
   },
   "devDependencies": {

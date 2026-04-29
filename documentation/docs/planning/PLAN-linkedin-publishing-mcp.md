@@ -267,7 +267,7 @@ LinkedIn does not publish specific numeric rate limits. Key facts:
 - LinkedIn Developer Portal app with "Share on LinkedIn" and "Sign In with LinkedIn using OpenID Connect" products enabled
 - `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` in `.env`
 - npm packages: `@modelcontextprotocol/sdk`, `zod`, `undici`
-- Existing `@micro-x/mcp-shared` package for validation, logging, errors
+- Existing `@micro-x-ai/mcp-shared` package for validation, logging, errors
 
 ## Risks
 

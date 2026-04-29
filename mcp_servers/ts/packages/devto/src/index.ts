@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createLogger, createServer, startStdioServer } from "@micro-x/mcp-shared";
+import { createLogger, createServer, startStdioServer } from "@micro-x-ai/mcp-shared";
 import { registerCreateArticle } from "./tools/create-article.js";
 import { registerPublishArticle } from "./tools/publish-article.js";
 import { registerUpdateArticle } from "./tools/update-article.js";

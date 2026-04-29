@@ -2,8 +2,8 @@ import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Logger } from "@micro-x/mcp-shared";
-import { PermissionError, ValidationError } from "@micro-x/mcp-shared";
+import type { Logger } from "@micro-x-ai/mcp-shared";
+import { PermissionError, ValidationError } from "@micro-x-ai/mcp-shared";
 
 export function registerSaveMemory(server: McpServer, logger: Logger, memoryDir: string, maxLines: number): void {
   server.registerTool(

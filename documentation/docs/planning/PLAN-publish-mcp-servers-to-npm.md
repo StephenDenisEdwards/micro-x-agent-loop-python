@@ -11,13 +11,13 @@ Today our TypeScript MCP servers in `mcp_servers/ts/packages/` are a private mon
 
 Industry-standard distribution for TypeScript MCP servers is `npx -y @scope/mcp-name` resolved from the public npm registry. That single line works in Claude Desktop's `claude_desktop_config.json`, Claude Code's `.mcp.json`, and our own `config.json`'s `McpServers` section. Once published, our servers become drop-in components for anyone running an MCP-aware client.
 
-The blocker today is mechanical — the workspace `*` dependency on `@micro-x/mcp-shared` is unpublishable, no package has the metadata npm requires, and we have no release pipeline. None of this is conceptually hard; it just needs a focused pass and a working canary before we put credential-bearing servers (Google, GitHub, X) through it.
+The blocker today is mechanical — the workspace `*` dependency on `@micro-x-ai/mcp-shared` is unpublishable, no package has the metadata npm requires, and we have no release pipeline. None of this is conceptually hard; it just needs a focused pass and a working canary before we put credential-bearing servers (Google, GitHub, X) through it.
 
 The full deployment recipe for a single server is documented in [`guides/publishing-google-mcp.md`](../guides/publishing-google-mcp.md). This plan covers the staged rollout across all eleven servers, the supporting infrastructure (CI, versioning convention, smoke tests), and the acceptance criteria.
 
 ## Goals
 
-- Every `@micro-x/mcp-*` package installable via `npx -y @micro-x/mcp-<name>` from a clean machine.
+- Every `@micro-x-ai/mcp-*` package installable via `npx -y @micro-x-ai/mcp-<name>` from a clean machine.
 - Each package self-documenting on npmjs.com (README, required env vars, install snippets for the three main clients).
 - Releases triggered by git tags, with provenance attestations.
 - Token/credential cache paths under user control via env vars — never written to package-internal directories.
@@ -36,7 +36,7 @@ Six phases. Phase 1 establishes the canary (`mcp-echo` — no auth, no native de
 
 Each server publish must satisfy the full checklist from `guides/publishing-google-mcp.md` (package metadata, README, LICENSE, configurable credential path, `--help` flag, dry-run inspection, smoke test in all three clients).
 
-## Phase 1 — Canary: publish `@micro-x/mcp-shared` and `@micro-x/mcp-echo`
+## Phase 1 — Canary: publish `@micro-x-ai/mcp-shared` and `@micro-x-ai/mcp-echo`
 
 `echo` is the simplest server we have — no auth, no env vars, one tool. It validates the entire publish pipeline before we put anything credential-bearing through it.
 
@@ -45,20 +45,20 @@ Each server publish must satisfy the full checklist from `guides/publishing-goog
 1. ~~Register the `@micro-x` scope on npmjs.com under the project owner's account; enable 2FA on the account. Decide org membership policy (single owner vs. team).~~ **Pending** — manual step.
 2. ~~Pick a license (MIT recommended unless we have a reason otherwise). Add `LICENSE` file at `mcp_servers/ts/` root and copy into each package directory we publish.~~ **Done 2026-04-29.** MIT license at `mcp_servers/ts/LICENSE`, copied into `shared/` and `echo/`.
 3. ~~Apply the `package.json` template from the worked example to `packages/shared/`:~~ **Done 2026-04-29.** `version: "1.0.0"`, `publishConfig.access: "public"`, `files`, `engines`, `repository`/`homepage`/`bugs`/`keywords`, `prepublishOnly` script.
-4. ~~Apply the same template to `packages/echo/` and change `"@micro-x/mcp-shared": "*"` → `"@micro-x/mcp-shared": "^1.0.0"`.~~ **Done 2026-04-29.** Also added `chmod` step to build script for POSIX bin shim.
+4. ~~Apply the same template to `packages/echo/` and change `"@micro-x-ai/mcp-shared": "*"` → `"@micro-x-ai/mcp-shared": "^1.0.0"`.~~ **Done 2026-04-29.** Also added `chmod` step to build script for POSIX bin shim.
 5. ~~Write `packages/shared/README.md` and `packages/echo/README.md`.~~ **Done 2026-04-29.** Shared: internal utilities disclaimer + exports table. Echo: install snippets for Claude Desktop/Code/loop, tool docs, `--help` flag docs.
 6. ~~Run `npm pack --dry-run` against both. Inspect tarballs — confirm no `src/`, no `tsconfig*`, no source maps unless we want them.~~ **Done 2026-04-29.** Both clean: `dist/`, `README.md`, `LICENSE`, `package.json` only. Shared 12.7 kB, Echo 3.2 kB.
 7. `npm login`, `npm publish -w packages/shared`, then `npm publish -w packages/echo`. **Pending** — manual step after scope registration.
-8. From a clean directory: `npx -y @micro-x/mcp-echo --help` succeeds and the server speaks MCP over stdio. **Pending** — after publish.
+8. From a clean directory: `npx -y @micro-x-ai/mcp-echo --help` succeeds and the server speaks MCP over stdio. **Pending** — after publish.
 9. Add the canary install line to the project README. **Pending** — after publish.
 
 **Also done:** Added `--help` / `-h` flag to `echo/src/index.ts` (prints usage, tools, exits 0).
 
-**Acceptance:** A fresh user with only Node 18+ installed can run `npx -y @micro-x/mcp-echo` and use the `echo` tool from Claude Desktop, Claude Code, and our own loop.
+**Acceptance:** A fresh user with only Node 18+ installed can run `npx -y @micro-x-ai/mcp-echo` and use the `echo` tool from Claude Desktop, Claude Code, and our own loop.
 
-**Rollback:** If publish fails or the published artifact is broken, `npm deprecate @micro-x/mcp-echo@<version> "broken — use later release"`. Never `npm unpublish` after 72 hours (npm policy); deprecate and ship a patch instead.
+**Rollback:** If publish fails or the published artifact is broken, `npm deprecate @micro-x-ai/mcp-echo@<version> "broken — use later release"`. Never `npm unpublish` after 72 hours (npm policy); deprecate and ship a patch instead.
 
-## Phase 2 — Worked example: publish `@micro-x/mcp-google`
+## Phase 2 — Worked example: publish `@micro-x-ai/mcp-google`
 
 Establishes the pattern for credential-bearing servers. Everything in the worked example doc lands here.
 
@@ -70,10 +70,10 @@ Establishes the pattern for credential-bearing servers. Everything in the worked
 4. ~~Add `--help` / `-h` flag to `src/index.ts`.~~ **Done 2026-04-29.** Prints env vars, all 12 tools, exits 0.
 5. ~~`npm pack --dry-run` and inspect.~~ **Done 2026-04-29.** 21.7 kB tarball, 63 files, clean (no `src/`).
 6. `npm publish -w packages/google`. **Pending** — manual step after Phase 1 publish.
-7. Smoke-test `npx -y @micro-x/mcp-google --help` from a clean directory with no env vars set — should print env requirements and exit 0. **Pending** — after publish.
+7. Smoke-test `npx -y @micro-x-ai/mcp-google --help` from a clean directory with no env vars set — should print env requirements and exit 0. **Pending** — after publish.
 8. Wire the published package into Claude Desktop, Claude Code, and our own loop using `npx`. Verify `gmail_search` (read-only, lowest blast radius) works in all three before declaring done. **Pending** — after publish.
 
-**Acceptance:** A user with their own Google Cloud OAuth credentials can install via `npx -y @micro-x/mcp-google` and complete an end-to-end OAuth flow without modifying any code.
+**Acceptance:** A user with their own Google Cloud OAuth credentials can install via `npx -y @micro-x-ai/mcp-google` and complete an end-to-end OAuth flow without modifying any code.
 
 ## Phase 3 — Replicate to remaining no-auth and simple-auth servers
 
@@ -114,7 +114,7 @@ This server has STT/recording dependencies that may carry native modules or plat
 **Deliverables:**
 
 1. Inventory native dependencies and platform-specific code paths.
-2. Decide bundling strategy (likely keep `tsc` + real `@micro-x/mcp-shared` dep, but verify native modules survive `npm install` on Windows / macOS / Linux).
+2. Decide bundling strategy (likely keep `tsc` + real `@micro-x-ai/mcp-shared` dep, but verify native modules survive `npm install` on Windows / macOS / Linux).
 3. Apply the `package.json` template with any required adjustments (`os` field, `cpu` field, `optionalDependencies` for platform-specific modules).
 4. Write `packages/interview-assist/README.md` with explicit platform support matrix.
 5. Publish and smoke-test on at least two of {Windows, macOS, Linux}.
@@ -134,7 +134,7 @@ Once all servers are published manually at least once, automate the release pipe
    - On failure, post a comment on the triggering commit.
 2. Document the release process in `documentation/docs/operations/publishing-mcp-releases.md`:
    - Tag convention (`mcp-google-v0.2.0`, etc.).
-   - Versioning policy: independent semver per package; bump `@micro-x/mcp-shared` minor → all dependent servers must bump patch within one week.
+   - Versioning policy: independent semver per package; bump `@micro-x-ai/mcp-shared` minor → all dependent servers must bump patch within one week.
    - Pre-release checklist: `npm pack --dry-run`, smoke test in clients, README diff review.
    - Deprecation policy: `npm deprecate` rather than unpublish; ship a patch.
 3. Add a `mcp_servers/ts/CHANGELOG.md` (one section per package) and require updates as part of any PR that bumps a version.
@@ -148,7 +148,7 @@ Once all servers are published manually at least once, automate the release pipe
 | Risk | Mitigation |
 |------|------------|
 | `@micro-x` scope is taken on npm | Check availability before Phase 1. If taken, pick an alternative scope (`@micro-x-agent`, `@microxa`) and apply consistently. Document the chosen scope in the operations doc. |
-| Published `@micro-x/mcp-shared` breaks consumers via accidental breaking change | Treat `shared` as a public API. Any change to its exported surface bumps the major version; servers re-pin and re-publish in lockstep. Smoke-test all dependent servers before publishing a `shared` major. |
+| Published `@micro-x-ai/mcp-shared` breaks consumers via accidental breaking change | Treat `shared` as a public API. Any change to its exported surface bumps the major version; servers re-pin and re-publish in lockstep. Smoke-test all dependent servers before publishing a `shared` major. |
 | OAuth token cache path change strands existing users on next upgrade | The first publish is `0.1.0` (no users yet). Future cache-path changes ship a one-shot migration shim that reads the old path and writes the new path. |
 | `npm publish` from a developer machine ships local-only changes | Phase 6 moves all publishes to GitHub Actions. Until then, every manual publish must be from a clean checkout of the tagged commit. |
 | Native modules in `mcp-interview-assist` fail to install on a platform | Phase 5 audit catches this. Worst case: ship that server with `os` restrictions and a documented limitation rather than blocking the others. |
@@ -164,9 +164,9 @@ Once all servers are published manually at least once, automate the release pipe
 
 ## Acceptance Criteria (Plan-level)
 
-- [ ] All eleven `@micro-x/mcp-*` packages published to npm with provenance attestations.
+- [ ] All eleven `@micro-x-ai/mcp-*` packages published to npm with provenance attestations.
 - [ ] Each package has a per-package README on npmjs.com with install snippets for Claude Desktop, Claude Code, and the loop.
 - [ ] Each credential-bearing server has a configurable token cache path documented in its README.
-- [ ] A clean machine with only Node 18+ installed can use any server via `npx -y @micro-x/mcp-<name>`.
+- [ ] A clean machine with only Node 18+ installed can use any server via `npx -y @micro-x-ai/mcp-<name>`.
 - [ ] GitHub Actions publishes new versions on tag push without any manual steps.
 - [ ] Operations doc documents the release process; CHANGELOG exists and is current.

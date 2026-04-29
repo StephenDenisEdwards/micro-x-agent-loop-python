@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Logger } from "@micro-x/mcp-shared";
-import { ValidationError, UpstreamError, resilientFetch } from "@micro-x/mcp-shared";
+import type { Logger } from "@micro-x-ai/mcp-shared";
+import { ValidationError, UpstreamError, resilientFetch } from "@micro-x-ai/mcp-shared";
 
 const BRAVE_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search";
 const TIMEOUT_MS = 30_000;
