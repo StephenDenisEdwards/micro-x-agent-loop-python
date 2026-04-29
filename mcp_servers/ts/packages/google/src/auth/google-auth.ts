@@ -3,6 +3,7 @@ import { google } from "googleapis";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import http from "node:http";
 import { URL } from "node:url";
 
@@ -14,11 +15,24 @@ import { URL } from "node:url";
 const serviceCache = new Map<string, ReturnType<typeof google.gmail> | ReturnType<typeof google.calendar> | ReturnType<typeof google.people>>();
 
 /**
- * Base directory for OAuth token storage.
- * Defaults to process.cwd() but can be overridden via GOOGLE_TOKEN_BASE_DIR
- * so that task apps spawned in subdirectories reuse the main project's tokens.
+ * Resolve the default token base directory using platform conventions:
+ * - POSIX: $XDG_DATA_HOME/mcp-google or ~/.local/share/mcp-google
+ * - Windows: %APPDATA%/mcp-google
  */
-const TOKEN_BASE_DIR = process.env.GOOGLE_TOKEN_BASE_DIR || process.cwd();
+function getDefaultTokenBaseDir(): string {
+  if (process.platform === "win32") {
+    const appData = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+    return path.join(appData, "mcp-google");
+  }
+  const xdgDataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
+  return path.join(xdgDataHome, "mcp-google");
+}
+
+/**
+ * Base directory for OAuth token storage.
+ * Override via GOOGLE_TOKEN_BASE_DIR to control where credentials are cached.
+ */
+const TOKEN_BASE_DIR = process.env.GOOGLE_TOKEN_BASE_DIR || getDefaultTokenBaseDir();
 
 interface TokenData {
   access_token?: string;

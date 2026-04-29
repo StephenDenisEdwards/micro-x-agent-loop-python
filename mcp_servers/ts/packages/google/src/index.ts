@@ -14,6 +14,44 @@ import { registerContactsCreate } from "./tools/contacts-create.js";
 import { registerContactsUpdate } from "./tools/contacts-update.js";
 import { registerContactsDelete } from "./tools/contacts-delete.js";
 
+// --help / -h flag
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`@micro-x/mcp-google — Gmail, Calendar, and Contacts MCP server
+
+Usage:
+  npx -y @micro-x/mcp-google          Start the server (stdio transport)
+  npx -y @micro-x/mcp-google --help   Show this message
+
+Required environment variables:
+  GOOGLE_CLIENT_ID        OAuth2 client ID from Google Cloud Console
+  GOOGLE_CLIENT_SECRET    OAuth2 client secret from Google Cloud Console
+
+Optional environment variables:
+  GOOGLE_TOKEN_BASE_DIR   Directory for cached OAuth tokens
+                          Default (POSIX):   \${XDG_DATA_HOME:-~/.local/share}/mcp-google
+                          Default (Windows): %APPDATA%/mcp-google
+
+Tools:
+  gmail_search         Search Gmail messages
+  gmail_read           Read a Gmail message by ID
+  gmail_send           Send an email via Gmail
+  calendar_list        List upcoming calendar events
+  calendar_create      Create a calendar event
+  calendar_get         Get a calendar event by ID
+  contacts_search      Search contacts by name or email
+  contacts_list        List contacts
+  contacts_get         Get a contact by resource name
+  contacts_create      Create a new contact
+  contacts_update      Update an existing contact
+  contacts_delete      Delete a contact
+
+On first run, the server opens a browser for OAuth consent. Tokens are
+cached locally and refreshed automatically. Tokens are never sent anywhere
+except Google's APIs.
+`);
+  process.exit(0);
+}
+
 const logger = createLogger("mcp-google");
 
 // Configuration from environment

@@ -1,6 +1,6 @@
 # Plan: Publish MCP Servers to npm
 
-**Status:** In Progress — Phase 1 code-complete (pending npm publish)
+**Status:** In Progress — Phases 1–2 code-complete (pending npm scope registration + publish)
 **Date:** 2026-04-29
 **Owner:** —
 **Reference:** [Publishing the Google MCP Server (worked example)](../guides/publishing-google-mcp.md)
@@ -64,14 +64,14 @@ Establishes the pattern for credential-bearing servers. Everything in the worked
 
 **Deliverables:**
 
-1. Apply the `package.json` template from the worked example to `packages/google/`.
-2. Write `packages/google/README.md` covering: install snippets for the three clients, required env vars (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_CACHE_PATH`), inline OAuth Cloud Console setup walkthrough (or link to existing `guides/google-mcp-setup.md`), tool table, security/credentials notes.
-3. Make the OAuth token cache path configurable via `GOOGLE_TOKEN_CACHE_PATH`. Default to `${XDG_DATA_HOME:-$HOME/.local/share}/mcp-google/tokens.json` on POSIX and `%APPDATA%/mcp-google/tokens.json` on Windows. Document the default in the README and the worked example.
-4. Add `--help` / `-h` flag to `src/index.ts` that prints required env vars and exits 0 — required so `npx @micro-x/mcp-google --help` produces useful output instead of triggering an OAuth flow.
-5. `npm pack --dry-run` and inspect.
-6. `npm publish -w packages/google`.
-7. Smoke-test `npx -y @micro-x/mcp-google --help` from a clean directory with no env vars set — should print env requirements and exit 0.
-8. Wire the published package into Claude Desktop, Claude Code, and our own loop using `npx`. Verify `gmail_search` (read-only, lowest blast radius) works in all three before declaring done.
+1. ~~Apply the `package.json` template from the worked example to `packages/google/`.~~ **Done 2026-04-29.** `publishConfig`, `files`, `engines`, `repository`/`homepage`/`bugs`, `prepublishOnly`, `chmod` build step, shared dep pinned to `^1.0.0`.
+2. ~~Write `packages/google/README.md`.~~ **Done 2026-04-29.** Install snippets for three clients, required/optional env vars, inline OAuth Cloud Console setup, tool tables (Gmail/Calendar/Contacts), security notes.
+3. ~~Make the OAuth token cache path configurable.~~ **Done 2026-04-29.** `GOOGLE_TOKEN_BASE_DIR` env var; default changed from `process.cwd()` to XDG-compliant path: `${XDG_DATA_HOME:-~/.local/share}/mcp-google` (POSIX), `%APPDATA%/mcp-google` (Windows).
+4. ~~Add `--help` / `-h` flag to `src/index.ts`.~~ **Done 2026-04-29.** Prints env vars, all 12 tools, exits 0.
+5. ~~`npm pack --dry-run` and inspect.~~ **Done 2026-04-29.** 21.7 kB tarball, 63 files, clean (no `src/`).
+6. `npm publish -w packages/google`. **Pending** — manual step after Phase 1 publish.
+7. Smoke-test `npx -y @micro-x/mcp-google --help` from a clean directory with no env vars set — should print env requirements and exit 0. **Pending** — after publish.
+8. Wire the published package into Claude Desktop, Claude Code, and our own loop using `npx`. Verify `gmail_search` (read-only, lowest blast radius) works in all three before declaring done. **Pending** — after publish.
 
 **Acceptance:** A user with their own Google Cloud OAuth credentials can install via `npx -y @micro-x/mcp-google` and complete an end-to-end OAuth flow without modifying any code.
 
