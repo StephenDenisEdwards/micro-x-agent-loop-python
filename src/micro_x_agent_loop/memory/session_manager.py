@@ -94,9 +94,7 @@ class SessionManager:
         if len(matches) > 1:
             ids = ", ".join(m["id"] for m in matches[:5])
             suffix = "..." if len(matches) > 5 else ""
-            raise ValueError(
-                f"Session name '{identifier}' is ambiguous ({len(matches)} matches: {ids}{suffix})"
-            )
+            raise ValueError(f"Session name '{identifier}' is ambiguous ({len(matches)} matches: {ids}{suffix})")
         return None
 
     def set_session_title(self, session_id: str, title: str) -> None:

@@ -24,10 +24,7 @@ class SessionController:
 
     def format_resumed_summary_lines(self, summary: dict) -> list[str]:
         lines = [f"{self._line_prefix}Session summary:"]
-        lines.append(
-            f"{self._line_prefix}- Created: {summary['created_at']} | "
-            f"Updated: {summary['updated_at']}"
-        )
+        lines.append(f"{self._line_prefix}- Created: {summary['created_at']} | Updated: {summary['updated_at']}")
         lines.append(
             f"{self._line_prefix}- Messages: {summary['message_count']} "
             f"(user={summary['user_message_count']}, assistant={summary['assistant_message_count']})"

@@ -65,14 +65,12 @@ class Scheduler:
                 consecutive_errors += 1
                 logger.error(f"Scheduler poll error ({consecutive_errors}/{_MAX_CONSECUTIVE_ERRORS}): {ex}")
                 if consecutive_errors >= _MAX_CONSECUTIVE_ERRORS:
-                    logger.critical(
-                        f"Scheduler hit {_MAX_CONSECUTIVE_ERRORS} consecutive errors, shutting down"
-                    )
+                    logger.critical(f"Scheduler hit {_MAX_CONSECUTIVE_ERRORS} consecutive errors, shutting down")
                     self._stop_event.set()
                     break
 
             wait_seconds = min(
-                self._poll_interval * (2 ** consecutive_errors) if consecutive_errors else self._poll_interval,
+                self._poll_interval * (2**consecutive_errors) if consecutive_errors else self._poll_interval,
                 _MAX_BACKOFF_SECONDS,
             )
             try:
@@ -174,10 +172,7 @@ class Scheduler:
             if retry_run.get("job_id"):
                 retry_job = self._store.get_job(retry_run["job_id"])
 
-            logger.info(
-                f"Dispatching retry run {retry_run['id'][:8]} "
-                f"(attempt {retry_run.get('attempt_number', '?')})"
-            )
+            logger.info(f"Dispatching retry run {retry_run['id'][:8]} (attempt {retry_run.get('attempt_number', '?')})")
 
             self._dispatcher.dispatch(
                 run_id=retry_run["id"],

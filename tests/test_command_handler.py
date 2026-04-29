@@ -248,6 +248,7 @@ class ToolsTests(unittest.TestCase):
 
     def test_tools_mcp_no_mcp_tools(self) -> None:
         from tests.fakes import FakeTool
+
         # Only built-in tool (no __) — should show "No MCP tools loaded."
         handler, out = _make_handler(tool_map={"ask_user": FakeTool("ask_user")})
         asyncio.run(handler.handle_tools("/tools mcp"))
@@ -255,11 +256,14 @@ class ToolsTests(unittest.TestCase):
 
     def test_tools_mcp_with_tools(self) -> None:
         from tests.fakes import FakeTool
-        handler, out = _make_handler(tool_map={
-            "server1__read_file": FakeTool("server1__read_file"),
-            "server1__write_file": FakeTool("server1__write_file"),
-            "server2__search": FakeTool("server2__search"),
-        })
+
+        handler, out = _make_handler(
+            tool_map={
+                "server1__read_file": FakeTool("server1__read_file"),
+                "server1__write_file": FakeTool("server1__write_file"),
+                "server2__search": FakeTool("server2__search"),
+            }
+        )
         asyncio.run(handler.handle_tools("/tools mcp"))
         combined = "\n".join(out)
         self.assertIn("server1", combined)
@@ -274,10 +278,13 @@ class ToolTests(unittest.TestCase):
 
     def test_tool_list_with_tools(self) -> None:
         from tests.fakes import FakeTool
-        handler, out = _make_handler(tool_map={
-            "server__foo": FakeTool("server__foo"),
-            "ask_user": FakeTool("ask_user"),
-        })
+
+        handler, out = _make_handler(
+            tool_map={
+                "server__foo": FakeTool("server__foo"),
+                "ask_user": FakeTool("ask_user"),
+            }
+        )
         asyncio.run(handler.handle_tool("/tool"))
         combined = "\n".join(out)
         self.assertIn("server", combined)
@@ -285,6 +292,7 @@ class ToolTests(unittest.TestCase):
 
     def test_tool_details(self) -> None:
         from tests.fakes import FakeTool
+
         tool = FakeTool("server__foo", description="does things")
         handler, out = _make_handler(tool_map={"server__foo": tool})
         asyncio.run(handler.handle_tool("/tool server__foo"))
@@ -294,6 +302,7 @@ class ToolTests(unittest.TestCase):
 
     def test_tool_by_short_name(self) -> None:
         from tests.fakes import FakeTool
+
         tool = FakeTool("server__foo", description="short")
         handler, out = _make_handler(tool_map={"server__foo": tool})
         asyncio.run(handler.handle_tool("/tool foo"))
@@ -302,10 +311,13 @@ class ToolTests(unittest.TestCase):
 
     def test_tool_ambiguous(self) -> None:
         from tests.fakes import FakeTool
-        handler, out = _make_handler(tool_map={
-            "s1__foo": FakeTool("s1__foo"),
-            "s2__foo": FakeTool("s2__foo"),
-        })
+
+        handler, out = _make_handler(
+            tool_map={
+                "s1__foo": FakeTool("s1__foo"),
+                "s2__foo": FakeTool("s2__foo"),
+            }
+        )
         asyncio.run(handler.handle_tool("/tool foo"))
         self.assertTrue(any("Ambiguous" in line for line in out))
 
@@ -316,6 +328,7 @@ class ToolTests(unittest.TestCase):
 
     def test_tool_schema(self) -> None:
         from tests.fakes import FakeTool
+
         tool = FakeTool("server__foo", input_schema={"type": "object", "properties": {}})
         handler, out = _make_handler(tool_map={"server__foo": tool})
         asyncio.run(handler.handle_tool("/tool server__foo schema"))
@@ -323,6 +336,7 @@ class ToolTests(unittest.TestCase):
 
     def test_tool_config_default(self) -> None:
         from tests.fakes import FakeTool
+
         tool = FakeTool("server__foo")
         handler, out = _make_handler(tool_map={"server__foo": tool})
         asyncio.run(handler.handle_tool("/tool server__foo config"))
@@ -331,6 +345,7 @@ class ToolTests(unittest.TestCase):
 
     def test_tool_config_custom(self) -> None:
         from tests.fakes import FakeTool
+
         tool = FakeTool("server__foo")
         handler, out = _make_handler(tool_map={"server__foo": tool})
         # Override formatter mock to return a config
@@ -341,6 +356,7 @@ class ToolTests(unittest.TestCase):
 
     def test_tool_invalid_sub(self) -> None:
         from tests.fakes import FakeTool
+
         tool = FakeTool("server__foo")
         handler, out = _make_handler(tool_map={"server__foo": tool})
         asyncio.run(handler.handle_tool("/tool server__foo bogus"))
@@ -427,16 +443,18 @@ class DebugTests(unittest.TestCase):
 
     def test_debug_show_api_payload_out_of_range(self) -> None:
         store = ApiPayloadStore()
-        store.record(ApiPayload(
-            timestamp=0.0,
-            model="claude",
-            system_prompt="sys",
-            messages=[{"role": "user", "content": "hello"}],
-            tools_count=0,
-            response_message={"role": "assistant", "content": "hi"},
-            stop_reason="end_turn",
-            usage=None,
-        ))
+        store.record(
+            ApiPayload(
+                timestamp=0.0,
+                model="claude",
+                system_prompt="sys",
+                messages=[{"role": "user", "content": "hello"}],
+                tools_count=0,
+                response_message={"role": "assistant", "content": "hi"},
+                stop_reason="end_turn",
+                usage=None,
+            )
+        )
         handler, out = _make_handler(api_payload_store=store)
         asyncio.run(handler.handle_debug("/debug show-api-payload 99"))
         self.assertTrue(any("out of range" in line for line in out))
@@ -444,28 +462,31 @@ class DebugTests(unittest.TestCase):
     def test_debug_show_api_payload_ok(self) -> None:
         store = ApiPayloadStore()
         from micro_x_agent_loop.usage import UsageResult
-        store.record(ApiPayload(
-            timestamp=0.0,
-            model="claude-3-5",
-            system_prompt="You are helpful." * 5,
-            messages=[{"role": "user", "content": "hello"}],
-            tools_count=3,
-            response_message={"role": "assistant", "content": [{"type": "text", "text": "hi"}]},
-            stop_reason="end_turn",
-            usage=UsageResult(
-                provider="anthropic",
+
+        store.record(
+            ApiPayload(
+                timestamp=0.0,
                 model="claude-3-5",
-                input_tokens=100,
-                output_tokens=50,
-                cache_creation_input_tokens=0,
-                cache_read_input_tokens=0,
-                message_count=1,
-                tool_schema_count=0,
+                system_prompt="You are helpful." * 5,
+                messages=[{"role": "user", "content": "hello"}],
+                tools_count=3,
+                response_message={"role": "assistant", "content": [{"type": "text", "text": "hi"}]},
                 stop_reason="end_turn",
-                duration_ms=100,
-                time_to_first_token_ms=None,
-            ),
-        ))
+                usage=UsageResult(
+                    provider="anthropic",
+                    model="claude-3-5",
+                    input_tokens=100,
+                    output_tokens=50,
+                    cache_creation_input_tokens=0,
+                    cache_read_input_tokens=0,
+                    message_count=1,
+                    tool_schema_count=0,
+                    stop_reason="end_turn",
+                    duration_ms=100,
+                    time_to_first_token_ms=None,
+                ),
+            )
+        )
         handler, out = _make_handler(api_payload_store=store)
         asyncio.run(handler.handle_debug("/debug show-api-payload"))
         combined = "\n".join(out)

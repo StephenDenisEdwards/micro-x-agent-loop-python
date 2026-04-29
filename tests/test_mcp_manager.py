@@ -19,6 +19,7 @@ from micro_x_agent_loop.mcp.mcp_manager import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _fake_tool(name: str = "tool", description: str = "desc") -> MagicMock:
     t = MagicMock()
     t.name = name
@@ -38,6 +39,7 @@ def _fake_tools_result(*tool_names: str) -> MagicMock:
 # ---------------------------------------------------------------------------
 # _build_proxies
 # ---------------------------------------------------------------------------
+
 
 class BuildProxiesTests(unittest.TestCase):
     def test_empty_tools(self) -> None:
@@ -79,6 +81,7 @@ class BuildProxiesTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # _mcp_logging_callback
 # ---------------------------------------------------------------------------
+
 
 class McpLoggingCallbackTests(unittest.TestCase):
     def test_routes_to_channels(self) -> None:
@@ -123,6 +126,7 @@ class McpLoggingCallbackTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # _ServerConnection
 # ---------------------------------------------------------------------------
+
 
 def _make_session_cm(tools_result: MagicMock) -> MagicMock:
     """Build a ClientSession async context manager mock that returns tools."""
@@ -169,9 +173,10 @@ class ServerConnectionTests(unittest.TestCase):
             session.list_tools = AsyncMock(return_value=tools_result)
 
             # Patch at the module level
-            with patch("micro_x_agent_loop.mcp.mcp_manager.stdio_client") as mock_stdio, \
-                 patch("micro_x_agent_loop.mcp.mcp_manager.ClientSession") as mock_client_cls:
-
+            with (
+                patch("micro_x_agent_loop.mcp.mcp_manager.stdio_client") as mock_stdio,
+                patch("micro_x_agent_loop.mcp.mcp_manager.ClientSession") as mock_client_cls,
+            ):
                 # stdio_client returns (read_stream, write_stream)
                 streams_cm = MagicMock()
                 streams_cm.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock()))
@@ -220,13 +225,12 @@ class ServerConnectionTests(unittest.TestCase):
             session.initialize = AsyncMock()
             session.list_tools = AsyncMock(return_value=tools_result)
 
-            with patch("micro_x_agent_loop.mcp.mcp_manager.streamable_http_client") as mock_http, \
-                 patch("micro_x_agent_loop.mcp.mcp_manager.ClientSession") as mock_client_cls:
-
+            with (
+                patch("micro_x_agent_loop.mcp.mcp_manager.streamable_http_client") as mock_http,
+                patch("micro_x_agent_loop.mcp.mcp_manager.ClientSession") as mock_client_cls,
+            ):
                 streams_cm = MagicMock()
-                streams_cm.__aenter__ = AsyncMock(
-                    return_value=(MagicMock(), MagicMock(), MagicMock())
-                )
+                streams_cm.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock(), MagicMock()))
                 streams_cm.__aexit__ = AsyncMock(return_value=False)
                 mock_http.return_value = streams_cm
 
@@ -249,6 +253,7 @@ class ServerConnectionTests(unittest.TestCase):
 # McpManager
 # ---------------------------------------------------------------------------
 
+
 class McpManagerTests(unittest.TestCase):
     def test_connect_all_empty(self) -> None:
         async def go() -> None:
@@ -266,9 +271,10 @@ class McpManagerTests(unittest.TestCase):
             session.initialize = AsyncMock()
             session.list_tools = AsyncMock(return_value=tools_result)
 
-            with patch("micro_x_agent_loop.mcp.mcp_manager.stdio_client") as mock_stdio, \
-                 patch("micro_x_agent_loop.mcp.mcp_manager.ClientSession") as mock_client_cls:
-
+            with (
+                patch("micro_x_agent_loop.mcp.mcp_manager.stdio_client") as mock_stdio,
+                patch("micro_x_agent_loop.mcp.mcp_manager.ClientSession") as mock_client_cls,
+            ):
                 streams_cm = MagicMock()
                 streams_cm.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock()))
                 streams_cm.__aexit__ = AsyncMock(return_value=False)

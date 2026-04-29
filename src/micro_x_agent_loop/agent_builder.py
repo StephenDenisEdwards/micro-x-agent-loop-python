@@ -88,7 +88,8 @@ class AgentComponents:
 def build_agent_components(config: AgentConfig) -> AgentComponents:
     """Build all Agent subsystems from config. Does not require a ``self`` reference."""
     provider = create_provider(
-        config.provider, config.api_key,
+        config.provider,
+        config.api_key,
         prompt_caching_enabled=config.prompt_caching_enabled,
         ollama_base_url=config.ollama_base_url,
     )
@@ -97,11 +98,12 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
 
     # --- Tool search ---
     tool_search_active = should_activate_tool_search(
-        config.tool_search_enabled, converted_tools, config.model, provider=config.provider,
+        config.tool_search_enabled,
+        converted_tools,
+        config.model,
+        provider=config.provider,
     )
-    any_policy_needs_search = any(
-        p.get("tool_search_only", False) for p in config.routing_policies.values()
-    )
+    any_policy_needs_search = any(p.get("tool_search_only", False) for p in config.routing_policies.values())
     ts = config.tool_search_config()
     rc = config.routing_config()
     llm = config.llm_config()
@@ -110,8 +112,10 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
     if tool_search_active or any_policy_needs_search:
         embedding_index = _build_tool_embedding_index(ts)
         tool_search_manager = ToolSearchManager(
-            all_tools=config.tools, converted_tools=converted_tools,
-            embedding_index=embedding_index, max_load=config.tool_search_max_load,
+            all_tools=config.tools,
+            converted_tools=converted_tools,
+            embedding_index=embedding_index,
+            max_load=config.tool_search_max_load,
         )
     if tool_search_active:
         logger.info(f"Tool search active: {len(config.tools)} tools deferred")
@@ -140,21 +144,27 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
 
     # --- Compact system prompt + SubAgentRunner ---
     compact_system_prompt = ""
-    any_policy_needs_compact = any(
-        p.get("system_prompt") == "compact" for p in config.routing_policies.values()
-    )
+    any_policy_needs_compact = any(p.get("system_prompt") == "compact" for p in config.routing_policies.values())
     if any_policy_needs_compact:
         compact_system_prompt = get_system_prompt(
-            user_memory="", user_memory_enabled=False, concise_output_enabled=True,
-            working_directory=config.working_directory, autonomous=autonomous,
-            hitl_enabled=False, compact=True, tool_search_active=True,
+            user_memory="",
+            user_memory_enabled=False,
+            concise_output_enabled=True,
+            working_directory=config.working_directory,
+            autonomous=autonomous,
+            hitl_enabled=False,
+            compact=True,
+            tool_search_active=True,
         )
         sub_agent_runner = SubAgentRunner(
-            parent_tools=config.tools, provider_name=config.provider,
-            api_key=config.api_key, parent_model=config.model,
+            parent_tools=config.tools,
+            provider_name=config.provider,
+            api_key=config.api_key,
+            parent_model=config.model,
             sub_agent_provider=config.sub_agent_provider,
             sub_agent_model=config.sub_agent_model,
-            timeout=config.sub_agent_timeout, max_turns=config.sub_agent_max_turns,
+            timeout=config.sub_agent_timeout,
+            max_turns=config.sub_agent_max_turns,
             max_tokens=config.sub_agent_max_tokens,
             max_tool_result_chars=config.max_tool_result_chars,
             tool_result_overrides=config.tool_result_overrides,
@@ -180,7 +190,8 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
     # --- Stage-2 classification ---
     stage2_provider = (
         create_provider(config.stage2_provider, resolve_runtime_env(config.stage2_provider).provider_api_key)
-        if config.stage2_classification_enabled else None
+        if config.stage2_classification_enabled
+        else None
     )
     if config.stage2_classification_enabled:
         if not config.stage2_provider:
@@ -196,7 +207,8 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
         summarization_provider = create_provider(config.provider, config.api_key)
 
     tool_result_formatter = ToolResultFormatter(
-        tool_formatting=config.tool_formatting, default_format=config.default_format,
+        tool_formatting=config.tool_formatting,
+        default_format=config.default_format,
     )
 
     # --- Routing ---
@@ -218,17 +230,26 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
         task_manager = TaskManager(task_store, list_id)
 
     return AgentComponents(
-        provider=provider, model=config.model, max_tokens=config.max_tokens,
-        temperature=config.temperature, system_prompt=system_prompt,
-        tool_map=tool_map, converted_tools=converted_tools,
-        tool_search_active=tool_search_active, tool_search_manager=tool_search_manager,
-        autonomous=autonomous, channel=channel, line_prefix=line_prefix,
-        sub_agent_runner=sub_agent_runner, task_manager=task_manager,
+        provider=provider,
+        model=config.model,
+        max_tokens=config.max_tokens,
+        temperature=config.temperature,
+        system_prompt=system_prompt,
+        tool_map=tool_map,
+        converted_tools=converted_tools,
+        tool_search_active=tool_search_active,
+        tool_search_manager=tool_search_manager,
+        autonomous=autonomous,
+        channel=channel,
+        line_prefix=line_prefix,
+        sub_agent_runner=sub_agent_runner,
+        task_manager=task_manager,
         compact_system_prompt=compact_system_prompt,
         max_tool_result_chars=config.max_tool_result_chars,
         max_conversation_messages=config.max_conversation_messages,
         compaction_strategy=config.compaction_strategy,
-        memory_enabled=config.memory_enabled, memory=memory,
+        memory_enabled=config.memory_enabled,
+        memory=memory,
         user_memory_enabled=config.user_memory_enabled,
         user_memory_dir=config.user_memory_dir,
         metrics_enabled=config.metrics_enabled,
@@ -236,7 +257,8 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
         session_budget_usd=config.session_budget_usd,
         mode_analysis_enabled=config.mode_analysis_enabled,
         stage2_classification_enabled=config.stage2_classification_enabled,
-        stage2_model=config.stage2_model, stage2_provider=stage2_provider,
+        stage2_model=config.stage2_model,
+        stage2_provider=stage2_provider,
         working_directory=config.working_directory,
         tool_result_formatter=tool_result_formatter,
         api_payload_store=ApiPayloadStore(),
@@ -248,7 +270,8 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
         summarization_enabled=config.tool_result_summarization_enabled,
         summarization_threshold=config.tool_result_summarization_threshold,
         tool_result_overrides=config.tool_result_overrides,
-        provider_pool=provider_pool, semantic_classifier=semantic_classifier,
+        provider_pool=provider_pool,
+        semantic_classifier=semantic_classifier,
         routing_policies=config.routing_policies,
         routing_fallback_provider=config.routing_fallback_provider or config.provider,
         routing_fallback_model=config.routing_fallback_model or config.model,
@@ -268,12 +291,16 @@ def _build_tool_embedding_index(ts: ToolSearchConfig) -> Any:
     if ts.tool_search_strategy == "keyword" or not ts.ollama_base_url:
         return None
     from micro_x_agent_loop.embedding import OllamaEmbeddingClient, ToolEmbeddingIndex
+
     client = OllamaEmbeddingClient(ts.ollama_base_url, ts.embedding_model)
     return ToolEmbeddingIndex(client)
 
 
 def _build_semantic_routing(
-    rc: RoutingConfig, llm: LLMConfig, ts: ToolSearchConfig, provider: Any,
+    rc: RoutingConfig,
+    llm: LLMConfig,
+    ts: ToolSearchConfig,
+    provider: Any,
 ) -> tuple[Any, Any, Any, Any, Any]:
     """Build the semantic routing subsystem. Returns (pool, classifier, feedback_store, callback, embedding_index)."""
     from micro_x_agent_loop.provider_pool import ProviderPool
@@ -286,7 +313,8 @@ def _build_semantic_routing(
             try:
                 p_env = resolve_runtime_env(p_name)
                 pool_providers[p_name] = create_provider(
-                    p_name, p_env.provider_api_key,
+                    p_name,
+                    p_env.provider_api_key,
                     prompt_caching_enabled=llm.prompt_caching_enabled,
                     ollama_base_url=ts.ollama_base_url,
                 )
@@ -294,18 +322,21 @@ def _build_semantic_routing(
                 logger.warning(f"Failed to create provider {p_name!r} for routing: {ex}")
 
     provider_pool = ProviderPool(
-        pool_providers, fallback_provider=rc.routing_fallback_provider or llm.provider,
+        pool_providers,
+        fallback_provider=rc.routing_fallback_provider or llm.provider,
     )
 
     task_embedding_index: object | None = None
     if ts.ollama_base_url and ts.embedding_model:
         from micro_x_agent_loop.embedding import OllamaEmbeddingClient, TaskEmbeddingIndex
+
         task_client = OllamaEmbeddingClient(ts.ollama_base_url, ts.embedding_model)
         task_embedding_index = TaskEmbeddingIndex(task_client)
 
     keywords = [kw.strip() for kw in rc.complexity_keywords.split(",") if kw.strip()]
     semantic_classifier = partial(
-        classify_task, complexity_keywords=keywords,
+        classify_task,
+        complexity_keywords=keywords,
         strategy=rc.semantic_routing_strategy,
         task_embedding_index=task_embedding_index,
     )
@@ -314,6 +345,7 @@ def _build_semantic_routing(
     routing_feedback_callback = None
     if rc.routing_feedback_enabled:
         from micro_x_agent_loop.routing_feedback import RoutingFeedbackStore
+
         db_path = Path(rc.routing_feedback_db_path)
         if not db_path.is_absolute():
             db_path = Path.cwd() / db_path
@@ -327,5 +359,3 @@ def _build_semantic_routing(
     )
 
     return provider_pool, semantic_classifier, routing_feedback_store, routing_feedback_callback, task_embedding_index
-
-

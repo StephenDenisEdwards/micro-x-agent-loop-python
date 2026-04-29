@@ -276,9 +276,7 @@ class TelegramAdapter:
     async def send_question(self, target: str, question: str, options: list[dict] | None = None) -> bool:
         text = f"Question: {question}"
         if options:
-            text += "\n\nOptions:\n" + "\n".join(
-                f"- {o['label']}: {o.get('description', '')}" for o in options
-            )
+            text += "\n\nOptions:\n" + "\n".join(f"- {o['label']}: {o.get('description', '')}" for o in options)
         return await self._send_text(target, text)
 
     async def _send_text(self, chat_id: str, text: str) -> bool:
@@ -288,7 +286,9 @@ class TelegramAdapter:
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    url, json={"chat_id": chat_id, "text": text}, timeout=30,
+                    url,
+                    json={"chat_id": chat_id, "text": text},
+                    timeout=30,
                 )
                 return resp.is_success
         except Exception:
@@ -326,7 +326,9 @@ class WhatsAppAdapter:
             if not signature.startswith("sha256="):
                 return False
             expected = hmac.new(
-                self.app_secret.encode(), body, hashlib.sha256,
+                self.app_secret.encode(),
+                body,
+                hashlib.sha256,
             ).hexdigest()
             return hmac.compare_digest(signature[7:], expected)
         return bool(self.access_token)
@@ -370,9 +372,7 @@ class WhatsAppAdapter:
     async def send_question(self, target: str, question: str, options: list[dict] | None = None) -> bool:
         text = f"Question: {question}"
         if options:
-            text += "\n\nOptions:\n" + "\n".join(
-                f"- {o['label']}: {o.get('description', '')}" for o in options
-            )
+            text += "\n\nOptions:\n" + "\n".join(f"- {o['label']}: {o.get('description', '')}" for o in options)
         return await self._send_text(target, text)
 
     async def _send_text(self, phone: str, text: str) -> bool:

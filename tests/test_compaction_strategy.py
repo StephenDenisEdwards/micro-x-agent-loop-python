@@ -72,7 +72,10 @@ class CompactionStrategyTests(unittest.TestCase):
 
         provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(
-            provider, "m", threshold_tokens=1, protected_tail_messages=1,
+            provider,
+            "m",
+            threshold_tokens=1,
+            protected_tail_messages=1,
             on_compaction_completed=on_compaction,
         )
         messages = [

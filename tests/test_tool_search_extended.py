@@ -24,10 +24,7 @@ def _make_tools() -> list[FakeTool]:
 
 
 def _convert_tools(tools: list[FakeTool]) -> list[dict]:
-    return [
-        {"name": t.name, "description": t.description, "input_schema": t.input_schema}
-        for t in tools
-    ]
+    return [{"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in tools]
 
 
 class GetContextWindowTests(unittest.TestCase):
@@ -163,10 +160,7 @@ class ToolSearchSemanticTests(unittest.TestCase):
 
 class ToolSearchKeywordMaxLoadTests(unittest.TestCase):
     def test_max_load_limits_results(self) -> None:
-        tools = [
-            FakeTool(name=f"tool_{i}", description=f"keyword match tool {i}")
-            for i in range(20)
-        ]
+        tools = [FakeTool(name=f"tool_{i}", description=f"keyword match tool {i}") for i in range(20)]
         converted = _convert_tools(tools)
         mgr = ToolSearchManager(
             all_tools=tools,
@@ -187,16 +181,18 @@ class ToolSearchKeywordMaxLoadTests(unittest.TestCase):
 
 class EstimateTokensTests(unittest.TestCase):
     def test_schemas_with_complex_input(self) -> None:
-        tools = [{
-            "name": "complex_tool",
-            "description": "A complex tool with nested schema",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "nested": {"type": "object", "properties": {"a": {"type": "string"}}},
+        tools = [
+            {
+                "name": "complex_tool",
+                "description": "A complex tool with nested schema",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "nested": {"type": "object", "properties": {"a": {"type": "string"}}},
+                    },
                 },
-            },
-        }]
+            }
+        ]
         tokens = estimate_tool_schema_tokens(tools)
         self.assertGreater(tokens, 0)
 

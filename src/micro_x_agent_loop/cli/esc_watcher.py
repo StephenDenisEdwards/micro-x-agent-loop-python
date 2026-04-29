@@ -88,20 +88,12 @@ class EscWatcher:
             if avail.value == 0:
                 continue
 
-            success = kernel32.PeekConsoleInputW(
-                h_stdin, ctypes.byref(rec), 1, ctypes.byref(read_count)
-            )
+            success = kernel32.PeekConsoleInputW(h_stdin, ctypes.byref(rec), 1, ctypes.byref(read_count))
             if not success or read_count.value == 0:
                 continue
 
-            if (
-                rec.EventType == KEY_EVENT
-                and rec.Event.bKeyDown
-                and rec.Event.wVirtualKeyCode == VK_ESCAPE
-            ):
-                kernel32.ReadConsoleInputW(
-                    h_stdin, ctypes.byref(rec), 1, ctypes.byref(read_count)
-                )
+            if rec.EventType == KEY_EVENT and rec.Event.bKeyDown and rec.Event.wVirtualKeyCode == VK_ESCAPE:
+                kernel32.ReadConsoleInputW(h_stdin, ctypes.byref(rec), 1, ctypes.byref(read_count))
                 task = self._task
                 loop = self._loop
                 if task is not None and loop is not None and not task.done():
@@ -109,8 +101,6 @@ class EscWatcher:
                 return
 
             if rec.EventType != KEY_EVENT:
-                kernel32.ReadConsoleInputW(
-                    h_stdin, ctypes.byref(rec), 1, ctypes.byref(read_count)
-                )
+                kernel32.ReadConsoleInputW(h_stdin, ctypes.byref(rec), 1, ctypes.byref(read_count))
             else:
                 self._stop_event.wait(0.1)

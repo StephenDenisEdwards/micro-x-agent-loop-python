@@ -72,7 +72,8 @@ class TestTaskStore(unittest.TestCase):
     def test_update_task_fields(self) -> None:
         self.store.create_task(self.list_id, "Original", "desc")
         updated = self.store.update_task(
-            self.list_id, "1",
+            self.list_id,
+            "1",
             subject="Updated",
             description="new desc",
             active_form="Updating",
@@ -287,15 +288,11 @@ class TestTaskStore(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_create_with_active_form(self) -> None:
-        task = self.store.create_task(
-            self.list_id, "Run tests", "desc", active_form="Running tests"
-        )
+        task = self.store.create_task(self.list_id, "Run tests", "desc", active_form="Running tests")
         self.assertEqual(task.active_form, "Running tests")
 
     def test_create_with_metadata(self) -> None:
-        task = self.store.create_task(
-            self.list_id, "Task", "desc", metadata={"priority": "high"}
-        )
+        task = self.store.create_task(self.list_id, "Task", "desc", metadata={"priority": "high"})
         assert task.metadata is not None
         self.assertEqual(task.metadata["priority"], "high")
 
@@ -320,12 +317,7 @@ class TestTaskStore(unittest.TestCase):
 
         async def create_tasks() -> list[Task]:
             loop = asyncio.get_event_loop()
-            tasks_created = await asyncio.gather(
-                *[
-                    loop.run_in_executor(None, _create_in_thread, i)
-                    for i in range(5)
-                ]
-            )
+            tasks_created = await asyncio.gather(*[loop.run_in_executor(None, _create_in_thread, i) for i in range(5)])
             return list(tasks_created)
 
         created = asyncio.run(create_tasks())

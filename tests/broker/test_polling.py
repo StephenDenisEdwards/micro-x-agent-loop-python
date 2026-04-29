@@ -48,6 +48,7 @@ class PollingIngressStartTests(unittest.TestCase):
 
     def test_start_dispatches_messages(self) -> None:
         """Polling loop dispatches a trigger and then stops."""
+
         async def go() -> None:
             ok_result = RunResult(exit_code=0, stdout="done", stderr="")
             adapter = MagicMock()
@@ -78,6 +79,7 @@ class PollingIngressStartTests(unittest.TestCase):
                 AsyncMock(return_value=ok_result),
             ):
                 ingress = PollingIngress(adapter, dispatcher, self._store, poll_interval=0)
+
                 # Run for a very short time then stop
                 async def stop_soon():
                     await asyncio.sleep(0.05)
@@ -93,6 +95,7 @@ class PollingIngressStartTests(unittest.TestCase):
 
     def test_start_stops_on_max_errors(self) -> None:
         """Loop stops after reaching the consecutive error limit."""
+
         async def go() -> None:
             adapter = MagicMock()
             adapter.channel_name = "telegram"
@@ -109,6 +112,7 @@ class PollingIngressStartTests(unittest.TestCase):
 
     def test_start_skips_dispatch_when_at_capacity(self) -> None:
         """Messages are dropped when the dispatcher is at capacity."""
+
         async def go() -> None:
             adapter = MagicMock()
             adapter.channel_name = "http"

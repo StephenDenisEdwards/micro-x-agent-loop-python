@@ -108,12 +108,10 @@ class TurnEngine:
         self._routing = resolved_routing
         # Keep direct references needed outside of routing
         self._routing_fallback_provider = (
-            routing_fallback_provider if routing is None
-            else (routing.fallback_provider if routing else "")
+            routing_fallback_provider if routing is None else (routing.fallback_provider if routing else "")
         )
         self._routing_fallback_model = (
-            routing_fallback_model if routing is None
-            else (routing.fallback_model if routing else "")
+            routing_fallback_model if routing is None else (routing.fallback_model if routing else "")
         )
 
     async def run(
@@ -217,7 +215,11 @@ class TurnEngine:
 
             if self._api_payload_store is not None:
                 self._record_api_payload(
-                    system_prompt, messages, message, stop_reason, usage,
+                    system_prompt,
+                    messages,
+                    message,
+                    stop_reason,
+                    usage,
                     tools_count=len(api_tools),
                     effective_model=effective_model,
                 )
@@ -275,11 +277,13 @@ class TurnEngine:
                 assert self._tool_search_manager is not None
                 query = block["input"].get("query", "")
                 result_text = await self._tool_search_manager.handle_tool_search(query)
-                inline_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block["id"],
-                    "content": result_text,
-                })
+                inline_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block["id"],
+                        "content": result_text,
+                    }
+                )
                 logger.info(f"tool_search query={query!r} loaded={self._tool_search_manager.loaded_tool_count}")
 
             # Handle ask_user calls inline (route through the channel)
@@ -289,24 +293,29 @@ class TurnEngine:
                 options = block["input"].get("options")
                 answer = await self._channel.ask_user(question, options)
                 result_text = json.dumps({"answer": answer})
-                inline_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block["id"],
-                    "content": result_text,
-                })
+                inline_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block["id"],
+                        "content": result_text,
+                    }
+                )
                 logger.info(f"ask_user question={question!r}")
 
             # Handle task decomposition calls inline
             for block in task_blocks:
                 assert self._task_manager is not None
                 result_text = await self._task_manager.handle_tool_call(
-                    block["name"], block["input"],
+                    block["name"],
+                    block["input"],
                 )
-                inline_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block["id"],
-                    "content": result_text,
-                })
+                inline_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block["id"],
+                        "content": result_text,
+                    }
+                )
                 logger.info(f"task tool={block['name']}")
 
             # Handle spawn_subagent calls (run sub-agents concurrently)
@@ -337,7 +346,9 @@ class TurnEngine:
             # Combine results in original order
             if inline_results:
                 all_results = self._merge_tool_results(
-                    tool_use_blocks, inline_results, regular_results,
+                    tool_use_blocks,
+                    inline_results,
+                    regular_results,
                 )
             else:
                 all_results = regular_results
@@ -413,7 +424,10 @@ class TurnEngine:
                 )
                 self._events.on_tool_completed(tool_use_id, tool_name, False)
                 self._events.on_tool_executed(
-                    tool_name, len(result_text), duration_ms, False,
+                    tool_name,
+                    len(result_text),
+                    duration_ms,
+                    False,
                     was_summarized=was_summarized,
                 )
                 return {
@@ -533,11 +547,7 @@ class TurnEngine:
 
         Returns (possibly-summarized result, was_summarized).
         """
-        if (
-            not summarize_enabled
-            or self._summarization_provider is None
-            or len(result) <= threshold
-        ):
+        if not summarize_enabled or self._summarization_provider is None or len(result) <= threshold:
             return result, False
 
         prompt = (
@@ -553,9 +563,7 @@ class TurnEngine:
                 [{"role": "user", "content": prompt}],
             )
             self._events.on_api_call_completed(usage, "tool_summarization")
-            logger.info(
-                f"Summarized {tool_name} result: {len(result):,} chars -> {len(summary):,} chars"
-            )
+            logger.info(f"Summarized {tool_name} result: {len(result):,} chars -> {len(summary):,} chars")
             return summary, True
         except Exception as ex:
             logger.warning(f"Tool result summarization failed for {tool_name}: {ex}")
@@ -586,14 +594,8 @@ class TurnEngine:
 
         original_length = len(result)
         truncated = result[:max_chars]
-        message = (
-            f"\n\n[OUTPUT TRUNCATED: Showing {max_chars:,} "
-            f"of {original_length:,} characters from {tool_name}]"
-        )
-        logger.warning(
-            f"{tool_name} output truncated from {original_length:,} "
-            f"to {max_chars:,} chars"
-        )
+        message = f"\n\n[OUTPUT TRUNCATED: Showing {max_chars:,} of {original_length:,} characters from {tool_name}]"
+        logger.warning(f"{tool_name} output truncated from {original_length:,} to {max_chars:,} chars")
         return truncated + message
 
     def _record_api_payload(

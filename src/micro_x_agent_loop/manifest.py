@@ -79,10 +79,7 @@ class ManifestTool:
                     break
             if not self._real_tool:
                 available = [t.name for t in tools]
-                logger.error(
-                    f"Tool '{self._proxy_name}' not found on connected server. "
-                    f"Available: {available}"
-                )
+                logger.error(f"Tool '{self._proxy_name}' not found on connected server. Available: {available}")
                 return ToolResult(
                     text=f"Error: tool '{self._proxy_name}' not found on connected server. "
                     f"Available: {', '.join(available)}",
@@ -142,13 +139,15 @@ def load_manifest(
         tool_name = entry.get("tool_name", task_name)
         description = entry.get("description", f"Generated task: {task_name}")
 
-        tools.append(ManifestTool(
-            task_name=task_name,
-            tool_name=tool_name,
-            description=description,
-            server_config=server_config,
-            connect_fn=connect_fn,
-        ))
+        tools.append(
+            ManifestTool(
+                task_name=task_name,
+                tool_name=tool_name,
+                description=description,
+                server_config=server_config,
+                connect_fn=connect_fn,
+            )
+        )
         logger.info(f"Manifest tool registered: {task_name}__{tool_name}")
 
     if tools:

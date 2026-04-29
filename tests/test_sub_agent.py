@@ -273,15 +273,17 @@ class _ListEvents(BaseTurnEvents):
         return None
 
     def on_subagent_completed(self, *, agent_type, task, result_summary, turns, timed_out, cost_usd, api_calls):
-        self.subagent_completed_calls.append({
-            "agent_type": agent_type,
-            "task": task,
-            "result_summary": result_summary,
-            "turns": turns,
-            "timed_out": timed_out,
-            "cost_usd": cost_usd,
-            "api_calls": api_calls,
-        })
+        self.subagent_completed_calls.append(
+            {
+                "agent_type": agent_type,
+                "task": task,
+                "result_summary": result_summary,
+                "turns": turns,
+                "timed_out": timed_out,
+                "cost_usd": cost_usd,
+                "api_calls": api_calls,
+            }
+        )
 
 
 class TestTurnEngineSubAgent(unittest.TestCase):
@@ -345,11 +347,13 @@ class TestTurnEngineSubAgent(unittest.TestCase):
         # First response: LLM calls spawn_subagent
         provider.queue(
             text="Let me search for that.",
-            tool_use_blocks=[{
-                "id": "tu_1",
-                "name": "spawn_subagent",
-                "input": {"task": "Find all Python files", "type": "explore"},
-            }],
+            tool_use_blocks=[
+                {
+                    "id": "tu_1",
+                    "name": "spawn_subagent",
+                    "input": {"task": "Find all Python files", "type": "explore"},
+                }
+            ],
             stop_reason="tool_use",
         )
         # Second response: LLM produces final answer after receiving sub-agent result
@@ -395,11 +399,13 @@ class TestTurnEngineSubAgent(unittest.TestCase):
         provider = FakeStreamProvider()
         provider.queue(
             text="Delegating.",
-            tool_use_blocks=[{
-                "id": "tu_2",
-                "name": "spawn_subagent",
-                "input": {"task": "Find all config files", "type": "explore"},
-            }],
+            tool_use_blocks=[
+                {
+                    "id": "tu_2",
+                    "name": "spawn_subagent",
+                    "input": {"task": "Find all config files", "type": "explore"},
+                }
+            ],
             stop_reason="tool_use",
         )
         provider.queue(text="Done.")
@@ -445,20 +451,25 @@ class TestSubAgentConfig(unittest.TestCase):
 
     def test_default_disabled(self) -> None:
         from micro_x_agent_loop.app_config import parse_app_config
+
         config = parse_app_config({})
         self.assertFalse(config.sub_agents_enabled)
 
     def test_enabled(self) -> None:
         from micro_x_agent_loop.app_config import parse_app_config
+
         config = parse_app_config({"SubAgentsEnabled": True})
         self.assertTrue(config.sub_agents_enabled)
 
     def test_provider_and_model_parsed(self) -> None:
         from micro_x_agent_loop.app_config import parse_app_config
-        config = parse_app_config({
-            "SubAgentProvider": "anthropic",
-            "SubAgentModel": "claude-haiku-4-5-20251001",
-        })
+
+        config = parse_app_config(
+            {
+                "SubAgentProvider": "anthropic",
+                "SubAgentModel": "claude-haiku-4-5-20251001",
+            }
+        )
         self.assertEqual("anthropic", config.sub_agent_provider)
         self.assertEqual("claude-haiku-4-5-20251001", config.sub_agent_model)
 
@@ -468,6 +479,7 @@ class TestSubAgentDirective(unittest.TestCase):
 
     def test_directive_contains_delegation_guidance(self) -> None:
         from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
+
         self.assertIn("DELEGATE", _SUBAGENT_DIRECTIVE)
         self.assertIn("spawn_subagent", _SUBAGENT_DIRECTIVE)
         self.assertIn("explore", _SUBAGENT_DIRECTIVE)
@@ -476,12 +488,14 @@ class TestSubAgentDirective(unittest.TestCase):
 
     def test_directive_contains_examples(self) -> None:
         from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
+
         self.assertIn("Examples", _SUBAGENT_DIRECTIVE)
         self.assertIn("Good delegation", _SUBAGENT_DIRECTIVE)
         self.assertIn("Not worth delegating", _SUBAGENT_DIRECTIVE)
 
     def test_directive_contains_cost_motivation(self) -> None:
         from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
+
         self.assertIn("cost", _SUBAGENT_DIRECTIVE.lower())
         self.assertIn("context", _SUBAGENT_DIRECTIVE.lower())
 

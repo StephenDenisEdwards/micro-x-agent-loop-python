@@ -86,16 +86,18 @@ def create_app(
                 session_timeout_minutes=session_timeout_minutes,
             )
 
-        _state.update({
-            "app_config": app_config,
-            "raw_config": raw_config,
-            "env": env,
-            "mcp_manager": mcp_manager,
-            "memory_store": memory_store,
-            "event_sink": event_sink,
-            "agent_manager": agent_manager,
-            "tools": tools,
-        })
+        _state.update(
+            {
+                "app_config": app_config,
+                "raw_config": raw_config,
+                "env": env,
+                "mcp_manager": mcp_manager,
+                "memory_store": memory_store,
+                "event_sink": event_sink,
+                "agent_manager": agent_manager,
+                "tools": tools,
+            }
+        )
 
         # -- Broker integration --
         broker_tasks: list[asyncio.Task] = []
@@ -150,21 +152,28 @@ def create_app(
                 if adapter.supports_polling:
                     adapter_poll = channels_config.get(name, {}).get("poll_interval", 10)
                     ingress = PollingIngress(
-                        adapter, dispatcher, broker_store,
+                        adapter,
+                        dispatcher,
+                        broker_store,
                         poll_interval=adapter_poll,
                     )
                     polling_ingresses.append(ingress)
-                    broker_tasks.append(asyncio.create_task(
-                        ingress.start(), name=f"polling-{name}",
-                    ))
+                    broker_tasks.append(
+                        asyncio.create_task(
+                            ingress.start(),
+                            name=f"polling-{name}",
+                        )
+                    )
 
-            _state.update({
-                "broker_store": broker_store,
-                "broker_dispatcher": dispatcher,
-                "broker_scheduler": scheduler,
-                "broker_adapters": adapters,
-                "broker_polling_ingresses": polling_ingresses,
-            })
+            _state.update(
+                {
+                    "broker_store": broker_store,
+                    "broker_dispatcher": dispatcher,
+                    "broker_scheduler": scheduler,
+                    "broker_adapters": adapters,
+                    "broker_polling_ingresses": polling_ingresses,
+                }
+            )
 
             logger.info(
                 f"Broker enabled: jobs={len(broker_store.list_jobs())}, "
@@ -229,6 +238,7 @@ def create_app(
     # Auth middleware
     secret = api_secret or os.environ.get("SERVER_API_SECRET", "")
     if secret:
+
         @app.middleware("http")
         async def auth_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
             if request.url.path in ("/api/health", "/docs", "/openapi.json"):
@@ -256,7 +266,6 @@ def create_app(
         # Include broker status if enabled
         broker_store = _state.get("broker_store")
         if broker_store:
-
             jobs = broker_store.list_jobs()
             dispatcher = _state.get("broker_dispatcher")
             result["broker"] = {
@@ -281,6 +290,7 @@ def create_app(
                 media_type="application/json",
             )
         from micro_x_agent_loop.memory import EventEmitter
+
         event_sink: AsyncEventSink | None = _state.get("event_sink")
         emitter = EventEmitter(memory_store, sink=event_sink)
         sm = SessionManager(memory_store, app_config.model, emitter)
@@ -294,6 +304,7 @@ def create_app(
         if memory_store is None or app_config is None or not app_config.memory_enabled:
             return {"sessions": []}
         from micro_x_agent_loop.memory import EventEmitter
+
         emitter = EventEmitter(memory_store, sink=_state.get("event_sink"))
         sm = SessionManager(memory_store, app_config.model, emitter)
         sessions = sm.list_sessions(limit=50)
@@ -306,6 +317,7 @@ def create_app(
         if memory_store is None or app_config is None or not app_config.memory_enabled:
             return Response(status_code=404, content='{"error": "Not found"}', media_type="application/json")
         from micro_x_agent_loop.memory import EventEmitter
+
         emitter = EventEmitter(memory_store, sink=_state.get("event_sink"))
         sm = SessionManager(memory_store, app_config.model, emitter)
         session = sm.get_session(session_id)
@@ -327,6 +339,7 @@ def create_app(
         if memory_store is None or app_config is None or not app_config.memory_enabled:
             return Response(status_code=404, content='{"error": "Not found"}', media_type="application/json")
         from micro_x_agent_loop.memory import EventEmitter
+
         emitter = EventEmitter(memory_store, sink=_state.get("event_sink"))
         sm = SessionManager(memory_store, app_config.model, emitter)
         messages = sm.load_messages(session_id)
@@ -353,6 +366,7 @@ def create_app(
 
         if not session_id:
             import uuid
+
             session_id = str(uuid.uuid4())
 
         channel = BufferedChannel()

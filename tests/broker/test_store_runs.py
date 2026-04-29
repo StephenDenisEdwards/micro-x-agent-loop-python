@@ -26,28 +26,20 @@ class BrokerStoreRunsTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_set_run_response_info(self) -> None:
-        run_id = self.store.create_run(
-            job_id=self.job["id"], trigger_source="cron", prompt="p"
-        )
-        self.store.set_run_response_info(
-            run_id, response_channel="http", response_target="http://cb"
-        )
+        run_id = self.store.create_run(job_id=self.job["id"], trigger_source="cron", prompt="p")
+        self.store.set_run_response_info(run_id, response_channel="http", response_target="http://cb")
         run = self.store.get_run(run_id)
         self.assertEqual("http", run["response_channel"])
         self.assertEqual("http://cb", run["response_target"])
 
     def test_mark_response_sent(self) -> None:
-        run_id = self.store.create_run(
-            job_id=self.job["id"], trigger_source="cron", prompt="p"
-        )
+        run_id = self.store.create_run(job_id=self.job["id"], trigger_source="cron", prompt="p")
         self.store.mark_response_sent(run_id)
         run = self.store.get_run(run_id)
         self.assertEqual(1, run["response_sent"])
 
     def test_mark_response_failed(self) -> None:
-        run_id = self.store.create_run(
-            job_id=self.job["id"], trigger_source="cron", prompt="p"
-        )
+        run_id = self.store.create_run(job_id=self.job["id"], trigger_source="cron", prompt="p")
         self.store.mark_response_failed(run_id, error="delivery failed")
         run = self.store.get_run(run_id)
         self.assertEqual("delivery failed", run["response_error"])
@@ -67,20 +59,14 @@ class BrokerStoreRunsTests(unittest.TestCase):
         self.assertEqual(self.job["id"], runs[0]["job_id"])
 
     def test_create_run_if_no_overlap_creates_run(self) -> None:
-        run_id = self.store.create_run_if_no_overlap(
-            job_id=self.job["id"], trigger_source="cron", prompt="p"
-        )
+        run_id = self.store.create_run_if_no_overlap(job_id=self.job["id"], trigger_source="cron", prompt="p")
         self.assertIsNotNone(run_id)
 
     def test_create_run_if_no_overlap_skips_when_running(self) -> None:
         # Create a running run first
-        self.store.create_run(
-            job_id=self.job["id"], trigger_source="cron", prompt="p"
-        )
+        self.store.create_run(job_id=self.job["id"], trigger_source="cron", prompt="p")
         # Now try to create with no overlap — should return None
-        run_id = self.store.create_run_if_no_overlap(
-            job_id=self.job["id"], trigger_source="cron", prompt="p2"
-        )
+        run_id = self.store.create_run_if_no_overlap(job_id=self.job["id"], trigger_source="cron", prompt="p2")
         self.assertIsNone(run_id)
 
 
@@ -89,12 +75,8 @@ class BrokerStoreQuestionTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self._db_path = str(Path(self._tmp.name) / "broker.db")
         self.store = BrokerStore(self._db_path)
-        self.job = self.store.create_job(
-            name="q-job", cron_expr="* * * * *", prompt_template="p"
-        )
-        self.run_id = self.store.create_run(
-            job_id=self.job["id"], trigger_source="cron", prompt="q"
-        )
+        self.job = self.store.create_job(name="q-job", cron_expr="* * * * *", prompt_template="p")
+        self.run_id = self.store.create_run(job_id=self.job["id"], trigger_source="cron", prompt="q")
 
     def tearDown(self) -> None:
         self.store.close()
@@ -180,9 +162,7 @@ class BrokerStoreRetryTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self._db_path = str(Path(self._tmp.name) / "broker.db")
         self.store = BrokerStore(self._db_path)
-        self.job = self.store.create_job(
-            name="retry-job", cron_expr="* * * * *", prompt_template="p"
-        )
+        self.job = self.store.create_job(name="retry-job", cron_expr="* * * * *", prompt_template="p")
 
     def tearDown(self) -> None:
         self.store.close()
@@ -190,6 +170,7 @@ class BrokerStoreRetryTests(unittest.TestCase):
 
     def test_create_retry_run(self) -> None:
         from datetime import UTC, datetime, timedelta
+
         scheduled_at = (datetime.now(UTC) + timedelta(seconds=60)).isoformat()
         retry_id = self.store.create_retry_run(
             job_id=self.job["id"],
@@ -206,6 +187,7 @@ class BrokerStoreRetryTests(unittest.TestCase):
 
     def test_list_due_retries(self) -> None:
         from datetime import UTC, datetime, timedelta
+
         # Past scheduled time
         past_time = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
         retry_id = self.store.create_retry_run(
@@ -221,6 +203,7 @@ class BrokerStoreRetryTests(unittest.TestCase):
 
     def test_start_run(self) -> None:
         from datetime import UTC, datetime, timedelta
+
         scheduled_at = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
         retry_id = self.store.create_retry_run(
             job_id=self.job["id"],

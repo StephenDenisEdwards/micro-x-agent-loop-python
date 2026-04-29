@@ -38,10 +38,7 @@ def _make_tools() -> list[FakeTool]:
 
 
 def _convert_tools(tools: list[FakeTool]) -> list[dict]:
-    return [
-        {"name": t.name, "description": t.description, "input_schema": t.input_schema}
-        for t in tools
-    ]
+    return [{"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in tools]
 
 
 # ---------------------------------------------------------------------------
@@ -78,80 +75,56 @@ class TestShouldActivateToolSearch(unittest.TestCase):
     def test_auto_anthropic_always_inactive(self) -> None:
         """On Anthropic, auto should always return False (cache-preserving)."""
         tools = _convert_tools(_make_tools())
-        self.assertFalse(
-            should_activate_tool_search("auto:0", tools, "claude-sonnet-4-5", provider="anthropic")
-        )
+        self.assertFalse(should_activate_tool_search("auto:0", tools, "claude-sonnet-4-5", provider="anthropic"))
 
     def test_auto_anthropic_case_insensitive(self) -> None:
         tools = _convert_tools(_make_tools())
-        self.assertFalse(
-            should_activate_tool_search("auto:0", tools, "claude-sonnet-4-5", provider="Anthropic")
-        )
+        self.assertFalse(should_activate_tool_search("auto:0", tools, "claude-sonnet-4-5", provider="Anthropic"))
 
     def test_auto_gemini_always_inactive(self) -> None:
         """On Gemini (90% cache discount), auto should return False."""
         tools = _convert_tools(_make_tools())
-        self.assertFalse(
-            should_activate_tool_search("auto:0", tools, "gemini-2.5-pro", provider="gemini")
-        )
+        self.assertFalse(should_activate_tool_search("auto:0", tools, "gemini-2.5-pro", provider="gemini"))
 
     def test_auto_gemini_case_insensitive(self) -> None:
         tools = _convert_tools(_make_tools())
-        self.assertFalse(
-            should_activate_tool_search("auto:0", tools, "gemini-2.5-flash", provider="Gemini")
-        )
+        self.assertFalse(should_activate_tool_search("auto:0", tools, "gemini-2.5-flash", provider="Gemini"))
 
     def test_auto_deepseek_always_inactive(self) -> None:
         """On DeepSeek (90% cache discount), auto should return False."""
         tools = _convert_tools(_make_tools())
-        self.assertFalse(
-            should_activate_tool_search("auto:0", tools, "deepseek-chat", provider="deepseek")
-        )
+        self.assertFalse(should_activate_tool_search("auto:0", tools, "deepseek-chat", provider="deepseek"))
 
     def test_auto_deepseek_case_insensitive(self) -> None:
         tools = _convert_tools(_make_tools())
-        self.assertFalse(
-            should_activate_tool_search("auto:0", tools, "deepseek-reasoner", provider="DeepSeek")
-        )
+        self.assertFalse(should_activate_tool_search("auto:0", tools, "deepseek-reasoner", provider="DeepSeek"))
 
     def test_true_overrides_gemini(self) -> None:
         """Explicit 'true' should override Gemini's cache-preserving logic."""
-        self.assertTrue(
-            should_activate_tool_search("true", [], "gemini-2.5-pro", provider="gemini")
-        )
+        self.assertTrue(should_activate_tool_search("true", [], "gemini-2.5-pro", provider="gemini"))
 
     def test_true_overrides_deepseek(self) -> None:
         """Explicit 'true' should override DeepSeek's cache-preserving logic."""
-        self.assertTrue(
-            should_activate_tool_search("true", [], "deepseek-chat", provider="deepseek")
-        )
+        self.assertTrue(should_activate_tool_search("true", [], "deepseek-chat", provider="deepseek"))
 
     def test_auto_openai_applies_threshold(self) -> None:
         """On OpenAI, auto should apply the token threshold heuristic."""
         tools = _convert_tools(_make_tools())
         # With threshold 0%, any tools should activate
-        self.assertTrue(
-            should_activate_tool_search("auto:0", tools, "gpt-4o", provider="openai")
-        )
+        self.assertTrue(should_activate_tool_search("auto:0", tools, "gpt-4o", provider="openai"))
 
     def test_auto_openai_below_threshold_inactive(self) -> None:
         """On OpenAI, auto with default threshold should be inactive for few tools."""
         tools = _convert_tools(_make_tools())
-        self.assertFalse(
-            should_activate_tool_search("auto", tools, "gpt-4o", provider="openai")
-        )
+        self.assertFalse(should_activate_tool_search("auto", tools, "gpt-4o", provider="openai"))
 
     def test_true_overrides_anthropic(self) -> None:
         """Explicit 'true' should override provider-aware logic."""
-        self.assertTrue(
-            should_activate_tool_search("true", [], "claude-sonnet-4-5", provider="anthropic")
-        )
+        self.assertTrue(should_activate_tool_search("true", [], "claude-sonnet-4-5", provider="anthropic"))
 
     def test_false_overrides_openai(self) -> None:
         """Explicit 'false' should override provider-aware logic."""
-        self.assertFalse(
-            should_activate_tool_search("false", [], "gpt-4o", provider="openai")
-        )
+        self.assertFalse(should_activate_tool_search("false", [], "gpt-4o", provider="openai"))
 
     def test_auto_no_provider_falls_through(self) -> None:
         """When no provider is specified, auto uses threshold logic (backward compat)."""
@@ -272,7 +245,6 @@ def _make_engine_with_search(
         system_prompt="sys",
         converted_tools=converted,
         tool_map={t.name: t for t in tool_list},
-
         max_tool_result_chars=40_000,
         max_tokens_retries=3,
         events=events,
@@ -287,25 +259,29 @@ class TestTurnEngineToolSearch(unittest.TestCase):
         provider = FakeStreamProvider()
 
         # Response 1: LLM calls tool_search
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Let me search for file tools."}],
-            },
-            [{"name": "tool_search", "id": "ts1", "input": {"query": "read file"}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Let me search for file tools."}],
+                },
+                [{"name": "tool_search", "id": "ts1", "input": {"query": "read file"}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         # Response 2: LLM calls the discovered tool
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Reading the file."}],
-            },
-            [{"name": "fs__read_file", "id": "t1", "input": {"path": "a.py"}}],
-            "tool_use",
-            UsageResult(input_tokens=20, output_tokens=10, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Reading the file."}],
+                },
+                [{"name": "fs__read_file", "id": "t1", "input": {"path": "a.py"}}],
+                "tool_use",
+                UsageResult(input_tokens=20, output_tokens=10, model="m"),
+            )
+        )
         # Response 3: Final text
         provider.queue(text="Here are the contents.", stop_reason="end_turn")
 
@@ -324,15 +300,17 @@ class TestTurnEngineToolSearch(unittest.TestCase):
         provider = FakeStreamProvider()
 
         # Response 1: tool_search only
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Searching."}],
-            },
-            [{"name": "tool_search", "id": "ts1", "input": {"query": "email"}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Searching."}],
+                },
+                [{"name": "tool_search", "id": "ts1", "input": {"query": "email"}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         # Response 2: text response
         provider.queue(text="No email tools needed.", stop_reason="end_turn")
 
@@ -352,18 +330,20 @@ class TestTurnEngineToolSearch(unittest.TestCase):
         provider = FakeStreamProvider()
 
         # Response 1: both tool_search and a regular tool
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Searching and reading."}],
-            },
-            [
-                {"name": "tool_search", "id": "ts1", "input": {"query": "write"}},
-                {"name": "fs__read_file", "id": "t1", "input": {"path": "b.py"}},
-            ],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Searching and reading."}],
+                },
+                [
+                    {"name": "tool_search", "id": "ts1", "input": {"query": "write"}},
+                    {"name": "fs__read_file", "id": "t1", "input": {"path": "b.py"}},
+                ],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         # Response 2: text
         provider.queue(text="Done.", stop_reason="end_turn")
 
@@ -387,15 +367,17 @@ class TestTurnEngineToolSearch(unittest.TestCase):
         """Without tool_search_manager, engine works normally."""
         tool = FakeTool(name="read_file", description="Read", execute_result="ok")
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Reading."}],
-            },
-            [{"name": "read_file", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Reading."}],
+                },
+                [{"name": "read_file", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Done.", stop_reason="end_turn")
 
         events = RecordingEvents()
@@ -408,7 +390,6 @@ class TestTurnEngineToolSearch(unittest.TestCase):
             system_prompt="sys",
             converted_tools=[],
             tool_map={tool.name: tool},
-
             max_tool_result_chars=40_000,
             max_tokens_retries=3,
             events=events,

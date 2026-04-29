@@ -63,9 +63,11 @@ class ParseToolResultOverridesTests(unittest.TestCase):
         self.assertEqual(_parse_tool_result_overrides([1, 2, 3]), {})
 
     def test_full_entry(self) -> None:
-        result = _parse_tool_result_overrides({
-            "gmail_read": {"Summarize": False, "Threshold": 10000, "MaxChars": 200000},
-        })
+        result = _parse_tool_result_overrides(
+            {
+                "gmail_read": {"Summarize": False, "Threshold": 10000, "MaxChars": 200000},
+            }
+        )
         self.assertEqual(
             result,
             {"gmail_read": ToolResultOverride(summarize=False, threshold=10000, max_chars=200000)},
@@ -83,16 +85,20 @@ class ParseToolResultOverridesTests(unittest.TestCase):
         self.assertIs(result["x"].summarize, True)
 
     def test_unknown_inner_keys_ignored(self) -> None:
-        result = _parse_tool_result_overrides({
-            "x": {"Summarize": False, "BogusKey": 42},
-        })
+        result = _parse_tool_result_overrides(
+            {
+                "x": {"Summarize": False, "BogusKey": 42},
+            }
+        )
         self.assertEqual(result["x"], ToolResultOverride(summarize=False))
 
     def test_non_dict_entry_skipped(self) -> None:
-        result = _parse_tool_result_overrides({
-            "good": {"Summarize": False},
-            "bad": "should be a dict",
-        })
+        result = _parse_tool_result_overrides(
+            {
+                "good": {"Summarize": False},
+                "bad": "should be a dict",
+            }
+        )
         self.assertEqual(set(result.keys()), {"good"})
 
     def test_negative_threshold_dropped(self) -> None:
@@ -104,11 +110,13 @@ class ParseToolResultOverridesTests(unittest.TestCase):
         self.assertEqual(result["x"], ToolResultOverride(max_chars=None))
 
     def test_multiple_tools(self) -> None:
-        result = _parse_tool_result_overrides({
-            "gmail_read": {"Summarize": False, "MaxChars": 200000},
-            "web_fetch": {"Summarize": False, "MaxChars": 200000},
-            "gmail_search": {"Summarize": True, "Threshold": 20000},
-        })
+        result = _parse_tool_result_overrides(
+            {
+                "gmail_read": {"Summarize": False, "MaxChars": 200000},
+                "web_fetch": {"Summarize": False, "MaxChars": 200000},
+                "gmail_search": {"Summarize": True, "Threshold": 20000},
+            }
+        )
         self.assertEqual(len(result), 3)
         self.assertEqual(
             result["gmail_search"],
@@ -203,12 +211,16 @@ class ResolveConfigWithBaseTests(unittest.TestCase):
     def test_base_merge_and_overlay(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             base_path = Path(tmpdir) / "base.json"
-            base_path.write_text(json.dumps({
-                "Provider": "anthropic",
-                "Model": "base-model",
-                "MaxTokens": 8192,
-                "ToolFormatting": {"tool_a": {"format": "json"}},
-            }))
+            base_path.write_text(
+                json.dumps(
+                    {
+                        "Provider": "anthropic",
+                        "Model": "base-model",
+                        "MaxTokens": 8192,
+                        "ToolFormatting": {"tool_a": {"format": "json"}},
+                    }
+                )
+            )
             variant = {
                 "Base": "base.json",
                 "Model": "override-model",
@@ -229,12 +241,16 @@ class ResolveConfigWithBaseTests(unittest.TestCase):
     def test_deep_merge_nested_dicts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             base_path = Path(tmpdir) / "base.json"
-            base_path.write_text(json.dumps({
-                "McpServers": {
-                    "filesystem": {"command": "node", "args": ["fs.js"]},
-                    "web": {"command": "node", "args": ["web.js"]},
-                },
-            }))
+            base_path.write_text(
+                json.dumps(
+                    {
+                        "McpServers": {
+                            "filesystem": {"command": "node", "args": ["fs.js"]},
+                            "web": {"command": "node", "args": ["web.js"]},
+                        },
+                    }
+                )
+            )
             variant = {
                 "Base": "base.json",
                 "McpServers": {
@@ -262,16 +278,24 @@ class LoadJsonConfigWithBaseTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
                 base_path = Path(tmpdir) / "base.json"
-                base_path.write_text(json.dumps({
-                    "Provider": "anthropic",
-                    "WorkingDirectory": "${_TEST_DIR}",
-                    "MaxTokens": 8192,
-                }))
+                base_path.write_text(
+                    json.dumps(
+                        {
+                            "Provider": "anthropic",
+                            "WorkingDirectory": "${_TEST_DIR}",
+                            "MaxTokens": 8192,
+                        }
+                    )
+                )
                 variant_path = Path(tmpdir) / "variant.json"
-                variant_path.write_text(json.dumps({
-                    "Base": "base.json",
-                    "Model": "claude-haiku",
-                }))
+                variant_path.write_text(
+                    json.dumps(
+                        {
+                            "Base": "base.json",
+                            "Model": "claude-haiku",
+                        }
+                    )
+                )
                 data, path = load_json_config(str(variant_path))
                 self.assertEqual(data["Model"], "claude-haiku")
                 self.assertEqual(data["MaxTokens"], 8192)
@@ -288,6 +312,7 @@ class LoadJsonConfigExtraTests(unittest.TestCase):
     def test_load_no_path_no_cwd_config(self) -> None:
         """When config_path=None and no cwd config.json, returns empty dict."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmp:
             orig_cwd = os.getcwd()
             try:
@@ -300,6 +325,7 @@ class LoadJsonConfigExtraTests(unittest.TestCase):
     def test_load_no_path_with_cwd_config(self) -> None:
         """When config_path=None and cwd has config.json, reads it."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "config.json").write_text(json.dumps({"Model": "test-model"}))
             orig_cwd = os.getcwd()

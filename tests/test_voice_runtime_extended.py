@@ -68,10 +68,15 @@ def _make_tool_map() -> dict[str, Any]:
     return {
         "stt-server__stt_start_session": _JsonTool({"session_id": "s-1"}),
         "stt-server__stt_stop_session": _JsonTool({"ok": True}),
-        "stt-server__stt_get_session": _JsonTool({
-            "status": "running", "next_seq": 1, "stable_chunk_count": 2,
-            "error_count": 0, "latest_transcript": "hello",
-        }),
+        "stt-server__stt_get_session": _JsonTool(
+            {
+                "status": "running",
+                "next_seq": 1,
+                "stable_chunk_count": 2,
+                "error_count": 0,
+                "latest_transcript": "hello",
+            }
+        ),
         "stt-server__stt_list_devices": _JsonTool({"capture": [], "render": []}),
         "stt-server__stt_get_updates": _JsonTool({"events": []}),
     }
@@ -155,9 +160,7 @@ class VoiceRuntimeStartTests(unittest.TestCase):
                 on_utterance=AsyncMock(),
                 ingress=_FakeIngress([]),
             )
-            msg = await runtime.start(
-                "microphone", mic_device_id="dev-1", mic_device_name="My Mic"
-            )
+            msg = await runtime.start("microphone", mic_device_id="dev-1", mic_device_name="My Mic")
             await runtime.stop()
             return msg
 
@@ -221,10 +224,15 @@ class VoiceRuntimeStatusTests(unittest.TestCase):
     def test_status_long_transcript_truncated(self) -> None:
         """Long latest_transcript in status is truncated."""
         tool_map = _make_tool_map()
-        tool_map["stt-server__stt_get_session"] = _JsonTool({
-            "status": "running", "next_seq": 5, "stable_chunk_count": 1,
-            "error_count": 0, "latest_transcript": "x" * 100,
-        })
+        tool_map["stt-server__stt_get_session"] = _JsonTool(
+            {
+                "status": "running",
+                "next_seq": 5,
+                "stable_chunk_count": 1,
+                "error_count": 0,
+                "latest_transcript": "x" * 100,
+            }
+        )
 
         async def scenario() -> str:
             runtime = VoiceRuntime(
@@ -307,7 +315,9 @@ class VoiceRuntimeIsRunningTests(unittest.TestCase):
 class ParseJsonObjectTests(unittest.TestCase):
     def _parse(self, raw: str) -> dict:
         runtime = VoiceRuntime(
-            line_prefix="", tool_map={}, on_utterance=AsyncMock(),
+            line_prefix="",
+            tool_map={},
+            on_utterance=AsyncMock(),
         )
         return runtime._parse_json_object(raw)
 
@@ -315,11 +325,11 @@ class ParseJsonObjectTests(unittest.TestCase):
         self.assertEqual({"a": 1}, self._parse('{"a": 1}'))
 
     def test_markdown_fenced(self) -> None:
-        raw = "```json\n{\"b\": 2}\n```"
+        raw = '```json\n{"b": 2}\n```'
         self.assertEqual({"b": 2}, self._parse(raw))
 
     def test_embedded_json(self) -> None:
-        raw = "Some text before {\"c\": 3} and after"
+        raw = 'Some text before {"c": 3} and after'
         self.assertEqual({"c": 3}, self._parse(raw))
 
     def test_invalid_json_raises(self) -> None:
@@ -329,6 +339,7 @@ class ParseJsonObjectTests(unittest.TestCase):
 
 class AsyncMock:
     """Simple async callable mock."""
+
     def __init__(self) -> None:
         self.calls: list = []
 

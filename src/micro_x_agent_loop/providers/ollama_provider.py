@@ -34,7 +34,11 @@ class OllamaProvider(OpenAIProvider):
         tools: list[dict],
     ) -> dict:
         kwargs = super()._build_stream_kwargs(
-            model, max_tokens, temperature, messages, tools,
+            model,
+            max_tokens,
+            temperature,
+            messages,
+            tools,
         )
         if tools:
             kwargs["tool_choice"] = "auto"

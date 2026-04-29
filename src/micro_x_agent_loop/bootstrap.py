@@ -98,9 +98,7 @@ async def bootstrap_runtime(
         if not app.compaction_model:
             raise ValueError("CompactionModel must be set in config when CompactionStrategy is 'summarize'")
         compaction_env = (
-            resolve_runtime_env(app.compaction_provider)
-            if app.compaction_provider != app.provider_name
-            else env
+            resolve_runtime_env(app.compaction_provider) if app.compaction_provider != app.provider_name else env
         )
         compaction_strategy = SummarizeCompactionStrategy(
             provider=create_provider(app.compaction_provider, compaction_env.provider_api_key),
@@ -137,7 +135,9 @@ async def bootstrap_runtime(
         )
 
         active_session_id = _resolve_session(
-            session_manager, app, autonomous=autonomous,
+            session_manager,
+            app,
+            autonomous=autonomous,
         )
 
         prune_memory(

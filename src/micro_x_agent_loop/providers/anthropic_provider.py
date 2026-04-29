@@ -27,11 +27,15 @@ class AnthropicProvider:
     def convert_tools(self, tools: list[Tool]) -> list[dict]:
         return canonicalise_tools(tools)
 
-    @retry(**default_retry_kwargs((
-        anthropic.RateLimitError,
-        anthropic.APIConnectionError,
-        anthropic.APITimeoutError,
-    )))
+    @retry(
+        **default_retry_kwargs(
+            (
+                anthropic.RateLimitError,
+                anthropic.APIConnectionError,
+                anthropic.APITimeoutError,
+            )
+        )
+    )
     async def stream_chat(
         self,
         model: str,
@@ -157,11 +161,15 @@ class AnthropicProvider:
 
         return message, tool_use_blocks, response.stop_reason or "end_turn", usage_result
 
-    @retry(**default_retry_kwargs((
-        anthropic.RateLimitError,
-        anthropic.APIConnectionError,
-        anthropic.APITimeoutError,
-    )))
+    @retry(
+        **default_retry_kwargs(
+            (
+                anthropic.RateLimitError,
+                anthropic.APIConnectionError,
+                anthropic.APITimeoutError,
+            )
+        )
+    )
     async def create_message(
         self,
         model: str,
@@ -180,10 +188,7 @@ class AnthropicProvider:
         )
         t_end = time.monotonic()
         usage = response.usage
-        logger.debug(
-            f"Compaction API response: input_tokens={usage.input_tokens}, "
-            f"output_tokens={usage.output_tokens}"
-        )
+        logger.debug(f"Compaction API response: input_tokens={usage.input_tokens}, output_tokens={usage.output_tokens}")
 
         usage_result = UsageResult(
             input_tokens=usage.input_tokens,

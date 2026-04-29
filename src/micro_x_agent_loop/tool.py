@@ -47,11 +47,7 @@ def normalize_tool_content(content: str | list) -> str:
     extracts and joins the text from list-form content.
     """
     if isinstance(content, list):
-        return "\n".join(
-            sub.get("text", "")
-            for sub in content
-            if isinstance(sub, dict) and sub.get("type") == "text"
-        )
+        return "\n".join(sub.get("text", "") for sub in content if isinstance(sub, dict) and sub.get("type") == "text")
     return str(content)
 
 

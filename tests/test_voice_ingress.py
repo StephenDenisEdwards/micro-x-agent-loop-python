@@ -46,6 +46,7 @@ class ParseJsonObjectTests(unittest.TestCase):
 class PollingVoiceIngressTests(unittest.TestCase):
     def test_no_tool_found_returns_immediately(self) -> None:
         """If no stt_get_updates tool is in the map, stream_events yields nothing."""
+
         async def collect():
             ingress = PollingVoiceIngress(tool_map={}, poll_interval_seconds=0)
             events = []
@@ -58,6 +59,7 @@ class PollingVoiceIngressTests(unittest.TestCase):
 
     def test_tool_not_in_map_returns_immediately(self) -> None:
         """If tool key resolves to None, generator exits."""
+
         # A tool map where the key ends with __stt_get_updates but value could be None
         # This can't happen in normal usage (dict.get returns None), so test the None branch
         async def collect():

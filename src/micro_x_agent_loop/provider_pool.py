@@ -52,8 +52,7 @@ class ProviderStatus:
         self.cooldown_until = self.last_error_time + cooldown
         self.available = False
         logger.warning(
-            f"Provider marked unavailable for {cooldown:.0f}s "
-            f"(consecutive errors: {self.consecutive_errors})"
+            f"Provider marked unavailable for {cooldown:.0f}s (consecutive errors: {self.consecutive_errors})"
         )
 
     def mark_success(self) -> None:
@@ -94,16 +93,13 @@ class ProviderPool:
         cache_switch_penalty_tokens: int = 0,
     ) -> None:
         self._providers = providers
-        self._status: dict[str, ProviderStatus] = {
-            name: ProviderStatus() for name in providers
-        }
+        self._status: dict[str, ProviderStatus] = {name: ProviderStatus() for name in providers}
         self._fallback_provider = fallback_provider or next(iter(providers), "")
         self._active_cache_provider: str = ""
         self._cache_switch_penalty_tokens = cache_switch_penalty_tokens
         # Extract family from each provider for same-family fallback gating
         self._families: dict[str, str] = {
-            name: getattr(provider, "family", name)
-            for name, provider in providers.items()
+            name: getattr(provider, "family", name) for name, provider in providers.items()
         }
 
     @property
@@ -176,16 +172,10 @@ class ProviderPool:
             if name == target.provider:
                 continue
             if self._check_and_reset(name) and self._families.get(name) == target_family:
-                logger.warning(
-                    f"Using first available same-family provider: {name!r} "
-                    f"(family: {target_family})"
-                )
+                logger.warning(f"Using first available same-family provider: {name!r} (family: {target_family})")
                 return provider, target.model
 
-        raise ValueError(
-            f"No same-family ({target_family}) providers available "
-            f"for {target.provider!r}"
-        )
+        raise ValueError(f"No same-family ({target_family}) providers available for {target.provider!r}")
 
     async def stream_chat(
         self,
@@ -207,8 +197,12 @@ class ProviderPool:
 
         try:
             result: tuple[dict, list[dict], str, Any] = await provider.stream_chat(
-                model, max_tokens, temperature,
-                system_prompt, messages, tools,
+                model,
+                max_tokens,
+                temperature,
+                system_prompt,
+                messages,
+                tools,
                 channel=channel,
             )
             self._mark_success(provider_name)
@@ -217,17 +211,18 @@ class ProviderPool:
         except Exception as ex:
             self._mark_error(provider_name)
             # Try fallback if different from the target AND same family
-            if (
-                provider_name != self._fallback_provider
-                and self._same_family(provider_name, self._fallback_provider)
-            ):
+            if provider_name != self._fallback_provider and self._same_family(provider_name, self._fallback_provider):
                 try:
                     fb_provider, fb_model = self.resolve_target(
                         RoutingTarget(provider=self._fallback_provider, model=model)
                     )
                     fb_result: tuple[dict, list[dict], str, Any] = await fb_provider.stream_chat(
-                        fb_model, max_tokens, temperature,
-                        system_prompt, messages, tools,
+                        fb_model,
+                        max_tokens,
+                        temperature,
+                        system_prompt,
+                        messages,
+                        tools,
                         channel=channel,
                     )
                     self._mark_success(self._fallback_provider)

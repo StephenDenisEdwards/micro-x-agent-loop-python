@@ -205,8 +205,11 @@ class TerminalChannel:
                 answer = await asyncio.to_thread(prompt_free_text, question)
         except Exception:
             answer = await asyncio.to_thread(
-                fallback_prompt, question, options or [],
-                line_prefix=self._line_prefix, user_prompt=self._user_prompt,
+                fallback_prompt,
+                question,
+                options or [],
+                line_prefix=self._line_prefix,
+                user_prompt=self._user_prompt,
             )
         return answer
 
@@ -379,6 +382,5 @@ class BrokerChannel:
 
 
 _NO_RESPONSE_MSG = (
-    "No response from human — question timed out. "
-    "Proceed with your best judgement or report that you cannot continue."
+    "No response from human — question timed out. Proceed with your best judgement or report that you cannot continue."
 )

@@ -16,6 +16,7 @@ _MAX_OUTPUT_BYTES = 10 * 1024 * 1024  # 10 MB
 @dataclass
 class RunResult:
     """Result of a one-shot agent run."""
+
     exit_code: int
     stdout: str
     stderr: str

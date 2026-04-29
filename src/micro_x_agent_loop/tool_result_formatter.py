@@ -122,8 +122,10 @@ class ToolResultFormatter:
             lines.append("| " + " | ".join(cells) + " |")
 
         result = "\n".join(lines)
-        total = len(structured) if isinstance(structured, list) else sum(
-            len(v) for v in structured.values() if isinstance(v, list)
+        total = (
+            len(structured)
+            if isinstance(structured, list)
+            else sum(len(v) for v in structured.values() if isinstance(v, list))
         )
         if total > max_rows:
             result += f"\n\n[Showing {max_rows} of {total} rows]"

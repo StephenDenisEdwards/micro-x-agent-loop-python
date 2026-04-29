@@ -51,10 +51,12 @@ class AutonomousModeTests(unittest.TestCase):
 class CliArgParsingTests(unittest.TestCase):
     def test_parse_run_flag(self) -> None:
         import sys
+
         original = sys.argv
         try:
             sys.argv = ["prog", "--run", "hello world"]
             from micro_x_agent_loop.__main__ import _parse_cli_args
+
             args = _parse_cli_args()
             self.assertEqual(args["run"], "hello world")
         finally:
@@ -62,10 +64,12 @@ class CliArgParsingTests(unittest.TestCase):
 
     def test_parse_run_with_session(self) -> None:
         import sys
+
         original = sys.argv
         try:
             sys.argv = ["prog", "--run", "hello", "--session", "abc123"]
             from micro_x_agent_loop.__main__ import _parse_cli_args
+
             args = _parse_cli_args()
             self.assertEqual(args["run"], "hello")
             self.assertEqual(args["session"], "abc123")
@@ -74,10 +78,12 @@ class CliArgParsingTests(unittest.TestCase):
 
     def test_parse_broker_command(self) -> None:
         import sys
+
         original = sys.argv
         try:
             sys.argv = ["prog", "--broker", "start"]
             from micro_x_agent_loop.__main__ import _parse_cli_args
+
             args = _parse_cli_args()
             self.assertEqual(args["broker"], ["start"])
         finally:
@@ -85,10 +91,12 @@ class CliArgParsingTests(unittest.TestCase):
 
     def test_parse_job_command(self) -> None:
         import sys
+
         original = sys.argv
         try:
             sys.argv = ["prog", "--job", "add", "test", "* * * * *", "hello"]
             from micro_x_agent_loop.__main__ import _parse_cli_args
+
             args = _parse_cli_args()
             self.assertEqual(args["job"], ["add", "test", "* * * * *", "hello"])
         finally:

@@ -52,10 +52,12 @@ class VoiceRuntimeTests(unittest.TestCase):
             "interview-assist__stt_list_devices": _JsonTool({"capture": [], "render": []}),
             "interview-assist__stt_get_updates": _JsonTool({"events": []}),
         }
-        ingress = _FakeIngress([
-            {"seq": 1, "type": "utterance_final", "text": "hello world"},
-            {"seq": 2, "type": "info", "message": "noop"},
-        ])
+        ingress = _FakeIngress(
+            [
+                {"seq": 1, "type": "utterance_final", "text": "hello world"},
+                {"seq": 2, "type": "info", "message": "noop"},
+            ]
+        )
         runtime = VoiceRuntime(
             line_prefix="assistant> ",
             tool_map=tool_map,

@@ -56,7 +56,8 @@ class McpToolProxy:
     async def execute(self, tool_input: dict[str, Any]) -> ToolResult:
         logger.debug(
             "MCP tool call: {name} | input: {input}",
-            name=self.name, input=json.dumps(tool_input, default=str),
+            name=self.name,
+            input=json.dumps(tool_input, default=str),
         )
         result = await self._session.call_tool(self._tool_name, arguments=tool_input)
         logger.debug(
@@ -81,6 +82,8 @@ class McpToolProxy:
 
         logger.debug(
             "MCP tool result: {name} | chars={chars} | result: {output}",
-            name=self.name, chars=len(output), output=output[:500],
+            name=self.name,
+            chars=len(output),
+            output=output[:500],
         )
         return ToolResult(text=output, structured=structured)

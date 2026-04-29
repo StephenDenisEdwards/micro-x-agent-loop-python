@@ -20,8 +20,7 @@ TASK_CREATE_SCHEMA: dict[str, Any] = {
             "subject": {
                 "type": "string",
                 "description": (
-                    "Brief, actionable title in imperative form "
-                    "(e.g., 'Fix authentication bug in login flow')."
+                    "Brief, actionable title in imperative form (e.g., 'Fix authentication bug in login flow')."
                 ),
             },
             "description": {
@@ -114,8 +113,7 @@ TASK_LIST_SCHEMA: dict[str, Any] = {
 TASK_GET_SCHEMA: dict[str, Any] = {
     "name": "task_get",
     "description": (
-        "Retrieve full details of a single task by ID, including its "
-        "description, dependencies, and metadata."
+        "Retrieve full details of a single task by ID, including its description, dependencies, and metadata."
     ),
     "input_schema": {
         "type": "object",
@@ -133,9 +131,14 @@ TASK_GET_SCHEMA: dict[str, Any] = {
 # Helpers
 # ---------------------------------------------------------------------------
 
-TASK_TOOL_NAMES: frozenset[str] = frozenset({
-    "task_create", "task_update", "task_list", "task_get",
-})
+TASK_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "task_create",
+        "task_update",
+        "task_list",
+        "task_get",
+    }
+)
 
 ALL_TASK_SCHEMAS: list[dict[str, Any]] = [
     TASK_CREATE_SCHEMA,

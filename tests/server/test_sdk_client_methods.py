@@ -48,13 +48,16 @@ def _make_client(responses: dict[tuple[str, str], httpx.Response]) -> AgentClien
 class AgentClientHealthTests(unittest.TestCase):
     def test_health(self) -> None:
         async def go():
-            resp = _make_response(200, {
-                "status": "ok",
-                "active_sessions": 3,
-                "tools": 10,
-                "memory_enabled": True,
-                "broker": {"jobs": 0},
-            })
+            resp = _make_response(
+                200,
+                {
+                    "status": "ok",
+                    "active_sessions": 3,
+                    "tools": 10,
+                    "memory_enabled": True,
+                    "broker": {"jobs": 0},
+                },
+            )
             client = _make_client({("GET", "/api/health"): resp})
             h = await client.health()
             self.assertEqual("ok", h.status)
@@ -154,11 +157,14 @@ class AgentClientSessionTests(unittest.TestCase):
 class AgentClientChatTests(unittest.TestCase):
     def test_chat_basic(self) -> None:
         async def go():
-            resp = _make_response(200, {
-                "session_id": "s1",
-                "response": "Hello!",
-                "errors": None,
-            })
+            resp = _make_response(
+                200,
+                {
+                    "session_id": "s1",
+                    "response": "Hello!",
+                    "errors": None,
+                },
+            )
             client = _make_client({("POST", "/api/chat"): resp})
             result = await client.chat("hi")
             self.assertEqual("s1", result.session_id)
@@ -169,10 +175,13 @@ class AgentClientChatTests(unittest.TestCase):
 
     def test_chat_with_session_id(self) -> None:
         async def go():
-            resp = _make_response(200, {
-                "session_id": "s1",
-                "response": "reply",
-            })
+            resp = _make_response(
+                200,
+                {
+                    "session_id": "s1",
+                    "response": "reply",
+                },
+            )
             client = _make_client({("POST", "/api/chat"): resp})
             result = await client.chat("hi", session_id="s1")
             self.assertEqual("s1", result.session_id)
@@ -182,11 +191,14 @@ class AgentClientChatTests(unittest.TestCase):
 
     def test_chat_errors_included(self) -> None:
         async def go():
-            resp = _make_response(200, {
-                "session_id": "s2",
-                "response": "",
-                "errors": ["something went wrong"],
-            })
+            resp = _make_response(
+                200,
+                {
+                    "session_id": "s2",
+                    "response": "",
+                    "errors": ["something went wrong"],
+                },
+            )
             client = _make_client({("POST", "/api/chat"): resp})
             result = await client.chat("fail")
             self.assertEqual(["something went wrong"], result.errors)

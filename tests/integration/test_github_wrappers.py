@@ -56,8 +56,7 @@ class TestListRepos:
     async def test_repo_has_expected_keys(self, clients):
         repos = await github_list_repos(clients, owner=TEST_OWNER, max_results=1)
         repo = repos[0]
-        expected = {"name", "full_name", "description", "url", "language",
-                    "stars", "forks", "visibility", "updated"}
+        expected = {"name", "full_name", "description", "url", "language", "stars", "forks", "visibility", "updated"}
         assert expected.issubset(repo.keys()), f"Missing: {expected - repo.keys()}"
 
     async def test_value_types(self, clients):
@@ -114,13 +113,19 @@ class TestGetFile:
 class TestSearchCode:
     async def test_returns_list(self, clients):
         results = await github_search_code(
-            clients, query="Hello", repo=TEST_REPO, max_results=3,
+            clients,
+            query="Hello",
+            repo=TEST_REPO,
+            max_results=3,
         )
         assert isinstance(results, list)
 
     async def test_result_has_expected_keys(self, clients):
         results = await github_search_code(
-            clients, query="Hello", repo=TEST_REPO, max_results=1,
+            clients,
+            query="Hello",
+            repo=TEST_REPO,
+            max_results=1,
         )
         if not results:
             pytest.skip("Search returned 0 results")
@@ -129,7 +134,10 @@ class TestSearchCode:
 
     async def test_repo_field_matches(self, clients):
         results = await github_search_code(
-            clients, query="Hello", repo=TEST_REPO, max_results=1,
+            clients,
+            query="Hello",
+            repo=TEST_REPO,
+            max_results=1,
         )
         if not results:
             pytest.skip("Search returned 0 results")
@@ -197,23 +205,31 @@ class TestGetPr:
 class TestListIssues:
     async def test_returns_list(self, clients):
         issues = await github_list_issues(
-            clients, repo=TEST_REPO, state="all", max_results=3,
+            clients,
+            repo=TEST_REPO,
+            state="all",
+            max_results=3,
         )
         assert isinstance(issues, list)
 
     async def test_issue_has_expected_keys(self, clients):
         issues = await github_list_issues(
-            clients, repo=TEST_REPO, state="all", max_results=1,
+            clients,
+            repo=TEST_REPO,
+            state="all",
+            max_results=1,
         )
         if not issues:
             pytest.skip("No issues in test repo")
-        expected = {"number", "title", "author", "state", "created",
-                    "comments", "labels", "url"}
+        expected = {"number", "title", "author", "state", "created", "comments", "labels", "url"}
         assert expected.issubset(issues[0].keys()), f"Missing: {expected - issues[0].keys()}"
 
     async def test_labels_is_list(self, clients):
         issues = await github_list_issues(
-            clients, repo=TEST_REPO, state="all", max_results=1,
+            clients,
+            repo=TEST_REPO,
+            state="all",
+            max_results=1,
         )
         if not issues:
             pytest.skip("No issues in test repo")

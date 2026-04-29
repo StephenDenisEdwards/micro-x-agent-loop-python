@@ -36,37 +36,49 @@ class LoadRecordsTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_loads_all_records(self) -> None:
-        path = _write_jsonl(self._tmp.name, [
-            {"type": "api_call", "session_id": "s1"},
-            {"type": "tool_execution", "session_id": "s2"},
-        ])
+        path = _write_jsonl(
+            self._tmp.name,
+            [
+                {"type": "api_call", "session_id": "s1"},
+                {"type": "tool_execution", "session_id": "s2"},
+            ],
+        )
         records = _load_records(path)
         self.assertEqual(2, len(records))
 
     def test_filters_by_session_id(self) -> None:
-        path = _write_jsonl(self._tmp.name, [
-            {"type": "api_call", "session_id": "s1"},
-            {"type": "api_call", "session_id": "s2"},
-        ])
+        path = _write_jsonl(
+            self._tmp.name,
+            [
+                {"type": "api_call", "session_id": "s1"},
+                {"type": "api_call", "session_id": "s2"},
+            ],
+        )
         records = _load_records(path, session_id="s1")
         self.assertEqual(1, len(records))
         self.assertEqual("s1", records[0]["session_id"])
 
     def test_filters_by_since(self) -> None:
-        path = _write_jsonl(self._tmp.name, [
-            {"type": "api_call", "timestamp": 1000.0},
-            {"type": "api_call", "timestamp": 2000.0},
-        ])
+        path = _write_jsonl(
+            self._tmp.name,
+            [
+                {"type": "api_call", "timestamp": 1000.0},
+                {"type": "api_call", "timestamp": 2000.0},
+            ],
+        )
         records = _load_records(path, since="1970-01-01T00:30:00Z")
         # 30 minutes = 1800 seconds; only the 2000.0 record passes
         self.assertEqual(1, len(records))
         self.assertEqual(2000.0, records[0]["timestamp"])
 
     def test_since_without_timezone_treated_as_utc(self) -> None:
-        path = _write_jsonl(self._tmp.name, [
-            {"type": "api_call", "timestamp": 1.0},
-            {"type": "api_call", "timestamp": 9999999999.0},
-        ])
+        path = _write_jsonl(
+            self._tmp.name,
+            [
+                {"type": "api_call", "timestamp": 1.0},
+                {"type": "api_call", "timestamp": 9999999999.0},
+            ],
+        )
         records = _load_records(path, since="2000-01-01T00:00:00")
         self.assertEqual(1, len(records))
 
@@ -95,15 +107,17 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(0, agg["tool_calls"])
 
     def test_api_call_record(self) -> None:
-        records = [{
-            "type": "api_call",
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_input_tokens": 10,
-            "cache_creation_input_tokens": 5,
-            "estimated_cost_usd": 0.001,
-            "duration_ms": 500,
-        }]
+        records = [
+            {
+                "type": "api_call",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_read_input_tokens": 10,
+                "cache_creation_input_tokens": 5,
+                "estimated_cost_usd": 0.001,
+                "duration_ms": 500,
+            }
+        ]
         agg = _aggregate(records)
         self.assertEqual(1, agg["api_calls"])
         self.assertEqual(100, agg["total_input_tokens"])
@@ -262,10 +276,12 @@ class MainTests(unittest.TestCase):
         self.assertIn("api_calls", buf.getvalue())
 
     def test_session_filter(self) -> None:
-        path = self._make_file([
-            {"type": "api_call", "session_id": "s1", "input_tokens": 10},
-            {"type": "api_call", "session_id": "s2", "input_tokens": 99},
-        ])
+        path = self._make_file(
+            [
+                {"type": "api_call", "session_id": "s1", "input_tokens": 10},
+                {"type": "api_call", "session_id": "s2", "input_tokens": 99},
+            ]
+        )
         buf = io.StringIO()
         with patch.object(sys, "argv", ["prog", "--file", path, "--session", "s1"]):
             with patch("sys.stdout", buf):
@@ -274,10 +290,12 @@ class MainTests(unittest.TestCase):
         self.assertIn("API calls:", out)
 
     def test_compare_table(self) -> None:
-        path = self._make_file([
-            {"type": "api_call", "session_id": "a", "input_tokens": 10},
-            {"type": "api_call", "session_id": "b", "input_tokens": 20},
-        ])
+        path = self._make_file(
+            [
+                {"type": "api_call", "session_id": "a", "input_tokens": 10},
+                {"type": "api_call", "session_id": "b", "input_tokens": 20},
+            ]
+        )
         buf = io.StringIO()
         with patch.object(sys, "argv", ["prog", "--file", path, "--compare", "a", "b"]):
             with patch("sys.stdout", buf):
@@ -286,10 +304,12 @@ class MainTests(unittest.TestCase):
         self.assertIn("Delta", out)
 
     def test_compare_csv(self) -> None:
-        path = self._make_file([
-            {"type": "api_call", "session_id": "a"},
-            {"type": "api_call", "session_id": "b"},
-        ])
+        path = self._make_file(
+            [
+                {"type": "api_call", "session_id": "a"},
+                {"type": "api_call", "session_id": "b"},
+            ]
+        )
         buf = io.StringIO()
         with patch.object(sys, "argv", ["prog", "--file", path, "--compare", "a", "b", "--csv"]):
             with patch("sys.stdout", buf):

@@ -41,6 +41,7 @@ class SubAgentType(Enum):
 @dataclass
 class SubAgentTypeConfig:
     """Configuration for a sub-agent type."""
+
     system_prompt: str
     read_only: bool = False
     no_tools: bool = False
@@ -81,20 +82,45 @@ _TYPE_CONFIGS: dict[SubAgentType, SubAgentTypeConfig] = {
 
 
 # Well-known read-only tool name patterns (prefix matches)
-_READ_ONLY_PATTERNS = frozenset({
-    "read_file", "list_directory", "search_files", "get_file_info",
-    "bash",  # bash is included but sub-agent prompt discourages mutations
-    "web_fetch", "web_search",
-    "grep", "glob", "find",
-    "get_", "list_", "search_", "read_", "fetch_",
-})
+_READ_ONLY_PATTERNS = frozenset(
+    {
+        "read_file",
+        "list_directory",
+        "search_files",
+        "get_file_info",
+        "bash",  # bash is included but sub-agent prompt discourages mutations
+        "web_fetch",
+        "web_search",
+        "grep",
+        "glob",
+        "find",
+        "get_",
+        "list_",
+        "search_",
+        "read_",
+        "fetch_",
+    }
+)
 
 # Tool names that are always excluded from read-only sub-agents
-_MUTATING_PATTERNS = frozenset({
-    "write_file", "append_file", "create_directory", "move_file",
-    "delete", "remove", "rename", "update_", "set_", "put_",
-    "create_", "post_", "send_", "publish_",
-})
+_MUTATING_PATTERNS = frozenset(
+    {
+        "write_file",
+        "append_file",
+        "create_directory",
+        "move_file",
+        "delete",
+        "remove",
+        "rename",
+        "update_",
+        "set_",
+        "put_",
+        "create_",
+        "post_",
+        "send_",
+        "publish_",
+    }
+)
 
 
 def _is_read_only_tool(tool: Tool) -> bool:
@@ -190,6 +216,7 @@ class _SubAgentEvents(BaseTurnEvents):
 @dataclass
 class SubAgentResult:
     """Result from a sub-agent execution."""
+
     text: str
     usage: list[UsageResult] = field(default_factory=list)
     turns: int = 0

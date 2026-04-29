@@ -12,6 +12,7 @@ from micro_x_agent_loop.agent_channel import BrokerChannel, BufferedChannel, Ter
 # BufferedChannel (already has some coverage, just ensure key paths)
 # ---------------------------------------------------------------------------
 
+
 class BufferedChannelTests(unittest.TestCase):
     def test_emit_text_delta(self) -> None:
         ch = BufferedChannel()
@@ -50,6 +51,7 @@ class BufferedChannelTests(unittest.TestCase):
 # TerminalChannel with markdown=False (no rich involvement)
 # ---------------------------------------------------------------------------
 
+
 class TerminalChannelPlainTests(unittest.TestCase):
     """Test TerminalChannel with markdown=False (plain output, no rich.Live)."""
 
@@ -67,6 +69,7 @@ class TerminalChannelPlainTests(unittest.TestCase):
         ch = self._make_channel()
         # Start a spinner manually
         from micro_x_agent_loop.terminal_renderer import PlainSpinner as _Spinner
+
         spinner = MagicMock(spec=_Spinner)
         ch._spinner = spinner
         with patch("builtins.print"):
@@ -140,6 +143,7 @@ class TerminalChannelPlainTests(unittest.TestCase):
 # TerminalChannel with markdown=True (rich renderer paths)
 # ---------------------------------------------------------------------------
 
+
 class TerminalChannelMarkdownTests(unittest.TestCase):
     """Test TerminalChannel with markdown=True — render paths."""
 
@@ -198,6 +202,7 @@ class TerminalChannelMarkdownTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # BrokerChannel
 # ---------------------------------------------------------------------------
+
 
 class BrokerChannelTests(unittest.TestCase):
     def _make_channel(self) -> BrokerChannel:
@@ -327,10 +332,13 @@ class BrokerChannelTests(unittest.TestCase):
             mock_client.get = AsyncMock(return_value=get_resp)
 
             with patch("httpx.AsyncClient", return_value=mock_client):
-                result = await ch.ask_user("Proceed?", options=[
-                    {"label": "yes", "description": "Go ahead"},
-                    {"label": "no", "description": "Stop"},
-                ])
+                result = await ch.ask_user(
+                    "Proceed?",
+                    options=[
+                        {"label": "yes", "description": "Go ahead"},
+                        {"label": "no", "description": "Stop"},
+                    ],
+                )
 
             self.assertEqual("yes", result)
 
@@ -341,17 +349,21 @@ class BrokerChannelTests(unittest.TestCase):
 # _Spinner
 # ---------------------------------------------------------------------------
 
+
 class SpinnerTests(unittest.TestCase):
     def test_start_stop(self) -> None:
         from micro_x_agent_loop.terminal_renderer import PlainSpinner as _Spinner
+
         spinner = _Spinner(prefix="", label=" Thinking...")
         spinner.start()
         import time
+
         time.sleep(0.05)
         spinner.stop()
 
     def test_stop_idempotent(self) -> None:
         from micro_x_agent_loop.terminal_renderer import PlainSpinner as _Spinner
+
         spinner = _Spinner()
         spinner.start()
         spinner.stop()
@@ -359,6 +371,7 @@ class SpinnerTests(unittest.TestCase):
 
     def test_print_line(self) -> None:
         from micro_x_agent_loop.terminal_renderer import PlainSpinner as _Spinner
+
         spinner = _Spinner()
         spinner.start()
         spinner.print_line("test line")
@@ -369,9 +382,11 @@ class SpinnerTests(unittest.TestCase):
 # _RichRenderer
 # ---------------------------------------------------------------------------
 
+
 class RichRendererTests(unittest.TestCase):
     def _make(self):
         from micro_x_agent_loop.terminal_renderer import RichRenderer as _RichRenderer
+
         return _RichRenderer(line_prefix="  ")
 
     def test_start_spinner(self) -> None:
@@ -458,15 +473,18 @@ class RichRendererTests(unittest.TestCase):
 # TerminalChannel _fallback_prompt
 # ---------------------------------------------------------------------------
 
+
 class TerminalChannelFallbackPromptTests(unittest.TestCase):
     def test_fallback_prompt_free_text(self) -> None:
         from micro_x_agent_loop.terminal_prompter import fallback_prompt
+
         with patch("builtins.input", return_value="my answer"):
             result = fallback_prompt("What is your name?", [])
         self.assertEqual("my answer", result)
 
     def test_fallback_prompt_with_options_numeric(self) -> None:
         from micro_x_agent_loop.terminal_prompter import fallback_prompt
+
         options = [
             {"label": "yes", "description": "Go ahead"},
             {"label": "no", "description": "Stop"},
@@ -478,6 +496,7 @@ class TerminalChannelFallbackPromptTests(unittest.TestCase):
 
     def test_fallback_prompt_with_options_free_text(self) -> None:
         from micro_x_agent_loop.terminal_prompter import fallback_prompt
+
         options = [
             {"label": "yes", "description": "Go ahead"},
         ]

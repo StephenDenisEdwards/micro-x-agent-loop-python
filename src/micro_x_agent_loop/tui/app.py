@@ -24,8 +24,7 @@ from micro_x_agent_loop.tui.widgets.task_panel import TaskPanel
 from micro_x_agent_loop.tui.widgets.tool_panel import ToolPanel
 
 _NO_RESPONSE_MSG = (
-    "No response from human — question timed out. "
-    "Proceed with your best judgement or report that you cannot continue."
+    "No response from human — question timed out. Proceed with your best judgement or report that you cannot continue."
 )
 
 _STARTUP_BANNER_MARKUP = (
@@ -113,16 +112,20 @@ class SlashCommandProvider(Provider):
 
     def _make_command_callback(self, cmd: str) -> Any:
         """Return a callable that submits the slash command."""
+
         async def _run() -> None:
             app = self.app
             if isinstance(app, AgentTUI):
                 app._submit_slash_command(cmd)
+
         return _run
 
     def _make_theme_callback(self, theme_name: str) -> Any:
         """Return a callable that switches the theme."""
+
         async def _run() -> None:
             self.app.theme = theme_name
+
         return _run
 
 
@@ -286,13 +289,9 @@ class AgentTUI(App[None]):
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.add_banner(_STARTUP_BANNER_MARKUP)
         chat_log.add_system_message(f"Config: {self._config_source}")
-        chat_log.add_system_message(
-            f"[{model_label}] (type 'exit' to quit, Ctrl+P for command palette)"
-        )
+        chat_log.add_system_message(f"[{model_label}] (type 'exit' to quit, Ctrl+P for command palette)")
         if self._app_config.memory_enabled and self._agent.active_session_id:
-            chat_log.add_system_message(
-                f"Memory: enabled (session: {self._agent.active_session_id})"
-            )
+            chat_log.add_system_message(f"Memory: enabled (session: {self._agent.active_session_id})")
         if self._runtime.mcp_tools:
             mcp_names: dict[str, list[str]] = {}
             for t in self._runtime.mcp_tools:
@@ -543,9 +542,7 @@ class AgentTUI(App[None]):
         self._refresh_session_sidebar()
         self.query_one("#status-bar", StatusBar).refresh_metrics()
 
-    def on_session_sidebar_rename_session_requested(
-        self, event: SessionSidebar.RenameSessionRequested
-    ) -> None:
+    def on_session_sidebar_rename_session_requested(self, event: SessionSidebar.RenameSessionRequested) -> None:
         """Handle Rename session button — open a modal to retitle the active session."""
         from micro_x_agent_loop.tui.screens.rename_session_modal import RenameSessionModal
 

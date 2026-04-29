@@ -79,9 +79,16 @@ class PromptCachingProviderTests(unittest.TestCase):
             {"name": "tool_b", "description": "B", "input_schema": {}},
         ]
 
-        asyncio.run(provider.stream_chat(
-            "m", 100, 0.5, "system text", [{"role": "user", "content": "hi"}], tools,
-        ))
+        asyncio.run(
+            provider.stream_chat(
+                "m",
+                100,
+                0.5,
+                "system text",
+                [{"role": "user", "content": "hi"}],
+                tools,
+            )
+        )
 
         # System should be a list with cache_control
         system = captured_kwargs["system"]
@@ -117,9 +124,16 @@ class PromptCachingProviderTests(unittest.TestCase):
 
         tools = [{"name": "tool_a", "description": "A", "input_schema": {}}]
 
-        asyncio.run(provider.stream_chat(
-            "m", 100, 0.5, "system text", [{"role": "user", "content": "hi"}], tools,
-        ))
+        asyncio.run(
+            provider.stream_chat(
+                "m",
+                100,
+                0.5,
+                "system text",
+                [{"role": "user", "content": "hi"}],
+                tools,
+            )
+        )
 
         # System should be plain string
         self.assertEqual("system text", captured_kwargs["system"])
@@ -147,9 +161,16 @@ class PromptCachingProviderTests(unittest.TestCase):
         provider = self._make_provider(prompt_caching_enabled=True)
         provider._client = CapturingClient()
 
-        asyncio.run(provider.stream_chat(
-            "m", 100, 0.5, "system text", [{"role": "user", "content": "hi"}], [],
-        ))
+        asyncio.run(
+            provider.stream_chat(
+                "m",
+                100,
+                0.5,
+                "system text",
+                [{"role": "user", "content": "hi"}],
+                [],
+            )
+        )
 
         self.assertIsInstance(captured_kwargs["system"], list)
         self.assertEqual([], captured_kwargs["tools"])
@@ -186,8 +207,10 @@ class CompactionModelUsageTests(unittest.TestCase):
     def test_compaction_uses_specified_model(self) -> None:
         provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(
-            provider, "claude-haiku-4-5-20251001",
-            threshold_tokens=1, protected_tail_messages=1,
+            provider,
+            "claude-haiku-4-5-20251001",
+            threshold_tokens=1,
+            protected_tail_messages=1,
         )
         messages = [
             {"role": "user", "content": "seed"},
@@ -212,11 +235,13 @@ class ToolSummarizationConfigTests(unittest.TestCase):
         self.assertEqual(4000, config.tool_result_summarization_threshold)
 
     def test_enabled(self) -> None:
-        config = parse_app_config({
-            "ToolResultSummarizationEnabled": True,
-            "ToolResultSummarizationModel": "claude-haiku-4-5-20251001",
-            "ToolResultSummarizationThreshold": 2000,
-        })
+        config = parse_app_config(
+            {
+                "ToolResultSummarizationEnabled": True,
+                "ToolResultSummarizationModel": "claude-haiku-4-5-20251001",
+                "ToolResultSummarizationThreshold": 2000,
+            }
+        )
         self.assertTrue(config.tool_result_summarization_enabled)
         self.assertEqual("claude-haiku-4-5-20251001", config.tool_result_summarization_model)
         self.assertEqual(2000, config.tool_result_summarization_threshold)
@@ -271,12 +296,14 @@ class ToolSummarizationEngineTests(unittest.TestCase):
     def test_summarization_skipped_when_disabled(self) -> None:
         tool = FakeTool(name="fetch", execute_result="x" * 5000)
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Fetching."}]},
-            [{"name": "fetch", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Fetching."}]},
+                [{"name": "fetch", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Done.", stop_reason="end_turn")
 
         events = RecordingEventsForSummarization()
@@ -292,18 +319,22 @@ class ToolSummarizationEngineTests(unittest.TestCase):
         big_result = "x" * 5000
         tool = FakeTool(name="fetch", execute_result=big_result)
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Fetching."}]},
-            [{"name": "fetch", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Fetching."}]},
+                [{"name": "fetch", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Done.", stop_reason="end_turn")
 
         summarization_provider = FakeProvider(summary_text="Short summary of fetch result")
         events = RecordingEventsForSummarization()
         engine = self._make_engine(
-            provider, events, [tool],
+            provider,
+            events,
+            [tool],
             summarization_provider=summarization_provider,
             summarization_model="haiku",
             summarization_enabled=True,
@@ -318,27 +349,29 @@ class ToolSummarizationEngineTests(unittest.TestCase):
         self.assertLess(result_chars, len(big_result))
 
         # Summarization API call should be recorded
-        summarization_calls = [
-            (u, ct) for u, ct in events.api_call_metrics if ct == "tool_summarization"
-        ]
+        summarization_calls = [(u, ct) for u, ct in events.api_call_metrics if ct == "tool_summarization"]
         self.assertEqual(1, len(summarization_calls))
 
     def test_summarization_skipped_when_below_threshold(self) -> None:
         small_result = "short"
         tool = FakeTool(name="fetch", execute_result=small_result)
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Fetching."}]},
-            [{"name": "fetch", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Fetching."}]},
+                [{"name": "fetch", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Done.", stop_reason="end_turn")
 
         summarization_provider = FakeProvider(summary_text="should not be called")
         events = RecordingEventsForSummarization()
         engine = self._make_engine(
-            provider, events, [tool],
+            provider,
+            events,
+            [tool],
             summarization_provider=summarization_provider,
             summarization_model="haiku",
             summarization_enabled=True,
@@ -356,12 +389,14 @@ class ToolSummarizationEngineTests(unittest.TestCase):
         big_result = "x" * 5000
         tool = FakeTool(name="fetch", execute_result=big_result)
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Fetching."}]},
-            [{"name": "fetch", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Fetching."}]},
+                [{"name": "fetch", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Done.", stop_reason="end_turn")
 
         class FailingProvider:
@@ -370,7 +405,9 @@ class ToolSummarizationEngineTests(unittest.TestCase):
 
         events = RecordingEventsForSummarization()
         engine = self._make_engine(
-            provider, events, [tool],
+            provider,
+            events,
+            [tool],
             summarization_provider=FailingProvider(),
             summarization_model="haiku",
             summarization_enabled=True,
@@ -404,7 +441,8 @@ class SmartCompactionTriggerTests(unittest.TestCase):
         """When smart trigger is enabled and actual tokens are fed, use them."""
         provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(
-            provider, "m",
+            provider,
+            "m",
             threshold_tokens=50_000,
             protected_tail_messages=1,
             smart_trigger_enabled=True,
@@ -427,7 +465,8 @@ class SmartCompactionTriggerTests(unittest.TestCase):
     def test_falls_back_to_estimate_when_smart_disabled(self) -> None:
         provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(
-            provider, "m",
+            provider,
+            "m",
             threshold_tokens=50_000,
             protected_tail_messages=1,
             smart_trigger_enabled=False,
@@ -447,7 +486,8 @@ class SmartCompactionTriggerTests(unittest.TestCase):
     def test_falls_back_to_estimate_when_no_actual_tokens(self) -> None:
         provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(
-            provider, "m",
+            provider,
+            "m",
             threshold_tokens=1,
             protected_tail_messages=1,
             smart_trigger_enabled=True,
@@ -513,6 +553,7 @@ class ConciseOutputSystemPromptTests(unittest.TestCase):
 
     def test_platform_info_included(self) -> None:
         import sys
+
         prompt = get_system_prompt()
         if sys.platform == "win32":
             self.assertIn("Windows", prompt)
@@ -527,6 +568,7 @@ class ConciseOutputSystemPromptTests(unittest.TestCase):
 
     def test_resolve_replaces_date_placeholder(self) -> None:
         from datetime import datetime
+
         template = get_system_prompt()
         resolved = resolve_system_prompt(template)
         self.assertNotIn("{current_date}", resolved)
@@ -542,15 +584,23 @@ class ConciseOutputSystemPromptTests(unittest.TestCase):
 class ToolMetricWasSummarizedTests(unittest.TestCase):
     def test_default_false(self) -> None:
         metric = build_tool_execution_metric(
-            tool_name="t", result_chars=100, duration_ms=10.0,
-            is_error=False, session_id="s", turn_number=1,
+            tool_name="t",
+            result_chars=100,
+            duration_ms=10.0,
+            is_error=False,
+            session_id="s",
+            turn_number=1,
         )
         self.assertFalse(metric["was_summarized"])
 
     def test_true_when_set(self) -> None:
         metric = build_tool_execution_metric(
-            tool_name="t", result_chars=100, duration_ms=10.0,
-            is_error=False, session_id="s", turn_number=1,
+            tool_name="t",
+            result_chars=100,
+            duration_ms=10.0,
+            is_error=False,
+            session_id="s",
+            turn_number=1,
             was_summarized=True,
         )
         self.assertTrue(metric["was_summarized"])
@@ -573,15 +623,17 @@ class AllNewConfigFieldsTests(unittest.TestCase):
         self.assertFalse(config.concise_output_enabled)
 
     def test_all_custom(self) -> None:
-        config = parse_app_config({
-            "PromptCachingEnabled": False,
-            "CompactionModel": "claude-haiku-4-5-20251001",
-            "ToolResultSummarizationEnabled": True,
-            "ToolResultSummarizationModel": "claude-haiku-4-5-20251001",
-            "ToolResultSummarizationThreshold": 2000,
-            "SmartCompactionTriggerEnabled": False,
-            "ConciseOutputEnabled": True,
-        })
+        config = parse_app_config(
+            {
+                "PromptCachingEnabled": False,
+                "CompactionModel": "claude-haiku-4-5-20251001",
+                "ToolResultSummarizationEnabled": True,
+                "ToolResultSummarizationModel": "claude-haiku-4-5-20251001",
+                "ToolResultSummarizationThreshold": 2000,
+                "SmartCompactionTriggerEnabled": False,
+                "ConciseOutputEnabled": True,
+            }
+        )
         self.assertFalse(config.prompt_caching_enabled)
         self.assertEqual("claude-haiku-4-5-20251001", config.compaction_model)
         self.assertTrue(config.tool_result_summarization_enabled)
@@ -624,6 +676,7 @@ class SessionBudgetConfigTests(unittest.TestCase):
 class SessionBudgetToolbarTests(unittest.TestCase):
     def test_toolbar_no_budget(self) -> None:
         from micro_x_agent_loop.metrics import SessionAccumulator
+
         acc = SessionAccumulator()
         acc.total_cost_usd = 0.05
         acc.total_turns = 3
@@ -633,6 +686,7 @@ class SessionBudgetToolbarTests(unittest.TestCase):
 
     def test_toolbar_with_budget(self) -> None:
         from micro_x_agent_loop.metrics import SessionAccumulator
+
         acc = SessionAccumulator()
         acc.total_cost_usd = 0.80
         acc.total_turns = 5
@@ -647,11 +701,14 @@ class SessionBudgetAgentTests(unittest.TestCase):
     def _make_agent(self, budget: float = 0.0) -> Agent:
         from micro_x_agent_loop.agent import Agent
         from micro_x_agent_loop.agent_config import AgentConfig
-        return Agent(AgentConfig(
-            api_key="test",
-            session_budget_usd=budget,
-            metrics_enabled=True,
-        ))
+
+        return Agent(
+            AgentConfig(
+                api_key="test",
+                session_budget_usd=budget,
+                metrics_enabled=True,
+            )
+        )
 
     def test_no_budget_never_exceeded(self) -> None:
         agent = self._make_agent(budget=0.0)
@@ -729,9 +786,16 @@ class NoRoutingTurnEngineTests(unittest.TestCase):
         provider.stream_chat = tracking
         events = BaseTurnEvents()
         engine = TurnEngine(
-            provider=provider, model="main-model", max_tokens=1024, temperature=0.7,
-            system_prompt="test", converted_tools=[], tool_map={},
-            max_tool_result_chars=40000, max_tokens_retries=1, events=events,
+            provider=provider,
+            model="main-model",
+            max_tokens=1024,
+            temperature=0.7,
+            system_prompt="test",
+            converted_tools=[],
+            tool_map={},
+            max_tool_result_chars=40000,
+            max_tokens_retries=1,
+            events=events,
         )
         asyncio.run(engine.run(messages=[], user_message="hello"))
         self.assertEqual(models_called, ["main-model"])

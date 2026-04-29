@@ -121,7 +121,10 @@ async def dispatch(cli_args: dict, raw_config: dict, config_source: str) -> None
     # One-shot mode.
     if cli_args["run"]:
         await run_oneshot(
-            app, env, cli_args["run"], cli_args["session"],
+            app,
+            env,
+            cli_args["run"],
+            cli_args["session"],
             resolved_config=raw_config,
         )
         return
@@ -131,7 +134,7 @@ async def dispatch(cli_args: dict, raw_config: dict, config_source: str) -> None
         try:
             from micro_x_agent_loop.tui.app import run_tui
         except ImportError:
-            print("Textual is not installed. Install with: pip install -e \".[tui]\"")
+            print('Textual is not installed. Install with: pip install -e ".[tui]"')
             sys.exit(1)
 
         # Redirect stderr AND stdout to a file BEFORE bootstrap — Textual owns

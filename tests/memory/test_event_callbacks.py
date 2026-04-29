@@ -58,8 +58,10 @@ class EventCallbackTests(unittest.TestCase):
     def test_off_removes_callback(self) -> None:
         emitter = EventEmitter(self._store)
         received: list[str] = []
+
         def cb(sid: str, et: str, p: object) -> None:
             received.append(et)
+
         emitter.on("tool.started", cb)
         emitter.off("tool.started", cb)
 
@@ -70,8 +72,10 @@ class EventCallbackTests(unittest.TestCase):
     def test_off_wildcard_removes_on_all_callback(self) -> None:
         emitter = EventEmitter(self._store)
         received: list[str] = []
+
         def cb(sid: str, et: str, p: object) -> None:
             received.append(et)
+
         emitter.on_all(cb)
         emitter.off(None, cb)
 
@@ -119,9 +123,7 @@ class EventCallbackTests(unittest.TestCase):
         # Callback fired
         self.assertEqual(["custom.event"], received)
         # Event persisted to DB
-        row = self._store.execute(
-            "SELECT COUNT(*) AS c FROM events WHERE type = ?", ("custom.event",)
-        ).fetchone()
+        row = self._store.execute("SELECT COUNT(*) AS c FROM events WHERE type = ?", ("custom.event",)).fetchone()
         self.assertEqual(1, int(row["c"]))
 
     def test_callback_receives_correct_payload(self) -> None:

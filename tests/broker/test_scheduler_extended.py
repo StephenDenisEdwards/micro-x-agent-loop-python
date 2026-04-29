@@ -46,9 +46,7 @@ class SchedulerInitialiseTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_initialise_sets_next_run(self) -> None:
-        job = self._store.create_job(
-            name="j", cron_expr="0 9 * * *", prompt_template="p"
-        )
+        job = self._store.create_job(name="j", cron_expr="0 9 * * *", prompt_template="p")
         dispatcher = MagicMock()
         sched = Scheduler(self._store, dispatcher, poll_interval=5)
         sched._initialise_schedules()
@@ -56,9 +54,7 @@ class SchedulerInitialiseTests(unittest.TestCase):
         self.assertIsNotNone(updated["next_run_at"])
 
     def test_initialise_skip_policy_advances_past_run(self) -> None:
-        job = self._store.create_job(
-            name="j", cron_expr="0 9 * * *", prompt_template="p"
-        )
+        job = self._store.create_job(name="j", cron_expr="0 9 * * *", prompt_template="p")
         # Set next_run_at to the past
         past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         self._store.update_job(job["id"], next_run_at=past)
@@ -71,9 +67,7 @@ class SchedulerInitialiseTests(unittest.TestCase):
         self.assertGreater(updated["next_run_at"], datetime.now(UTC).isoformat())
 
     def test_initialise_run_once_policy_leaves_past(self) -> None:
-        job = self._store.create_job(
-            name="j", cron_expr="0 9 * * *", prompt_template="p"
-        )
+        job = self._store.create_job(name="j", cron_expr="0 9 * * *", prompt_template="p")
         past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         self._store.update_job(job["id"], next_run_at=past)
 
@@ -100,9 +94,7 @@ class SchedulerPollAndDispatchTests(unittest.TestCase):
             router = _make_router()
             dispatcher = RunDispatcher(self._store, router)
 
-            job = self._store.create_job(
-                name="due-job", cron_expr="* * * * *", prompt_template="hello"
-            )
+            job = self._store.create_job(name="due-job", cron_expr="* * * * *", prompt_template="hello")
             # Set next_run_at to the past so it's due
             past = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
             self._store.update_job(job["id"], next_run_at=past)
@@ -125,9 +117,7 @@ class SchedulerPollAndDispatchTests(unittest.TestCase):
             dispatcher = MagicMock()
             dispatcher.at_capacity = False
 
-            job = self._store.create_job(
-                name="future-job", cron_expr="0 9 * * *", prompt_template="p"
-            )
+            job = self._store.create_job(name="future-job", cron_expr="0 9 * * *", prompt_template="p")
             future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
             self._store.update_job(job["id"], next_run_at=future)
 
@@ -143,9 +133,7 @@ class SchedulerPollAndDispatchTests(unittest.TestCase):
             dispatcher = MagicMock()
             dispatcher.at_capacity = True
 
-            job = self._store.create_job(
-                name="j", cron_expr="* * * * *", prompt_template="p"
-            )
+            job = self._store.create_job(name="j", cron_expr="* * * * *", prompt_template="p")
             past = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
             self._store.update_job(job["id"], next_run_at=past)
 
@@ -162,7 +150,9 @@ class SchedulerPollAndDispatchTests(unittest.TestCase):
             dispatcher.at_capacity = False
 
             job = self._store.create_job(
-                name="j", cron_expr="* * * * *", prompt_template="p",
+                name="j",
+                cron_expr="* * * * *",
+                prompt_template="p",
                 overlap_policy="skip_if_running",
             )
             past = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
@@ -184,9 +174,7 @@ class SchedulerPollAndDispatchTests(unittest.TestCase):
             router = _make_router()
             dispatcher = RunDispatcher(self._store, router)
 
-            job = self._store.create_job(
-                name="j", cron_expr="* * * * *", prompt_template="p"
-            )
+            job = self._store.create_job(name="j", cron_expr="* * * * *", prompt_template="p")
             past = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
             retry_id = self._store.create_retry_run(
                 job_id=job["id"],

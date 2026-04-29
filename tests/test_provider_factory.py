@@ -56,9 +56,7 @@ class DeepSeekExtractCachedTokensTests(unittest.TestCase):
         usage = MagicMock(spec=[])  # No attributes at all
         del usage.prompt_cache_hit_tokens
         # Parent method should handle gracefully
-        with patch.object(
-            type(provider).__bases__[0], "_extract_cached_tokens", return_value=99
-        ):
+        with patch.object(type(provider).__bases__[0], "_extract_cached_tokens", return_value=99):
             result = provider._extract_cached_tokens(usage)
         self.assertEqual(99, result)
 

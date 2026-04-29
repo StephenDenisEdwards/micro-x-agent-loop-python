@@ -75,6 +75,7 @@ class ToGeminiContentsTests(unittest.TestCase):
         import importlib
 
         from micro_x_agent_loop.providers import gemini_provider
+
         importlib.reload(gemini_provider)
 
         with patch.object(gemini_provider, "_build_tool_use_id_map", return_value={}):
@@ -88,6 +89,7 @@ class ToGeminiContentsTests(unittest.TestCase):
         import importlib
 
         from micro_x_agent_loop.providers import gemini_provider
+
         importlib.reload(gemini_provider)
 
         with patch.object(gemini_provider, "_build_tool_use_id_map", return_value={}):
@@ -111,6 +113,7 @@ class ToGeminiToolsTests(unittest.TestCase):
         import importlib
 
         from micro_x_agent_loop.providers import gemini_provider
+
         importlib.reload(gemini_provider)
 
         with patch("google.genai.types", _mock_types):
@@ -122,6 +125,7 @@ class ToGeminiToolsTests(unittest.TestCase):
         import importlib
 
         from micro_x_agent_loop.providers import gemini_provider
+
         importlib.reload(gemini_provider)
 
         with patch("google.genai.types", _mock_types):

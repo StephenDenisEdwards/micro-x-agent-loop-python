@@ -77,19 +77,13 @@ class PollingIngress:
 
             except Exception as ex:
                 consecutive_errors += 1
-                logger.error(
-                    f"Polling error for {channel} "
-                    f"({consecutive_errors}/{_MAX_CONSECUTIVE_ERRORS}): {ex}"
-                )
+                logger.error(f"Polling error for {channel} ({consecutive_errors}/{_MAX_CONSECUTIVE_ERRORS}): {ex}")
                 if consecutive_errors >= _MAX_CONSECUTIVE_ERRORS:
-                    logger.critical(
-                        f"Polling for {channel} hit {_MAX_CONSECUTIVE_ERRORS} "
-                        f"consecutive errors, stopping"
-                    )
+                    logger.critical(f"Polling for {channel} hit {_MAX_CONSECUTIVE_ERRORS} consecutive errors, stopping")
                     break
 
             wait_seconds = min(
-                self._poll_interval * (2 ** consecutive_errors) if consecutive_errors else self._poll_interval,
+                self._poll_interval * (2**consecutive_errors) if consecutive_errors else self._poll_interval,
                 _MAX_BACKOFF_SECONDS,
             )
             try:

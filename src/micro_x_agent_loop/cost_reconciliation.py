@@ -142,7 +142,7 @@ def _get_api_data(result: ToolResult) -> list[dict]:
     text = result.text
     for prefix in ("Cost Report:\n", "Token Usage Report:\n", "Claude Code Usage Report:\n"):
         if text.startswith(prefix):
-            text = text[len(prefix):]
+            text = text[len(prefix) :]
             break
     try:
         data = json.loads(text)
@@ -194,9 +194,7 @@ def _parse_cost_report(
 ) -> dict[str, float]:
     """Parse cost report into ``{date: total_cost_usd}``."""
     by_date: dict[str, float] = defaultdict(float)
-    for date_str, record in _flatten_buckets(
-        _get_api_data(result), api_key_id=api_key_id
-    ):
+    for date_str, record in _flatten_buckets(_get_api_data(result), api_key_id=api_key_id):
         cost = record.get("amount_usd", record.get("amount", 0.0))
         if isinstance(cost, (int, float)):
             by_date[date_str] += cost
@@ -220,9 +218,7 @@ def _parse_usage_report_to_costs(
     from micro_x_agent_loop.usage import UsageResult, estimate_cost
 
     by_date_model: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    for date_str, record in _flatten_buckets(
-        _get_api_data(result), api_key_id=api_key_id
-    ):
+    for date_str, record in _flatten_buckets(_get_api_data(result), api_key_id=api_key_id):
         model = record.get("model", "unknown")
         if model == "unknown":
             continue
@@ -235,9 +231,7 @@ def _parse_usage_report_to_costs(
         # cache_creation is nested: {ephemeral_5m_input_tokens, ephemeral_1h_input_tokens}
         cache_creation = record.get("cache_creation", {})
         if isinstance(cache_creation, dict):
-            cache_create = sum(
-                int(v) for v in cache_creation.values() if isinstance(v, (int, float))
-            )
+            cache_create = sum(int(v) for v in cache_creation.values() if isinstance(v, (int, float)))
         else:
             cache_create = int(cache_creation) if cache_creation else 0
 
@@ -257,7 +251,7 @@ def _shorten_model(model: str) -> str:
     """Shorten model name for display."""
     for prefix in ("claude-", "anthropic/claude-"):
         if model.startswith(prefix):
-            model = model[len(prefix):]
+            model = model[len(prefix) :]
     return model
 
 
@@ -356,9 +350,7 @@ def _build_daily_report(
         lines.append(f"  {_shorten_model(model):<40} ${cost:>9.4f}")
 
 
-def _append_summary(
-    lines: list[str], local_total: float, anthropic_total: float, mismatches: int
-) -> None:
+def _append_summary(lines: list[str], local_total: float, anthropic_total: float, mismatches: int) -> None:
     """Append overall divergence and mismatch summary."""
     if anthropic_total > 0:
         total_diff = abs(local_total - anthropic_total) / anthropic_total * 100
@@ -474,12 +466,14 @@ async def reconcile_costs(
 
         # 3a. Cost report — org-wide daily totals (no per-key filtering available)
         try:
-            cost_result = await tool.execute({
-                "action": "cost",
-                "starting_at": start_str,
-                "ending_at": api_end_str,
-                "bucket_width": "1d",
-            })
+            cost_result = await tool.execute(
+                {
+                    "action": "cost",
+                    "starting_at": start_str,
+                    "ending_at": api_end_str,
+                    "bucket_width": "1d",
+                }
+            )
         except Exception as ex:
             lines.append(f"Error calling Anthropic API: {ex}")
             lines.append("  Check that ANTHROPIC_ADMIN_API_KEY is set.")
@@ -492,13 +486,15 @@ async def reconcile_costs(
         # 3b. Usage report — per-model token breakdown, filtered to our API key
         usage_result = None
         try:
-            usage_result = await tool.execute({
-                "action": "usage",
-                "starting_at": start_str,
-                "ending_at": api_end_str,
-                "bucket_width": "1d",
-                "group_by": usage_group_by,
-            })
+            usage_result = await tool.execute(
+                {
+                    "action": "usage",
+                    "starting_at": start_str,
+                    "ending_at": api_end_str,
+                    "bucket_width": "1d",
+                    "group_by": usage_group_by,
+                }
+            )
         except Exception:
             pass  # Non-fatal — we can still show aggregate comparison
 
@@ -508,15 +504,9 @@ async def reconcile_costs(
         anthropic_daily_costs = _parse_cost_report(cost_result)
 
         if usage_result is not None and not usage_result.is_error:
-            anthropic_model_costs = _parse_usage_report_to_costs(
-                usage_result, api_key_id=api_key_id
-            )
+            anthropic_model_costs = _parse_usage_report_to_costs(usage_result, api_key_id=api_key_id)
             # Use the filtered usage-derived total instead of org-wide cost total
-            anthropic_total = sum(
-                cost
-                for by_model in anthropic_model_costs.values()
-                for cost in by_model.values()
-            )
+            anthropic_total = sum(cost for by_model in anthropic_model_costs.values() for cost in by_model.values())
         else:
             anthropic_total = sum(anthropic_daily_costs.values())
     else:

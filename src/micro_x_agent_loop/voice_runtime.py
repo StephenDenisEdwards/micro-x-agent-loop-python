@@ -66,10 +66,7 @@ class VoiceRuntime:
         tool_names = self._resolve_tool_names()
         missing = [name for name, resolved in tool_names.items() if resolved is None]
         if missing:
-            return (
-                f"{self._line_prefix}Voice unavailable: missing MCP tools "
-                f"{', '.join('stt_' + n for n in missing)}"
-            )
+            return f"{self._line_prefix}Voice unavailable: missing MCP tools {', '.join('stt_' + n for n in missing)}"
 
         if source not in {"microphone", "loopback"}:
             return f"{self._line_prefix}Voice source must be microphone or loopback"
@@ -238,12 +235,8 @@ class VoiceRuntime:
 
                 self._metrics["processed_count"] += 1
                 n = self._metrics["processed_count"]
-                self._metrics["avg_queue_wait_ms"] = (
-                    (self._metrics["avg_queue_wait_ms"] * (n - 1) + wait_ms) / n
-                )
-                self._metrics["avg_process_ms"] = (
-                    (self._metrics["avg_process_ms"] * (n - 1) + process_ms) / n
-                )
+                self._metrics["avg_queue_wait_ms"] = (self._metrics["avg_queue_wait_ms"] * (n - 1) + wait_ms) / n
+                self._metrics["avg_process_ms"] = (self._metrics["avg_process_ms"] * (n - 1) + process_ms) / n
                 self._metrics["last_process_ms"] = process_ms
         except asyncio.CancelledError:
             raise

@@ -27,34 +27,40 @@ class ToOpenAIMessagesTests(unittest.TestCase):
         self.assertEqual("hello", result[0]["content"])
 
     def test_assistant_text_blocks(self) -> None:
-        result = _to_openai_messages("", [
-            {
-                "role": "assistant",
-                "content": [
-                    {"type": "text", "text": "line1"},
-                    {"type": "text", "text": "line2"},
-                ],
-            }
-        ])
+        result = _to_openai_messages(
+            "",
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "line1"},
+                        {"type": "text", "text": "line2"},
+                    ],
+                }
+            ],
+        )
         self.assertEqual(1, len(result))
         self.assertEqual("assistant", result[0]["role"])
         self.assertEqual("line1\nline2", result[0]["content"])
 
     def test_assistant_tool_use_blocks(self) -> None:
-        result = _to_openai_messages("", [
-            {
-                "role": "assistant",
-                "content": [
-                    {"type": "text", "text": "I'll read that file."},
-                    {
-                        "type": "tool_use",
-                        "id": "call_abc",
-                        "name": "read_file",
-                        "input": {"path": "test.py"},
-                    },
-                ],
-            }
-        ])
+        result = _to_openai_messages(
+            "",
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "I'll read that file."},
+                        {
+                            "type": "tool_use",
+                            "id": "call_abc",
+                            "name": "read_file",
+                            "input": {"path": "test.py"},
+                        },
+                    ],
+                }
+            ],
+        )
         self.assertEqual(1, len(result))
         msg = result[0]
         self.assertEqual("assistant", msg["role"])
@@ -67,18 +73,21 @@ class ToOpenAIMessagesTests(unittest.TestCase):
         self.assertEqual(json.dumps({"path": "test.py"}), tc["function"]["arguments"])
 
     def test_user_tool_result_blocks(self) -> None:
-        result = _to_openai_messages("", [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": "call_abc",
-                        "content": "file contents here",
-                    },
-                ],
-            }
-        ])
+        result = _to_openai_messages(
+            "",
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "call_abc",
+                            "content": "file contents here",
+                        },
+                    ],
+                }
+            ],
+        )
         self.assertEqual(1, len(result))
         msg = result[0]
         self.assertEqual("tool", msg["role"])
@@ -86,24 +95,27 @@ class ToOpenAIMessagesTests(unittest.TestCase):
         self.assertEqual("file contents here", msg["content"])
 
     def test_user_mixed_text_and_tool_results(self) -> None:
-        result = _to_openai_messages("", [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Here are results:"},
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": "call_1",
-                        "content": "result1",
-                    },
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": "call_2",
-                        "content": "result2",
-                    },
-                ],
-            }
-        ])
+        result = _to_openai_messages(
+            "",
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Here are results:"},
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "call_1",
+                            "content": "result1",
+                        },
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "call_2",
+                            "content": "result2",
+                        },
+                    ],
+                }
+            ],
+        )
         # Should produce: tool msg for call_1, tool msg for call_2, user msg for text
         tool_msgs = [m for m in result if m["role"] == "tool"]
         user_msgs = [m for m in result if m["role"] == "user"]
@@ -112,18 +124,21 @@ class ToOpenAIMessagesTests(unittest.TestCase):
         self.assertEqual("Here are results:", user_msgs[0]["content"])
 
     def test_tool_result_with_list_content(self) -> None:
-        result = _to_openai_messages("", [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": "call_x",
-                        "content": [{"type": "text", "text": "part1"}, {"type": "text", "text": "part2"}],
-                    },
-                ],
-            }
-        ])
+        result = _to_openai_messages(
+            "",
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "call_x",
+                            "content": [{"type": "text", "text": "part1"}, {"type": "text", "text": "part2"}],
+                        },
+                    ],
+                }
+            ],
+        )
         self.assertEqual(1, len(result))
         self.assertEqual("part1\npart2", result[0]["content"])
 
@@ -224,24 +239,33 @@ class OpenAIProviderStreamTests(unittest.TestCase):
 
     def test_stream_chat_text_response(self) -> None:
         chunks = [
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason=None,
-                    delta=SimpleNamespace(content="Hello", tool_calls=None),
-                )
-            ], usage=None),
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason=None,
-                    delta=SimpleNamespace(content=" world", tool_calls=None),
-                )
-            ], usage=None),
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason="stop",
-                    delta=SimpleNamespace(content=None, tool_calls=None),
-                )
-            ], usage=None),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason=None,
+                        delta=SimpleNamespace(content="Hello", tool_calls=None),
+                    )
+                ],
+                usage=None,
+            ),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason=None,
+                        delta=SimpleNamespace(content=" world", tool_calls=None),
+                    )
+                ],
+                usage=None,
+            ),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="stop",
+                        delta=SimpleNamespace(content=None, tool_calls=None),
+                    )
+                ],
+                usage=None,
+            ),
             self._usage_chunk(prompt_tokens=15, completion_tokens=3),
         ]
         provider = self._make_provider(chunks)
@@ -261,42 +285,51 @@ class OpenAIProviderStreamTests(unittest.TestCase):
 
     def test_stream_chat_tool_call_response(self) -> None:
         chunks = [
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason=None,
-                    delta=SimpleNamespace(
-                        content=None,
-                        tool_calls=[
-                            SimpleNamespace(
-                                index=0,
-                                id="call_123",
-                                function=SimpleNamespace(name="read_file", arguments='{"pa'),
-                            )
-                        ],
-                    ),
-                )
-            ], usage=None),
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason=None,
-                    delta=SimpleNamespace(
-                        content=None,
-                        tool_calls=[
-                            SimpleNamespace(
-                                index=0,
-                                id=None,
-                                function=SimpleNamespace(name=None, arguments='th": "x"}'),
-                            )
-                        ],
-                    ),
-                )
-            ], usage=None),
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason="tool_calls",
-                    delta=SimpleNamespace(content=None, tool_calls=None),
-                )
-            ], usage=None),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason=None,
+                        delta=SimpleNamespace(
+                            content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    id="call_123",
+                                    function=SimpleNamespace(name="read_file", arguments='{"pa'),
+                                )
+                            ],
+                        ),
+                    )
+                ],
+                usage=None,
+            ),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason=None,
+                        delta=SimpleNamespace(
+                            content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    id=None,
+                                    function=SimpleNamespace(name=None, arguments='th": "x"}'),
+                                )
+                            ],
+                        ),
+                    )
+                ],
+                usage=None,
+            ),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="tool_calls",
+                        delta=SimpleNamespace(content=None, tool_calls=None),
+                    )
+                ],
+                usage=None,
+            ),
             self._usage_chunk(),
         ]
         provider = self._make_provider(chunks)
@@ -314,33 +347,42 @@ class OpenAIProviderStreamTests(unittest.TestCase):
 
     def test_stream_chat_text_and_tool_calls(self) -> None:
         chunks = [
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason=None,
-                    delta=SimpleNamespace(content="Let me read that.", tool_calls=None),
-                )
-            ], usage=None),
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason=None,
-                    delta=SimpleNamespace(
-                        content=None,
-                        tool_calls=[
-                            SimpleNamespace(
-                                index=0,
-                                id="call_456",
-                                function=SimpleNamespace(name="read_file", arguments='{"path": "a.py"}'),
-                            )
-                        ],
-                    ),
-                )
-            ], usage=None),
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason="tool_calls",
-                    delta=SimpleNamespace(content=None, tool_calls=None),
-                )
-            ], usage=None),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason=None,
+                        delta=SimpleNamespace(content="Let me read that.", tool_calls=None),
+                    )
+                ],
+                usage=None,
+            ),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason=None,
+                        delta=SimpleNamespace(
+                            content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    id="call_456",
+                                    function=SimpleNamespace(name="read_file", arguments='{"path": "a.py"}'),
+                                )
+                            ],
+                        ),
+                    )
+                ],
+                usage=None,
+            ),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="tool_calls",
+                        delta=SimpleNamespace(content=None, tool_calls=None),
+                    )
+                ],
+                usage=None,
+            ),
             self._usage_chunk(),
         ]
         provider = self._make_provider(chunks)
@@ -360,12 +402,15 @@ class OpenAIProviderStreamTests(unittest.TestCase):
 
     def test_stream_chat_length_stop_reason(self) -> None:
         chunks = [
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason="length",
-                    delta=SimpleNamespace(content="truncated", tool_calls=None),
-                )
-            ], usage=None),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="length",
+                        delta=SimpleNamespace(content="truncated", tool_calls=None),
+                    )
+                ],
+                usage=None,
+            ),
             self._usage_chunk(),
         ]
         provider = self._make_provider(chunks)
@@ -379,44 +424,53 @@ class OpenAIProviderStreamTests(unittest.TestCase):
 
     def test_stream_chat_multiple_tool_calls(self) -> None:
         chunks = [
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason=None,
-                    delta=SimpleNamespace(
-                        content=None,
-                        tool_calls=[
-                            SimpleNamespace(
-                                index=0,
-                                id="call_a",
-                                function=SimpleNamespace(name="read_file", arguments='{"path": "a.py"}'),
-                            ),
-                        ],
-                    ),
-                )
-            ], usage=None),
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason=None,
-                    delta=SimpleNamespace(
-                        content=None,
-                        tool_calls=[
-                            SimpleNamespace(
-                                index=1,
-                                id="call_b",
-                                function=SimpleNamespace(
-                                    name="write_file", arguments='{"path": "b.py", "content": "x"}'
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason=None,
+                        delta=SimpleNamespace(
+                            content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    id="call_a",
+                                    function=SimpleNamespace(name="read_file", arguments='{"path": "a.py"}'),
                                 ),
-                            ),
-                        ],
-                    ),
-                )
-            ], usage=None),
-            SimpleNamespace(choices=[
-                SimpleNamespace(
-                    finish_reason="tool_calls",
-                    delta=SimpleNamespace(content=None, tool_calls=None),
-                )
-            ], usage=None),
+                            ],
+                        ),
+                    )
+                ],
+                usage=None,
+            ),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason=None,
+                        delta=SimpleNamespace(
+                            content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=1,
+                                    id="call_b",
+                                    function=SimpleNamespace(
+                                        name="write_file", arguments='{"path": "b.py", "content": "x"}'
+                                    ),
+                                ),
+                            ],
+                        ),
+                    )
+                ],
+                usage=None,
+            ),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="tool_calls",
+                        delta=SimpleNamespace(content=None, tool_calls=None),
+                    )
+                ],
+                usage=None,
+            ),
             self._usage_chunk(),
         ]
         provider = self._make_provider(chunks)

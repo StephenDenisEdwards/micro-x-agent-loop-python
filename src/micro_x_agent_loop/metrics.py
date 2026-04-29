@@ -171,8 +171,14 @@ class SessionAccumulator:
         key = f"{provider}/{model}"
         sub = self.model_subtotals.get(key)
         if sub is None:
-            sub = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
-                   "provider": provider, "model": model}
+            sub = {
+                "calls": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_usd": 0.0,
+                "provider": provider,
+                "model": model,
+            }
             self.model_subtotals[key] = sub
         sub["calls"] += 1
         sub["input_tokens"] += usage.input_tokens
@@ -192,19 +198,21 @@ class SessionAccumulator:
         self.total_cost_usd += cost
         self.total_duration_ms += usage.duration_ms
         self._record_model(usage)
-        self.api_call_log.append({
-            "call_number": self.total_api_calls,
-            "turn": turn_number,
-            "call_type": call_type,
-            "provider": usage.provider or "unknown",
-            "model": usage.model or "unknown",
-            "input_tokens": usage.input_tokens,
-            "output_tokens": usage.output_tokens,
-            "cache_read": usage.cache_read_input_tokens,
-            "cache_create": usage.cache_creation_input_tokens,
-            "cost_usd": cost,
-            "duration_ms": usage.duration_ms,
-        })
+        self.api_call_log.append(
+            {
+                "call_number": self.total_api_calls,
+                "turn": turn_number,
+                "call_type": call_type,
+                "provider": usage.provider or "unknown",
+                "model": usage.model or "unknown",
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+                "cache_read": usage.cache_read_input_tokens,
+                "cache_create": usage.cache_creation_input_tokens,
+                "cost_usd": cost,
+                "duration_ms": usage.duration_ms,
+            }
+        )
 
     def restore_from_events(self, events: list[dict]) -> None:
         """Replay persisted metric events to restore session cost state.
@@ -236,26 +244,34 @@ class SessionAccumulator:
                 key = f"{provider}/{model}"
                 sub = self.model_subtotals.get(key)
                 if sub is None:
-                    sub = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
-                           "provider": provider, "model": model}
+                    sub = {
+                        "calls": 0,
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "cost_usd": 0.0,
+                        "provider": provider,
+                        "model": model,
+                    }
                     self.model_subtotals[key] = sub
                 sub["calls"] += 1
                 sub["input_tokens"] += int(payload.get("input_tokens", 0))
                 sub["output_tokens"] += int(payload.get("output_tokens", 0))
                 sub["cost_usd"] += float(payload.get("estimated_cost_usd", 0))
-                self.api_call_log.append({
-                    "call_number": self.total_api_calls,
-                    "turn": turn,
-                    "call_type": payload.get("call_type", ""),
-                    "provider": provider,
-                    "model": model,
-                    "input_tokens": int(payload.get("input_tokens", 0)),
-                    "output_tokens": int(payload.get("output_tokens", 0)),
-                    "cache_read": int(payload.get("cache_read_input_tokens", 0)),
-                    "cache_create": int(payload.get("cache_creation_input_tokens", 0)),
-                    "cost_usd": float(payload.get("estimated_cost_usd", 0)),
-                    "duration_ms": float(payload.get("duration_ms", 0)),
-                })
+                self.api_call_log.append(
+                    {
+                        "call_number": self.total_api_calls,
+                        "turn": turn,
+                        "call_type": payload.get("call_type", ""),
+                        "provider": provider,
+                        "model": model,
+                        "input_tokens": int(payload.get("input_tokens", 0)),
+                        "output_tokens": int(payload.get("output_tokens", 0)),
+                        "cache_read": int(payload.get("cache_read_input_tokens", 0)),
+                        "cache_create": int(payload.get("cache_creation_input_tokens", 0)),
+                        "cost_usd": float(payload.get("estimated_cost_usd", 0)),
+                        "duration_ms": float(payload.get("duration_ms", 0)),
+                    }
+                )
 
             elif etype == "metric.compaction":
                 self.total_compaction_events += 1
@@ -309,9 +325,7 @@ class SessionAccumulator:
             lines.append("Model breakdown:")
             for key, sub in sorted(self.model_subtotals.items(), key=lambda x: -x[1]["cost_usd"]):
                 prices = _lookup_pricing(sub.get("provider", ""), sub.get("model", ""))
-                pricing_str = (
-                    f" (in=${prices[0]} out=${prices[1]})" if prices else ""
-                )
+                pricing_str = f" (in=${prices[0]} out=${prices[1]})" if prices else ""
                 lines.append(
                     f"  {key}{pricing_str}: {sub['calls']} calls, "
                     f"{sub['input_tokens']:,} in / {sub['output_tokens']:,} out, "
@@ -367,7 +381,7 @@ def _short_model_name(model: str) -> str:
     """Shorten model ID for toolbar display."""
     for prefix in ("claude-", "anthropic/"):
         if model.startswith(prefix):
-            model = model[len(prefix):]
+            model = model[len(prefix) :]
     # Strip date suffix (-YYYYMMDD)
     if len(model) > 9 and model[-8:].isdigit() and model[-9] == "-":
         model = model[:-9]

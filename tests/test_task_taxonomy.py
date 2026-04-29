@@ -14,8 +14,14 @@ from micro_x_agent_loop.task_taxonomy import (
 class TaskTypeTests(unittest.TestCase):
     def test_all_types_defined(self) -> None:
         expected = {
-            "trivial", "conversational", "factual_lookup", "summarization",
-            "code_generation", "code_review", "analysis", "tool_continuation",
+            "trivial",
+            "conversational",
+            "factual_lookup",
+            "summarization",
+            "code_generation",
+            "code_review",
+            "analysis",
+            "tool_continuation",
             "creative",
         }
         self.assertEqual({t.value for t in TaskType}, expected)

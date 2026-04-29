@@ -35,29 +35,44 @@ class TestTaskManager(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_create_basic(self) -> None:
-        result = self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Fix auth bug",
-            "description": "Fix the JWT validation in login flow",
-        }))
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Fix auth bug",
+                    "description": "Fix the JWT validation in login flow",
+                },
+            )
+        )
         self.assertEqual(result, "Task #1 created successfully: Fix auth bug")
 
     def test_create_with_active_form(self) -> None:
-        result = self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Run tests",
-            "description": "Execute full test suite",
-            "activeForm": "Running tests",
-        }))
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Run tests",
+                    "description": "Execute full test suite",
+                    "activeForm": "Running tests",
+                },
+            )
+        )
         self.assertIn("Task #1 created successfully", result)
         task = self.store.get_task(self.list_id, "1")
         assert task is not None
         self.assertEqual(task.active_form, "Running tests")
 
     def test_create_with_metadata(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Task",
-            "description": "desc",
-            "metadata": {"priority": "high"},
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                    "metadata": {"priority": "high"},
+                },
+            )
+        )
         task = self.store.get_task(self.list_id, "1")
         assert task is not None
         assert task.metadata is not None
@@ -72,45 +87,100 @@ class TestTaskManager(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_update_status(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
-        result = self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "in_progress",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "in_progress",
+                },
+            )
+        )
         self.assertEqual(result, "Updated task #1 status")
 
     def test_update_multiple_fields(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
-        result = self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "in_progress", "owner": "alice",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "in_progress",
+                    "owner": "alice",
+                },
+            )
+        )
         self.assertIn("status", result)
         self.assertIn("owner", result)
 
     def test_update_delete(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
-        result = self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "deleted",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "deleted",
+                },
+            )
+        )
         self.assertEqual(result, "Updated task #1 deleted")
         # Verify it's gone
         self.assertIsNone(self.store.get_task(self.list_id, "1"))
 
     def test_update_add_blocks(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "A", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "B", "description": "desc",
-        }))
-        result = self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "addBlocks": ["2"],
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "A",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "B",
+                    "description": "desc",
+                },
+            )
+        )
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "addBlocks": ["2"],
+                },
+            )
+        )
         self.assertIn("blocks", result)
 
         # Verify dependency
@@ -121,24 +191,53 @@ class TestTaskManager(unittest.TestCase):
         self.assertIn("1", t2.blocked_by)
 
     def test_update_add_blocked_by(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "A", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "B", "description": "desc",
-        }))
-        result = self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "2", "addBlockedBy": ["1"],
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "A",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "B",
+                    "description": "desc",
+                },
+            )
+        )
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "2",
+                    "addBlockedBy": ["1"],
+                },
+            )
+        )
         self.assertIn("blockedBy", result)
 
     def test_update_no_fields(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
-        result = self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                },
+            )
+        )
         self.assertIn("unchanged", result)
 
     # ------------------------------------------------------------------
@@ -146,22 +245,39 @@ class TestTaskManager(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_update_not_found(self) -> None:
-        result = self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "999", "status": "completed",
-        }))
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "999",
+                    "status": "completed",
+                },
+            )
+        )
         self.assertEqual(result, "Task #999 not found")
         # Must NOT raise or return is_error — it's just text
 
     def test_delete_not_found(self) -> None:
-        result = self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "999", "status": "deleted",
-        }))
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "999",
+                    "status": "deleted",
+                },
+            )
+        )
         self.assertEqual(result, "Task #999 not found")
 
     def test_get_not_found(self) -> None:
-        result = self._run(self.mgr.handle_tool_call("task_get", {
-            "taskId": "999",
-        }))
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_get",
+                {
+                    "taskId": "999",
+                },
+            )
+        )
         self.assertEqual(result, "Task not found")
 
     # ------------------------------------------------------------------
@@ -173,21 +289,52 @@ class TestTaskManager(unittest.TestCase):
         self.assertEqual(result, "No tasks.")
 
     def test_list_formatting(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Set up schema", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "completed",
-        }))
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Implement auth", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "2", "status": "in_progress", "owner": "alice",
-        }))
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Write tests", "description": "desc",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Set up schema",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "completed",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Implement auth",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "2",
+                    "status": "in_progress",
+                    "owner": "alice",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Write tests",
+                    "description": "desc",
+                },
+            )
+        )
         # Block task 3 by task 2
         self.store.block_task(self.list_id, "2", "3")
 
@@ -200,12 +347,24 @@ class TestTaskManager(unittest.TestCase):
 
     def test_list_filters_completed_blockers(self) -> None:
         """Section 6.3 / 13.2: completed blockers are filtered from display."""
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "A", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "B", "description": "desc",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "A",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "B",
+                    "description": "desc",
+                },
+            )
+        )
         self.store.block_task(self.list_id, "1", "2")
 
         # Before completing A, B shows as blocked
@@ -213,20 +372,38 @@ class TestTaskManager(unittest.TestCase):
         self.assertIn("[blocked by #1]", result)
 
         # After completing A, B no longer shows as blocked
-        self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "completed",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "completed",
+                },
+            )
+        )
         result = self._run(self.mgr.handle_tool_call("task_list", {}))
         self.assertNotIn("[blocked by", result)
 
     def test_list_filters_internal_tasks(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Visible", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Internal", "description": "desc",
-            "metadata": {"_internal": True},
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Visible",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Internal",
+                    "description": "desc",
+                    "metadata": {"_internal": True},
+                },
+            )
+        )
         result = self._run(self.mgr.handle_tool_call("task_list", {}))
         self.assertIn("Visible", result)
         self.assertNotIn("Internal", result)
@@ -236,13 +413,24 @@ class TestTaskManager(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_get_full_details(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Implement auth",
-            "description": "Add JWT-based auth with login/logout endpoints",
-        }))
-        self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "in_progress",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Implement auth",
+                    "description": "Add JWT-based auth with login/logout endpoints",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "in_progress",
+                },
+            )
+        )
 
         result = self._run(self.mgr.handle_tool_call("task_get", {"taskId": "1"}))
         self.assertIn("Task #1: Implement auth", result)
@@ -250,15 +438,33 @@ class TestTaskManager(unittest.TestCase):
         self.assertIn("Description: Add JWT-based auth", result)
 
     def test_get_with_dependencies(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "A", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "B", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "C", "description": "desc",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "A",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "B",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "C",
+                    "description": "desc",
+                },
+            )
+        )
         self.store.block_task(self.list_id, "1", "2")
         self.store.block_task(self.list_id, "1", "3")
 
@@ -266,12 +472,24 @@ class TestTaskManager(unittest.TestCase):
         self.assertIn("Blocks: #2, #3", result)
 
     def test_get_with_owner(self) -> None:
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "owner": "alice",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "owner": "alice",
+                },
+            )
+        )
         result = self._run(self.mgr.handle_tool_call("task_get", {"taskId": "1"}))
         self.assertIn("Owner: alice", result)
 
@@ -289,20 +507,44 @@ class TestTaskManager(unittest.TestCase):
 
     def test_delete_cascades_via_manager(self) -> None:
         """Section 13.4: delete via task_update cascades dependency cleanup."""
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "A", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "B", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "2", "addBlockedBy": ["1"],
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "A",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "B",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "2",
+                    "addBlockedBy": ["1"],
+                },
+            )
+        )
 
         # Delete A
-        self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "deleted",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "deleted",
+                },
+            )
+        )
 
         # B should have no blockers
         t2 = self.store.get_task(self.list_id, "2")
@@ -315,18 +557,42 @@ class TestTaskManager(unittest.TestCase):
 
     def test_id_non_reuse_via_manager(self) -> None:
         """Section 13.5: after delete, next ID skips the deleted one."""
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "A", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "B", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "2", "status": "deleted",
-        }))
-        result = self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "C", "description": "desc",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "A",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "B",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "2",
+                    "status": "deleted",
+                },
+            )
+        )
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "C",
+                    "description": "desc",
+                },
+            )
+        )
         self.assertEqual(result, "Task #3 created successfully: C")
 
 
@@ -359,9 +625,15 @@ class TestTaskManagerHooks(unittest.TestCase):
             return None
 
         self.mgr.register_created_hook(hook)
-        result = self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Fix bug", "description": "Fix the auth bug",
-        }))
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Fix bug",
+                    "description": "Fix the auth bug",
+                },
+            )
+        )
         self.assertIn("created successfully", result)
         # Hook received correct args
         self.assertEqual(len(received_args), 1)
@@ -371,13 +643,20 @@ class TestTaskManagerHooks(unittest.TestCase):
 
     def test_created_hook_blocking_rolls_back(self) -> None:
         """Blocking hook: task is deleted (rolled back), error returned."""
+
         async def blocking_hook(task_id: str, subject: str, description: str) -> str | None:
             return "Policy violation: too many tasks"
 
         self.mgr.register_created_hook(blocking_hook)
-        result = self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
         self.assertIn("Task creation blocked", result)
         self.assertIn("Policy violation", result)
         # Task was rolled back — should not exist
@@ -397,29 +676,48 @@ class TestTaskManagerHooks(unittest.TestCase):
 
         self.mgr.register_created_hook(hook_a)
         self.mgr.register_created_hook(hook_b)
-        result = self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
         self.assertIn("Error from A", result)
         # Hook B was never called because A blocked first
         self.assertEqual(call_order, ["a"])
 
     def test_created_hook_id_reuse_after_rollback(self) -> None:
         """After rollback, the ID is consumed (HWM prevents reuse)."""
+
         async def blocking_hook(task_id: str, subject: str, description: str) -> str | None:
             return "blocked"
 
         self.mgr.register_created_hook(blocking_hook)
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "A", "description": "desc",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "A",
+                    "description": "desc",
+                },
+            )
+        )
         # ID 1 was consumed and rolled back
 
         # Remove the hook so the next create succeeds
         self.mgr._created_hooks.clear()
-        result = self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "B", "description": "desc",
-        }))
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "B",
+                    "description": "desc",
+                },
+            )
+        )
         # Should get ID 2, not 1 (HWM prevents reuse)
         self.assertEqual(result, "Task #2 created successfully: B")
 
@@ -436,12 +734,24 @@ class TestTaskManagerHooks(unittest.TestCase):
             return None
 
         self.mgr.register_completed_hook(hook)
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Fix bug", "description": "Fix the auth bug",
-        }))
-        result = self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "completed",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Fix bug",
+                    "description": "Fix the auth bug",
+                },
+            )
+        )
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "completed",
+                },
+            )
+        )
         self.assertIn("Updated task #1 status", result)
         # Hook received correct args
         self.assertEqual(len(received_args), 1)
@@ -453,19 +763,38 @@ class TestTaskManagerHooks(unittest.TestCase):
 
     def test_completed_hook_blocking_rejects(self) -> None:
         """Blocking hook: completion is rejected, task stays in_progress."""
+
         async def blocking_hook(task_id: str, subject: str, description: str) -> str | None:
             return "Tests are failing"
 
         self.mgr.register_completed_hook(blocking_hook)
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "in_progress",
-        }))
-        result = self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "completed",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "in_progress",
+                },
+            )
+        )
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "completed",
+                },
+            )
+        )
         self.assertIn("completion blocked", result)
         self.assertIn("Tests are failing", result)
         # Task remains in_progress
@@ -483,23 +812,47 @@ class TestTaskManagerHooks(unittest.TestCase):
             return None
 
         self.mgr.register_completed_hook(hook)
-        self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
-        self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "in_progress",
-        }))
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "in_progress",
+                },
+            )
+        )
         self.assertFalse(hook_called)
 
     def test_no_hooks_registered(self) -> None:
         """Without hooks, create and complete work normally."""
-        result = self._run(self.mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
         self.assertIn("created successfully", result)
-        result = self._run(self.mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "completed",
-        }))
+        result = self._run(
+            self.mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "completed",
+                },
+            )
+        )
         self.assertIn("Updated task #1 status", result)
 
 

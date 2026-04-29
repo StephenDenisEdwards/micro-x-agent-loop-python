@@ -185,17 +185,24 @@ class AgentConfig:
 
     def llm_config(self) -> LLMConfig:
         return LLMConfig(
-            model=self.model, max_tokens=self.max_tokens,
-            temperature=self.temperature, api_key=self.api_key,
-            provider=self.provider, prompt_caching_enabled=self.prompt_caching_enabled,
+            model=self.model,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            api_key=self.api_key,
+            provider=self.provider,
+            prompt_caching_enabled=self.prompt_caching_enabled,
         )
 
     def memory_config(self) -> MemoryConfig:
         return MemoryConfig(
-            memory_enabled=self.memory_enabled, session_id=self.session_id,
-            memory_store=self.memory_store, session_manager=self.session_manager,
-            checkpoint_manager=self.checkpoint_manager, event_emitter=self.event_emitter,
-            user_memory_enabled=self.user_memory_enabled, user_memory_dir=self.user_memory_dir,
+            memory_enabled=self.memory_enabled,
+            session_id=self.session_id,
+            memory_store=self.memory_store,
+            session_manager=self.session_manager,
+            checkpoint_manager=self.checkpoint_manager,
+            event_emitter=self.event_emitter,
+            user_memory_enabled=self.user_memory_enabled,
+            user_memory_dir=self.user_memory_dir,
         )
 
     def tool_search_config(self) -> ToolSearchConfig:
@@ -203,7 +210,8 @@ class AgentConfig:
             tool_search_enabled=self.tool_search_enabled,
             tool_search_strategy=self.tool_search_strategy,
             tool_search_max_load=self.tool_search_max_load,
-            embedding_model=self.embedding_model, ollama_base_url=self.ollama_base_url,
+            embedding_model=self.embedding_model,
+            ollama_base_url=self.ollama_base_url,
         )
 
     def routing_config(self) -> RoutingConfig:
@@ -236,7 +244,8 @@ class AgentConfig:
             tool_result_summarization_threshold=self.tool_result_summarization_threshold,
             mode_analysis_enabled=self.mode_analysis_enabled,
             stage2_classification_enabled=self.stage2_classification_enabled,
-            stage2_provider=self.stage2_provider, stage2_model=self.stage2_model,
+            stage2_provider=self.stage2_provider,
+            stage2_model=self.stage2_model,
         )
 
     def tool_result_config(self) -> ToolResultConfig:

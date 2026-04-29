@@ -52,6 +52,7 @@ class UrlParsingTests(unittest.TestCase):
                 import importlib
 
                 import micro_x_agent_loop.server.client as client_mod
+
                 importlib.reload(client_mod)
 
                 # We can't fully test WS connection without a server, but we verify
@@ -100,10 +101,12 @@ class UrlParsingTests(unittest.TestCase):
 
         async def mock_get(*args, **kwargs):
             return mock_health_resp
+
         mock_http.get = mock_get
 
         async def mock_post(*args, **kwargs):
             return mock_session_resp
+
         mock_http.post = mock_post
 
         mock_http.__aenter__ = AsyncMock(return_value=mock_http)
@@ -116,6 +119,7 @@ class UrlParsingTests(unittest.TestCase):
                 import importlib
 
                 import micro_x_agent_loop.server.client as client_mod
+
                 importlib.reload(client_mod)
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
@@ -146,13 +150,12 @@ class UrlParsingTests(unittest.TestCase):
                 import importlib
 
                 import micro_x_agent_loop.server.client as client_mod
+
                 importlib.reload(client_mod)
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
                     try:
-                        asyncio.run(client_mod.run_client(
-                            "http://localhost:9999", session_id="my-session"
-                        ))
+                        asyncio.run(client_mod.run_client("http://localhost:9999", session_id="my-session"))
                     except Exception:
                         pass
 
@@ -175,14 +178,17 @@ class UrlParsingTests(unittest.TestCase):
                 import importlib
 
                 import micro_x_agent_loop.server.client as client_mod
+
                 importlib.reload(client_mod)
 
                 try:
-                    asyncio.run(client_mod.run_client(
-                        "http://localhost:9999",
-                        session_id="s1",
-                        api_secret="my-secret",
-                    ))
+                    asyncio.run(
+                        client_mod.run_client(
+                            "http://localhost:9999",
+                            session_id="s1",
+                            api_secret="my-secret",
+                        )
+                    )
                 except Exception:
                     pass
 
@@ -213,6 +219,7 @@ class UrlParsingTests(unittest.TestCase):
         mock_http2.__aexit__ = AsyncMock(return_value=False)
 
         call_count = 0
+
         def make_http(*a, **k):
             nonlocal call_count
             call_count += 1
@@ -222,6 +229,7 @@ class UrlParsingTests(unittest.TestCase):
 
         # Remove websockets from sys.modules to trigger ImportError
         import sys
+
         ws_backup = sys.modules.get("websockets")
         sys.modules["websockets"] = None  # type: ignore[assignment]
 
@@ -229,6 +237,7 @@ class UrlParsingTests(unittest.TestCase):
             import importlib
 
             import micro_x_agent_loop.server.client as client_mod
+
             importlib.reload(client_mod)
 
             with patch("micro_x_agent_loop.server.client.httpx.AsyncClient", side_effect=make_http):
@@ -246,9 +255,7 @@ class UrlParsingTests(unittest.TestCase):
 class ReceiverDispatchTests(unittest.TestCase):
     """Test the WebSocket receiver loop message dispatch."""
 
-    def _run_with_ws_messages(
-        self, ws_messages: list[dict], *, session_id: str = "s1"
-    ) -> list[str]:
+    def _run_with_ws_messages(self, ws_messages: list[dict], *, session_id: str = "s1") -> list[str]:
         """Helper: run client with mocked health check + WebSocket messages."""
         output: list[str] = []
 
@@ -293,59 +300,72 @@ class ReceiverDispatchTests(unittest.TestCase):
         mock_websockets = MagicMock()
         mock_websockets.connect = mock_ws_connect
         mock_websockets.ConnectionClosed = type("ConnectionClosed", (Exception,), {})
-        mock_websockets.InvalidStatus = type("InvalidStatus", (Exception,), {
-            "__init__": lambda self, *a: None,
-        })
+        mock_websockets.InvalidStatus = type(
+            "InvalidStatus",
+            (Exception,),
+            {
+                "__init__": lambda self, *a: None,
+            },
+        )
 
         with patch("micro_x_agent_loop.server.client.httpx.AsyncClient", return_value=mock_http):
             with patch.dict("sys.modules", {"websockets": mock_websockets}):
                 import importlib
 
                 import micro_x_agent_loop.server.client as client_mod
+
                 importlib.reload(client_mod)
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
                     try:
-                        asyncio.run(client_mod.run_client(
-                            "http://localhost:9999", session_id=session_id
-                        ))
+                        asyncio.run(client_mod.run_client("http://localhost:9999", session_id=session_id))
                     except Exception:
                         pass
 
         return output
 
     def test_text_delta_dispatched(self) -> None:
-        output = self._run_with_ws_messages([
-            {"type": "text_delta", "text": "Hello"},
-            {"type": "turn_complete", "usage": {}},
-        ])
+        output = self._run_with_ws_messages(
+            [
+                {"type": "text_delta", "text": "Hello"},
+                {"type": "turn_complete", "usage": {}},
+            ]
+        )
         # Should have connected and printed session info
         self.assertTrue(any("Session:" in o for o in output))
 
     def test_error_message_dispatched(self) -> None:
-        output = self._run_with_ws_messages([
-            {"type": "error", "message": "something broke"},
-        ])
+        output = self._run_with_ws_messages(
+            [
+                {"type": "error", "message": "something broke"},
+            ]
+        )
         self.assertTrue(any("Session:" in o for o in output))
 
     def test_system_message_dispatched(self) -> None:
-        output = self._run_with_ws_messages([
-            {"type": "system_message", "text": "system info"},
-        ])
+        output = self._run_with_ws_messages(
+            [
+                {"type": "system_message", "text": "system info"},
+            ]
+        )
         self.assertTrue(any("Session:" in o for o in output))
 
     def test_pong_dispatched(self) -> None:
-        output = self._run_with_ws_messages([
-            {"type": "pong"},
-        ])
+        output = self._run_with_ws_messages(
+            [
+                {"type": "pong"},
+            ]
+        )
         self.assertTrue(any("Session:" in o for o in output))
 
     def test_tool_lifecycle_dispatched(self) -> None:
-        output = self._run_with_ws_messages([
-            {"type": "tool_started", "tool_use_id": "t1", "tool": "read_file"},
-            {"type": "tool_completed", "tool_use_id": "t1", "tool": "read_file", "error": False},
-            {"type": "turn_complete", "usage": {}},
-        ])
+        output = self._run_with_ws_messages(
+            [
+                {"type": "tool_started", "tool_use_id": "t1", "tool": "read_file"},
+                {"type": "tool_completed", "tool_use_id": "t1", "tool": "read_file", "error": False},
+                {"type": "turn_complete", "usage": {}},
+            ]
+        )
         self.assertTrue(any("Session:" in o for o in output))
 
 
@@ -384,12 +404,11 @@ class InvalidStatusTests(unittest.TestCase):
                 import importlib
 
                 import micro_x_agent_loop.server.client as client_mod
+
                 importlib.reload(client_mod)
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
-                    asyncio.run(client_mod.run_client(
-                        "http://localhost:9999", session_id="s1"
-                    ))
+                    asyncio.run(client_mod.run_client("http://localhost:9999", session_id="s1"))
 
         self.assertTrue(any("Authentication failed" in o for o in output))
 
@@ -425,12 +444,11 @@ class InvalidStatusTests(unittest.TestCase):
                 import importlib
 
                 import micro_x_agent_loop.server.client as client_mod
+
                 importlib.reload(client_mod)
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
-                    asyncio.run(client_mod.run_client(
-                        "http://localhost:9999", session_id="s1"
-                    ))
+                    asyncio.run(client_mod.run_client("http://localhost:9999", session_id="s1"))
 
         self.assertTrue(any("WebSocket connection failed" in o for o in output))
 
@@ -462,12 +480,11 @@ class InvalidStatusTests(unittest.TestCase):
                 import importlib
 
                 import micro_x_agent_loop.server.client as client_mod
+
                 importlib.reload(client_mod)
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
-                    asyncio.run(client_mod.run_client(
-                        "http://localhost:9999", session_id="s1"
-                    ))
+                    asyncio.run(client_mod.run_client("http://localhost:9999", session_id="s1"))
 
         self.assertTrue(any("Connection error" in o for o in output))
 

@@ -35,6 +35,7 @@ import httpx
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ChatResponse:
     """Response from a non-streaming chat request."""
@@ -68,6 +69,7 @@ class SessionInfo:
 # Streaming context
 # ---------------------------------------------------------------------------
 
+
 class StreamSession:
     """Async iterator over WebSocket events from a single turn.
 
@@ -97,11 +99,15 @@ class StreamSession:
 
     async def answer(self, question_id: str, text: str) -> None:
         """Answer a HITL question."""
-        await self._ws.send(json.dumps({
-            "type": "answer",
-            "question_id": question_id,
-            "text": text,
-        }))
+        await self._ws.send(
+            json.dumps(
+                {
+                    "type": "answer",
+                    "question_id": question_id,
+                    "text": text,
+                }
+            )
+        )
 
     async def ping(self) -> None:
         """Send a keepalive ping."""
@@ -111,6 +117,7 @@ class StreamSession:
 # ---------------------------------------------------------------------------
 # Client
 # ---------------------------------------------------------------------------
+
 
 class AgentClient:
     """Async client for the micro-x-agent API server.
@@ -262,17 +269,14 @@ class AgentClient:
             import websockets
         except ImportError as exc:
             raise ImportError(
-                "The 'websockets' package is required for streaming. "
-                "Install with: pip install websockets"
+                "The 'websockets' package is required for streaming. Install with: pip install websockets"
             ) from exc
 
         if not session_id:
             session_id = str(uuid.uuid4())
 
         ws_scheme = "wss" if self._base_url.startswith("https") else "ws"
-        ws_url = self._base_url.replace("https://", f"{ws_scheme}://").replace(
-            "http://", f"{ws_scheme}://"
-        )
+        ws_url = self._base_url.replace("https://", f"{ws_scheme}://").replace("http://", f"{ws_scheme}://")
         ws_url = f"{ws_url}/api/ws/{session_id}"
 
         extra_headers = []

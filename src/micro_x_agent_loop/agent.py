@@ -139,24 +139,25 @@ class Agent:
         if c.routing_feedback_store is not None and c.semantic_routing_enabled:
             from micro_x_agent_loop.routing_feedback import RoutingOutcome
 
-            def _on_routing_feedback(
-                *, task_classification: object, usage: UsageResult, call_type: str
-            ) -> None:
+            def _on_routing_feedback(*, task_classification: object, usage: UsageResult, call_type: str) -> None:
                 from micro_x_agent_loop.semantic_classifier import TaskClassification as TC
+
                 if not isinstance(task_classification, TC):
                     return
                 assert self._routing_feedback_store is not None
-                self._routing_feedback_store.record(RoutingOutcome(
-                    session_id=self._memory.active_session_id or "",
-                    turn_number=self._turn_number,
-                    task_type=task_classification.task_type.value,
-                    provider=usage.provider,
-                    model=usage.model,
-                    cost_usd=estimate_cost(usage),
-                    latency_ms=usage.duration_ms,
-                    stage=task_classification.stage,
-                    confidence=task_classification.confidence,
-                ))
+                self._routing_feedback_store.record(
+                    RoutingOutcome(
+                        session_id=self._memory.active_session_id or "",
+                        turn_number=self._turn_number,
+                        task_type=task_classification.task_type.value,
+                        provider=usage.provider,
+                        model=usage.model,
+                        cost_usd=estimate_cost(usage),
+                        latency_ms=usage.duration_ms,
+                        stage=task_classification.stage,
+                        confidence=task_classification.confidence,
+                    )
+                )
 
             routing_feedback_callback = _on_routing_feedback
 
@@ -243,9 +244,7 @@ class Agent:
         if not self._memory_enabled or session_id is None:
             return
         self._messages = self._memory.load_messages(session_id)
-        logger.info(
-            f"Loaded {len(self._messages)} persisted messages for session {session_id}"
-        )
+        logger.info(f"Loaded {len(self._messages)} persisted messages for session {session_id}")
         self._inject_task_summary()
 
     def _inject_task_summary(self) -> None:
@@ -255,15 +254,17 @@ class Agent:
         summary = self._task_manager.format_task_summary()
         if summary is None:
             return
-        self._messages.append({
-            "role": "user",
-            "content": (
-                "[Session resumed — existing tasks from previous session]\n\n"
-                f"{summary}\n\n"
-                "Review these tasks and continue where you left off. "
-                "Use task_list / task_get to check details before proceeding."
-            ),
-        })
+        self._messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "[Session resumed — existing tasks from previous session]\n\n"
+                    f"{summary}\n\n"
+                    "Review these tasks and continue where you left off. "
+                    "Use task_list / task_get to check details before proceeding."
+                ),
+            }
+        )
         logger.info("Injected task summary into resumed session")
 
     async def run(self, user_message: str) -> None:
@@ -273,6 +274,7 @@ class Agent:
                     add_notification_channel,
                     remove_notification_channel,
                 )
+
                 add_notification_channel(self._channel)
                 try:
                     await self._run_inner(user_message)
@@ -290,6 +292,7 @@ class Agent:
         """Build the task type embedding index for semantic routing. Call once at startup."""
         if self._task_embedding_index is not None:
             from micro_x_agent_loop.embedding import TaskEmbeddingIndex
+
             if isinstance(self._task_embedding_index, TaskEmbeddingIndex):
                 success = await self._task_embedding_index.build()
                 if not success:
@@ -299,7 +302,7 @@ class Agent:
         # /prompt <filename> — read file and use contents as the user message
         stripped = user_message.strip()
         if stripped.startswith("/prompt "):
-            filename = stripped[len("/prompt "):].strip()
+            filename = stripped[len("/prompt ") :].strip()
             if not filename:
                 self._system_print(f"{self._line_prefix}Usage: /prompt <filename>")
                 return
@@ -323,8 +326,7 @@ class Agent:
             analysis = analyze_prompt(user_message)
             stage2: Stage2Result | None = None
 
-            if (analysis.recommended_mode == RecommendedMode.AMBIGUOUS
-                    and self._stage2_classification_enabled):
+            if analysis.recommended_mode == RecommendedMode.AMBIGUOUS and self._stage2_classification_enabled:
                 try:
                     stage2 = await self._classify_ambiguous(user_message, analysis)
                 except Exception as ex:
@@ -373,7 +375,9 @@ class Agent:
     # -- Mode choice prompt --
 
     async def _prompt_mode_choice(
-        self, analysis: ModeAnalysis, stage2: Stage2Result | None,
+        self,
+        analysis: ModeAnalysis,
+        stage2: Stage2Result | None,
     ) -> RecommendedMode:
         """Prompt the user to choose between PROMPT and COMPILED execution mode."""
         # Determine the recommendation to present
@@ -386,17 +390,16 @@ class Agent:
             recommended = RecommendedMode.COMPILED
 
         # Build signal descriptions for display
-        signal_texts = [
-            f"{s.name} ({s.strength.value}): \"{s.matched_text}\""
-            for s in analysis.signals
-        ]
+        signal_texts = [f'{s.name} ({s.strength.value}): "{s.matched_text}"' for s in analysis.signals]
         reasoning = stage2.reasoning if stage2 and stage2.reasoning else ""
         recommended_str = recommended.value
 
         # Route through channel if it supports mode choice (e.g. TUI modal)
         if self._channel is not None and hasattr(self._channel, "prompt_mode_choice"):
             selected = await self._channel.prompt_mode_choice(
-                signal_texts, recommended_str, reasoning,
+                signal_texts,
+                recommended_str,
+                reasoning,
             )
             if selected == "COMPILED":
                 return RecommendedMode.COMPILED
@@ -406,16 +409,14 @@ class Agent:
 
         # Fallback: interactive terminal prompt via questionary
         self._system_print(
-            "[Mode Analysis] Your prompt contains signals that suggest "
-            "compiled (batch) mode may be more appropriate:"
+            "[Mode Analysis] Your prompt contains signals that suggest compiled (batch) mode may be more appropriate:"
         )
         for text in signal_texts:
             self._system_print(f"  * {text}")
         if reasoning:
             self._system_print(f"  LLM assessment: {reasoning}")
         self._system_print(
-            "  PROMPT mode: conversational, single-turn responses\n"
-            "  COMPILED mode: structured batch execution"
+            "  PROMPT mode: conversational, single-turn responses\n  COMPILED mode: structured batch execution"
         )
 
         import questionary
@@ -439,13 +440,15 @@ class Agent:
             ),
         ]
 
-        style = Style([
-            ("qmark", "fg:cyan bold"),
-            ("question", "bold"),
-            ("pointer", "fg:cyan bold"),
-            ("highlighted", "fg:cyan bold"),
-            ("selected", "fg:cyan"),
-        ])
+        style = Style(
+            [
+                ("qmark", "fg:cyan bold"),
+                ("question", "bold"),
+                ("pointer", "fg:cyan bold"),
+                ("highlighted", "fg:cyan bold"),
+                ("selected", "fg:cyan"),
+            ]
+        )
 
         def _do_select() -> str | None:
             result: str | None = questionary.select(
@@ -458,10 +461,7 @@ class Agent:
         try:
             selected = await asyncio.to_thread(_do_select)
         except Exception:
-            self._system_print(
-                f"[Mode Analysis] Non-interactive terminal, using recommendation: "
-                f"{recommended.value}"
-            )
+            self._system_print(f"[Mode Analysis] Non-interactive terminal, using recommendation: {recommended.value}")
             return recommended
 
         if selected == "COMPILED":
@@ -506,8 +506,13 @@ class Agent:
         self._memory.emit_event("metric.api_call", metric)
 
     def on_tool_executed(
-        self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool,
-        *, was_summarized: bool = False,
+        self,
+        tool_name: str,
+        result_chars: int,
+        duration_ms: float,
+        is_error: bool,
+        *,
+        was_summarized: bool = False,
     ) -> None:
         if not self._metrics_enabled:
             return
@@ -569,12 +574,12 @@ class Agent:
         self._update_context_stats()
         tokens_after = estimate_tokens(self._messages)
         return True, (
-            f"Compacted: ~{tokens_before:,} → ~{tokens_after:,} tokens "
-            f"({len(self._messages)} messages remaining)."
+            f"Compacted: ~{tokens_before:,} → ~{tokens_after:,} tokens ({len(self._messages)} messages remaining)."
         )
 
     def _update_context_stats(self) -> None:
         from micro_x_agent_loop.compaction import estimate_tokens
+
         self._session_accumulator.context_tokens = estimate_tokens(self._messages)
         self._session_accumulator.context_messages = len(self._messages)
 
@@ -627,15 +632,18 @@ class Agent:
         cost_usd: float,
         api_calls: int,
     ) -> None:
-        self._memory.emit_event("subagent.completed", {
-            "agent_type": agent_type,
-            "task": task[:500],
-            "result_summary": result_summary[:500],
-            "turns": turns,
-            "timed_out": timed_out,
-            "cost_usd": cost_usd,
-            "api_calls": api_calls,
-        })
+        self._memory.emit_event(
+            "subagent.completed",
+            {
+                "agent_type": agent_type,
+                "task": task[:500],
+                "result_summary": result_summary[:500],
+                "turns": turns,
+                "timed_out": timed_out,
+                "cost_usd": cost_usd,
+                "api_calls": api_calls,
+            },
+        )
 
     def on_record_tool_call(
         self,
@@ -679,9 +687,7 @@ class Agent:
         if not tool_names:
             return
         to_remove = set(tool_names)
-        self._converted_tools[:] = [
-            tool for tool in self._converted_tools if tool.get("name") not in to_remove
-        ]
+        self._converted_tools[:] = [tool for tool in self._converted_tools if tool.get("name") not in to_remove]
         if self._tool_search_manager is not None:
             self._tool_search_manager.remove_tools(tool_names)
 

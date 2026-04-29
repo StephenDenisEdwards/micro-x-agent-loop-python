@@ -173,9 +173,7 @@ class DecisionLogicTests(unittest.TestCase):
         self.assertGreaterEqual(analysis.strong_count, 2)
 
     def test_three_strong_signals_compiled(self) -> None:
-        analysis = analyze_prompt(
-            "Search all emails, score each one, and show the total distribution"
-        )
+        analysis = analyze_prompt("Search all emails, score each one, and show the total distribution")
         self.assertEqual(RecommendedMode.COMPILED, analysis.recommended_mode)
         self.assertGreaterEqual(analysis.strong_count, 2)
 
@@ -215,9 +213,7 @@ class FormatAnalysisTests(unittest.TestCase):
         self.assertNotIn("\n", output)
 
     def test_compiled_lists_signals(self) -> None:
-        analysis = analyze_prompt(
-            "Score each job against criteria and show the total count"
-        )
+        analysis = analyze_prompt("Score each job against criteria and show the total count")
         output = format_analysis(analysis)
         self.assertIn("[Mode Analysis] Recommendation: COMPILED", output)
         self.assertIn("strong", output)
@@ -230,9 +226,7 @@ class FormatAnalysisTests(unittest.TestCase):
         self.assertIn("Scoring/ranking", output)
 
     def test_compiled_shows_signal_count_line(self) -> None:
-        analysis = analyze_prompt(
-            "Score each job and calculate the average across all results"
-        )
+        analysis = analyze_prompt("Score each job and calculate the average across all results")
         output = format_analysis(analysis)
         # Should have a summary line like "Signals: N strong, N moderate, N supportive"
         self.assertRegex(output, r"Signals: \d+ strong, \d+ moderate, \d+ supportive")
@@ -283,8 +277,7 @@ class PromptCommandIntegrationTests(unittest.TestCase):
     def test_file_contents_as_user_message_compiled(self) -> None:
         # Simulates what /prompt does: file contents become the user message
         file_contents = (
-            "Search my Gmail for all JobServe emails. Score each job 1-10. "
-            "Show Summary Statistics with total count."
+            "Search my Gmail for all JobServe emails. Score each job 1-10. Show Summary Statistics with total count."
         )
         analysis = analyze_prompt(file_contents)
         self.assertEqual(RecommendedMode.COMPILED, analysis.recommended_mode)
@@ -368,8 +361,7 @@ class Stage2FormatTests(unittest.TestCase):
 class Stage2AgentIntegrationTests(unittest.TestCase):
     """End-to-end: Agent._run_inner triggers (or skips) Stage 2 and prompts the user."""
 
-    def _make_agent(self, *, stage2_response: str = "COMPILED\nBatch task.",
-                    stage2_enabled: bool = True) -> Agent:
+    def _make_agent(self, *, stage2_response: str = "COMPILED\nBatch task.", stage2_enabled: bool = True) -> Agent:
         """Create an Agent with a fake provider that returns a canned Stage 2 response."""
         fake_provider = FakeStreamProvider()
         # Queue one response for the main turn (after mode analysis)
@@ -378,20 +370,24 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
         # FakeStreamProvider doesn't have create_message — add it
         async def fake_create_message(model, max_tokens, temperature, messages):
             return stage2_response, UsageResult(
-                input_tokens=300, output_tokens=30, model=model,
+                input_tokens=300,
+                output_tokens=30,
+                model=model,
             )
 
         fake_provider.create_message = fake_create_message
 
         with patch("micro_x_agent_loop.agent_builder.create_provider", return_value=fake_provider):
-            return Agent(AgentConfig(
-                api_key="test",
-                tools=[FakeTool()],
-                mode_analysis_enabled=True,
-                stage2_classification_enabled=stage2_enabled,
-                stage2_provider="anthropic",
-                stage2_model="test-model",
-            ))
+            return Agent(
+                AgentConfig(
+                    api_key="test",
+                    tools=[FakeTool()],
+                    mode_analysis_enabled=True,
+                    stage2_classification_enabled=stage2_enabled,
+                    stage2_provider="anthropic",
+                    stage2_model="test-model",
+                )
+            )
 
     def test_prompt_mode_no_user_prompt(self) -> None:
         """'What's the weather in London?' → PROMPT, no interactive prompt shown."""
@@ -424,9 +420,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
 
     def test_compiled_user_overrides_to_prompt(self) -> None:
         """User can override a COMPILED recommendation to PROMPT mode."""
-        prompt = (
-            "Score each job and calculate the total count across all listings"
-        )
+        prompt = "Score each job and calculate the total count across all listings"
         agent = self._make_agent()
         mock_choice = AsyncMock(return_value=RecommendedMode.PROMPT)
         with patch.object(agent, "_prompt_mode_choice", mock_choice):
@@ -443,10 +437,12 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
         with patch.object(agent, "_prompt_mode_choice", mock_choice):
             buf = io.StringIO()
             with redirect_stdout(buf):
-                asyncio.run(agent.run(
-                    "List the last 50 emails from JobServe with the subject "
-                    "and then a summary of the content for each."
-                ))
+                asyncio.run(
+                    agent.run(
+                        "List the last 50 emails from JobServe with the subject "
+                        "and then a summary of the content for each."
+                    )
+                )
         out = buf.getvalue()
         self.assertIn("Proceeding in COMPILED mode", out)
         # Stage2Result should have been passed to the prompt
@@ -475,12 +471,14 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
         fake_provider = FakeStreamProvider()
         fake_provider.queue(text="Hello!", stop_reason="end_turn")
         with patch("micro_x_agent_loop.agent_builder.create_provider", return_value=fake_provider):
-            agent = Agent(AgentConfig(
-                api_key="test",
-                tools=[FakeTool()],
-                mode_analysis_enabled=True,
-                stage2_classification_enabled=False,
-            ))
+            agent = Agent(
+                AgentConfig(
+                    api_key="test",
+                    tools=[FakeTool()],
+                    mode_analysis_enabled=True,
+                    stage2_classification_enabled=False,
+                )
+            )
         mock_choice = AsyncMock(return_value=RecommendedMode.COMPILED)
         with patch.object(agent, "_prompt_mode_choice", mock_choice):
             buf = io.StringIO()
@@ -504,14 +502,16 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
         fake_provider.create_message = failing_create_message
 
         with patch("micro_x_agent_loop.agent_builder.create_provider", return_value=fake_provider):
-            agent = Agent(AgentConfig(
-                api_key="test",
-                tools=[FakeTool()],
-                mode_analysis_enabled=True,
-                stage2_classification_enabled=True,
-                stage2_provider="anthropic",
-                stage2_model="test-model",
-            ))
+            agent = Agent(
+                AgentConfig(
+                    api_key="test",
+                    tools=[FakeTool()],
+                    mode_analysis_enabled=True,
+                    stage2_classification_enabled=True,
+                    stage2_provider="anthropic",
+                    stage2_model="test-model",
+                )
+            )
         mock_choice = AsyncMock(return_value=RecommendedMode.COMPILED)
         with patch.object(agent, "_prompt_mode_choice", mock_choice):
             buf = io.StringIO()

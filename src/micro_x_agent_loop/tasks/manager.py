@@ -81,7 +81,11 @@ class TaskManager:
     # ------------------------------------------------------------------
 
     async def _run_hooks(
-        self, hooks: list[TaskHook], task_id: str, subject: str, description: str,
+        self,
+        hooks: list[TaskHook],
+        task_id: str,
+        subject: str,
+        description: str,
     ) -> str | None:
         """Execute hooks in order. Return the first blocking error, or ``None``."""
         for hook in hooks:
@@ -120,7 +124,10 @@ class TaskManager:
         # Execute created hooks — rollback on blocking error (guide Section 8.3)
         if self._created_hooks:
             error = await self._run_hooks(
-                self._created_hooks, task.id, task.subject, task.description,
+                self._created_hooks,
+                task.id,
+                task.subject,
+                task.description,
             )
             if error is not None:
                 self._store.delete_task(self._list_id, task.id)
@@ -160,7 +167,10 @@ class TaskManager:
         # Execute completed hooks BEFORE applying status change (guide Section 8.3)
         if status_str == "completed" and self._completed_hooks:
             error = await self._run_hooks(
-                self._completed_hooks, task_id, existing.subject, existing.description,
+                self._completed_hooks,
+                task_id,
+                existing.subject,
+                existing.description,
             )
             if error is not None:
                 logger.warning("task_update id=%s completion blocked: %s", task_id, error)
@@ -170,8 +180,12 @@ class TaskManager:
         updates: dict[str, Any] = {}
         updated_fields: list[str] = []
 
-        for field, key in [("subject", "subject"), ("description", "description"),
-                           ("active_form", "activeForm"), ("owner", "owner")]:
+        for field, key in [
+            ("subject", "subject"),
+            ("description", "description"),
+            ("active_form", "activeForm"),
+            ("owner", "owner"),
+        ]:
             if key in inp:
                 updates[field] = inp[key]
                 updated_fields.append(key)

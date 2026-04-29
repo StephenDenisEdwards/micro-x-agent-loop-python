@@ -192,10 +192,7 @@ class AgentManager:
 
     def _evict_expired(self) -> None:
         now = time.monotonic()
-        expired = [
-            sid for sid, slot in self._slots.items()
-            if (now - slot.last_access) > self._session_timeout_seconds
-        ]
+        expired = [sid for sid, slot in self._slots.items() if (now - slot.last_access) > self._session_timeout_seconds]
         for sid in expired:
             slot = self._slots.pop(sid)
             logger.info(f"Session {sid[:8]}... evicted (timeout)")

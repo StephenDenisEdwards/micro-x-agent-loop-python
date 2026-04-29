@@ -172,7 +172,9 @@ class TestUnassignAgentTasks(unittest.TestCase):
         self.store.claim_task(self.list_id, "2", "alice")
 
         unassigned, msg = self.store.unassign_agent_tasks(
-            self.list_id, "alice", "terminated",
+            self.list_id,
+            "alice",
+            "terminated",
         )
         self.assertEqual(len(unassigned), 2)
         self.assertIn("alice was terminated", msg)
@@ -194,7 +196,9 @@ class TestUnassignAgentTasks(unittest.TestCase):
         self.store.claim_task(self.list_id, "2", "alice")
 
         unassigned, msg = self.store.unassign_agent_tasks(
-            self.list_id, "alice", "shutdown",
+            self.list_id,
+            "alice",
+            "shutdown",
         )
         self.assertEqual(len(unassigned), 1)
         self.assertEqual(unassigned[0].id, "2")
@@ -206,7 +210,9 @@ class TestUnassignAgentTasks(unittest.TestCase):
 
     def test_unassign_no_tasks(self) -> None:
         unassigned, msg = self.store.unassign_agent_tasks(
-            self.list_id, "alice", "shutdown",
+            self.list_id,
+            "alice",
+            "shutdown",
         )
         self.assertEqual(len(unassigned), 0)
         self.assertIn("No tasks were unassigned", msg)
@@ -219,7 +225,9 @@ class TestUnassignAgentTasks(unittest.TestCase):
         self.store.claim_task(self.list_id, "2", "bob")
 
         unassigned, _ = self.store.unassign_agent_tasks(
-            self.list_id, "alice", "terminated",
+            self.list_id,
+            "alice",
+            "terminated",
         )
         self.assertEqual(len(unassigned), 1)
         # Bob's task untouched
@@ -250,12 +258,24 @@ class TestAutoOwner(unittest.TestCase):
         from micro_x_agent_loop.tasks.manager import TaskManager
 
         mgr = TaskManager(self.store, self.list_id, agent_id="alice")
-        self._run(mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
-        result = self._run(mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "in_progress",
-        }))
+        self._run(
+            mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
+        result = self._run(
+            mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "in_progress",
+                },
+            )
+        )
         self.assertIn("status", result)
         self.assertIn("owner", result)
 
@@ -267,12 +287,24 @@ class TestAutoOwner(unittest.TestCase):
         from micro_x_agent_loop.tasks.manager import TaskManager
 
         mgr = TaskManager(self.store, self.list_id)  # no agent_id
-        self._run(mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
-        self._run(mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "in_progress",
-        }))
+        self._run(
+            mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "in_progress",
+                },
+            )
+        )
         task = self.store.get_task(self.list_id, "1")
         assert task is not None
         self.assertIsNone(task.owner)
@@ -281,12 +313,25 @@ class TestAutoOwner(unittest.TestCase):
         from micro_x_agent_loop.tasks.manager import TaskManager
 
         mgr = TaskManager(self.store, self.list_id, agent_id="alice")
-        self._run(mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
-        self._run(mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "in_progress", "owner": "bob",
-        }))
+        self._run(
+            mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
+        self._run(
+            mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "in_progress",
+                    "owner": "bob",
+                },
+            )
+        )
         task = self.store.get_task(self.list_id, "1")
         assert task is not None
         self.assertEqual(task.owner, "bob")
@@ -295,17 +340,35 @@ class TestAutoOwner(unittest.TestCase):
         from micro_x_agent_loop.tasks.manager import TaskManager
 
         mgr = TaskManager(self.store, self.list_id, agent_id="alice")
-        self._run(mgr.handle_tool_call("task_create", {
-            "subject": "Task", "description": "desc",
-        }))
+        self._run(
+            mgr.handle_tool_call(
+                "task_create",
+                {
+                    "subject": "Task",
+                    "description": "desc",
+                },
+            )
+        )
         # Set owner first
-        self._run(mgr.handle_tool_call("task_update", {
-            "taskId": "1", "owner": "bob",
-        }))
+        self._run(
+            mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "owner": "bob",
+                },
+            )
+        )
         # Now mark in_progress — should NOT override bob with alice
-        self._run(mgr.handle_tool_call("task_update", {
-            "taskId": "1", "status": "in_progress",
-        }))
+        self._run(
+            mgr.handle_tool_call(
+                "task_update",
+                {
+                    "taskId": "1",
+                    "status": "in_progress",
+                },
+            )
+        )
         task = self.store.get_task(self.list_id, "1")
         assert task is not None
         self.assertEqual(task.owner, "bob")

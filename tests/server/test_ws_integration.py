@@ -149,10 +149,13 @@ class TestWebSocketHitl(unittest.TestCase):
         captured_answer: list[str] = []
 
         async def hitl_run(text: str, channel: Any) -> None:
-            answer = await channel.ask_user("Which format?", [
-                {"label": "PDF", "description": "Portable Document Format"},
-                {"label": "HTML", "description": "Web page"},
-            ])
+            answer = await channel.ask_user(
+                "Which format?",
+                [
+                    {"label": "PDF", "description": "Portable Document Format"},
+                    {"label": "HTML", "description": "Web page"},
+                ],
+            )
             captured_answer.append(answer)
             channel.emit_text_delta(f"Using {answer}")
             await asyncio.sleep(0.01)
@@ -180,11 +183,13 @@ class TestWebSocketHitl(unittest.TestCase):
                 self.assertEqual(2, len(question_msg["options"]))
 
                 # Send answer
-                ws.send_json({
-                    "type": "answer",
-                    "question_id": question_msg["id"],
-                    "text": "PDF",
-                })
+                ws.send_json(
+                    {
+                        "type": "answer",
+                        "question_id": question_msg["id"],
+                        "text": "PDF",
+                    }
+                )
 
                 events = _collect_events(ws)
                 types = [e["type"] for e in events]
@@ -220,6 +225,7 @@ class TestWebSocketPing(unittest.TestCase):
                 ws.send_json({"type": "message", "text": "slow task"})
 
                 import time
+
                 time.sleep(0.1)
 
                 ws.send_json({"type": "ping"})

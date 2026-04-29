@@ -107,7 +107,8 @@ class _ServerConnection:
             params.cwd = config["cwd"]
         async with stdio_client(params) as (read_stream, write_stream):
             async with ClientSession(
-                read_stream, write_stream,
+                read_stream,
+                write_stream,
                 logging_callback=_mcp_logging_callback,
             ) as session:
                 await session.initialize()
@@ -120,7 +121,8 @@ class _ServerConnection:
     async def _run_http(self, config: dict[str, Any]) -> None:
         async with streamable_http_client(config["url"]) as (read_stream, write_stream, _):
             async with ClientSession(
-                read_stream, write_stream,
+                read_stream,
+                write_stream,
                 logging_callback=_mcp_logging_callback,
             ) as session:
                 await session.initialize()
@@ -188,9 +190,7 @@ class McpManager:
 
         return all_tools
 
-    async def connect_on_demand(
-        self, server_name: str, config: dict[str, Any]
-    ) -> list[Tool]:
+    async def connect_on_demand(self, server_name: str, config: dict[str, Any]) -> list[Tool]:
         """Connect to a single MCP server on demand and return its tools.
 
         Used for generated MCP servers from the manifest. The connection

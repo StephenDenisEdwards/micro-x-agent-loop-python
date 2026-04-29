@@ -49,14 +49,16 @@ def _to_openai_messages(
                 if block.get("type") == "text":
                     text_parts.append(block["text"])
                 elif block.get("type") == "tool_use":
-                    tool_calls.append({
-                        "id": block["id"],
-                        "type": "function",
-                        "function": {
-                            "name": block["name"],
-                            "arguments": json.dumps(block["input"]),
-                        },
-                    })
+                    tool_calls.append(
+                        {
+                            "id": block["id"],
+                            "type": "function",
+                            "function": {
+                                "name": block["name"],
+                                "arguments": json.dumps(block["input"]),
+                            },
+                        }
+                    )
 
             oai_msg: dict = {"role": "assistant"}
             if text_parts:
@@ -85,11 +87,13 @@ def _to_openai_messages(
                 elif block.get("type") == "text":
                     text_parts_user.append(block["text"])
                 elif block.get("type") == "tool_result":
-                    out.append({
-                        "role": "tool",
-                        "tool_call_id": block["tool_use_id"],
-                        "content": normalize_tool_content(block.get("content", "")),
-                    })
+                    out.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": block["tool_use_id"],
+                            "content": normalize_tool_content(block.get("content", "")),
+                        }
+                    )
 
             if text_parts_user:
                 out.append({"role": "user", "content": "\n".join(text_parts_user)})
@@ -160,11 +164,15 @@ class OpenAIProvider:
             kwargs["tools"] = tools
         return kwargs
 
-    @retry(**default_retry_kwargs((
-        openai.RateLimitError,
-        openai.APIConnectionError,
-        openai.APITimeoutError,
-    )))
+    @retry(
+        **default_retry_kwargs(
+            (
+                openai.RateLimitError,
+                openai.APIConnectionError,
+                openai.APITimeoutError,
+            )
+        )
+    )
     async def stream_chat(
         self,
         model: str,
@@ -204,7 +212,11 @@ class OpenAIProvider:
                 f"messages={len(oai_messages)}, tools={len(oai_tools)}"
             )
             kwargs = self._build_stream_kwargs(
-                model, max_tokens, temperature, oai_messages, oai_tools,
+                model,
+                max_tokens,
+                temperature,
+                oai_messages,
+                oai_tools,
             )
 
             stream = await self._client.chat.completions.create(**kwargs)
@@ -243,9 +255,7 @@ class OpenAIProvider:
                             tool_calls_acc[idx] = {
                                 "id": tc_delta.id or "",
                                 "name": (
-                                    tc_delta.function.name
-                                    if tc_delta.function and tc_delta.function.name
-                                    else ""
+                                    tc_delta.function.name if tc_delta.function and tc_delta.function.name else ""
                                 ),
                                 "arguments_parts": [],
                             }
@@ -291,8 +301,7 @@ class OpenAIProvider:
             tool_use_blocks.append(tool_block)
 
         logger.debug(
-            f"API response: stop_reason={stop_reason}, "
-            f"text_len={len(text_content)}, tool_calls={len(tool_use_blocks)}"
+            f"API response: stop_reason={stop_reason}, text_len={len(text_content)}, tool_calls={len(tool_use_blocks)}"
         )
 
         message = {"role": "assistant", "content": assistant_content}
@@ -312,11 +321,15 @@ class OpenAIProvider:
 
         return message, tool_use_blocks, stop_reason, usage_result
 
-    @retry(**default_retry_kwargs((
-        openai.RateLimitError,
-        openai.APIConnectionError,
-        openai.APITimeoutError,
-    )))
+    @retry(
+        **default_retry_kwargs(
+            (
+                openai.RateLimitError,
+                openai.APIConnectionError,
+                openai.APITimeoutError,
+            )
+        )
+    )
     async def create_message(
         self,
         model: str,

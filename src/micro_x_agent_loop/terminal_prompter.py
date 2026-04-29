@@ -8,14 +8,16 @@ from __future__ import annotations
 import questionary
 from questionary import Choice, Style
 
-_ASK_USER_STYLE = Style([
-    ("qmark", "fg:cyan bold"),
-    ("question", "bold"),
-    ("pointer", "fg:cyan bold"),
-    ("highlighted", "fg:cyan bold"),
-    ("selected", "fg:cyan"),
-    ("instruction", "fg:gray"),
-])
+_ASK_USER_STYLE = Style(
+    [
+        ("qmark", "fg:cyan bold"),
+        ("question", "bold"),
+        ("pointer", "fg:cyan bold"),
+        ("highlighted", "fg:cyan bold"),
+        ("selected", "fg:cyan"),
+        ("instruction", "fg:gray"),
+    ]
+)
 
 _OTHER_SENTINEL = "__other__"
 
@@ -23,8 +25,7 @@ _OTHER_SENTINEL = "__other__"
 def prompt_with_options(question: str, options: list[dict[str, str]]) -> str:
     """Present a selection list with an 'Other' escape hatch."""
     choices = [
-        Choice(title=f"{opt['label']} \u2014 {opt.get('description', '')}", value=opt["label"])
-        for opt in options
+        Choice(title=f"{opt['label']} \u2014 {opt.get('description', '')}", value=opt["label"]) for opt in options
     ]
     choices.append(Choice(title="Other (type your own answer)", value=_OTHER_SENTINEL))
     selected = questionary.select(question, choices=choices, style=_ASK_USER_STYLE).ask()
@@ -43,8 +44,11 @@ def prompt_free_text(question: str) -> str:
 
 
 def fallback_prompt(
-    question: str, options: list[dict[str, str]],
-    *, line_prefix: str = "", user_prompt: str = "",
+    question: str,
+    options: list[dict[str, str]],
+    *,
+    line_prefix: str = "",
+    user_prompt: str = "",
 ) -> str:
     """Plain-text fallback when questionary fails."""
     print(f"\n{line_prefix}Question: {question}")

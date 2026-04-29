@@ -94,10 +94,12 @@ class ProviderFactory:
                 api_key = self._default_api_key
             else:
                 from micro_x_agent_loop.app_config import resolve_runtime_env
+
                 api_key = resolve_runtime_env(provider_name).provider_api_key
         caching = prompt_caching_enabled if prompt_caching_enabled is not None else self._prompt_caching_enabled
         return create_provider(
-            provider_name, api_key,
+            provider_name,
+            api_key,
             prompt_caching_enabled=caching,
             ollama_base_url=self._ollama_base_url,
         )
@@ -114,18 +116,23 @@ def create_provider(
     name = provider_name.strip().lower()
     if name == "anthropic":
         from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
+
         return AnthropicProvider(api_key, prompt_caching_enabled=prompt_caching_enabled)
     if name == "openai":
         from micro_x_agent_loop.providers.openai_provider import OpenAIProvider
+
         return OpenAIProvider(api_key)
     if name == "deepseek":
         from micro_x_agent_loop.providers.deepseek_provider import DeepSeekProvider
+
         return DeepSeekProvider(api_key)
     if name == "gemini":
         from micro_x_agent_loop.providers.gemini_provider import GeminiProvider
+
         return GeminiProvider(api_key)
     if name == "ollama":
         from micro_x_agent_loop.providers.ollama_provider import OllamaProvider
+
         return OllamaProvider(api_key, base_url=ollama_base_url)
     raise ValueError(
         f"Unknown provider: {provider_name!r}. Supported: 'anthropic', 'openai', 'deepseek', 'gemini', 'ollama'",

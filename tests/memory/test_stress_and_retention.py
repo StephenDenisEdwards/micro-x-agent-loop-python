@@ -157,9 +157,7 @@ class RetentionHardeningTests(MemoryStoreTestCase):
             retention_days=36500,
         )
 
-        rows = self._store.execute(
-            "SELECT COUNT(*) AS c FROM messages WHERE session_id = ?", (sid,)
-        ).fetchone()
+        rows = self._store.execute("SELECT COUNT(*) AS c FROM messages WHERE session_id = ?", (sid,)).fetchone()
         self.assertEqual(5, int(rows["c"]))
 
     def test_max_messages_prunes_oldest_keeps_newest(self) -> None:
@@ -175,9 +173,7 @@ class RetentionHardeningTests(MemoryStoreTestCase):
             retention_days=36500,
         )
 
-        rows = self._store.execute(
-            "SELECT seq FROM messages WHERE session_id = ? ORDER BY seq ASC", (sid,)
-        ).fetchall()
+        rows = self._store.execute("SELECT seq FROM messages WHERE session_id = ? ORDER BY seq ASC", (sid,)).fetchall()
         seqs = [int(r["seq"]) for r in rows]
         self.assertEqual([3, 4, 5], seqs)
 
@@ -197,12 +193,8 @@ class RetentionHardeningTests(MemoryStoreTestCase):
             retention_days=36500,
         )
 
-        count_a = self._store.execute(
-            "SELECT COUNT(*) AS c FROM messages WHERE session_id = ?", (sid_a,)
-        ).fetchone()
-        count_b = self._store.execute(
-            "SELECT COUNT(*) AS c FROM messages WHERE session_id = ?", (sid_b,)
-        ).fetchone()
+        count_a = self._store.execute("SELECT COUNT(*) AS c FROM messages WHERE session_id = ?", (sid_a,)).fetchone()
+        count_b = self._store.execute("SELECT COUNT(*) AS c FROM messages WHERE session_id = ?", (sid_b,)).fetchone()
         self.assertEqual(2, int(count_a["c"]))
         self.assertEqual(2, int(count_b["c"]))
 
@@ -236,14 +228,10 @@ class RetentionHardeningTests(MemoryStoreTestCase):
         )
 
         # sessions table uses 'id', others use 'session_id'
-        row = self._store.execute(
-            "SELECT COUNT(*) AS c FROM sessions WHERE id = ?", (sid,)
-        ).fetchone()
+        row = self._store.execute("SELECT COUNT(*) AS c FROM sessions WHERE id = ?", (sid,)).fetchone()
         self.assertEqual(0, int(row["c"]), "Expected 0 rows in sessions")
         for table in ["messages", "tool_calls", "events"]:
-            row = self._store.execute(
-                f"SELECT COUNT(*) AS c FROM {table} WHERE session_id = ?", (sid,)
-            ).fetchone()
+            row = self._store.execute(f"SELECT COUNT(*) AS c FROM {table} WHERE session_id = ?", (sid,)).fetchone()
             self.assertEqual(0, int(row["c"]), f"Expected 0 rows in {table}")
 
 

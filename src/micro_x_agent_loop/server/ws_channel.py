@@ -33,37 +33,57 @@ class WebSocketChannel:
         asyncio.ensure_future(self._send({"type": "text_delta", "text": text}))
 
     def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
-        asyncio.ensure_future(self._send({
-            "type": "tool_started",
-            "tool_use_id": tool_use_id,
-            "tool": tool_name,
-        }))
+        asyncio.ensure_future(
+            self._send(
+                {
+                    "type": "tool_started",
+                    "tool_use_id": tool_use_id,
+                    "tool": tool_name,
+                }
+            )
+        )
 
     def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
-        asyncio.ensure_future(self._send({
-            "type": "tool_completed",
-            "tool_use_id": tool_use_id,
-            "tool": tool_name,
-            "error": is_error,
-        }))
+        asyncio.ensure_future(
+            self._send(
+                {
+                    "type": "tool_completed",
+                    "tool_use_id": tool_use_id,
+                    "tool": tool_name,
+                    "error": is_error,
+                }
+            )
+        )
 
     def emit_turn_complete(self, usage: dict[str, Any]) -> None:
-        asyncio.ensure_future(self._send({
-            "type": "turn_complete",
-            "usage": usage,
-        }))
+        asyncio.ensure_future(
+            self._send(
+                {
+                    "type": "turn_complete",
+                    "usage": usage,
+                }
+            )
+        )
 
     def emit_error(self, message: str) -> None:
-        asyncio.ensure_future(self._send({
-            "type": "error",
-            "message": message,
-        }))
+        asyncio.ensure_future(
+            self._send(
+                {
+                    "type": "error",
+                    "message": message,
+                }
+            )
+        )
 
     def emit_system_message(self, text: str) -> None:
-        asyncio.ensure_future(self._send({
-            "type": "system_message",
-            "text": text,
-        }))
+        asyncio.ensure_future(
+            self._send(
+                {
+                    "type": "system_message",
+                    "text": text,
+                }
+            )
+        )
 
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:
         self._question_counter += 1
@@ -73,12 +93,14 @@ class WebSocketChannel:
         future: asyncio.Future[str] = loop.create_future()
         self._pending_questions[question_id] = future
 
-        await self._send({
-            "type": "question",
-            "id": question_id,
-            "text": question,
-            "options": options,
-        })
+        await self._send(
+            {
+                "type": "question",
+                "id": question_id,
+                "text": question,
+                "options": options,
+            }
+        )
 
         try:
             answer = await asyncio.wait_for(future, timeout=self._ask_user_timeout)

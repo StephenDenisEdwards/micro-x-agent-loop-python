@@ -49,12 +49,14 @@ class ResolveApiKeyIdTests(unittest.TestCase):
         from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
 
         api_key = "sk-ant-api03-HzWxxxxxxQwAA"
-        response_data = json.dumps({
-            "data": [
-                {"id": "apikey_inactive", "partial_key_hint": "sk-ant-api03-Yyy...ZzZz", "status": "inactive"},
-                {"id": "apikey_match", "partial_key_hint": "sk-ant-api03-HzW...QwAA", "status": "active"},
-            ]
-        }).encode()
+        response_data = json.dumps(
+            {
+                "data": [
+                    {"id": "apikey_inactive", "partial_key_hint": "sk-ant-api03-Yyy...ZzZz", "status": "inactive"},
+                    {"id": "apikey_match", "partial_key_hint": "sk-ant-api03-HzW...QwAA", "status": "active"},
+                ]
+            }
+        ).encode()
 
         mock_resp = MagicMock()
         mock_resp.read.return_value = response_data
@@ -73,11 +75,13 @@ class ResolveApiKeyIdTests(unittest.TestCase):
 
         from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
 
-        response_data = json.dumps({
-            "data": [
-                {"id": "key1", "partial_key_hint": "sk-ant-api03-Xyz...Other", "status": "active"},
-            ]
-        }).encode()
+        response_data = json.dumps(
+            {
+                "data": [
+                    {"id": "key1", "partial_key_hint": "sk-ant-api03-Xyz...Other", "status": "active"},
+                ]
+            }
+        ).encode()
 
         mock_resp = MagicMock()
         mock_resp.read.return_value = response_data
@@ -108,11 +112,13 @@ class ResolveApiKeyIdTests(unittest.TestCase):
 
         from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
 
-        response_data = json.dumps({
-            "data": [
-                {"id": "key1", "partial_key_hint": "no-dots-here", "status": "active"},
-            ]
-        }).encode()
+        response_data = json.dumps(
+            {
+                "data": [
+                    {"id": "key1", "partial_key_hint": "no-dots-here", "status": "active"},
+                ]
+            }
+        ).encode()
 
         mock_resp = MagicMock()
         mock_resp.read.return_value = response_data
@@ -435,9 +441,12 @@ class ReconcileCostsTests(unittest.TestCase):
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
 
         fake_tool = MagicMock()
-        lines = asyncio.run(reconcile_costs(
-            tool_map={RECONCILE_TOOL_NAME: fake_tool}, store=None,
-        ))
+        lines = asyncio.run(
+            reconcile_costs(
+                tool_map={RECONCILE_TOOL_NAME: fake_tool},
+                store=None,
+            )
+        )
         self.assertTrue(any("Memory not enabled" in line for line in lines))
 
     def test_no_local_events(self) -> None:
@@ -454,11 +463,13 @@ class ReconcileCostsTests(unittest.TestCase):
         fake_store.execute.return_value = cursor
 
         with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
-            lines = asyncio.run(reconcile_costs(
-                tool_map={RECONCILE_TOOL_NAME: fake_tool},
-                store=fake_store,
-                days=1,
-            ))
+            lines = asyncio.run(
+                reconcile_costs(
+                    tool_map={RECONCILE_TOOL_NAME: fake_tool},
+                    store=fake_store,
+                    days=1,
+                )
+            )
         self.assertTrue(any("No local metric" in line for line in lines))
 
     def test_successful_reconciliation_with_usage(self) -> None:
@@ -472,33 +483,45 @@ class ReconcileCostsTests(unittest.TestCase):
         past_ts = datetime(2026, 3, 10, 12, 0, 0, tzinfo=UTC).timestamp()
 
         fake_store = MagicMock()
-        event_payload = json.dumps({
-            "timestamp": past_ts,
-            "model": "claude-sonnet-4-5-20250929",
-            "estimated_cost_usd": 0.05,
-        })
+        event_payload = json.dumps(
+            {
+                "timestamp": past_ts,
+                "model": "claude-sonnet-4-5-20250929",
+                "estimated_cost_usd": 0.05,
+            }
+        )
         cursor = MagicMock()
         cursor.fetchall.return_value = [(event_payload,)]
         fake_store.execute.return_value = cursor
 
-        cost_data = json.dumps({
-            "data": [{
-                "starting_at": f"{past_date}T00:00:00Z",
-                "results": [{"amount_usd": 0.052}],
-            }]
-        })
-        usage_data = json.dumps({
-            "data": [{
-                "starting_at": f"{past_date}T00:00:00Z",
-                "results": [{
-                    "model": "claude-sonnet-4-5-20250929",
-                    "uncached_input_tokens": 1000,
-                    "output_tokens": 500,
-                    "cache_read_input_tokens": 200,
-                    "cache_creation": {"ephemeral_5m_input_tokens": 100},
-                }],
-            }]
-        })
+        cost_data = json.dumps(
+            {
+                "data": [
+                    {
+                        "starting_at": f"{past_date}T00:00:00Z",
+                        "results": [{"amount_usd": 0.052}],
+                    }
+                ]
+            }
+        )
+        usage_data = json.dumps(
+            {
+                "data": [
+                    {
+                        "starting_at": f"{past_date}T00:00:00Z",
+                        "results": [
+                            {
+                                "model": "claude-sonnet-4-5-20250929",
+                                "uncached_input_tokens": 1000,
+                                "output_tokens": 500,
+                                "cache_read_input_tokens": 200,
+                                "cache_creation": {"ephemeral_5m_input_tokens": 100},
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
 
         call_count = [0]
 
@@ -512,12 +535,14 @@ class ReconcileCostsTests(unittest.TestCase):
         fake_tool.execute = fake_execute
 
         with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value="key1"):
-            lines = asyncio.run(reconcile_costs(
-                tool_map={RECONCILE_TOOL_NAME: fake_tool},
-                store=fake_store,
-                start=past_date,
-                end=past_date,
-            ))
+            lines = asyncio.run(
+                reconcile_costs(
+                    tool_map={RECONCILE_TOOL_NAME: fake_tool},
+                    store=fake_store,
+                    start=past_date,
+                    end=past_date,
+                )
+            )
 
         text = "\n".join(lines)
         self.assertIn("Cost Reconciliation", text)
@@ -532,21 +557,27 @@ class ReconcileCostsTests(unittest.TestCase):
 
         fake_store = MagicMock()
         ts = datetime(2026, 3, 10, 12, 0, 0, tzinfo=UTC).timestamp()
-        event_payload = json.dumps({
-            "timestamp": ts,
-            "model": "claude-sonnet-4-5-20250929",
-            "estimated_cost_usd": 0.10,
-        })
+        event_payload = json.dumps(
+            {
+                "timestamp": ts,
+                "model": "claude-sonnet-4-5-20250929",
+                "estimated_cost_usd": 0.10,
+            }
+        )
         cursor = MagicMock()
         cursor.fetchall.return_value = [(event_payload,)]
         fake_store.execute.return_value = cursor
 
-        cost_data = json.dumps({
-            "data": [{
-                "starting_at": "2026-03-10T00:00:00Z",
-                "results": [{"amount_usd": 0.11}],
-            }]
-        })
+        cost_data = json.dumps(
+            {
+                "data": [
+                    {
+                        "starting_at": "2026-03-10T00:00:00Z",
+                        "results": [{"amount_usd": 0.11}],
+                    }
+                ]
+            }
+        )
 
         async def fake_execute(tool_input: dict) -> ToolResult:
             return ToolResult(text=cost_data)
@@ -555,12 +586,14 @@ class ReconcileCostsTests(unittest.TestCase):
         fake_tool.execute = fake_execute
 
         with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
-            lines = asyncio.run(reconcile_costs(
-                tool_map={RECONCILE_TOOL_NAME: fake_tool},
-                store=fake_store,
-                start="2026-03-10",
-                end="2026-03-10",
-            ))
+            lines = asyncio.run(
+                reconcile_costs(
+                    tool_map={RECONCILE_TOOL_NAME: fake_tool},
+                    store=fake_store,
+                    start="2026-03-10",
+                    end="2026-03-10",
+                )
+            )
 
         text = "\n".join(lines)
         self.assertIn("2026-03-10", text)
@@ -573,11 +606,13 @@ class ReconcileCostsTests(unittest.TestCase):
 
         fake_store = MagicMock()
         ts = datetime(2026, 3, 10, 12, 0, 0, tzinfo=UTC).timestamp()
-        event_payload = json.dumps({
-            "timestamp": ts,
-            "model": "claude-sonnet-4-5-20250929",
-            "estimated_cost_usd": 0.10,
-        })
+        event_payload = json.dumps(
+            {
+                "timestamp": ts,
+                "model": "claude-sonnet-4-5-20250929",
+                "estimated_cost_usd": 0.10,
+            }
+        )
         cursor = MagicMock()
         cursor.fetchall.return_value = [(event_payload,)]
         fake_store.execute.return_value = cursor
@@ -589,12 +624,14 @@ class ReconcileCostsTests(unittest.TestCase):
         fake_tool.execute = failing_execute
 
         with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
-            lines = asyncio.run(reconcile_costs(
-                tool_map={RECONCILE_TOOL_NAME: fake_tool},
-                store=fake_store,
-                start="2026-03-10",
-                end="2026-03-10",
-            ))
+            lines = asyncio.run(
+                reconcile_costs(
+                    tool_map={RECONCILE_TOOL_NAME: fake_tool},
+                    store=fake_store,
+                    start="2026-03-10",
+                    end="2026-03-10",
+                )
+            )
 
         text = "\n".join(lines)
         self.assertIn("Error calling", text)
@@ -607,11 +644,13 @@ class ReconcileCostsTests(unittest.TestCase):
 
         fake_store = MagicMock()
         ts = datetime(2026, 3, 10, 12, 0, 0, tzinfo=UTC).timestamp()
-        event_payload = json.dumps({
-            "timestamp": ts,
-            "model": "claude-sonnet-4-5-20250929",
-            "estimated_cost_usd": 0.10,
-        })
+        event_payload = json.dumps(
+            {
+                "timestamp": ts,
+                "model": "claude-sonnet-4-5-20250929",
+                "estimated_cost_usd": 0.10,
+            }
+        )
         cursor = MagicMock()
         cursor.fetchall.return_value = [(event_payload,)]
         fake_store.execute.return_value = cursor
@@ -623,12 +662,14 @@ class ReconcileCostsTests(unittest.TestCase):
         fake_tool.execute = error_execute
 
         with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
-            lines = asyncio.run(reconcile_costs(
-                tool_map={RECONCILE_TOOL_NAME: fake_tool},
-                store=fake_store,
-                start="2026-03-10",
-                end="2026-03-10",
-            ))
+            lines = asyncio.run(
+                reconcile_costs(
+                    tool_map={RECONCILE_TOOL_NAME: fake_tool},
+                    store=fake_store,
+                    start="2026-03-10",
+                    end="2026-03-10",
+                )
+            )
 
         text = "\n".join(lines)
         self.assertIn("API error", text)

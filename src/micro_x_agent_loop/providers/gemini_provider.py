@@ -58,12 +58,14 @@ def _to_gemini_contents(messages: list[dict]) -> list[Any]:
                     if text:
                         parts.append(types.Part(text=text))
                 elif block.get("type") == "tool_use":
-                    parts.append(types.Part(
-                        function_call=types.FunctionCall(
-                            name=block["name"],
-                            args=block.get("input", {}),
+                    parts.append(
+                        types.Part(
+                            function_call=types.FunctionCall(
+                                name=block["name"],
+                                args=block.get("input", {}),
+                            )
                         )
-                    ))
+                    )
             if parts:
                 contents.append(types.Content(role="model", parts=parts))
 
@@ -84,12 +86,14 @@ def _to_gemini_contents(messages: list[dict]) -> list[Any]:
                         elif block.get("type") == "tool_result":
                             tool_use_id = block.get("tool_use_id", "")
                             tool_name = id_to_name.get(tool_use_id, tool_use_id)
-                            tool_result_parts.append(types.Part(
-                                function_response=types.FunctionResponse(
-                                    name=tool_name,
-                                    response={"result": normalize_tool_content(block.get("content", ""))},
+                            tool_result_parts.append(
+                                types.Part(
+                                    function_response=types.FunctionResponse(
+                                        name=tool_name,
+                                        response={"result": normalize_tool_content(block.get("content", ""))},
+                                    )
                                 )
-                            ))
+                            )
                 if text_parts:
                     combined = "\n".join(t for t in text_parts if t)
                     if combined:
@@ -167,8 +171,7 @@ class GeminiProvider:
         config = types.GenerateContentConfig(**config_kwargs)
 
         logger.debug(
-            f"Gemini API request: model={model}, max_tokens={max_tokens}, "
-            f"messages={len(messages)}, tools={len(tools)}"
+            f"Gemini API request: model={model}, max_tokens={max_tokens}, messages={len(messages)}, tools={len(tools)}"
         )
 
         t_start = time.monotonic()
@@ -195,12 +198,14 @@ class GeminiProvider:
             # Function calls (complete objects, not streamed incrementally)
             if chunk.function_calls:
                 for fc in chunk.function_calls:
-                    tool_use_blocks.append({
-                        "type": "tool_use",
-                        "id": str(uuid.uuid4()),
-                        "name": fc.name,
-                        "input": dict(fc.args) if fc.args else {},
-                    })
+                    tool_use_blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": str(uuid.uuid4()),
+                            "name": fc.name,
+                            "input": dict(fc.args) if fc.args else {},
+                        }
+                    )
 
             # Finish reason (from candidates)
             if chunk.candidates:

@@ -161,9 +161,11 @@ class ToOpenAiToolsTests(unittest.TestCase):
         self.assertEqual([], _to_openai_tools([]))
 
     def test_single_tool(self) -> None:
-        result = _to_openai_tools([
-            {"name": "search", "description": "Search web", "input_schema": {"type": "object"}},
-        ])
+        result = _to_openai_tools(
+            [
+                {"name": "search", "description": "Search web", "input_schema": {"type": "object"}},
+            ]
+        )
         self.assertEqual(1, len(result))
         t = result[0]
         self.assertEqual("function", t["type"])
@@ -175,8 +177,7 @@ class ToOpenAiToolsTests(unittest.TestCase):
         self.assertEqual("", result[0]["function"]["description"])
 
 
-def _make_chunk(*, content: str | None = None, tool_calls=None,
-                finish_reason: str | None = None, usage=None):
+def _make_chunk(*, content: str | None = None, tool_calls=None, finish_reason: str | None = None, usage=None):
     """Build a mock streaming chunk."""
     chunk = MagicMock()
     delta = MagicMock()
@@ -284,9 +285,7 @@ class OpenAIProviderStreamChatTests(unittest.TestCase):
             mock_stream.__aiter__ = fake_aiter
             provider._client.chat.completions.create = AsyncMock(return_value=mock_stream)
 
-            _, _, _, result_usage = await provider.stream_chat(
-                "gpt-4", 1000, 0.0, "", [], []
-            )
+            _, _, _, result_usage = await provider.stream_chat("gpt-4", 1000, 0.0, "", [], [])
 
             self.assertEqual(100, result_usage.input_tokens)
             self.assertEqual(50, result_usage.output_tokens)
@@ -381,7 +380,9 @@ class OpenAIProviderCreateMessageTests(unittest.TestCase):
             provider._client.chat.completions.create = AsyncMock(return_value=resp)
 
             text, result_usage = await provider.create_message(
-                model="gpt-4", max_tokens=500, temperature=0.0,
+                model="gpt-4",
+                max_tokens=500,
+                temperature=0.0,
                 messages=[{"role": "user", "content": "summarize"}],
             )
 

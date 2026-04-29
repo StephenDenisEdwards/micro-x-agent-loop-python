@@ -126,7 +126,7 @@ class SessionSidebar(Vertical):
             return
 
         all_sessions = self._session_manager.list_sessions(limit=self._loaded_count + _PAGE_SIZE)
-        page = all_sessions[self._loaded_count:]
+        page = all_sessions[self._loaded_count :]
 
         if not page and self._loaded_count == 0:
             scroll.mount(Static("[dim]No sessions[/dim]", classes="session-entry"))

@@ -38,12 +38,22 @@ class SessionRecordTests(unittest.TestCase):
 
     def test_equality(self) -> None:
         r1 = SessionRecord(
-            id="s1", parent_session_id=None, created_at="t", updated_at="t",
-            status="active", model="m", metadata_json="{}",
+            id="s1",
+            parent_session_id=None,
+            created_at="t",
+            updated_at="t",
+            status="active",
+            model="m",
+            metadata_json="{}",
         )
         r2 = SessionRecord(
-            id="s1", parent_session_id=None, created_at="t", updated_at="t",
-            status="active", model="m", metadata_json="{}",
+            id="s1",
+            parent_session_id=None,
+            created_at="t",
+            updated_at="t",
+            status="active",
+            model="m",
+            metadata_json="{}",
         )
         self.assertEqual(r1, r2)
 
@@ -67,20 +77,35 @@ class MessageRecordTests(unittest.TestCase):
 
     def test_frozen(self) -> None:
         m = MessageRecord(
-            id="m1", session_id="s1", seq=1, role="user",
-            content_json="[]", created_at="t", token_estimate=0,
+            id="m1",
+            session_id="s1",
+            seq=1,
+            role="user",
+            content_json="[]",
+            created_at="t",
+            token_estimate=0,
         )
         with self.assertRaises((AttributeError, TypeError)):
             m.seq = 99  # type: ignore[misc]
 
     def test_equality(self) -> None:
         m1 = MessageRecord(
-            id="m1", session_id="s1", seq=1, role="user",
-            content_json="[]", created_at="t", token_estimate=5,
+            id="m1",
+            session_id="s1",
+            seq=1,
+            role="user",
+            content_json="[]",
+            created_at="t",
+            token_estimate=5,
         )
         m2 = MessageRecord(
-            id="m1", session_id="s1", seq=1, role="user",
-            content_json="[]", created_at="t", token_estimate=5,
+            id="m1",
+            session_id="s1",
+            seq=1,
+            role="user",
+            content_json="[]",
+            created_at="t",
+            token_estimate=5,
         )
         self.assertEqual(m1, m2)
 

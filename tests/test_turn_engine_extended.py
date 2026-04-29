@@ -58,17 +58,21 @@ class SummarizationTests(unittest.TestCase):
         )
 
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Reading."}]},
-            [{"name": "read_file", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Reading."}]},
+                [{"name": "read_file", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Done.", stop_reason="end_turn")
 
         events = RecordingEvents()
         engine = _make_engine(
-            provider, events, tools=[tool],
+            provider,
+            events,
+            tools=[tool],
             summarization_provider=sum_provider,
             summarization_model="sm",
             summarization_enabled=True,
@@ -91,17 +95,21 @@ class SummarizationTests(unittest.TestCase):
         sum_provider.create_message = AsyncMock()
 
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Reading."}]},
-            [{"name": "read_file", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Reading."}]},
+                [{"name": "read_file", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Done.", stop_reason="end_turn")
 
         events = RecordingEvents()
         engine = _make_engine(
-            provider, events, tools=[tool],
+            provider,
+            events,
+            tools=[tool],
             summarization_provider=sum_provider,
             summarization_model="sm",
             summarization_enabled=True,
@@ -119,17 +127,21 @@ class SummarizationTests(unittest.TestCase):
         sum_provider.create_message = AsyncMock(side_effect=Exception("api error"))
 
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Reading."}]},
-            [{"name": "read_file", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Reading."}]},
+                [{"name": "read_file", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Done.", stop_reason="end_turn")
 
         events = RecordingEvents()
         engine = _make_engine(
-            provider, events, tools=[tool],
+            provider,
+            events,
+            tools=[tool],
             summarization_provider=sum_provider,
             summarization_model="sm",
             summarization_enabled=True,
@@ -169,6 +181,7 @@ class NestedLLMUsageTests(unittest.TestCase):
     def test_nested_usage_tracked(self) -> None:
         """Tool returning structured LLM usage gets tracked."""
         tool = FakeTool(name="smart_tool", execute_result="result")
+
         # Monkey-patch execute to return structured data
         async def patched_execute(tool_input: dict) -> ToolResult:
             tool.execute_calls += 1
@@ -181,15 +194,18 @@ class NestedLLMUsageTests(unittest.TestCase):
                     "provider": "openai",
                 },
             )
+
         tool.execute = patched_execute  # type: ignore[assignment]
 
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Running."}]},
-            [{"name": "smart_tool", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Running."}]},
+                [{"name": "smart_tool", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Done.", stop_reason="end_turn")
 
         events = RecordingEvents()
@@ -217,17 +233,13 @@ class RoutingTargetResolutionTests(unittest.TestCase):
         return RoutingStrategy(**defaults)
 
     def test_no_classification_returns_none(self) -> None:
-        strategy = self._make_strategy(
-            routing_policies={"trivial": {"provider": "ollama", "model": "sm"}}
-        )
+        strategy = self._make_strategy(routing_policies={"trivial": {"provider": "ollama", "model": "sm"}})
         result = strategy._resolve_routing_target(None)
         self.assertIsNone(result)
 
     def test_no_policies_returns_none(self) -> None:
         strategy = self._make_strategy()
-        classification = TaskClassification(
-            task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test"
-        )
+        classification = TaskClassification(task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test")
         result = strategy._resolve_routing_target(classification)
         self.assertIsNone(result)
 
@@ -237,9 +249,7 @@ class RoutingTargetResolutionTests(unittest.TestCase):
             routing_fallback_provider="anthropic",
             routing_fallback_model="m",
         )
-        classification = TaskClassification(
-            task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test"
-        )
+        classification = TaskClassification(task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test")
         result = strategy._resolve_routing_target(classification)
         self.assertIsNotNone(result)
         self.assertEqual("ollama", result.provider)
@@ -274,18 +284,19 @@ class RoutingTargetResolutionTests(unittest.TestCase):
 
     def test_policy_with_tool_search_only(self) -> None:
         strategy = self._make_strategy(
-            routing_policies={"trivial": {
-                "provider": "ollama", "model": "sm",
-                "tool_search_only": True,
-                "system_prompt": "compact",
-                "pin_continuation": True,
-            }},
+            routing_policies={
+                "trivial": {
+                    "provider": "ollama",
+                    "model": "sm",
+                    "tool_search_only": True,
+                    "system_prompt": "compact",
+                    "pin_continuation": True,
+                }
+            },
             routing_fallback_provider="anthropic",
             routing_fallback_model="m",
         )
-        classification = TaskClassification(
-            task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test"
-        )
+        classification = TaskClassification(task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test")
         result = strategy._resolve_routing_target(classification)
         self.assertTrue(result.tool_search_only)
         self.assertEqual("compact", result.system_prompt)
@@ -295,9 +306,7 @@ class RoutingTargetResolutionTests(unittest.TestCase):
         strategy = self._make_strategy(
             routing_policies={"trivial": {"provider": "", "model": ""}},
         )
-        classification = TaskClassification(
-            task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test"
-        )
+        classification = TaskClassification(task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test")
         result = strategy._resolve_routing_target(classification)
         self.assertIsNone(result)
 
@@ -310,12 +319,14 @@ class RoutingTargetResolutionTests(unittest.TestCase):
 class AskUserTests(unittest.TestCase):
     def test_ask_user_handled_inline(self) -> None:
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Let me ask."}]},
-            [{"name": "ask_user", "id": "q1", "input": {"question": "Continue?", "options": ["yes", "no"]}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Let me ask."}]},
+                [{"name": "ask_user", "id": "q1", "input": {"question": "Continue?", "options": ["yes", "no"]}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Great.", stop_reason="end_turn")
 
         events = RecordingEvents()
@@ -377,15 +388,18 @@ class ToolResultIsErrorTests(unittest.TestCase):
         async def patched_execute(tool_input: dict) -> ToolResult:
             tool.execute_calls += 1
             return ToolResult(text="something went wrong", is_error=True)
+
         tool.execute = patched_execute  # type: ignore[assignment]
 
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Trying."}]},
-            [{"name": "err_tool", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Trying."}]},
+                [{"name": "err_tool", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="I see.", stop_reason="end_turn")
 
         events = RecordingEvents()
@@ -407,12 +421,14 @@ class ToolResultOverridesTests(unittest.TestCase):
 
     def _make_tool_use_provider(self, tool_name: str) -> FakeStreamProvider:
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Reading."}]},
-            [{"name": tool_name, "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Reading."}]},
+                [{"name": tool_name, "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Done.", stop_reason="end_turn")
         return provider
 
@@ -428,9 +444,13 @@ class ToolResultOverridesTests(unittest.TestCase):
 
         events = RecordingEvents()
         engine = _make_engine(
-            self._make_tool_use_provider("search_tool"), events, tools=[tool],
-            summarization_provider=sum_provider, summarization_model="sm",
-            summarization_enabled=True, summarization_threshold=100,
+            self._make_tool_use_provider("search_tool"),
+            events,
+            tools=[tool],
+            summarization_provider=sum_provider,
+            summarization_model="sm",
+            summarization_enabled=True,
+            summarization_threshold=100,
             tool_result_overrides={},
         )
 
@@ -451,9 +471,13 @@ class ToolResultOverridesTests(unittest.TestCase):
 
         events = RecordingEvents()
         engine = _make_engine(
-            self._make_tool_use_provider("gmail_read"), events, tools=[tool],
-            summarization_provider=sum_provider, summarization_model="sm",
-            summarization_enabled=True, summarization_threshold=100,
+            self._make_tool_use_provider("gmail_read"),
+            events,
+            tools=[tool],
+            summarization_provider=sum_provider,
+            summarization_model="sm",
+            summarization_enabled=True,
+            summarization_threshold=100,
             tool_result_overrides={"gmail_read": ToolResultOverride(summarize=False)},
         )
 
@@ -469,7 +493,9 @@ class ToolResultOverridesTests(unittest.TestCase):
 
         events = RecordingEvents()
         engine = _make_engine(
-            self._make_tool_use_provider("gmail_read"), events, tools=[tool],
+            self._make_tool_use_provider("gmail_read"),
+            events,
+            tools=[tool],
             tool_result_overrides={"gmail_read": ToolResultOverride(max_chars=200_000)},
         )
 
@@ -486,7 +512,9 @@ class ToolResultOverridesTests(unittest.TestCase):
 
         events = RecordingEvents()
         engine = _make_engine(
-            self._make_tool_use_provider("other_tool"), events, tools=[tool],
+            self._make_tool_use_provider("other_tool"),
+            events,
+            tools=[tool],
             tool_result_overrides={"gmail_read": ToolResultOverride(max_chars=200_000)},
         )
 
@@ -507,9 +535,13 @@ class ToolResultOverridesTests(unittest.TestCase):
 
         events = RecordingEvents()
         engine = _make_engine(
-            self._make_tool_use_provider("gmail_search"), events, tools=[tool],
-            summarization_provider=sum_provider, summarization_model="sm",
-            summarization_enabled=True, summarization_threshold=100,
+            self._make_tool_use_provider("gmail_search"),
+            events,
+            tools=[tool],
+            summarization_provider=sum_provider,
+            summarization_model="sm",
+            summarization_enabled=True,
+            summarization_threshold=100,
             tool_result_overrides={"gmail_search": ToolResultOverride(threshold=1000)},
         )
 

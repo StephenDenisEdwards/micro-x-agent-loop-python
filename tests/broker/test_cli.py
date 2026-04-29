@@ -91,16 +91,26 @@ class JobAddTests(unittest.TestCase):
 
     def test_add_with_all_flags(self) -> None:
         args = [
-            "myjob2", "0 9 * * *", "prompt text",
-            "--tz", "America/New_York",
-            "--config", "cfg.json",
-            "--session", "sess1",
-            "--response-channel", "http",
-            "--response-target", "http://cb",
+            "myjob2",
+            "0 9 * * *",
+            "prompt text",
+            "--tz",
+            "America/New_York",
+            "--config",
+            "cfg.json",
+            "--session",
+            "sess1",
+            "--response-channel",
+            "http",
+            "--response-target",
+            "http://cb",
             "--hitl",
-            "--hitl-timeout", "120",
-            "--max-retries", "3",
-            "--retry-delay", "30",
+            "--hitl-timeout",
+            "120",
+            "--max-retries",
+            "3",
+            "--retry-delay",
+            "30",
         ]
         out = self._capture(_job_add, self._store, args)
         self.assertIn("Created job", out)
@@ -269,6 +279,7 @@ class JobRunNowTests(unittest.TestCase):
     def test_run_now_no_args(self) -> None:
         async def go():
             await _job_run_now(self._store, [])
+
         buf = io.StringIO()
         with patch("builtins.print", lambda *a: buf.write(" ".join(str(x) for x in a) + "\n")):
             asyncio.run(go())
@@ -277,6 +288,7 @@ class JobRunNowTests(unittest.TestCase):
     def test_run_now_no_match(self) -> None:
         async def go():
             await _job_run_now(self._store, ["zzzzzz"])
+
         buf = io.StringIO()
         with patch("builtins.print", lambda *a: buf.write(" ".join(str(x) for x in a) + "\n")):
             asyncio.run(go())
@@ -284,14 +296,17 @@ class JobRunNowTests(unittest.TestCase):
 
     def test_run_now_success(self) -> None:
         from micro_x_agent_loop.broker.runner import RunResult
+
         job = self._store.create_job(name="j", cron_expr="* * * * *", prompt_template="say hello")
         ok_result = RunResult(exit_code=0, stdout="Agent output\ndone", stderr="")
+
         async def go():
             with patch(
                 "micro_x_agent_loop.broker.cli.run_agent",
                 AsyncMock(return_value=ok_result),
             ):
                 await _job_run_now(self._store, [job["id"][:8]])
+
         buf = io.StringIO()
         with patch("builtins.print", lambda *a: buf.write(" ".join(str(x) for x in a) + "\n")):
             asyncio.run(go())
@@ -299,14 +314,17 @@ class JobRunNowTests(unittest.TestCase):
 
     def test_run_now_failure(self) -> None:
         from micro_x_agent_loop.broker.runner import RunResult
+
         job = self._store.create_job(name="j", cron_expr="* * * * *", prompt_template="fail")
         fail_result = RunResult(exit_code=1, stdout="", stderr="something broke")
+
         async def go():
             with patch(
                 "micro_x_agent_loop.broker.cli.run_agent",
                 AsyncMock(return_value=fail_result),
             ):
                 await _job_run_now(self._store, [job["id"][:8]])
+
         buf = io.StringIO()
         with patch("builtins.print", lambda *a: buf.write(" ".join(str(x) for x in a) + "\n")):
             asyncio.run(go())
@@ -425,16 +443,17 @@ class HandleBrokerCommandTests(unittest.TestCase):
             db_path = str(Path(tmp) / "broker.db")
             store = BrokerStore(db_path)
             store.close()
-            with patch(
-                "micro_x_agent_loop.broker.cli.BrokerService.read_pid",
-                return_value=12345,
-            ), patch(
-                "micro_x_agent_loop.broker.cli._get_store",
-                return_value=BrokerStore(db_path),
+            with (
+                patch(
+                    "micro_x_agent_loop.broker.cli.BrokerService.read_pid",
+                    return_value=12345,
+                ),
+                patch(
+                    "micro_x_agent_loop.broker.cli._get_store",
+                    return_value=BrokerStore(db_path),
+                ),
             ):
-                out = self._capture_async(
-                    handle_broker_command(["status"], config={"BrokerDatabase": db_path})
-                )
+                out = self._capture_async(handle_broker_command(["status"], config={"BrokerDatabase": db_path}))
         self.assertIn("12345", out)
 
     def test_unknown_subcommand(self) -> None:
@@ -469,16 +488,12 @@ class HandleJobCommandTests(unittest.TestCase):
         self.assertIn("add", out)
 
     def test_add(self) -> None:
-        out = self._capture_async(
-            handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config())
-        )
+        out = self._capture_async(handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config()))
         self.assertIn("Created job", out)
 
     def test_list(self) -> None:
         # First add a job, then list
-        asyncio.run(
-            handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config())
-        )
+        asyncio.run(handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config()))
         out = self._capture_async(handle_job_command(["list"], config=self._config()))
         self.assertIn("myjob", out)
 
@@ -487,30 +502,22 @@ class HandleJobCommandTests(unittest.TestCase):
         self.assertIn("Unknown", out)
 
     def test_remove(self) -> None:
-        asyncio.run(
-            handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config())
-        )
+        asyncio.run(handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config()))
         store = BrokerStore(self._db_path)
         jobs = store.list_jobs()
         store.close()
         job_id = jobs[0]["id"]
-        out = self._capture_async(
-            handle_job_command(["remove", job_id[:8]], config=self._config())
-        )
+        out = self._capture_async(handle_job_command(["remove", job_id[:8]], config=self._config()))
         self.assertIn("Removed", out)
 
     def test_enable(self) -> None:
-        asyncio.run(
-            handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config())
-        )
+        asyncio.run(handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config()))
         store = BrokerStore(self._db_path)
         jobs = store.list_jobs()
         store.close()
         job_id = jobs[0]["id"]
         asyncio.run(handle_job_command(["disable", job_id[:8]], config=self._config()))
-        out = self._capture_async(
-            handle_job_command(["enable", job_id[:8]], config=self._config())
-        )
+        out = self._capture_async(handle_job_command(["enable", job_id[:8]], config=self._config()))
         self.assertIn("Enabled", out)
 
     def test_runs(self) -> None:

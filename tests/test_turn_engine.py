@@ -49,14 +49,16 @@ class RecordingEvents(BaseTurnEvents):
         self.mutation_calls.append((tool_name, tool, tool_input))
 
     def on_record_tool_call(self, *, tool_call_id, tool_name, tool_input, result_text, is_error, message_id) -> None:
-        self.tool_call_records.append({
-            "tool_call_id": tool_call_id,
-            "tool_name": tool_name,
-            "tool_input": tool_input,
-            "result_text": result_text,
-            "is_error": is_error,
-            "message_id": message_id,
-        })
+        self.tool_call_records.append(
+            {
+                "tool_call_id": tool_call_id,
+                "tool_name": tool_name,
+                "tool_input": tool_input,
+                "result_text": result_text,
+                "is_error": is_error,
+                "message_id": message_id,
+            }
+        )
 
     def on_tool_started(self, tool_use_id: str, tool_name: str) -> None:
         self.tool_started.append((tool_use_id, tool_name))
@@ -68,8 +70,13 @@ class RecordingEvents(BaseTurnEvents):
         self.api_call_metrics.append((usage, call_type))
 
     def on_tool_executed(
-        self, tool_name: str, result_chars: int, duration_ms: float, is_error: bool,
-        *, was_summarized: bool = False,
+        self,
+        tool_name: str,
+        result_chars: int,
+        duration_ms: float,
+        is_error: bool,
+        *,
+        was_summarized: bool = False,
     ) -> None:
         self.tool_exec_metrics.append((tool_name, result_chars, duration_ms, is_error, was_summarized))
 
@@ -130,18 +137,20 @@ class TurnEngineBasicTests(unittest.TestCase):
         tool = FakeTool(name="read_file", execute_result="file contents")
         provider = FakeStreamProvider()
         # First response: tool call
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [
-                    {"type": "text", "text": "Let me read that."},
-                    {"type": "tool_use", "id": "t1", "name": "read_file", "input": {"path": "a.py"}},
-                ],
-            },
-            [{"name": "read_file", "id": "t1", "input": {"path": "a.py"}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "Let me read that."},
+                        {"type": "tool_use", "id": "t1", "name": "read_file", "input": {"path": "a.py"}},
+                    ],
+                },
+                [{"name": "read_file", "id": "t1", "input": {"path": "a.py"}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         # Second response: text
         provider.queue(text="Done!", stop_reason="end_turn")
 
@@ -163,18 +172,20 @@ class TurnEngineBasicTests(unittest.TestCase):
         tool_a = FakeTool(name="read_file", execute_result="content_a")
         tool_b = FakeTool(name="list_dir", execute_result="content_b")
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Reading both."}],
-            },
-            [
-                {"name": "read_file", "id": "t1", "input": {"path": "a.py"}},
-                {"name": "list_dir", "id": "t2", "input": {"path": "."}},
-            ],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Reading both."}],
+                },
+                [
+                    {"name": "read_file", "id": "t1", "input": {"path": "a.py"}},
+                    {"name": "list_dir", "id": "t2", "input": {"path": "."}},
+                ],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="All done.", stop_reason="end_turn")
 
         events = RecordingEvents()
@@ -191,15 +202,17 @@ class TurnEngineBasicTests(unittest.TestCase):
         """Tool raises exception → error result returned to LLM."""
         tool = FakeTool(name="bad_tool", execute_side_effect=RuntimeError("boom"))
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Trying."}],
-            },
-            [{"name": "bad_tool", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Trying."}],
+                },
+                [{"name": "bad_tool", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="I see the error.", stop_reason="end_turn")
 
         events = RecordingEvents()
@@ -218,15 +231,17 @@ class TurnEngineBasicTests(unittest.TestCase):
     def test_unknown_tool(self) -> None:
         """LLM calls nonexistent tool → error result."""
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Calling unknown."}],
-            },
-            [{"name": "nonexistent", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Calling unknown."}],
+                },
+                [{"name": "nonexistent", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Oh.", stop_reason="end_turn")
 
         events = RecordingEvents()
@@ -244,15 +259,17 @@ class TurnEngineBasicTests(unittest.TestCase):
         long_result = "x" * 200
         tool = FakeTool(name="verbose", execute_result=long_result)
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Running."}],
-            },
-            [{"name": "verbose", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Running."}],
+                },
+                [{"name": "verbose", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Got it.", stop_reason="end_turn")
 
         events = RecordingEvents()
@@ -287,15 +304,17 @@ class TurnEngineBasicTests(unittest.TestCase):
         # max_tokens once
         provider.queue(text="cut1", stop_reason="max_tokens")
         # Then tool_use — should reset counter
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "reading"}],
-            },
-            [{"name": "read_file", "id": "t1", "input": {}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "reading"}],
+                },
+                [{"name": "read_file", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         # Then text
         provider.queue(text="Done", stop_reason="end_turn")
 
@@ -312,12 +331,14 @@ class TurnEngineBasicTests(unittest.TestCase):
         """on_api_call_completed called with usage."""
         usage = UsageResult(input_tokens=100, output_tokens=50, model="m")
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {"role": "assistant", "content": [{"type": "text", "text": "Hi"}]},
-            [],
-            "end_turn",
-            usage,
-        ))
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Hi"}]},
+                [],
+                "end_turn",
+                usage,
+            )
+        )
 
         events = RecordingEvents()
         engine = _make_engine(provider, events)
@@ -334,15 +355,17 @@ class TurnEngineBasicTests(unittest.TestCase):
         """on_tool_executed called with timing."""
         tool = FakeTool(name="read_file", execute_result="result")
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Reading."}],
-            },
-            [{"name": "read_file", "id": "t1", "input": {"path": "x"}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Reading."}],
+                },
+                [{"name": "read_file", "id": "t1", "input": {"path": "x"}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="Done.", stop_reason="end_turn")
 
         events = RecordingEvents()

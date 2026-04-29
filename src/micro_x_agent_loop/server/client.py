@@ -122,11 +122,15 @@ async def run_client(
                             question_text = data.get("text", "")
                             options = data.get("options")
                             answer = await channel.ask_user(question_text, options)
-                            await ws.send(json.dumps({
-                                "type": "answer",
-                                "question_id": question_id,
-                                "text": answer,
-                            }))
+                            await ws.send(
+                                json.dumps(
+                                    {
+                                        "type": "answer",
+                                        "question_id": question_id,
+                                        "text": answer,
+                                    }
+                                )
+                            )
 
                         elif msg_type == "pong":
                             pass

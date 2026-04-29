@@ -43,7 +43,7 @@ def parse_voice_start_options(parts: list[str], *, line_prefix: str) -> tuple[Vo
                 j += 1
             if not name_tokens:
                 return None, f"{line_prefix}Usage: /voice start ... --mic-device-name <name>"
-            opts.mic_device_name = " ".join(name_tokens).strip().strip('"\'')
+            opts.mic_device_name = " ".join(name_tokens).strip().strip("\"'")
             idx = j
             continue
         if token == "--chunk-seconds":

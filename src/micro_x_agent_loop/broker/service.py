@@ -123,9 +123,12 @@ class BrokerService:
                         poll_interval=poll_interval,
                     )
                     self._polling_ingresses.append(ingress)
-                    tasks.append(asyncio.create_task(
-                        ingress.start(), name=f"polling-{name}",
-                    ))
+                    tasks.append(
+                        asyncio.create_task(
+                            ingress.start(),
+                            name=f"polling-{name}",
+                        )
+                    )
 
             # Wait for the scheduler to finish (it runs until stop() is called)
             await tasks[0]

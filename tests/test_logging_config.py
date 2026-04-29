@@ -45,6 +45,7 @@ class ConsoleLogConsumerTests(unittest.TestCase):
 class FileLogConsumerTests(unittest.TestCase):
     def test_register_creates_file(self) -> None:
         from loguru import logger as _logger
+
         with tempfile.TemporaryDirectory() as tmp:
             log_path = str(Path(tmp) / "subdir" / "test.log")
             consumer = FileLogConsumer(path=log_path)
@@ -62,6 +63,7 @@ class FileLogConsumerTests(unittest.TestCase):
 class MetricsLogConsumerTests(unittest.TestCase):
     def test_register(self) -> None:
         from loguru import logger as _logger
+
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / "metrics.jsonl")
             consumer = MetricsLogConsumer(path=path)
@@ -77,6 +79,7 @@ class MetricsLogConsumerTests(unittest.TestCase):
 class ApiPayloadLogConsumerTests(unittest.TestCase):
     def test_register(self) -> None:
         from loguru import logger as _logger
+
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / "payloads.jsonl")
             consumer = ApiPayloadLogConsumer(path=path)
@@ -99,6 +102,7 @@ class SetupLoggingTests(unittest.TestCase):
 
     def test_file_consumer(self) -> None:
         from loguru import logger as _logger
+
         with tempfile.TemporaryDirectory() as tmp:
             log_path = str(Path(tmp) / "test.log")
             consumers = [{"type": "file", "path": log_path}]
@@ -117,6 +121,7 @@ class SetupLoggingTests(unittest.TestCase):
 
     def test_null_consumers_uses_default(self) -> None:
         import tempfile
+
         with tempfile.TemporaryDirectory():
             # Default uses console + file; just check it doesn't raise
             try:

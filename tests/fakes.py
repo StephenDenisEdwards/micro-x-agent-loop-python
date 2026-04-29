@@ -150,12 +150,14 @@ class FakeProvider:
         return "openai"
 
     async def create_message(self, model, max_tokens, temperature, messages):
-        self.calls.append({
-            "model": model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": messages,
-        })
+        self.calls.append(
+            {
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": messages,
+            }
+        )
         return self._summary_text, UsageResult(input_tokens=100, output_tokens=50, model=model)
 
 
@@ -181,19 +183,23 @@ class FakeStreamProvider:
             "role": "assistant",
             "content": [{"type": "text", "text": text}],
         }
-        self.responses.append((
-            message,
-            tool_use_blocks or [],
-            stop_reason,
-            usage or UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        self.responses.append(
+            (
+                message,
+                tool_use_blocks or [],
+                stop_reason,
+                usage or UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
 
     async def stream_chat(self, model, max_tokens, temperature, system_prompt, messages, tools, **kwargs):
-        self.stream_calls.append({
-            "model": model,
-            "max_tokens": max_tokens,
-            "messages": list(messages),
-        })
+        self.stream_calls.append(
+            {
+                "model": model,
+                "max_tokens": max_tokens,
+                "messages": list(messages),
+            }
+        )
         return self.responses.pop(0)
 
     def convert_tools(self, tools):

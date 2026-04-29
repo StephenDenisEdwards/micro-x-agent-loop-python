@@ -15,8 +15,17 @@ from micro_x_agent_loop.semantic_classifier import (
 from micro_x_agent_loop.task_taxonomy import TaskType
 
 COMPLEXITY_KEYWORDS = [
-    "design", "architect", "analyze", "analyse", "explain why",
-    "compare", "evaluate", "debug", "refactor", "plan", "implement",
+    "design",
+    "architect",
+    "analyze",
+    "analyse",
+    "explain why",
+    "compare",
+    "evaluate",
+    "debug",
+    "refactor",
+    "plan",
+    "implement",
 ]
 
 
@@ -156,9 +165,7 @@ class Stage2Tests(unittest.TestCase):
         self.assertLessEqual(result.confidence, 0.5)
 
     def test_analysis_message(self) -> None:
-        result = classify_stage2(
-            "evaluate the architecture and compare the design approaches"
-        )
+        result = classify_stage2("evaluate the architecture and compare the design approaches")
         self.assertEqual(result.task_type, TaskType.ANALYSIS)
 
     def test_confidence_range(self) -> None:

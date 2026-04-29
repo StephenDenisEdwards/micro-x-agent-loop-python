@@ -22,6 +22,7 @@ class ComputeNextRunTests(unittest.TestCase):
 
     def test_next_run_is_in_future(self) -> None:
         from datetime import datetime
+
         result = compute_next_run("* * * * *", "UTC")
         next_dt = datetime.fromisoformat(result)
         now = datetime.now(UTC)
@@ -68,12 +69,12 @@ class SchedulerOverlapPolicyTests(unittest.TestCase):
 class CronExpressionValidationTests(unittest.TestCase):
     def test_valid_expressions(self) -> None:
         valid = [
-            "* * * * *",        # every minute
-            "0 9 * * *",        # daily at 9am
-            "0 0 * * 1",        # weekly on Monday
-            "0 0 1 * *",        # monthly on 1st
-            "*/5 * * * *",      # every 5 minutes
-            "0 9,17 * * 1-5",   # 9am and 5pm weekdays
+            "* * * * *",  # every minute
+            "0 9 * * *",  # daily at 9am
+            "0 0 * * 1",  # weekly on Monday
+            "0 0 1 * *",  # monthly on 1st
+            "*/5 * * * *",  # every 5 minutes
+            "0 9,17 * * 1-5",  # 9am and 5pm weekdays
         ]
         for expr in valid:
             with self.subTest(expr=expr):
@@ -82,7 +83,7 @@ class CronExpressionValidationTests(unittest.TestCase):
     def test_invalid_expressions(self) -> None:
         invalid = [
             "not a cron",
-            "60 * * * *",       # invalid minute
+            "60 * * * *",  # invalid minute
         ]
         for expr in invalid:
             with self.subTest(expr=expr):

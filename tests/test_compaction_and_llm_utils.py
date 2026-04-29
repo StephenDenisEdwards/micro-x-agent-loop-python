@@ -62,26 +62,26 @@ class CompactionAndLlmUtilsTests(unittest.TestCase):
         asyncio.run(asyncio.sleep(0.01))
         spinner.stop()
 
+
 class EstimateTokensExtraTests(unittest.TestCase):
     def test_tool_use_block(self) -> None:
-        messages = [{
-            "role": "assistant",
-            "content": [
-                {"type": "tool_use", "name": "search", "input": {"q": "hello"}}
-            ]
-        }]
+        messages = [{"role": "assistant", "content": [{"type": "tool_use", "name": "search", "input": {"q": "hello"}}]}]
         tokens = estimate_tokens(messages)
         self.assertGreater(tokens, 0)
 
     def test_tool_result_with_list_content(self) -> None:
-        messages = [{
-            "role": "user",
-            "content": [{
-                "type": "tool_result",
-                "tool_use_id": "t1",
-                "content": [{"type": "text", "text": "result text"}],
-            }]
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "t1",
+                        "content": [{"type": "text", "text": "result text"}],
+                    }
+                ],
+            }
+        ]
         tokens = estimate_tokens(messages)
         self.assertGreater(tokens, 0)
 
@@ -93,50 +93,54 @@ class EstimateTokensExtraTests(unittest.TestCase):
 
 class FormatForSummarizationTests(unittest.TestCase):
     def test_text_message(self) -> None:
-        result = _format_for_summarization([
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "world"},
-        ])
+        result = _format_for_summarization(
+            [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": "world"},
+            ]
+        )
         self.assertIn("[user]: hello", result)
         self.assertIn("[assistant]: world", result)
 
     def test_tool_use_block(self) -> None:
-        result = _format_for_summarization([{
-            "role": "assistant",
-            "content": [{"type": "tool_use", "name": "search", "input": {"q": "foo"}}]
-        }])
+        result = _format_for_summarization(
+            [{"role": "assistant", "content": [{"type": "tool_use", "name": "search", "input": {"q": "foo"}}]}]
+        )
         self.assertIn("Tool call: search", result)
 
     def test_tool_use_long_input_truncated(self) -> None:
-        result = _format_for_summarization([{
-            "role": "assistant",
-            "content": [{"type": "tool_use", "name": "x", "input": {"data": "x" * 300}}]
-        }])
+        result = _format_for_summarization(
+            [{"role": "assistant", "content": [{"type": "tool_use", "name": "x", "input": {"data": "x" * 300}}]}]
+        )
         self.assertIn("...", result)
 
     def test_tool_result_string_content(self) -> None:
-        result = _format_for_summarization([{
-            "role": "user",
-            "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "result"}]
-        }])
+        result = _format_for_summarization(
+            [{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "result"}]}]
+        )
         self.assertIn("Tool result", result)
 
     def test_tool_result_list_content(self) -> None:
-        result = _format_for_summarization([{
-            "role": "user",
-            "content": [{
-                "type": "tool_result",
-                "tool_use_id": "t1",
-                "content": [{"type": "text", "text": "partial result"}],
-            }]
-        }])
+        result = _format_for_summarization(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "t1",
+                            "content": [{"type": "text", "text": "partial result"}],
+                        }
+                    ],
+                }
+            ]
+        )
         self.assertIn("partial result", result)
 
     def test_tool_result_other_content(self) -> None:
-        result = _format_for_summarization([{
-            "role": "user",
-            "content": [{"type": "tool_result", "tool_use_id": "t1", "content": 42}]
-        }])
+        result = _format_for_summarization(
+            [{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": 42}]}]
+        )
         self.assertIn("Tool result", result)
 
 
@@ -183,10 +187,13 @@ class RebuildMessagesListContentTests(unittest.TestCase):
     def test_first_msg_with_list_content(self) -> None:
         """First message has list content - should extract text blocks."""
         messages = [
-            {"role": "user", "content": [
-                {"type": "text", "text": "original question"},
-                {"type": "text", "text": "more context"},
-            ]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "original question"},
+                    {"type": "text", "text": "more context"},
+                ],
+            },
             {"role": "assistant", "content": [{"type": "text", "text": "answer"}]},
             {"role": "user", "content": "tail"},
         ]

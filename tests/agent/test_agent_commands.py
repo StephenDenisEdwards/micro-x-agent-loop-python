@@ -268,24 +268,27 @@ class DebugCommandTests(unittest.TestCase):
         from micro_x_agent_loop.api_payload_store import ApiPayload
 
         agent = self._make_agent()
-        agent._api_payload_store.record(ApiPayload(
-            timestamp=time.time(),
-            model="claude-haiku-4-5-20251001",
-            system_prompt="You are a helpful assistant.",
-            messages=[
-                {"role": "user", "content": "list files"},
-            ],
-            tools_count=59,
-            response_message={
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Let me list the files."}],
-            },
-            stop_reason="tool_use",
-            usage=UsageResult(
-                input_tokens=24417, output_tokens=68,
-                cache_read_input_tokens=11993,
-            ),
-        ))
+        agent._api_payload_store.record(
+            ApiPayload(
+                timestamp=time.time(),
+                model="claude-haiku-4-5-20251001",
+                system_prompt="You are a helpful assistant.",
+                messages=[
+                    {"role": "user", "content": "list files"},
+                ],
+                tools_count=59,
+                response_message={
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Let me list the files."}],
+                },
+                stop_reason="tool_use",
+                usage=UsageResult(
+                    input_tokens=24417,
+                    output_tokens=68,
+                    cache_read_input_tokens=11993,
+                ),
+            )
+        )
         out = self._run(agent, "/debug show-api-payload")
         self.assertIn("API Payload #0 (most recent):", out)
         self.assertIn("claude-haiku-4-5-20251001", out)
@@ -302,20 +305,22 @@ class DebugCommandTests(unittest.TestCase):
         from micro_x_agent_loop.api_payload_store import ApiPayload
 
         agent = self._make_agent()
-        agent._api_payload_store.record(ApiPayload(
-            timestamp=time.time(),
-            model="m",
-            system_prompt="sys",
-            messages=[
-                {"role": "user", "content": "list files"},
-                {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "bash", "input": {}}]},
-                {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "file1.txt"}]},
-            ],
-            tools_count=5,
-            response_message={"role": "assistant", "content": [{"type": "text", "text": "Done."}]},
-            stop_reason="end_turn",
-            usage=UsageResult(input_tokens=100, output_tokens=10),
-        ))
+        agent._api_payload_store.record(
+            ApiPayload(
+                timestamp=time.time(),
+                model="m",
+                system_prompt="sys",
+                messages=[
+                    {"role": "user", "content": "list files"},
+                    {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "bash", "input": {}}]},
+                    {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "file1.txt"}]},
+                ],
+                tools_count=5,
+                response_message={"role": "assistant", "content": [{"type": "text", "text": "Done."}]},
+                stop_reason="end_turn",
+                usage=UsageResult(input_tokens=100, output_tokens=10),
+            )
+        )
         out = self._run(agent, "/debug show-api-payload")
         # Should show the original user message, not the tool_result
         self.assertIn("list files", out)
@@ -326,19 +331,21 @@ class DebugCommandTests(unittest.TestCase):
         from micro_x_agent_loop.api_payload_store import ApiPayload
 
         agent = self._make_agent()
-        agent._api_payload_store.record(ApiPayload(
-            timestamp=time.time(),
-            model="m",
-            system_prompt="sys",
-            messages=[{"role": "user", "content": "read a.py"}],
-            tools_count=5,
-            response_message={
-                "role": "assistant",
-                "content": [{"type": "tool_use", "id": "t1", "name": "read_file", "input": {"path": "a.py"}}],
-            },
-            stop_reason="tool_use",
-            usage=UsageResult(input_tokens=100, output_tokens=10),
-        ))
+        agent._api_payload_store.record(
+            ApiPayload(
+                timestamp=time.time(),
+                model="m",
+                system_prompt="sys",
+                messages=[{"role": "user", "content": "read a.py"}],
+                tools_count=5,
+                response_message={
+                    "role": "assistant",
+                    "content": [{"type": "tool_use", "id": "t1", "name": "read_file", "input": {"path": "a.py"}}],
+                },
+                stop_reason="tool_use",
+                usage=UsageResult(input_tokens=100, output_tokens=10),
+            )
+        )
         out = self._run(agent, "/debug show-api-payload")
         self.assertIn("tool_use: read_file", out)
 
@@ -348,16 +355,18 @@ class DebugCommandTests(unittest.TestCase):
         from micro_x_agent_loop.api_payload_store import ApiPayload
 
         agent = self._make_agent()
-        agent._api_payload_store.record(ApiPayload(
-            timestamp=time.time(),
-            model="m",
-            system_prompt="sys",
-            messages=[],
-            tools_count=0,
-            response_message=None,
-            stop_reason="end_turn",
-            usage=None,
-        ))
+        agent._api_payload_store.record(
+            ApiPayload(
+                timestamp=time.time(),
+                model="m",
+                system_prompt="sys",
+                messages=[],
+                tools_count=0,
+                response_message=None,
+                stop_reason="end_turn",
+                usage=None,
+            )
+        )
         out = self._run(agent, "/debug show-api-payload 5")
         self.assertIn("out of range", out)
 

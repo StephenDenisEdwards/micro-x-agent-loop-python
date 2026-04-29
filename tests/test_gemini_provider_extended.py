@@ -46,6 +46,7 @@ def _load_gemini_provider():
         # Ensure a fresh import by removing the cached module
         sys.modules.pop("micro_x_agent_loop.providers.gemini_provider", None)
         from micro_x_agent_loop.providers import gemini_provider
+
         importlib.reload(gemini_provider)
         return gemini_provider
 
@@ -331,6 +332,7 @@ class GeminiCreateMessageTests(unittest.TestCase):
 class GeminiConvertToolsTests(unittest.TestCase):
     def test_convert_tools(self) -> None:
         from tests.fakes import FakeTool
+
         provider = _gp.GeminiProvider.__new__(_gp.GeminiProvider)
         tools = [FakeTool(name="test", description="a test tool")]
         result = provider.convert_tools(tools)

@@ -111,10 +111,7 @@ class RoutingStrategy:
         # --- Semantic routing ---
         elif self._semantic_classifier is not None and self._provider_pool is not None:
             query_embedding: list[float] | None = None
-            if (
-                self._task_embedding_index is not None
-                and getattr(self._task_embedding_index, "is_ready", False)
-            ):
+            if self._task_embedding_index is not None and getattr(self._task_embedding_index, "is_ready", False):
                 query_embedding = await self._task_embedding_index.embed_query(
                     user_message[:2000],
                 )
@@ -154,9 +151,11 @@ class RoutingStrategy:
                     narrowed_tools = self._tool_search_manager.get_tools_for_api_call()
                 else:
                     from micro_x_agent_loop.tool_search import TOOL_SEARCH_SCHEMA
+
                     narrowed_tools = [TOOL_SEARCH_SCHEMA]
                 if channel is not None:
                     from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA
+
                     narrowed_tools.append(ASK_USER_SCHEMA)
                 logger.info(
                     "tool_search_only: narrowed tools to {count} for {model}",
@@ -165,6 +164,7 @@ class RoutingStrategy:
                 )
             if routing_target.system_prompt == "compact" and self._compact_system_prompt:
                 from micro_x_agent_loop.system_prompt import resolve_system_prompt
+
                 system_prompt_override = resolve_system_prompt(self._compact_system_prompt)
                 logger.info(
                     "system_prompt: using compact prompt for {model}",
@@ -183,7 +183,8 @@ class RoutingStrategy:
         )
 
     def _resolve_routing_target(
-        self, classification: TaskClassification | None,
+        self,
+        classification: TaskClassification | None,
     ) -> RoutingTarget | None:
         """Map a task classification to a provider/model routing target.
 
@@ -213,13 +214,9 @@ class RoutingStrategy:
             return None
 
         main_model = self._routing_fallback_model or self._default_model
-        if (
-            classification.confidence < self._routing_confidence_threshold
-            and model != main_model
-        ):
+        if classification.confidence < self._routing_confidence_threshold and model != main_model:
             logger.info(
-                "Confidence gate: {confidence:.2f} < {threshold:.2f}, "
-                "refusing downgrade from {main} to {target}",
+                "Confidence gate: {confidence:.2f} < {threshold:.2f}, refusing downgrade from {main} to {target}",
                 confidence=classification.confidence,
                 threshold=self._routing_confidence_threshold,
                 main=main_model,

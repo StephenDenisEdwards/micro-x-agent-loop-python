@@ -129,13 +129,16 @@ class SessionAccumulatorTests(unittest.TestCase):
         self.assertEqual(1, metric["total_tool_calls"])
         self.assertIn("read_file", metric["tool_call_counts"])
 
-
     def test_reset_clears_all_counters(self) -> None:
         acc = SessionAccumulator(session_id="s1")
         usage = UsageResult(
-            input_tokens=100, output_tokens=50,
-            cache_read_input_tokens=20, cache_creation_input_tokens=10,
-            duration_ms=500.0, provider="anthropic", model="claude-sonnet-4-5-20250929",
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_input_tokens=20,
+            cache_creation_input_tokens=10,
+            duration_ms=500.0,
+            provider="anthropic",
+            model="claude-sonnet-4-5-20250929",
         )
         acc.add_api_call(usage)
         acc.add_tool_call("read_file", False)
@@ -163,12 +166,16 @@ class SessionAccumulatorTests(unittest.TestCase):
     def test_model_subtotals_tracks_multiple_models(self) -> None:
         acc = SessionAccumulator(session_id="s1")
         usage_main = UsageResult(
-            input_tokens=1000, output_tokens=500,
-            provider="anthropic", model="claude-sonnet-4-5-20250929",
+            input_tokens=1000,
+            output_tokens=500,
+            provider="anthropic",
+            model="claude-sonnet-4-5-20250929",
         )
         usage_cheap = UsageResult(
-            input_tokens=200, output_tokens=100,
-            provider="anthropic", model="claude-haiku-4-5-20251001",
+            input_tokens=200,
+            output_tokens=100,
+            provider="anthropic",
+            model="claude-haiku-4-5-20251001",
         )
         acc.add_api_call(usage_main, call_type="main", turn_number=1)
         acc.add_api_call(usage_cheap, call_type="stage2_classification", turn_number=1)
@@ -193,12 +200,16 @@ class SessionAccumulatorTests(unittest.TestCase):
     def test_api_call_log_tracks_call_type(self) -> None:
         acc = SessionAccumulator(session_id="s1")
         usage_main = UsageResult(
-            input_tokens=1000, output_tokens=500,
-            provider="anthropic", model="claude-sonnet-4-5-20250929",
+            input_tokens=1000,
+            output_tokens=500,
+            provider="anthropic",
+            model="claude-sonnet-4-5-20250929",
         )
         usage_stage2 = UsageResult(
-            input_tokens=300, output_tokens=50,
-            provider="anthropic", model="claude-haiku-4-5-20251001",
+            input_tokens=300,
+            output_tokens=50,
+            provider="anthropic",
+            model="claude-haiku-4-5-20251001",
         )
         acc.add_api_call(usage_main, call_type="main", turn_number=1)
         acc.add_api_call(usage_stage2, call_type="stage2_classification", turn_number=1)

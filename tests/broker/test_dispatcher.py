@@ -54,9 +54,7 @@ class DispatchTests(unittest.TestCase):
     def test_dispatch_returns_task(self) -> None:
         async def go() -> None:
             dispatcher = RunDispatcher(self._store, self._router)
-            run_id = self._store.create_run(
-                job_id=None, trigger_source="test", prompt="hello"
-            )
+            run_id = self._store.create_run(job_id=None, trigger_source="test", prompt="hello")
             ok_result = RunResult(exit_code=0, stdout="done", stderr="")
             with patch(
                 "micro_x_agent_loop.broker.dispatcher.run_agent",
@@ -71,9 +69,7 @@ class DispatchTests(unittest.TestCase):
     def test_dispatch_success_completes_run(self) -> None:
         async def go() -> None:
             dispatcher = RunDispatcher(self._store, self._router)
-            run_id = self._store.create_run(
-                job_id=None, trigger_source="cron", prompt="greet"
-            )
+            run_id = self._store.create_run(job_id=None, trigger_source="cron", prompt="greet")
             ok_result = RunResult(exit_code=0, stdout="hello world", stderr="")
             with patch(
                 "micro_x_agent_loop.broker.dispatcher.run_agent",
@@ -90,9 +86,7 @@ class DispatchTests(unittest.TestCase):
     def test_dispatch_failure_marks_run_failed(self) -> None:
         async def go() -> None:
             dispatcher = RunDispatcher(self._store, self._router)
-            run_id = self._store.create_run(
-                job_id=None, trigger_source="cron", prompt="fail"
-            )
+            run_id = self._store.create_run(job_id=None, trigger_source="cron", prompt="fail")
             fail_result = RunResult(exit_code=1, stdout="", stderr="something went wrong")
             with patch(
                 "micro_x_agent_loop.broker.dispatcher.run_agent",
@@ -108,9 +102,7 @@ class DispatchTests(unittest.TestCase):
 
     def test_dispatch_with_hitl_env(self) -> None:
         async def go() -> None:
-            dispatcher = RunDispatcher(
-                self._store, self._router, broker_url="http://broker:8321"
-            )
+            dispatcher = RunDispatcher(self._store, self._router, broker_url="http://broker:8321")
             job = self._store.create_job(
                 name="j",
                 cron_expr="* * * * *",
@@ -121,9 +113,7 @@ class DispatchTests(unittest.TestCase):
             job_dict["hitl_enabled"] = 1
             job_dict["hitl_timeout_seconds"] = 120
 
-            run_id = self._store.create_run(
-                job_id=job["id"], trigger_source="cron", prompt="test"
-            )
+            run_id = self._store.create_run(job_id=job["id"], trigger_source="cron", prompt="test")
             ok_result = RunResult(exit_code=0, stdout="done", stderr="")
             captured_kwargs = {}
 
@@ -149,9 +139,7 @@ class DispatchTests(unittest.TestCase):
     def test_execute_run_exception_marks_failed(self) -> None:
         async def go() -> None:
             dispatcher = RunDispatcher(self._store, self._router)
-            run_id = self._store.create_run(
-                job_id=None, trigger_source="cron", prompt="boom"
-            )
+            run_id = self._store.create_run(job_id=None, trigger_source="cron", prompt="boom")
             with patch(
                 "micro_x_agent_loop.broker.dispatcher.run_agent",
                 AsyncMock(side_effect=RuntimeError("crash")),
@@ -174,9 +162,7 @@ class DispatchTests(unittest.TestCase):
     def test_wait_for_all_waits_for_tasks(self) -> None:
         async def go() -> None:
             dispatcher = RunDispatcher(self._store, self._router)
-            run_id = self._store.create_run(
-                job_id=None, trigger_source="cron", prompt="wait"
-            )
+            run_id = self._store.create_run(job_id=None, trigger_source="cron", prompt="wait")
             ok_result = RunResult(exit_code=0, stdout="done", stderr="")
             with patch(
                 "micro_x_agent_loop.broker.dispatcher.run_agent",
@@ -201,9 +187,7 @@ class DispatchTests(unittest.TestCase):
             job_dict["max_retries"] = 3
             job_dict["retry_delay_seconds"] = 1
 
-            run_id = self._store.create_run(
-                job_id=job["id"], trigger_source="cron", prompt="retry"
-            )
+            run_id = self._store.create_run(job_id=job["id"], trigger_source="cron", prompt="retry")
             fail_result = RunResult(exit_code=1, stdout="", stderr="fail")
             with patch(
                 "micro_x_agent_loop.broker.dispatcher.run_agent",

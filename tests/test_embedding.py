@@ -41,6 +41,7 @@ class CosineSimTests(unittest.TestCase):
     def test_known_value(self) -> None:
         # [1,2,3] · [4,5,6] = 32, |a|=√14, |b|=√77
         import math
+
         expected = 32 / (math.sqrt(14) * math.sqrt(77))
         self.assertAlmostEqual(expected, cosine_similarity([1, 2, 3], [4, 5, 6]), places=6)
 

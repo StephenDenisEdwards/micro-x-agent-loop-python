@@ -27,7 +27,9 @@ class TaskStore:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(
-            str(self._db_path), check_same_thread=False, isolation_level=None,
+            str(self._db_path),
+            check_same_thread=False,
+            isolation_level=None,
         )
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON")
@@ -83,8 +85,17 @@ class TaskStore:
                                    active_form, owner, metadata_json, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
                 """,
-                (next_id, list_id, subject, description, TaskStatus.PENDING.value,
-                 active_form, metadata_json, now, now),
+                (
+                    next_id,
+                    list_id,
+                    subject,
+                    description,
+                    TaskStatus.PENDING.value,
+                    active_form,
+                    metadata_json,
+                    now,
+                    now,
+                ),
             )
             self._write_hwm(list_id, next_id)
 
@@ -253,8 +264,12 @@ class TaskStore:
     # ------------------------------------------------------------------
 
     def claim_task(
-        self, list_id: str, task_id: str, agent_id: str,
-        *, check_busy: bool = False,
+        self,
+        list_id: str,
+        task_id: str,
+        agent_id: str,
+        *,
+        check_busy: bool = False,
     ) -> ClaimResult:
         """Atomically claim a task for an agent.
 
@@ -285,30 +300,31 @@ class TaskStore:
             active_blockers = [bid for bid in task.blocked_by if bid in unresolved_ids]
             if active_blockers:
                 return ClaimResult(
-                    success=False, reason="blocked", task=task,
+                    success=False,
+                    reason="blocked",
+                    task=task,
                     blocked_by_tasks=active_blockers,
                 )
 
             # Optional busy check
             if check_busy:
                 busy_tasks = [
-                    t.id for t in all_tasks
-                    if t.owner == agent_id
-                    and t.status == TaskStatus.IN_PROGRESS
-                    and t.id != task_id
+                    t.id
+                    for t in all_tasks
+                    if t.owner == agent_id and t.status == TaskStatus.IN_PROGRESS and t.id != task_id
                 ]
                 if busy_tasks:
                     return ClaimResult(
-                        success=False, reason="agent_busy", task=task,
+                        success=False,
+                        reason="agent_busy",
+                        task=task,
                         busy_with_tasks=busy_tasks,
                     )
 
             # Claim: set owner and status
             self._conn.execute(
-                "UPDATE tasks SET owner = ?, status = ?, updated_at = ? "
-                "WHERE id = ? AND list_id = ?",
-                (agent_id, TaskStatus.IN_PROGRESS.value, _now_iso(),
-                 int(task_id), list_id),
+                "UPDATE tasks SET owner = ?, status = ?, updated_at = ? WHERE id = ? AND list_id = ?",
+                (agent_id, TaskStatus.IN_PROGRESS.value, _now_iso(), int(task_id), list_id),
             )
 
         return ClaimResult(
@@ -325,20 +341,22 @@ class TaskStore:
         all_tasks = self._list_all_tasks(list_id)
         statuses: list[AgentStatus] = []
         for agent_id in agent_ids:
-            owned = [
-                t.id for t in all_tasks
-                if t.owner == agent_id and t.status != TaskStatus.COMPLETED
-            ]
-            statuses.append(AgentStatus(
-                agent_id=agent_id,
-                name=agent_id,
-                status="busy" if owned else "idle",
-                current_tasks=owned,
-            ))
+            owned = [t.id for t in all_tasks if t.owner == agent_id and t.status != TaskStatus.COMPLETED]
+            statuses.append(
+                AgentStatus(
+                    agent_id=agent_id,
+                    name=agent_id,
+                    status="busy" if owned else "idle",
+                    current_tasks=owned,
+                )
+            )
         return statuses
 
     def unassign_agent_tasks(
-        self, list_id: str, agent_id: str, reason: str = "shutdown",
+        self,
+        list_id: str,
+        agent_id: str,
+        reason: str = "shutdown",
     ) -> tuple[list[Task], str]:
         """Reset all non-completed tasks owned by an agent to pending/unowned.
 
@@ -352,19 +370,15 @@ class TaskStore:
             for task in all_tasks:
                 if task.owner == agent_id and task.status != TaskStatus.COMPLETED:
                     self._conn.execute(
-                        "UPDATE tasks SET owner = NULL, status = ?, updated_at = ? "
-                        "WHERE id = ? AND list_id = ?",
-                        (TaskStatus.PENDING.value, _now_iso(),
-                         int(task.id), list_id),
+                        "UPDATE tasks SET owner = NULL, status = ?, updated_at = ? WHERE id = ? AND list_id = ?",
+                        (TaskStatus.PENDING.value, _now_iso(), int(task.id), list_id),
                     )
                     unassigned.append(task)
 
         if not unassigned:
             msg = f"{agent_id} was {reason}. No tasks were unassigned."
         else:
-            task_list = ", ".join(
-                f'#{t.id} "{t.subject}"' for t in unassigned
-            )
+            task_list = ", ".join(f'#{t.id} "{t.subject}"' for t in unassigned)
             msg = (
                 f"{agent_id} was {reason}. {len(unassigned)} task(s) were "
                 f"unassigned: {task_list}. Use task_list to check availability "
@@ -425,8 +439,7 @@ class TaskStore:
 
     def _write_hwm(self, list_id: str, value: int) -> None:
         self._conn.execute(
-            "INSERT INTO high_water_marks (list_id, value) VALUES (?, ?) "
-            "ON CONFLICT(list_id) DO UPDATE SET value = ?",
+            "INSERT INTO high_water_marks (list_id, value) VALUES (?, ?) ON CONFLICT(list_id) DO UPDATE SET value = ?",
             (list_id, value, value),
         )
 

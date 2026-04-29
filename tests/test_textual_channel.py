@@ -102,6 +102,7 @@ class CliArgParsingTests(unittest.TestCase):
 
     def test_tui_flag_parsed(self) -> None:
         import sys
+
         original_argv = sys.argv
         try:
             sys.argv = ["prog", "--tui"]
@@ -114,6 +115,7 @@ class CliArgParsingTests(unittest.TestCase):
 
     def test_tui_flag_default_false(self) -> None:
         import sys
+
         original_argv = sys.argv
         try:
             sys.argv = ["prog"]
@@ -126,6 +128,7 @@ class CliArgParsingTests(unittest.TestCase):
 
     def test_tui_with_config(self) -> None:
         import sys
+
         original_argv = sys.argv
         try:
             sys.argv = ["prog", "--config", "my.json", "--tui"]

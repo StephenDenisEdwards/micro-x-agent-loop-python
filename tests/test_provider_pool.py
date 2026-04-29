@@ -13,12 +13,14 @@ def _make_fake_provider(name: str = "fake", family: str = "openai") -> MagicMock
     """Create a fake provider with async methods."""
     provider = MagicMock()
     provider.family = family
-    provider.stream_chat = AsyncMock(return_value=(
-        {"content": [{"type": "text", "text": f"response from {name}"}]},
-        [],
-        "end_turn",
-        MagicMock(input_tokens=100, output_tokens=50, provider=name, model="test-model"),
-    ))
+    provider.stream_chat = AsyncMock(
+        return_value=(
+            {"content": [{"type": "text", "text": f"response from {name}"}]},
+            [],
+            "end_turn",
+            MagicMock(input_tokens=100, output_tokens=50, provider=name, model="test-model"),
+        )
+    )
     provider.create_message = AsyncMock(return_value=("text", MagicMock()))
     provider.convert_tools = MagicMock(return_value=[])
     return provider
@@ -94,9 +96,16 @@ class ProviderPoolTests(unittest.TestCase):
         pool = ProviderPool({"anthropic": p1})
         target = RoutingTarget("anthropic", "sonnet")
 
-        asyncio.run(pool.stream_chat(
-            target, 8192, 0.7, "system", [], [],
-        ))
+        asyncio.run(
+            pool.stream_chat(
+                target,
+                8192,
+                0.7,
+                "system",
+                [],
+                [],
+            )
+        )
         p1.stream_chat.assert_called_once()
         self.assertEqual(pool.active_cache_provider, "anthropic")
 
@@ -109,9 +118,16 @@ class ProviderPoolTests(unittest.TestCase):
             fallback_provider="secondary",
         )
 
-        asyncio.run(pool.stream_chat(
-            RoutingTarget("primary", "model"), 8192, 0.7, "sys", [], [],
-        ))
+        asyncio.run(
+            pool.stream_chat(
+                RoutingTarget("primary", "model"),
+                8192,
+                0.7,
+                "sys",
+                [],
+                [],
+            )
+        )
         p2.stream_chat.assert_called_once()
         self.assertEqual(pool.active_cache_provider, "secondary")
 
@@ -182,8 +198,15 @@ class ProviderPoolTests(unittest.TestCase):
             fallback_provider="anthropic",
         )
         with self.assertRaises(RuntimeError, msg="Ollama down"):
-            asyncio.run(pool.stream_chat(
-                RoutingTarget("ollama", "qwen2.5:7b"), 8192, 0.7, "sys", [], [],
-            ))
+            asyncio.run(
+                pool.stream_chat(
+                    RoutingTarget("ollama", "qwen2.5:7b"),
+                    8192,
+                    0.7,
+                    "sys",
+                    [],
+                    [],
+                )
+            )
         # Anthropic provider should NOT have been called
         p2.stream_chat.assert_not_called()

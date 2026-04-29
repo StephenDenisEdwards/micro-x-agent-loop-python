@@ -39,9 +39,11 @@ def create_prompt_session(toolbar_fn: Any = None) -> Any:
         from prompt_toolkit.styles import Style
 
         kwargs["bottom_toolbar"] = toolbar_fn
-        kwargs["style"] = Style.from_dict({
-            "bottom-toolbar": "bg:#333333 #aaaaaa",
-        })
+        kwargs["style"] = Style.from_dict(
+            {
+                "bottom-toolbar": "bg:#333333 #aaaaaa",
+            }
+        )
 
     return PromptSession(**kwargs)
 
@@ -120,9 +122,7 @@ async def run_repl(
     session = None
     try:
         logger.info("Creating prompt_toolkit session...")
-        session = await asyncio.wait_for(
-            asyncio.to_thread(create_prompt_session, toolbar_fn), timeout=5.0
-        )
+        session = await asyncio.wait_for(asyncio.to_thread(create_prompt_session, toolbar_fn), timeout=5.0)
         logger.info("PromptSession created, entering REPL loop...")
     except TimeoutError:
         logger.warning("prompt_toolkit setup timed out; falling back to basic console input")

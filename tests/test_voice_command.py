@@ -103,9 +103,7 @@ class ParseVoiceStartOptionsTests(unittest.TestCase):
         self.assertIn("Usage:", err)
 
     def test_all_options(self) -> None:
-        opts, err = self._parse(
-            "/voice start microphone --chunk-seconds 2 --endpointing-ms 200 --utterance-end-ms 500"
-        )
+        opts, err = self._parse("/voice start microphone --chunk-seconds 2 --endpointing-ms 200 --utterance-end-ms 500")
         self.assertIsNone(err)
         self.assertEqual("microphone", opts.source)
         self.assertEqual(2, opts.chunk_seconds)

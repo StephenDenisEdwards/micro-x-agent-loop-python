@@ -91,14 +91,11 @@ class RoutingFeedbackStore:
         )
         conn.commit()
 
-    def update_quality_signal(
-        self, session_id: str, turn_number: int, signal: int
-    ) -> None:
+    def update_quality_signal(self, session_id: str, turn_number: int, signal: int) -> None:
         """Update the quality signal for a specific turn's routing outcome."""
         conn = self._ensure_connection()
         conn.execute(
-            "UPDATE routing_outcomes SET quality_signal = ? "
-            "WHERE session_id = ? AND turn_number = ?",
+            "UPDATE routing_outcomes SET quality_signal = ? WHERE session_id = ? AND turn_number = ?",
             (signal, session_id, turn_number),
         )
         conn.commit()

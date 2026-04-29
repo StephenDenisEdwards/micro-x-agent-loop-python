@@ -80,10 +80,12 @@ class TestChatEndpoint(unittest.TestCase):
 class TestCliArgParsing(unittest.TestCase):
     def test_parse_server_flag(self) -> None:
         import sys
+
         original = sys.argv
         try:
             sys.argv = ["prog", "--server", "start"]
             from micro_x_agent_loop.__main__ import _parse_cli_args
+
             args = _parse_cli_args()
             self.assertEqual(["start"], args["server"])
         finally:
@@ -91,10 +93,12 @@ class TestCliArgParsing(unittest.TestCase):
 
     def test_parse_server_no_subcommand(self) -> None:
         import sys
+
         original = sys.argv
         try:
             sys.argv = ["prog", "--server"]
             from micro_x_agent_loop.__main__ import _parse_cli_args
+
             args = _parse_cli_args()
             self.assertEqual([], args["server"])
         finally:

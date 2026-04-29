@@ -22,6 +22,7 @@ class StreamSessionTests(unittest.TestCase):
     def _make_ws(self) -> tuple:
         """Return (ws_mock, sent_list)."""
         from unittest.mock import MagicMock
+
         sent: list[str] = []
         ws = MagicMock()
 

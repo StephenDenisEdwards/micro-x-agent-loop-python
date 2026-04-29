@@ -248,10 +248,7 @@ def format_analysis(analysis: ModeAnalysis) -> str:
     lines: list[str] = []
     lines.append(f"[Mode Analysis] Recommendation: {analysis.recommended_mode.value}")
     for signal in analysis.signals:
-        lines.append(
-            f"  {signal.name} ({signal.strength.value}): "
-            f'"{signal.matched_text}"'
-        )
+        lines.append(f'  {signal.name} ({signal.strength.value}): "{signal.matched_text}"')
     lines.append(
         f"  Signals: {analysis.strong_count} strong, "
         f"{analysis.moderate_count} moderate, "
@@ -264,16 +261,16 @@ def format_analysis(analysis: ModeAnalysis) -> str:
 # Stage 2 — LLM classification for ambiguous cases
 # ---------------------------------------------------------------------------
 
+
 def build_stage2_prompt(user_message: str, stage1: ModeAnalysis) -> str:
     """Build a classification prompt for the LLM to resolve an ambiguous case.
 
     The prompt provides the user's original message, Stage 1 signals, and
     guidance on how to decide between PROMPT and COMPILED modes.
     """
-    signal_lines = "\n".join(
-        f"  - {s.name} ({s.strength.value}): \"{s.matched_text}\""
-        for s in stage1.signals
-    ) or "  (none)"
+    signal_lines = (
+        "\n".join(f'  - {s.name} ({s.strength.value}): "{s.matched_text}"' for s in stage1.signals) or "  (none)"
+    )
 
     return f"""\
 You are a task classifier. Given a user's prompt and pre-detected signals,

@@ -17,6 +17,7 @@ from loguru import logger
 # Cosine similarity (pure Python)
 # ---------------------------------------------------------------------------
 
+
 def cosine_similarity(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two vectors.
 
@@ -37,6 +38,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 # ---------------------------------------------------------------------------
 # Ollama embedding client
 # ---------------------------------------------------------------------------
+
 
 class OllamaEmbeddingClient:
     """Async client for Ollama's native embedding API."""
@@ -81,15 +83,10 @@ _TOOL_SEARCH_HINTS: dict[str, str] = {
         "create directory, move files, copy files, delete files, find files"
     ),
     "google__gmail_search": (
-        "list emails, read emails, inbox, email search, "
-        "find emails, check email, latest emails, recent emails"
+        "list emails, read emails, inbox, email search, find emails, check email, latest emails, recent emails"
     ),
-    "google__calendar_list_events": (
-        "list calendar, schedule, meetings, appointments, events today"
-    ),
-    "google__contacts_list": (
-        "list contacts, phone numbers, address book"
-    ),
+    "google__calendar_list_events": ("list calendar, schedule, meetings, appointments, events today"),
+    "google__contacts_list": ("list contacts, phone numbers, address book"),
 }
 
 
@@ -188,10 +185,7 @@ class TaskEmbeddingIndex:
         try:
             embeddings = await self._client.embed(texts)
             if len(embeddings) != len(names):
-                logger.warning(
-                    f"Task embedding count mismatch: expected {len(names)}, "
-                    f"got {len(embeddings)}"
-                )
+                logger.warning(f"Task embedding count mismatch: expected {len(names)}, got {len(embeddings)}")
                 return False
 
             self._task_embeddings = dict(zip(names, embeddings, strict=True))
@@ -263,9 +257,7 @@ class ToolEmbeddingIndex:
         try:
             embeddings = await self._client.embed(texts)
             if len(embeddings) != len(names):
-                logger.warning(
-                    f"Embedding count mismatch: expected {len(names)}, got {len(embeddings)}"
-                )
+                logger.warning(f"Embedding count mismatch: expected {len(names)}, got {len(embeddings)}")
                 return False
 
             self._tool_embeddings = dict(zip(names, embeddings, strict=True))

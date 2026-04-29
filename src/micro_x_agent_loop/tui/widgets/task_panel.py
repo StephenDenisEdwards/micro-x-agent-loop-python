@@ -56,10 +56,7 @@ class TaskPanel(VerticalScroll):
     def update_tasks(self, tasks: list[Task]) -> None:
         """Replace the task list with a fresh snapshot and re-render."""
         # Filter internal tasks
-        visible = [
-            t for t in tasks
-            if not (t.metadata and t.metadata.get("_internal"))
-        ]
+        visible = [t for t in tasks if not (t.metadata and t.metadata.get("_internal"))]
         self._tasks = visible[:_MAX_VISIBLE_TASKS]
         self._render_tasks()
 
@@ -89,9 +86,7 @@ class TaskPanel(VerticalScroll):
             if task.owner:
                 line += f" [dim]({escape(task.owner)})[/dim]"
             # Show only active blockers
-            active_blockers = [
-                bid for bid in task.blocked_by if bid not in completed_ids
-            ]
+            active_blockers = [bid for bid in task.blocked_by if bid not in completed_ids]
             if active_blockers:
                 refs = ", ".join(f"#{bid}" for bid in active_blockers)
                 line += f" [red][blocked by {refs}][/red]"

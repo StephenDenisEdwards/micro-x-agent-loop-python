@@ -98,9 +98,7 @@ def should_activate_tool_search(
     # - DeepSeek:  90% off, no write surcharge, fully automatic
     _cache_preserving_providers = {"anthropic", "gemini", "deepseek"}
     if provider.strip().lower() in _cache_preserving_providers:
-        logger.info(
-            f"Tool search: auto + {provider} provider — inactive (cache-preserving, >=90% discount)"
-        )
+        logger.info(f"Tool search: auto + {provider} provider — inactive (cache-preserving, >=90% discount)")
         return False
 
     if match.group(1):
@@ -175,19 +173,12 @@ class ToolSearchManager:
         """Build the embedding index from all tools. Call once at startup."""
         if self._embedding_index is None:
             return
-        tools = [
-            (name, tool.description or "")
-            for name, (tool, _conv) in self._tool_index.items()
-        ]
+        tools = [(name, tool.description or "") for name, (tool, _conv) in self._tool_index.items()]
         success = await self._embedding_index.build(tools)
         if success:
-            logger.info(
-                f"Semantic tool search active: {len(tools)} tools indexed"
-            )
+            logger.info(f"Semantic tool search active: {len(tools)} tools indexed")
         else:
-            logger.warning(
-                "Semantic tool search unavailable — falling back to keyword search"
-            )
+            logger.warning("Semantic tool search unavailable — falling back to keyword search")
 
     async def handle_tool_search(self, query: str) -> str:
         """Execute a tool_search query and return matching tool descriptions.
@@ -290,9 +281,7 @@ class ToolSearchManager:
             return
         to_remove = set(tool_names)
         self._all_tools = [tool for tool in self._all_tools if tool.name not in to_remove]
-        self._all_converted_tools = [
-            tool for tool in self._all_converted_tools if tool.get("name") not in to_remove
-        ]
+        self._all_converted_tools = [tool for tool in self._all_converted_tools if tool.get("name") not in to_remove]
         for name in to_remove:
             self._tool_index.pop(name, None)
             self._loaded_tool_names.discard(name)

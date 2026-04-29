@@ -29,14 +29,18 @@ def _make_server(
     if adapters is None:
         adapters = {}
     return WebhookServer(
-        store, dispatcher, adapters,
-        host="127.0.0.1", port=9999,
+        store,
+        dispatcher,
+        adapters,
+        host="127.0.0.1",
+        port=9999,
         api_secret=api_secret,
     )
 
 
 def _client(server: WebhookServer):
     from fastapi.testclient import TestClient
+
     return TestClient(server._app)
 
 

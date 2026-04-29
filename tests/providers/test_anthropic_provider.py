@@ -84,9 +84,7 @@ class AnthropicProviderTests(unittest.TestCase):
         )
         provider = self._make_provider(create_response=create_response)
 
-        text, usage = asyncio.run(
-            provider.create_message("m", 4096, 0, [{"role": "user", "content": "summarize"}])
-        )
+        text, usage = asyncio.run(provider.create_message("m", 4096, 0, [{"role": "user", "content": "summarize"}]))
         self.assertEqual("summary result", text)
         self.assertIsInstance(usage, UsageResult)
         self.assertEqual(5, usage.input_tokens)

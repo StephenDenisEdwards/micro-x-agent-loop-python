@@ -107,26 +107,38 @@ def _print_table(agg: dict, label: str = "") -> None:
 
 def _print_csv(agg: dict, label: str = "") -> None:
     writer = csv.writer(sys.stdout)
-    writer.writerow([
-        "label", "api_calls", "input_tokens", "output_tokens",
-        "cache_read_tokens", "cache_create_tokens", "cost_usd",
-        "duration_ms", "tool_calls", "tool_errors",
-        "compaction_events", "tokens_freed",
-    ])
-    writer.writerow([
-        label,
-        agg["api_calls"],
-        agg["total_input_tokens"],
-        agg["total_output_tokens"],
-        agg["total_cache_read_tokens"],
-        agg["total_cache_create_tokens"],
-        f"{agg['total_cost_usd']:.6f}",
-        f"{agg['total_duration_ms']:.0f}",
-        agg["tool_calls"],
-        agg["tool_errors"],
-        agg["compaction_events"],
-        agg["compaction_tokens_freed"],
-    ])
+    writer.writerow(
+        [
+            "label",
+            "api_calls",
+            "input_tokens",
+            "output_tokens",
+            "cache_read_tokens",
+            "cache_create_tokens",
+            "cost_usd",
+            "duration_ms",
+            "tool_calls",
+            "tool_errors",
+            "compaction_events",
+            "tokens_freed",
+        ]
+    )
+    writer.writerow(
+        [
+            label,
+            agg["api_calls"],
+            agg["total_input_tokens"],
+            agg["total_output_tokens"],
+            agg["total_cache_read_tokens"],
+            agg["total_cache_create_tokens"],
+            f"{agg['total_cost_usd']:.6f}",
+            f"{agg['total_duration_ms']:.0f}",
+            agg["tool_calls"],
+            agg["tool_errors"],
+            agg["compaction_events"],
+            agg["compaction_tokens_freed"],
+        ]
+    )
 
 
 def main() -> None:
@@ -134,8 +146,7 @@ def main() -> None:
     parser.add_argument("--file", default="metrics.jsonl", help="Path to metrics.jsonl")
     parser.add_argument("--session", default=None, help="Filter to session ID")
     parser.add_argument("--since", default=None, help="Only include records after ISO timestamp")
-    parser.add_argument("--compare", nargs=2, metavar=("SESSION_A", "SESSION_B"),
-                        help="Compare two session IDs")
+    parser.add_argument("--compare", nargs=2, metavar=("SESSION_A", "SESSION_B"), help="Compare two session IDs")
     parser.add_argument("--csv", action="store_true", help="Output as CSV")
     args = parser.parse_args()
 
@@ -159,9 +170,8 @@ def main() -> None:
             # Delta
             print("\n=== Delta (B - A) ===")
             cost_delta = agg_b["total_cost_usd"] - agg_a["total_cost_usd"]
-            token_delta = (
-                (agg_b["total_input_tokens"] + agg_b["total_output_tokens"])
-                - (agg_a["total_input_tokens"] + agg_a["total_output_tokens"])
+            token_delta = (agg_b["total_input_tokens"] + agg_b["total_output_tokens"]) - (
+                agg_a["total_input_tokens"] + agg_a["total_output_tokens"]
             )
             print(f"Cost delta:   ${cost_delta:+.6f}")
             print(f"Token delta:  {token_delta:+,}")

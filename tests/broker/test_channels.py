@@ -162,12 +162,14 @@ class HttpAdapterTests(unittest.TestCase):
 
     def test_poll_messages_returns_empty(self) -> None:
         import asyncio
+
         a = HttpAdapter()
         result = asyncio.run(a.poll_messages())
         self.assertEqual([], result)
 
     def test_send_response_no_target(self) -> None:
         import asyncio
+
         a = HttpAdapter()
         result_obj = RunResult(exit_code=0, stdout="done", stderr="")
         result = asyncio.run(a.send_response("", result_obj))
@@ -175,12 +177,14 @@ class HttpAdapterTests(unittest.TestCase):
 
     def test_send_question_no_target(self) -> None:
         import asyncio
+
         a = HttpAdapter()
         result = asyncio.run(a.send_question("", "a question?"))
         self.assertFalse(result)
 
     def test_send_response_http_success(self) -> None:
         import asyncio
+
         a = HttpAdapter()
         result_obj = RunResult(exit_code=0, stdout="done", stderr="")
         mock_resp = MagicMock()
@@ -195,6 +199,7 @@ class HttpAdapterTests(unittest.TestCase):
 
     def test_send_response_http_failure(self) -> None:
         import asyncio
+
         a = HttpAdapter()
         result_obj = RunResult(exit_code=1, stdout="", stderr="error")
         mock_client = AsyncMock()
@@ -207,6 +212,7 @@ class HttpAdapterTests(unittest.TestCase):
 
     def test_send_question_http_success(self) -> None:
         import asyncio
+
         a = HttpAdapter()
         mock_resp = MagicMock()
         mock_resp.is_success = True
@@ -220,6 +226,7 @@ class HttpAdapterTests(unittest.TestCase):
 
     def test_send_question_http_exception(self) -> None:
         import asyncio
+
         a = HttpAdapter()
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=Exception("fail"))
@@ -253,11 +260,13 @@ class LogAdapterTests(unittest.TestCase):
 
     def test_poll_messages_returns_empty(self) -> None:
         import asyncio
+
         result = asyncio.run(LogAdapter().poll_messages())
         self.assertEqual([], result)
 
     def test_send_response_logs_and_returns_true(self) -> None:
         import asyncio
+
         a = LogAdapter()
         result_obj = RunResult(exit_code=0, stdout="done", stderr="")
         result = asyncio.run(a.send_response("", result_obj))
@@ -265,6 +274,7 @@ class LogAdapterTests(unittest.TestCase):
 
     def test_send_response_failed_run(self) -> None:
         import asyncio
+
         a = LogAdapter()
         result_obj = RunResult(exit_code=1, stdout="", stderr="err")
         result = asyncio.run(a.send_response("", result_obj))
@@ -272,12 +282,14 @@ class LogAdapterTests(unittest.TestCase):
 
     def test_send_question_returns_false(self) -> None:
         import asyncio
+
         a = LogAdapter()
         result = asyncio.run(a.send_question("", "q?"))
         self.assertFalse(result)
 
     def test_send_question_with_options(self) -> None:
         import asyncio
+
         a = LogAdapter()
         result = asyncio.run(a.send_question("", "q?", [{"label": "yes"}]))
         self.assertFalse(result)
@@ -340,6 +352,7 @@ class TelegramAdapterParseTests(unittest.TestCase):
 
     def test_send_response(self) -> None:
         import asyncio
+
         a = TelegramAdapter(bot_token="TOKEN")
         result_obj = RunResult(exit_code=0, stdout="done", stderr="")
         mock_resp = MagicMock()
@@ -354,6 +367,7 @@ class TelegramAdapterParseTests(unittest.TestCase):
 
     def test_send_question_with_options(self) -> None:
         import asyncio
+
         a = TelegramAdapter(bot_token="TOKEN")
         mock_resp = MagicMock()
         mock_resp.is_success = True
@@ -367,6 +381,7 @@ class TelegramAdapterParseTests(unittest.TestCase):
 
     def test_send_text_exception(self) -> None:
         import asyncio
+
         a = TelegramAdapter(bot_token="TOKEN")
         result_obj = RunResult(exit_code=0, stdout="", stderr="")
         mock_client = AsyncMock()
@@ -379,6 +394,7 @@ class TelegramAdapterParseTests(unittest.TestCase):
 
     def test_poll_messages_success(self) -> None:
         import asyncio
+
         a = TelegramAdapter(bot_token="TOKEN")
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
@@ -402,6 +418,7 @@ class TelegramAdapterParseTests(unittest.TestCase):
 
     def test_poll_messages_not_ok(self) -> None:
         import asyncio
+
         a = TelegramAdapter(bot_token="TOKEN")
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"ok": False}
@@ -415,6 +432,7 @@ class TelegramAdapterParseTests(unittest.TestCase):
 
     def test_poll_messages_exception(self) -> None:
         import asyncio
+
         a = TelegramAdapter(bot_token="TOKEN")
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(side_effect=Exception("network error"))
@@ -433,17 +451,23 @@ class TelegramAdapterParseTests(unittest.TestCase):
 class WhatsAppAdapterTests(unittest.TestCase):
     def _make_payload(self, text: str = "hello", from_id: str = "1234567890") -> dict:
         return {
-            "entry": [{
-                "changes": [{
-                    "value": {
-                        "messages": [{
-                            "type": "text",
-                            "from": from_id,
-                            "text": {"body": text},
-                        }]
-                    }
-                }]
-            }]
+            "entry": [
+                {
+                    "changes": [
+                        {
+                            "value": {
+                                "messages": [
+                                    {
+                                        "type": "text",
+                                        "from": from_id,
+                                        "text": {"body": text},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
         }
 
     def test_parse_webhook_valid(self) -> None:
@@ -490,6 +514,7 @@ class WhatsAppAdapterTests(unittest.TestCase):
     def test_verify_request_with_secret_valid(self) -> None:
         import hashlib
         import hmac
+
         secret = "mysecret"
         body = b'{"test": true}'
         sig = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
@@ -512,12 +537,14 @@ class WhatsAppAdapterTests(unittest.TestCase):
 
     def test_poll_messages_returns_empty(self) -> None:
         import asyncio
+
         a = WhatsAppAdapter(phone_number_id="PH", access_token="TOK")
         result = asyncio.run(a.poll_messages())
         self.assertEqual([], result)
 
     def test_send_response(self) -> None:
         import asyncio
+
         a = WhatsAppAdapter(phone_number_id="PH", access_token="TOK")
         result_obj = RunResult(exit_code=0, stdout="done", stderr="")
         mock_resp = MagicMock()
@@ -532,6 +559,7 @@ class WhatsAppAdapterTests(unittest.TestCase):
 
     def test_send_question_with_options(self) -> None:
         import asyncio
+
         a = WhatsAppAdapter(phone_number_id="PH", access_token="TOK")
         mock_resp = MagicMock()
         mock_resp.is_success = True
@@ -545,6 +573,7 @@ class WhatsAppAdapterTests(unittest.TestCase):
 
     def test_send_text_exception(self) -> None:
         import asyncio
+
         a = WhatsAppAdapter(phone_number_id="PH", access_token="TOK")
         result_obj = RunResult(exit_code=0, stdout="", stderr="")
         mock_client = AsyncMock()
@@ -571,11 +600,13 @@ class BuildTriggerFilterTests(unittest.TestCase):
         self.assertTrue(f.is_empty)
 
     def test_full_config(self) -> None:
-        f = build_trigger_filter({
-            "chat_ids": ["c1"],
-            "sender_ids": ["u1"],
-            "prefix": "/bot ",
-        })
+        f = build_trigger_filter(
+            {
+                "chat_ids": ["c1"],
+                "sender_ids": ["u1"],
+                "prefix": "/bot ",
+            }
+        )
         self.assertEqual(["c1"], f.chat_ids)
         self.assertEqual(["u1"], f.sender_ids)
         self.assertEqual("/bot ", f.prefix)
@@ -607,9 +638,11 @@ class BuildAdaptersTests(unittest.TestCase):
         self.assertNotIn("telegram", adapters)
 
     def test_telegram_with_token(self) -> None:
-        adapters = build_adapters({
-            "telegram": {"enabled": True, "bot_token": "TOK", "trigger_filter": {"prefix": "/a "}},
-        })
+        adapters = build_adapters(
+            {
+                "telegram": {"enabled": True, "bot_token": "TOK", "trigger_filter": {"prefix": "/a "}},
+            }
+        )
         self.assertIn("telegram", adapters)
         self.assertIsInstance(adapters["telegram"], TelegramAdapter)
 
@@ -622,14 +655,16 @@ class BuildAdaptersTests(unittest.TestCase):
         self.assertNotIn("whatsapp", adapters)
 
     def test_whatsapp_with_credentials(self) -> None:
-        adapters = build_adapters({
-            "whatsapp": {
-                "enabled": True,
-                "phone_number_id": "PH",
-                "access_token": "TOK",
-                "trigger_filter": {"prefix": "/w "},
+        adapters = build_adapters(
+            {
+                "whatsapp": {
+                    "enabled": True,
+                    "phone_number_id": "PH",
+                    "access_token": "TOK",
+                    "trigger_filter": {"prefix": "/w "},
+                }
             }
-        })
+        )
         self.assertIn("whatsapp", adapters)
         self.assertIsInstance(adapters["whatsapp"], WhatsAppAdapter)
 

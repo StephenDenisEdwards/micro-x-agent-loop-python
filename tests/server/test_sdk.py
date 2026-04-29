@@ -45,6 +45,7 @@ class TestSdkAgainstTestServer(unittest.TestCase):
 
     def _make_app(self):  # type: ignore[no-untyped-def]
         from micro_x_agent_loop.server.app import create_app
+
         return create_app(config_path=_TEST_CONFIG)
 
     def test_health_via_sdk(self) -> None:
@@ -93,6 +94,7 @@ class TestSdkConnectionError(unittest.TestCase):
                     await client.health()
 
         import httpx
+
         asyncio.run(go())
 
 

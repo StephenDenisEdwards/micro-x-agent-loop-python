@@ -32,10 +32,12 @@ class TestClientArgParsing(unittest.TestCase):
     def test_parse_server_url(self) -> None:
         """Verify --server http://... is parsed as server args."""
         import sys
+
         original = sys.argv
         try:
             sys.argv = ["prog", "--server", "http://localhost:8321"]
             from micro_x_agent_loop.__main__ import _parse_cli_args
+
             args = _parse_cli_args()
             self.assertEqual(["http://localhost:8321"], args["server"])
         finally:
@@ -44,10 +46,12 @@ class TestClientArgParsing(unittest.TestCase):
     def test_parse_server_url_with_session(self) -> None:
         """Verify --session is parsed alongside --server."""
         import sys
+
         original = sys.argv
         try:
             sys.argv = ["prog", "--session", "my-session", "--server", "http://localhost:8321"]
             from micro_x_agent_loop.__main__ import _parse_cli_args
+
             args = _parse_cli_args()
             self.assertEqual(["http://localhost:8321"], args["server"])
             self.assertEqual("my-session", args["session"])

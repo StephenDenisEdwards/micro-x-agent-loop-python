@@ -10,10 +10,26 @@ from micro_x_agent_loop.commands.router import CommandRouter
 
 def _make_router() -> tuple[CommandRouter, dict[str, list]]:
     """Create a router with all handlers collecting calls."""
-    calls: dict[str, list] = {k: [] for k in (
-        "help", "command", "cost", "rewind", "checkpoint", "session",
-        "voice", "memory", "tools", "tool", "console_log_level", "debug", "routing", "compact", "unknown"
-    )}
+    calls: dict[str, list] = {
+        k: []
+        for k in (
+            "help",
+            "command",
+            "cost",
+            "rewind",
+            "checkpoint",
+            "session",
+            "voice",
+            "memory",
+            "tools",
+            "tool",
+            "console_log_level",
+            "debug",
+            "routing",
+            "compact",
+            "unknown",
+        )
+    }
 
     async def on_help():
         calls["help"].append(())

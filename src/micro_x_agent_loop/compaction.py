@@ -212,11 +212,7 @@ async def _summarize(
     # Cap summarization input
     if len(formatted) > COMPACTION_SUMMARIZE_INPUT_CAP:
         half = COMPACTION_SUMMARIZE_HALF_CAP
-        formatted = (
-            formatted[:half]
-            + "\n\n[...middle of conversation omitted for brevity...]\n\n"
-            + formatted[-half:]
-        )
+        formatted = formatted[:half] + "\n\n[...middle of conversation omitted for brevity...]\n\n" + formatted[-half:]
 
     logger.debug(f"Compaction API request: model={model}, input_chars={len(formatted):,}")
     text, usage = await provider.create_message(
@@ -236,9 +232,7 @@ def _adjust_boundary(messages: list[dict], start: int, end: int) -> int:
         content = boundary_msg.get("content", [])
         if not isinstance(content, list):
             break
-        has_tool_use = any(
-            isinstance(b, dict) and b.get("type") == "tool_use" for b in content
-        )
+        has_tool_use = any(isinstance(b, dict) and b.get("type") == "tool_use" for b in content)
         if not has_tool_use:
             break
         # This assistant message has tool_use — its tool_result is at messages[end],
@@ -257,18 +251,10 @@ def _rebuild_messages(
     original_content = first_msg.get("content", "")
     if isinstance(original_content, list):
         # Extract text from content blocks
-        text_parts = [
-            b.get("text", "") for b in original_content
-            if isinstance(b, dict) and b.get("type") == "text"
-        ]
+        text_parts = [b.get("text", "") for b in original_content if isinstance(b, dict) and b.get("type") == "text"]
         original_content = "\n".join(text_parts)
 
-    merged_content = (
-        original_content
-        + "\n\n[CONTEXT SUMMARY]\n"
-        + summary
-        + "\n[END CONTEXT SUMMARY]"
-    )
+    merged_content = original_content + "\n\n[CONTEXT SUMMARY]\n" + summary + "\n[END CONTEXT SUMMARY]"
     merged_first = {"role": "user", "content": merged_content}
 
     tail = messages[compact_end:]
@@ -277,10 +263,12 @@ def _rebuild_messages(
 
     # Insert assistant ack if needed for role alternation
     if tail and tail[0].get("role") == "user":
-        result.append({
-            "role": "assistant",
-            "content": [{"type": "text", "text": "Understood. Continuing with the current task."}],
-        })
+        result.append(
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Understood. Continuing with the current task."}],
+            }
+        )
 
     result.extend(tail)
     return result

@@ -201,10 +201,7 @@ def _make_engine_with_channel(
     tools: list[FakeTool] | None = None,
 ) -> TurnEngine:
     tool_list = tools or []
-    converted = [
-        {"name": t.name, "description": t.description, "input_schema": t.input_schema}
-        for t in tool_list
-    ]
+    converted = [{"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in tool_list]
     return TurnEngine(
         provider=provider,
         model="m",
@@ -225,15 +222,17 @@ class TestTurnEngineAskUser(unittest.TestCase):
         """When LLM only calls ask_user, loop continues without checkpoint."""
         provider = FakeStreamProvider()
         # Response 1: ask_user only
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Let me ask."}],
-            },
-            [{"name": "ask_user", "id": "au1", "input": {"question": "Which file?"}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Let me ask."}],
+                },
+                [{"name": "ask_user", "id": "au1", "input": {"question": "Which file?"}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         # Response 2: final text
         provider.queue(text="Got it, reading main.py.", stop_reason="end_turn")
 
@@ -261,18 +260,20 @@ class TestTurnEngineAskUser(unittest.TestCase):
         tool = FakeTool(name="read_file", description="Read a file", execute_result="file data")
         provider = FakeStreamProvider()
         # Response 1: ask_user + regular tool
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Asking and reading."}],
-            },
-            [
-                {"name": "ask_user", "id": "au1", "input": {"question": "Confirm?"}},
-                {"name": "read_file", "id": "t1", "input": {"path": "x.py"}},
-            ],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Asking and reading."}],
+                },
+                [
+                    {"name": "ask_user", "id": "au1", "input": {"question": "Confirm?"}},
+                    {"name": "read_file", "id": "t1", "input": {"path": "x.py"}},
+                ],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         # Response 2: final text
         provider.queue(text="Done.", stop_reason="end_turn")
 
@@ -295,15 +296,17 @@ class TestTurnEngineAskUser(unittest.TestCase):
     def test_no_channel_treats_ask_user_as_unknown(self) -> None:
         """Without a channel, 'ask_user' is routed as a regular tool and fails as unknown."""
         provider = FakeStreamProvider()
-        provider.responses.append((
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Asking."}],
-            },
-            [{"name": "ask_user", "id": "au1", "input": {"question": "Which?"}}],
-            "tool_use",
-            UsageResult(input_tokens=10, output_tokens=5, model="m"),
-        ))
+        provider.responses.append(
+            (
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Asking."}],
+                },
+                [{"name": "ask_user", "id": "au1", "input": {"question": "Which?"}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
         provider.queue(text="OK.", stop_reason="end_turn")
 
         events = RecordingEvents()

@@ -116,10 +116,7 @@ class CommandHandler:
             self._print(f"{p}- /checkpoint list [limit]")
             self._print(f"{p}- /checkpoint rewind <checkpoint_id>")
         else:
-            self._print(
-                f"{p}Memory commands are available when MemoryEnabled=true "
-                "(see operations/config.md)."
-            )
+            self._print(f"{p}Memory commands are available when MemoryEnabled=true (see operations/config.md).")
 
     # -- /command --
 
@@ -205,9 +202,7 @@ class CommandHandler:
                 try:
                     days = int(arg)
                 except ValueError:
-                    self._print(
-                        f"{self._p}Usage: /cost reconcile [days] [--start YYYY-MM-DD] [--end YYYY-MM-DD]"
-                    )
+                    self._print(f"{self._p}Usage: /cost reconcile [days] [--start YYYY-MM-DD] [--end YYYY-MM-DD]")
                     return
                 i += 1
 
@@ -257,10 +252,7 @@ class CommandHandler:
             memory_file = memory_dir / "MEMORY.md"
             editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
             if not editor:
-                self._print(
-                    f"{self._p}No $EDITOR set. "
-                    f"Edit manually: {memory_file}"
-                )
+                self._print(f"{self._p}No $EDITOR set. Edit manually: {memory_file}")
                 return
             memory_dir.mkdir(parents=True, exist_ok=True)
             if not memory_file.exists():
@@ -282,8 +274,7 @@ class CommandHandler:
                     self._print(f"{self._p}No memory files to reset")
                     return
                 self._print(
-                    f"{self._p}This will delete {len(files)} memory file(s). "
-                    f"Run '/memory reset confirm' to proceed."
+                    f"{self._p}This will delete {len(files)} memory file(s). Run '/memory reset confirm' to proceed."
                 )
                 return
             if len(parts) == 3 and parts[2] == "confirm":
@@ -350,8 +341,7 @@ class CommandHandler:
             self._print_tool_config(tool)
             return
         self._print(
-            f"{self._p}Usage: /tool | /tool <name> | "
-            "/tool <name> schema | /tool <name> config | /tool delete <name>"
+            f"{self._p}Usage: /tool | /tool <name> | /tool <name> schema | /tool <name> config | /tool delete <name>"
         )
 
     async def _delete_generated_tool(self, name_arg: str) -> None:
@@ -389,7 +379,8 @@ class CommandHandler:
             dir_removed = True
 
         deleted_tool_names = [
-            tool_name for tool_name in list(self._tool_map)
+            tool_name
+            for tool_name in list(self._tool_map)
             if tool_name == task_name or tool_name.startswith(f"{task_name}__")
         ]
         for tool_name in deleted_tool_names:
@@ -454,10 +445,7 @@ class CommandHandler:
     def _resolve_tool_name(self, name_arg: str) -> Tool | None:
         if name_arg in self._tool_map:
             return self._tool_map[name_arg]
-        matches = [
-            t for t in self._tool_map.values()
-            if "__" in t.name and t.name.split("__", 1)[1] == name_arg
-        ]
+        matches = [t for t in self._tool_map.values() if "__" in t.name and t.name.split("__", 1)[1] == name_arg]
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
@@ -529,10 +517,7 @@ class CommandHandler:
             if len(self._api_payload_store) == 0:
                 self._print(f"{self._p}No API payloads recorded yet.")
             else:
-                self._print(
-                    f"{self._p}Payload index {index} out of range "
-                    f"(0..{len(self._api_payload_store) - 1})."
-                )
+                self._print(f"{self._p}Payload index {index} out of range (0..{len(self._api_payload_store) - 1}).")
             return
 
         ts = datetime.fromtimestamp(payload.timestamp).strftime("%Y-%m-%d %H:%M:%S")
@@ -560,8 +545,7 @@ class CommandHandler:
             elif isinstance(resp_content, list):
                 texts = [b.get("text", "") for b in resp_content if isinstance(b, dict) and b.get("type") == "text"]
                 tool_names = [
-                    b.get("name", "") for b in resp_content
-                    if isinstance(b, dict) and b.get("type") == "tool_use"
+                    b.get("name", "") for b in resp_content if isinstance(b, dict) and b.get("type") == "tool_use"
                 ]
                 if texts:
                     response_text = " ".join(texts)
@@ -570,6 +554,7 @@ class CommandHandler:
                     response_text = f"{response_text}  [{tool_label}]" if response_text else f"[{tool_label}]"
 
         from micro_x_agent_loop.usage import estimate_cost
+
         usage_str = "n/a"
         cost_str = ""
         if payload.usage:
@@ -612,8 +597,7 @@ class CommandHandler:
             session = sm.get_session(active_id)
             title = session.get("title", active_id) if session else active_id
             self._print(
-                f"{self._p}Current session: {title} "
-                f"[{self._session_controller.short_id(active_id)}] (id={active_id})"
+                f"{self._p}Current session: {title} [{self._session_controller.short_id(active_id)}] (id={active_id})"
             )
             return
 
@@ -631,9 +615,11 @@ class CommandHandler:
                 return
             self._print(f"{self._p}Recent sessions:")
             for s in sessions:
-                self._print(self._session_controller.format_session_list_entry(
-                    s, active_session_id=self._memory.active_session_id
-                ))
+                self._print(
+                    self._session_controller.format_session_list_entry(
+                        s, active_session_id=self._memory.active_session_id
+                    )
+                )
             return
 
         if len(parts) >= 2 and parts[1] == "new":
@@ -731,11 +717,7 @@ class CommandHandler:
     async def handle_checkpoint(self, command: str) -> None:
         cm = self._memory.checkpoint_manager
         active_id = self._memory.active_session_id
-        if (
-            not self._memory_enabled
-            or cm is None
-            or active_id is None
-        ):
+        if not self._memory_enabled or cm is None or active_id is None:
             self._print(f"{self._p}Checkpoint commands require MemoryEnabled=true")
             return
 
@@ -761,21 +743,17 @@ class CommandHandler:
             await self.handle_rewind(f"/rewind {parts[2]}")
             return
 
-        self._print(
-            f"{self._p}Usage: /checkpoint list [limit] | /checkpoint rewind <checkpoint_id>"
-        )
+        self._print(f"{self._p}Usage: /checkpoint list [limit] | /checkpoint rewind <checkpoint_id>")
 
     # -- /routing --
 
     async def handle_routing(self, command: str) -> None:
         if self._routing_feedback_store is None:
-            self._print(
-                f"{self._p}Routing stats require SemanticRoutingEnabled=true "
-                "and RoutingFeedbackEnabled=true"
-            )
+            self._print(f"{self._p}Routing stats require SemanticRoutingEnabled=true and RoutingFeedbackEnabled=true")
             return
 
         from micro_x_agent_loop.routing_feedback import RoutingFeedbackStore
+
         store: RoutingFeedbackStore = self._routing_feedback_store  # type: ignore[assignment]
 
         parts = command.split()
@@ -851,8 +829,7 @@ class CommandHandler:
         if not task_stats:
             self._print(f"{self._p}No routing data recorded yet.")
             self._print(
-                f"{self._p}Usage: /routing | /routing tasks | /routing providers"
-                " | /routing stages | /routing recent"
+                f"{self._p}Usage: /routing | /routing tasks | /routing providers | /routing stages | /routing recent"
             )
             return
 
@@ -865,9 +842,7 @@ class CommandHandler:
 
         stage_stats = store.get_stage_stats()
         for s in stage_stats:
-            self._print(
-                f"{self._p}  Stage {s['stage']}: {s['percentage']:.1f}% of calls"
-            )
+            self._print(f"{self._p}  Stage {s['stage']}: {s['percentage']:.1f}% of calls")
 
         self._print(f"{self._p}Use /routing tasks|providers|stages|recent for details.")
 

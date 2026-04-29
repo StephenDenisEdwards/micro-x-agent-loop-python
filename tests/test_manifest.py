@@ -21,19 +21,21 @@ class ManifestTests(unittest.TestCase):
             task_dir.mkdir(parents=True)
             manifest_path = project_root / "tools" / "manifest.json"
             manifest_path.write_text(
-                json.dumps({
-                    "demo_task": {
-                        "tool_name": "demo_tool",
-                        "description": "Demo tool",
-                        "server": {
-                            "transport": "stdio",
-                            "command": "npx",
-                            "args": ["tsx", "src/index.ts"],
-                            "cwd": "tools/demo_task/",
-                            "env": {"EXISTING": "1"},
-                        },
+                json.dumps(
+                    {
+                        "demo_task": {
+                            "tool_name": "demo_tool",
+                            "description": "Demo tool",
+                            "server": {
+                                "transport": "stdio",
+                                "command": "npx",
+                                "args": ["tsx", "src/index.ts"],
+                                "cwd": "tools/demo_task/",
+                                "env": {"EXISTING": "1"},
+                            },
+                        }
                     }
-                }),
+                ),
                 encoding="utf-8",
             )
 
@@ -64,8 +66,11 @@ class ManifestTests(unittest.TestCase):
 class ManifestToolPropertiesTests(unittest.TestCase):
     def _make_tool(self, **kwargs: Any) -> ManifestTool:
         defaults = dict(
-            task_name="task", tool_name="tool", description="desc",
-            server_config={}, connect_fn=lambda *a: None,
+            task_name="task",
+            tool_name="tool",
+            description="desc",
+            server_config={},
+            connect_fn=lambda *a: None,
         )
         defaults.update(kwargs)
         return ManifestTool(**defaults)
@@ -90,16 +95,21 @@ class ManifestToolExecuteTests(unittest.TestCase):
     def test_execute_connects_and_delegates(self) -> None:
         class FakeRealTool:
             name = "task__tool"
+
             async def execute(self, tool_input: dict) -> Any:
                 from micro_x_agent_loop.tool import ToolResult
+
                 return ToolResult(text="done")
 
         async def fake_connect(task_name: str, config: dict) -> list:
             return [FakeRealTool()]
 
         tool = ManifestTool(
-            task_name="task", tool_name="tool", description="",
-            server_config={}, connect_fn=fake_connect,
+            task_name="task",
+            tool_name="tool",
+            description="",
+            server_config={},
+            connect_fn=fake_connect,
         )
         result = asyncio.run(tool.execute({"input": "test"}))
         self.assertEqual("done", result.text)
@@ -109,8 +119,11 @@ class ManifestToolExecuteTests(unittest.TestCase):
             raise RuntimeError("Connection failed")
 
         tool = ManifestTool(
-            task_name="task", tool_name="tool", description="",
-            server_config={}, connect_fn=failing_connect,
+            task_name="task",
+            tool_name="tool",
+            description="",
+            server_config={},
+            connect_fn=failing_connect,
         )
         result = asyncio.run(tool.execute({}))
         self.assertTrue(result.is_error)
@@ -124,8 +137,11 @@ class ManifestToolExecuteTests(unittest.TestCase):
             return [OtherTool()]
 
         tool = ManifestTool(
-            task_name="task", tool_name="tool", description="",
-            server_config={}, connect_fn=connect,
+            task_name="task",
+            tool_name="tool",
+            description="",
+            server_config={},
+            connect_fn=connect,
         )
         result = asyncio.run(tool.execute({}))
         self.assertTrue(result.is_error)

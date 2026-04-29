@@ -177,10 +177,7 @@ def load_json_config(config_path: str | None = None) -> tuple[dict, str]:
     if config_file:
         target = Path.cwd() / config_file
         if not target.exists():
-            raise FileNotFoundError(
-                f"ConfigFile target not found: {target} "
-                f"(referenced from config.json)"
-            )
+            raise FileNotFoundError(f"ConfigFile target not found: {target} (referenced from config.json)")
         with open(target) as f:
             data = json.load(f)
         data = _expand_config(data, target.parent)
@@ -212,10 +209,7 @@ def _resolve_config_with_base(data: dict, config_dir: Path) -> dict:
 
     base_path = config_dir / base_file
     if not base_path.exists():
-        raise FileNotFoundError(
-            f"Base config not found: {base_path} "
-            f"(referenced via 'Base' key)"
-        )
+        raise FileNotFoundError(f"Base config not found: {base_path} (referenced via 'Base' key)")
     with open(base_path) as f:
         base_data = json.load(f)
 
@@ -247,8 +241,7 @@ def _expand_config_refs(data: dict) -> dict:
                 ref_key = m.group(1)
                 if ref_key not in data:
                     raise KeyError(
-                        f"Config key {key!r} references #{ref_key} "
-                        f"but {ref_key!r} is not defined in the config"
+                        f"Config key {key!r} references #{ref_key} but {ref_key!r} is not defined in the config"
                     )
                 resolved[key] = data[ref_key]
                 continue

@@ -109,9 +109,7 @@ class BrokerStore:
             ("retry_delay_seconds", "INTEGER NOT NULL", "60"),
         ]:
             try:
-                self._conn.execute(
-                    f"ALTER TABLE broker_jobs ADD COLUMN {col} {col_type} DEFAULT {default}"
-                )
+                self._conn.execute(f"ALTER TABLE broker_jobs ADD COLUMN {col} {col_type} DEFAULT {default}")
             except sqlite3.OperationalError:
                 pass
 
@@ -154,39 +152,57 @@ class BrokerStore:
                 hitl_enabled, hitl_timeout_seconds, max_retries, retry_delay_seconds,
                 created_at, updated_at)
                VALUES (?, ?, 'cron', ?, ?, 1, ?, ?, ?, 'log', ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (job_id, name, cron_expr, timezone, prompt_template,
-             session_id, config_profile, overlap_policy, timeout_seconds,
-             1 if hitl_enabled else 0, hitl_timeout_seconds,
-             max_retries, retry_delay_seconds,
-             now, now),
+            (
+                job_id,
+                name,
+                cron_expr,
+                timezone,
+                prompt_template,
+                session_id,
+                config_profile,
+                overlap_policy,
+                timeout_seconds,
+                1 if hitl_enabled else 0,
+                hitl_timeout_seconds,
+                max_retries,
+                retry_delay_seconds,
+                now,
+                now,
+            ),
         )
         self._conn.commit()
         return self.get_job(job_id)  # type: ignore[return-value]
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
-        row = self._conn.execute(
-            "SELECT * FROM broker_jobs WHERE id = ?", (job_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM broker_jobs WHERE id = ?", (job_id,)).fetchone()
         return dict(row) if row else None
 
     def list_jobs(self, *, enabled_only: bool = False) -> list[dict[str, Any]]:
         if enabled_only:
-            rows = self._conn.execute(
-                "SELECT * FROM broker_jobs WHERE enabled = 1 ORDER BY name"
-            ).fetchall()
+            rows = self._conn.execute("SELECT * FROM broker_jobs WHERE enabled = 1 ORDER BY name").fetchall()
         else:
-            rows = self._conn.execute(
-                "SELECT * FROM broker_jobs ORDER BY name"
-            ).fetchall()
+            rows = self._conn.execute("SELECT * FROM broker_jobs ORDER BY name").fetchall()
         return [dict(r) for r in rows]
 
     def update_job(self, job_id: str, **fields: Any) -> None:
         allowed = {
-            "name", "cron_expr", "timezone", "enabled", "prompt_template",
-            "session_id", "config_profile", "overlap_policy", "timeout_seconds",
-            "response_channel", "response_target",
-            "hitl_enabled", "hitl_timeout_seconds", "max_retries", "retry_delay_seconds",
-            "last_run_at", "next_run_at",
+            "name",
+            "cron_expr",
+            "timezone",
+            "enabled",
+            "prompt_template",
+            "session_id",
+            "config_profile",
+            "overlap_policy",
+            "timeout_seconds",
+            "response_channel",
+            "response_target",
+            "hitl_enabled",
+            "hitl_timeout_seconds",
+            "max_retries",
+            "retry_delay_seconds",
+            "last_run_at",
+            "next_run_at",
         }
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
@@ -194,9 +210,7 @@ class BrokerStore:
         updates["updated_at"] = _now_iso()
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [job_id]
-        self._conn.execute(
-            f"UPDATE broker_jobs SET {set_clause} WHERE id = ?", values
-        )
+        self._conn.execute(f"UPDATE broker_jobs SET {set_clause} WHERE id = ?", values)
         self._conn.commit()
 
     def delete_job(self, job_id: str) -> bool:
@@ -335,9 +349,7 @@ class BrokerStore:
         self._conn.commit()
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
-        row = self._conn.execute(
-            "SELECT * FROM broker_runs WHERE id = ?", (run_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM broker_runs WHERE id = ?", (run_id,)).fetchone()
         return dict(row) if row else None
 
     # -- Question tracking (HITL) --
@@ -363,9 +375,7 @@ class BrokerStore:
         return qid
 
     def get_question(self, question_id: str) -> dict[str, Any] | None:
-        row = self._conn.execute(
-            "SELECT * FROM broker_questions WHERE id = ?", (question_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM broker_questions WHERE id = ?", (question_id,)).fetchone()
         if row is None:
             return None
         q = dict(row)
@@ -382,8 +392,7 @@ class BrokerStore:
     def get_pending_question(self, run_id: str) -> dict[str, Any] | None:
         """Get the most recent pending question for a run."""
         row = self._conn.execute(
-            "SELECT * FROM broker_questions WHERE run_id = ? AND status = 'pending' "
-            "ORDER BY asked_at DESC LIMIT 1",
+            "SELECT * FROM broker_questions WHERE run_id = ? AND status = 'pending' ORDER BY asked_at DESC LIMIT 1",
             (run_id,),
         ).fetchone()
         if row is None:
@@ -425,8 +434,7 @@ class BrokerStore:
                (id, job_id, trigger_source, prompt, session_id, status,
                 attempt_number, scheduled_at)
                VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)""",
-            (run_id, job_id, trigger_source, prompt, session_id,
-             attempt_number, scheduled_at),
+            (run_id, job_id, trigger_source, prompt, session_id, attempt_number, scheduled_at),
         )
         self._conn.commit()
         return run_id

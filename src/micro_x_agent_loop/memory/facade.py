@@ -43,9 +43,7 @@ class MemoryFacade(Protocol):
         current_checkpoint_id: str | None,
     ) -> str | None: ...
 
-    def maybe_track_mutation(
-        self, tool_name: str, tool: Tool, tool_input: dict, checkpoint_id: str | None
-    ) -> None: ...
+    def maybe_track_mutation(self, tool_name: str, tool: Tool, tool_input: dict, checkpoint_id: str | None) -> None: ...
 
     def record_tool_call(
         self,
@@ -106,9 +104,7 @@ class NullMemoryFacade:
     ) -> str | None:
         return None
 
-    def maybe_track_mutation(
-        self, tool_name: str, tool: Tool, tool_input: dict, checkpoint_id: str | None
-    ) -> None:
+    def maybe_track_mutation(self, tool_name: str, tool: Tool, tool_input: dict, checkpoint_id: str | None) -> None:
         return
 
     def record_tool_call(
@@ -206,14 +202,8 @@ class ActiveMemoryFacade:
         )
         return result
 
-    def maybe_track_mutation(
-        self, tool_name: str, tool: Tool, tool_input: dict, checkpoint_id: str | None
-    ) -> None:
-        if (
-            self._checkpoint_manager is None
-            or not self._checkpoint_manager.enabled
-            or checkpoint_id is None
-        ):
+    def maybe_track_mutation(self, tool_name: str, tool: Tool, tool_input: dict, checkpoint_id: str | None) -> None:
+        if self._checkpoint_manager is None or not self._checkpoint_manager.enabled or checkpoint_id is None:
             return
         if self._checkpoint_manager.write_tools_only and tool_name not in _MUTATING_TOOL_NAMES:
             return
@@ -231,10 +221,7 @@ class ActiveMemoryFacade:
             else:
                 self._checkpoint_manager.maybe_track_tool_input(checkpoint_id, tool_input)
         except Exception as ex:
-            logger.warning(
-                f"Checkpoint tracking failed for tool '{tool_name}' "
-                f"(checkpoint={checkpoint_id}): {ex}"
-            )
+            logger.warning(f"Checkpoint tracking failed for tool '{tool_name}' (checkpoint={checkpoint_id}): {ex}")
             if self._event_emitter is not None and self._active_session_id is not None:
                 self._event_emitter.emit(
                     self._active_session_id,
