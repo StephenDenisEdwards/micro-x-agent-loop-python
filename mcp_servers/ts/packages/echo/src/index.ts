@@ -7,6 +7,22 @@ import {
   startStdioServer,
 } from "@micro-x/mcp-shared";
 
+// --help / -h flag
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`@micro-x/mcp-echo — Echo MCP server for connectivity testing
+
+Usage:
+  npx -y @micro-x/mcp-echo          Start the server (stdio transport)
+  npx -y @micro-x/mcp-echo --help   Show this message
+
+Tools:
+  echo   Echo back the provided message with a timestamp
+
+No environment variables required.
+`);
+  process.exit(0);
+}
+
 const logger = createLogger("mcp-echo");
 
 const server = createServer({

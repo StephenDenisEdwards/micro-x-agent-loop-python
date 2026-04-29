@@ -1,7 +1,17 @@
 {
   "name": "@micro-x/mcp-shared",
-  "version": "0.1.0",
-  "description": "Shared utilities for micro-x MCP servers",
+  "version": "1.0.0",
+  "description": "Shared utilities for @micro-x/mcp-* servers — logging, validation, retry, server factory",
+  "keywords": ["mcp", "model-context-protocol", "shared", "utilities"],
+  "homepage": "https://github.com/StephenDenisEdwards/micro-x-agent-loop-python/tree/master/mcp_servers/ts/packages/shared",
+  "bugs": "https://github.com/StephenDenisEdwards/micro-x-agent-loop-python/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StephenDenisEdwards/micro-x-agent-loop-python.git",
+    "directory": "mcp_servers/ts/packages/shared"
+  },
+  "license": "MIT",
+  "author": "micro-x",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,10 +21,14 @@
       "default": "./dist/index.js"
     }
   },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=18.17" },
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
   },
+  "publishConfig": { "access": "public" },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "p-retry": "^7.1.1",

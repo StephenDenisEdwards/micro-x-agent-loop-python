@@ -1,7 +1,7 @@
 # Plan: Publish MCP Servers to npm
 
-**Status:** Planned — Next up
-**Date:** 2026-04-28
+**Status:** In Progress — Phase 1 code-complete (pending npm publish)
+**Date:** 2026-04-29
 **Owner:** —
 **Reference:** [Publishing the Google MCP Server (worked example)](../guides/publishing-google-mcp.md)
 
@@ -42,16 +42,17 @@ Each server publish must satisfy the full checklist from `guides/publishing-goog
 
 **Deliverables:**
 
-1. Register the `@micro-x` scope on npmjs.com under the project owner's account; enable 2FA on the account. Decide org membership policy (single owner vs. team).
-2. Pick a license (MIT recommended unless we have a reason otherwise). Add `LICENSE` file at `mcp_servers/ts/` root and copy into each package directory we publish.
-3. Apply the `package.json` template from the worked example to `packages/shared/`:
-   - Set `version: "1.0.0"`, add `publishConfig.access: "public"`, `files: ["dist", "README.md", "LICENSE"]`, `engines.node: ">=18.17"`, `repository`/`homepage`/`bugs`/`keywords`, `prepublishOnly` script.
-4. Apply the same template to `packages/echo/` and change `"@micro-x/mcp-shared": "*"` → `"@micro-x/mcp-shared": "^1.0.0"`.
-5. Write `packages/shared/README.md` (one paragraph: "internal utilities for `@micro-x/mcp-*` servers — not intended for direct consumption") and `packages/echo/README.md` (install snippet, tool list, link back to repo).
-6. Run `npm pack --dry-run` against both. Inspect tarballs — confirm no `src/`, no `tsconfig*`, no source maps unless we want them.
-7. `npm login`, `npm publish -w packages/shared`, then `npm publish -w packages/echo`.
-8. From a clean directory: `npx -y @micro-x/mcp-echo --help` succeeds and the server speaks MCP over stdio.
-9. Add the canary install line to the project README.
+1. ~~Register the `@micro-x` scope on npmjs.com under the project owner's account; enable 2FA on the account. Decide org membership policy (single owner vs. team).~~ **Pending** — manual step.
+2. ~~Pick a license (MIT recommended unless we have a reason otherwise). Add `LICENSE` file at `mcp_servers/ts/` root and copy into each package directory we publish.~~ **Done 2026-04-29.** MIT license at `mcp_servers/ts/LICENSE`, copied into `shared/` and `echo/`.
+3. ~~Apply the `package.json` template from the worked example to `packages/shared/`:~~ **Done 2026-04-29.** `version: "1.0.0"`, `publishConfig.access: "public"`, `files`, `engines`, `repository`/`homepage`/`bugs`/`keywords`, `prepublishOnly` script.
+4. ~~Apply the same template to `packages/echo/` and change `"@micro-x/mcp-shared": "*"` → `"@micro-x/mcp-shared": "^1.0.0"`.~~ **Done 2026-04-29.** Also added `chmod` step to build script for POSIX bin shim.
+5. ~~Write `packages/shared/README.md` and `packages/echo/README.md`.~~ **Done 2026-04-29.** Shared: internal utilities disclaimer + exports table. Echo: install snippets for Claude Desktop/Code/loop, tool docs, `--help` flag docs.
+6. ~~Run `npm pack --dry-run` against both. Inspect tarballs — confirm no `src/`, no `tsconfig*`, no source maps unless we want them.~~ **Done 2026-04-29.** Both clean: `dist/`, `README.md`, `LICENSE`, `package.json` only. Shared 12.7 kB, Echo 3.2 kB.
+7. `npm login`, `npm publish -w packages/shared`, then `npm publish -w packages/echo`. **Pending** — manual step after scope registration.
+8. From a clean directory: `npx -y @micro-x/mcp-echo --help` succeeds and the server speaks MCP over stdio. **Pending** — after publish.
+9. Add the canary install line to the project README. **Pending** — after publish.
+
+**Also done:** Added `--help` / `-h` flag to `echo/src/index.ts` (prints usage, tools, exits 0).
 
 **Acceptance:** A fresh user with only Node 18+ installed can run `npx -y @micro-x/mcp-echo` and use the `echo` tool from Claude Desktop, Claude Code, and our own loop.
 
