@@ -1,7 +1,7 @@
 {
   "name": "@micro-x-ai/mcp-filesystem",
   "version": "0.1.0",
-  "description": "Filesystem MCP server (bash, read_file, write_file, append_file, save_memory)",
+  "description": "Filesystem MCP server (bash, read_file, write_file, append_file, save_memory, grep, glob)",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "@micro-x-ai/mcp-shared": "*",
+    "@vscode/ripgrep": "^1.15.9",
+    "fast-glob": "^3.3.2",
     "mammoth": "^1.8.0",
     "zod": "^3.24.0"
   },

@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 
 import { createLogger, createServer, startStdioServer } from "@micro-x-ai/mcp-shared";
+import { loadPathPolicy } from "./paths.js";
 import { registerBash } from "./tools/bash.js";
 import { registerReadFile } from "./tools/read-file.js";
 import { registerWriteFile } from "./tools/write-file.js";
 import { registerAppendFile } from "./tools/append-file.js";
 import { registerSaveMemory } from "./tools/save-memory.js";
+import { registerGrep } from "./tools/grep.js";
+import { registerGlob } from "./tools/glob.js";
 
 const logger = createLogger("mcp-filesystem");
 
@@ -13,6 +16,7 @@ const logger = createLogger("mcp-filesystem");
 const workingDir = process.env.FILESYSTEM_WORKING_DIR || process.cwd();
 const memoryDir = process.env.USER_MEMORY_DIR || "";
 const maxMemoryLines = parseInt(process.env.USER_MEMORY_MAX_LINES || "200", 10);
+const policy = loadPathPolicy(workingDir, process.env.FILESYSTEM_ALLOWED_DIRS);
 
 const server = createServer({
   name: "filesystem",
@@ -25,6 +29,8 @@ registerBash(server, logger, workingDir);
 registerReadFile(server, logger, workingDir);
 registerWriteFile(server, logger, workingDir);
 registerAppendFile(server, logger, workingDir);
+registerGrep(server, logger, policy);
+registerGlob(server, logger, policy);
 
 if (memoryDir) {
   registerSaveMemory(server, logger, memoryDir, maxMemoryLines);
