@@ -16,6 +16,11 @@ afterEach(() => {
 
 describe("loadJsonConfig", () => {
   it("resolves ConfigFile, Base inheritance, and env vars", () => {
+    // The inherited-config env var takes precedence in loadJsonConfig, which
+    // would short-circuit this file-based test when the suite is run from a
+    // process that has it set (e.g. codegen's validation subprocess).
+    delete process.env.MICRO_X_AGENT_CONFIG_JSON;
+
     const root = mkdtempSync(join(tmpdir(), "task-app-config-"));
     tempDirs.push(root);
 
