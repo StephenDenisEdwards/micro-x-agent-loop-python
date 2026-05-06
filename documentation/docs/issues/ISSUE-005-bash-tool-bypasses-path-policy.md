@@ -73,3 +73,24 @@ When this issue is resolved:
 - `mcp_servers/ts/packages/filesystem/src/paths.ts` — the `PathPolicy` that `bash` currently bypasses.
 - `mcp_servers/ts/packages/filesystem/src/tools/bash.ts` — the tool to revise or remove.
 - The existing `read_file` / `write_file` / `append_file` tools are also not yet on `PathPolicy`. Migrating them is worth doing **alongside or after** this issue, not before — while `bash` is unconstrained, restricting the file tools is mostly cosmetic (the agent can do the same thing via `bash`). Note also that `write_file` / `append_file` are higher-risk than `grep` / `glob`, so the current asymmetry (search tools gated, write tools open) is backwards.
+
+  **Migration shape (~15-line diff per tool, no design work):**
+
+  Today each tool resolves paths inline, e.g. `read_file.ts:33-35`:
+
+  ```ts
+  const resolvedPath = path.isAbsolute(input.path)
+    ? input.path
+    : path.resolve(workingDir, input.path);
+  ```
+
+  Replace with one call into the existing helper:
+
+  ```ts
+  const resolvedPath = await resolveAllowed(policy, input.path, { mustExist: true });   // read_file
+  const resolvedPath = await resolveAllowed(policy, input.path, { mustExist: false });  // write_file, append_file
+  ```
+
+  Tool signatures change from `(server, logger, workingDir: string)` to `(server, logger, policy: PathPolicy)`; `index.ts` passes `policy` instead of `workingDir`. `resolveAllowed` adds three things the inline code doesn't: `realpath` resolution (defeats symlink escape), containment check against `policy.workingDir + extraAllowed`, and a clear error message naming `FILESYSTEM_ALLOWED_DIRS` when denied.
+
+  **Behavior change to flag in release notes:** absolute paths outside `FILESYSTEM_WORKING_DIR` (and not in `FILESYSTEM_ALLOWED_DIRS`) start failing. Today they silently succeed — any workflow relying on that needs the extra root added to `FILESYSTEM_ALLOWED_DIRS`.
