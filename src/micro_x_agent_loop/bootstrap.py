@@ -76,14 +76,14 @@ async def bootstrap_runtime(
     mcp_manager: McpManager | None = None
     tools: list = []
     if app.mcp_server_configs:
-        mcp_manager = McpManager(app.mcp_server_configs)
+        mcp_manager = McpManager(app.mcp_server_configs, resolved_config=resolved_config)
         tools = await mcp_manager.connect_all()
 
     # Load manifest tools (generated MCP servers from tools/manifest.json).
     # These connect on-demand when first called, not at startup.
     project_root = Path.cwd()
     if mcp_manager is None:
-        mcp_manager = McpManager({})
+        mcp_manager = McpManager({}, resolved_config=resolved_config)
     manifest_tools = load_manifest(
         project_root,
         connect_fn=mcp_manager.connect_on_demand,

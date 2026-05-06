@@ -55,7 +55,7 @@ def create_app(
         mcp_manager: McpManager | None = None
         tools: list = []
         if app_config.mcp_server_configs:
-            mcp_manager = McpManager(app_config.mcp_server_configs)
+            mcp_manager = McpManager(app_config.mcp_server_configs, resolved_config=raw_config)
             tools = await mcp_manager.connect_all()
 
         memory_store: MemoryStore | None = None

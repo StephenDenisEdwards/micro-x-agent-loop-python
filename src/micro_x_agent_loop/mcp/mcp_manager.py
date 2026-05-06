@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from typing import Any
 
@@ -93,11 +94,21 @@ class _ServerConnection:
         if self._error:
             raise self._error
 
-    async def _run_stdio(self, config: dict[str, Any]) -> None:
+    async def _run_stdio(
+        self,
+        config: dict[str, Any],
+        resolved_config: dict[str, Any] | None,
+    ) -> None:
         # Preserve parent process environment (including .env-loaded secrets)
         # and allow per-server overrides from config.
         merged_env = dict(os.environ)
         merged_env.update(config.get("env") or {})
+        # Forward the Agent's resolved config to every spawned MCP server so
+        # children (including codegen-generated tasks) execute against the
+        # same configuration as the Agent. Set after the per-server merge so
+        # the manager's value is the source of truth.
+        if resolved_config is not None:
+            merged_env["MICRO_X_AGENT_CONFIG_JSON"] = json.dumps(resolved_config)
         params = StdioServerParameters(
             command=config["command"],
             args=config.get("args", []),
@@ -132,13 +143,17 @@ class _ServerConnection:
                 self._ready.set()
                 await self._shutdown.wait()
 
-    async def start(self, config: dict[str, Any]) -> None:
+    async def start(
+        self,
+        config: dict[str, Any],
+        resolved_config: dict[str, Any] | None = None,
+    ) -> None:
         transport = config.get("transport", "stdio")
 
         async def _run() -> None:
             try:
                 if transport == "stdio":
-                    await self._run_stdio(config)
+                    await self._run_stdio(config, resolved_config)
                 elif transport == "http":
                     await self._run_http(config)
                 else:
@@ -165,8 +180,13 @@ class _ServerConnection:
 class McpManager:
     """Manages connections to all configured MCP servers."""
 
-    def __init__(self, server_configs: dict[str, dict[str, Any]]):
+    def __init__(
+        self,
+        server_configs: dict[str, dict[str, Any]],
+        resolved_config: dict[str, Any] | None = None,
+    ):
         self._server_configs = server_configs
+        self._resolved_config = resolved_config
         self._connections: list[_ServerConnection] = []
 
     async def connect_all(self) -> list[Tool]:
@@ -176,7 +196,7 @@ class McpManager:
             conn = _ServerConnection(server_name)
             connections.append(conn)
             self._connections.append(conn)
-            await conn.start(config)
+            await conn.start(config, self._resolved_config)
 
         # Wait for all servers to become ready in parallel.
         all_tools: list[Tool] = []
@@ -198,7 +218,7 @@ class McpManager:
         """
         conn = _ServerConnection(server_name)
         self._connections.append(conn)
-        await conn.start(config)
+        await conn.start(config, self._resolved_config)
         await conn.wait_ready()
         logger.info(f"On-demand MCP server '{server_name}': {len(conn.tools)} tool(s)")
         return conn.tools
