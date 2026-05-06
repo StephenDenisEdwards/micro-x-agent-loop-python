@@ -1,19 +1,33 @@
 {
   "name": "@micro-x-ai/mcp-linkedin",
   "version": "0.1.0",
-  "description": "LinkedIn MCP server (linkedin_jobs, linkedin_job_detail)",
+  "description": "LinkedIn MCP server — job search, job detail, and post/article publishing tools",
+  "keywords": ["mcp", "model-context-protocol", "linkedin", "jobs", "publishing", "claude"],
+  "homepage": "https://github.com/StephenDenisEdwards/micro-x-agent-loop-python/tree/master/mcp_servers/ts/packages/linkedin",
+  "bugs": "https://github.com/StephenDenisEdwards/micro-x-agent-loop-python/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StephenDenisEdwards/micro-x-agent-loop-python.git",
+    "directory": "mcp_servers/ts/packages/linkedin"
+  },
+  "license": "MIT",
+  "author": "micro-x",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "mcp-linkedin": "dist/index.js"
   },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=18.17" },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').chmodSync('dist/index.js', 0o755)\"",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run clean && npm run build"
   },
+  "publishConfig": { "access": "public" },
   "dependencies": {
-    "@micro-x-ai/mcp-shared": "*",
+    "@micro-x-ai/mcp-shared": "^1.0.0",
     "cheerio": "^1.0.0",
     "open": "^10.1.0",
     "zod": "^3.24.0"
