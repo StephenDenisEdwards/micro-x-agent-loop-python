@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -199,6 +200,87 @@ class ServerConnectionTests(unittest.TestCase):
 
                 await start_then_stop()
                 self.assertEqual(2, len(conn.tools))
+
+        asyncio.run(go())
+
+    def test_start_stdio_injects_resolved_config_env(self) -> None:
+        """_run_stdio must forward the Agent's resolved config to spawned servers
+        via MICRO_X_AGENT_CONFIG_JSON, layered after the per-server env merge."""
+        async def go() -> None:
+            tools_result = _fake_tools_result("t")
+            session = MagicMock()
+            session.initialize = AsyncMock()
+            session.list_tools = AsyncMock(return_value=tools_result)
+
+            with (
+                patch("micro_x_agent_loop.mcp.mcp_manager.stdio_client") as mock_stdio,
+                patch("micro_x_agent_loop.mcp.mcp_manager.ClientSession") as mock_client_cls,
+            ):
+                streams_cm = MagicMock()
+                streams_cm.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock()))
+                streams_cm.__aexit__ = AsyncMock(return_value=False)
+                mock_stdio.return_value = streams_cm
+
+                session_cm = MagicMock()
+                session_cm.__aenter__ = AsyncMock(return_value=session)
+                session_cm.__aexit__ = AsyncMock(return_value=False)
+                mock_client_cls.return_value = session_cm
+
+                resolved_config = {
+                    "WorkingDirectory": "/work",
+                    "McpServers": {"google": {"command": "node"}},
+                }
+                conn = _ServerConnection("srv")
+                await conn.start(
+                    {
+                        "transport": "stdio",
+                        "command": "fake",
+                        "env": {"PER_SERVER": "yes"},
+                    },
+                    resolved_config=resolved_config,
+                )
+                await conn.wait_ready()
+                await conn.stop()
+
+                params = mock_stdio.call_args[0][0]
+                self.assertEqual("yes", params.env["PER_SERVER"])
+                self.assertEqual(
+                    resolved_config,
+                    json.loads(params.env["MICRO_X_AGENT_CONFIG_JSON"]),
+                )
+
+        asyncio.run(go())
+
+    def test_start_stdio_no_env_injection_when_no_resolved_config(self) -> None:
+        """When resolved_config is omitted, MICRO_X_AGENT_CONFIG_JSON must not be set."""
+        async def go() -> None:
+            tools_result = _fake_tools_result("t")
+            session = MagicMock()
+            session.initialize = AsyncMock()
+            session.list_tools = AsyncMock(return_value=tools_result)
+
+            with (
+                patch("micro_x_agent_loop.mcp.mcp_manager.stdio_client") as mock_stdio,
+                patch("micro_x_agent_loop.mcp.mcp_manager.ClientSession") as mock_client_cls,
+                patch.dict("os.environ", {}, clear=True),
+            ):
+                streams_cm = MagicMock()
+                streams_cm.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock()))
+                streams_cm.__aexit__ = AsyncMock(return_value=False)
+                mock_stdio.return_value = streams_cm
+
+                session_cm = MagicMock()
+                session_cm.__aenter__ = AsyncMock(return_value=session)
+                session_cm.__aexit__ = AsyncMock(return_value=False)
+                mock_client_cls.return_value = session_cm
+
+                conn = _ServerConnection("srv")
+                await conn.start({"transport": "stdio", "command": "fake"})
+                await conn.wait_ready()
+                await conn.stop()
+
+                params = mock_stdio.call_args[0][0]
+                self.assertNotIn("MICRO_X_AGENT_CONFIG_JSON", params.env)
 
         asyncio.run(go())
 

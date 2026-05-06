@@ -87,7 +87,6 @@ async def bootstrap_runtime(
     manifest_tools = load_manifest(
         project_root,
         connect_fn=mcp_manager.connect_on_demand,
-        resolved_config=resolved_config,
     )
     tools.extend(manifest_tools)
 
