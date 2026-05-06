@@ -4,7 +4,7 @@ from typing import Any
 
 from loguru import logger
 from mcp import ClientSession, StdioServerParameters, stdio_client
-from mcp.client.streamable_http import streamable_http_client
+from mcp.client.streamable_http import streamablehttp_client as streamable_http_client
 from mcp.types import LoggingMessageNotificationParams
 
 from micro_x_agent_loop.llm_client import print_through_spinner
