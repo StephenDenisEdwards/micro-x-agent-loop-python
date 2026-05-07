@@ -29,12 +29,17 @@ load_dotenv()
 PROJECT_ROOT = Path(os.environ.get("PROJECT_ROOT", ""))
 WORKING_DIR = Path(os.environ.get("WORKING_DIR", ""))
 TEMPLATE_DIR = PROJECT_ROOT / "tools" / "template-ts"
+RUNTIME_DIR = PROJECT_ROOT / "tools" / "_runtime"
 DEFAULT_MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 16384
 MAX_TURNS = 10
 MAX_TEST_ROUNDS = 3
-# Infrastructure files in src/ that the LLM must not read or modify
-INFRASTRUCTURE_FILES = {"index.ts", "mcp-client.ts", "llm.ts", "tools.ts", "tool-types.ts", "utils.ts", "test-base.ts"}
+# Per-task sealed files (live in tools/<task>/src/, must exist after template copy)
+PER_TASK_SEALED_FILES = {"index.ts", "tools.ts", "tool-types.ts"}
+# Runtime files (live in tools/_runtime/src/, never copied into a task)
+RUNTIME_FILES = {"llm.ts", "mcp-client.ts", "utils.ts", "test-base.ts"}
+# All filenames the LLM must not generate or read — defense-in-depth for parse_files / read_file
+BLOCKED_FILES = PER_TASK_SEALED_FILES | RUNTIME_FILES
 # Directories/files to exclude when copying the template
 TEMPLATE_IGNORE = shutil.ignore_patterns("node_modules", "dist", "*.tsbuildinfo", "scripts")
 
@@ -94,8 +99,8 @@ def copy_template(task_name: str, max_attempts: int = 20) -> tuple[Path, str]:
             suffix += 1
             actual_name = f"{task_name}_{suffix}"
             continue
-        # Verify key infrastructure files exist
-        for f in INFRASTRUCTURE_FILES:
+        # Verify per-task sealed files exist (runtime files live in tools/_runtime/, not in the task)
+        for f in PER_TASK_SEALED_FILES:
             if not (target / "src" / f).exists():
                 raise FileNotFoundError(f"src/{f} missing after template copy")
         return target, actual_name
@@ -126,7 +131,7 @@ def _npm_install_sync(target_dir: Path) -> tuple[bool, str]:
 def _execute_read_file(path: str) -> str:
     """Read a file from WORKING_DIR with path traversal protection."""
     filename = Path(path).name
-    if filename in INFRASTRUCTURE_FILES:
+    if filename in BLOCKED_FILES:
         return (
             f"ACCESS_DENIED: '{filename}' is a sealed infrastructure file "
             "and cannot be read. All information you need is in the system prompt."
@@ -314,7 +319,8 @@ def build_system_prompt(task_name: str, tools_ts: str, test_base_ts: str) -> str
 
 ## Non-negotiables
 - Do not call any tool unless the user prompt explicitly references a file not already in this prompt.
-- Infrastructure is sealed: index.ts, mcp-client.ts, llm.ts, tools.ts, utils.ts, test-base.ts. Do not inspect, read, or modify them.
+- Per-task sealed files (in tools/{task_name}/src/): index.ts, tools.ts, tool-types.ts. Do not inspect or modify.
+- Shared runtime files (in tools/_runtime/src/): llm.ts, utils.ts, mcp-client.ts, test-base.ts. Do not inspect, modify, or generate. Imported via "../../_runtime/src/<name>.js" relative paths.
 - Do not output prose, explanations, or commentary — only the file manifest.
 
 ## Runtime contract
@@ -358,19 +364,20 @@ those values. The file is read at startup and passed to handleTool as `profile`.
 Generate profile.json using the === profile.json === delimiter, same as .ts files.
 If no profile data is needed, do not generate profile.json (an empty default exists).
 
-Available imports (from files in the same src/ directory):
+Available imports:
 - import {{ z }} from "zod"; (for TOOL_INPUT_SCHEMA)
-- import {{ ... }} from "./tools.js"; (typed MCP wrappers — signatures below)
+- import {{ ... }} from "./tools.js"; (typed MCP wrappers — signatures below; per-task file in src/)
 - import type {{ Clients }} from "./tools.js"; (type for the clients dict)
-- import type {{ ... }} from "./tool-types.js"; (auto-generated strict input/output types per MCP tool — use these whenever you need exact allowed values for a wrapper argument)
-- import {{ writeFile, appendFile }} from "./utils.js"; (both async)
+- import type {{ ... }} from "./tool-types.js"; (auto-generated strict input/output types per MCP tool — per-task file in src/)
+- import {{ writeFile, appendFile }} from "../../_runtime/src/utils.js"; (both async — shared runtime)
   - await writeFile(path, content, config) — overwrites, returns resolved path string
   - await appendFile(path, content, config) — appends, returns resolved path string
-  - When writing in stages, writeFile first, appendFile after.
-- import {{ createMessage, streamMessage, estimateCost, type Usage }} from "./llm.js"; (only if LLM calls needed)
+  - For cumulative/log-style files that grow across runs, always use appendFile only.
+  - For single-shot reports written in stages within ONE run, writeFile first, appendFile after.
+- import {{ createMessage, streamMessage, estimateCost, type Usage }} from "../../_runtime/src/llm.js"; (shared runtime; only if LLM calls needed)
   - createMessage(model, maxTokens, messages, options?) → Promise<[text: string, usage: Usage]>
   - streamMessage(model, maxTokens, messages, options?) → Promise<[text: string, usage: Usage]>
-  - messages is Anthropic.MessageParam[] (e.g. [{ role: "user", content: prompt }]); options is { system?, temperature? }
+  - messages is Anthropic.MessageParam[] (e.g. [{{ role: "user", content: prompt }}]); options is {{ system?, temperature? }}
   - Both return a tuple; destructure the text: const [text, usage] = await createMessage(...)
   - Do NOT access .content on the return value — it is a string, not a Message object.
   - Use a current model id. Valid options:
@@ -378,8 +385,8 @@ Available imports (from files in the same src/ directory):
     - claude-sonnet-4-6 (balanced — for harder reasoning or longer outputs)
     - claude-opus-4-7 (most capable — only when explicitly required)
   - Do NOT use claude-3-*, claude-3-5-*, or any 2024-dated model id — they are retired.
-- import {{ makeJobserveJob, makeLinkedinJob, makeEmail }} from "./test-base.js"; (test fixtures only)
-- Optional modules: collector.ts, scorer.ts, processor.ts — import with ./module.js extension
+- import {{ makeJobserveJob, makeLinkedinJob, makeEmail }} from "../../_runtime/src/test-base.js"; (test fixtures only — shared runtime)
+- Optional modules you create yourself in the task src/: collector.ts, scorer.ts, processor.ts — import with ./module.js extension
 
 IMPORTANT: All relative imports MUST use the .js extension (e.g. "./collector.js"), even for .ts files.
 This is required by Node16 module resolution with ESM.
@@ -418,7 +425,7 @@ The body field is html-to-text converted email HTML:
 ## Unit tests
 For every module with pure-logic functions, produce a <module>.test.ts file:
 - Use vitest: import {{ describe, it, expect }} from "vitest";
-- Import test fixtures: import {{ makeJobserveJob, makeLinkedinJob, makeEmail }} from "./test-base.js";
+- Import test fixtures: import {{ makeJobserveJob, makeLinkedinJob, makeEmail }} from "../../_runtime/src/test-base.js";
 - Import source modules with .js extension:
   import {{ parseJobserveEmail, extractRateStr }} from "./collector.js";
 - Do NOT test async functions, MCP calls, or anything requiring network/IO.
@@ -458,7 +465,7 @@ def parse_files(response_text: str) -> tuple[dict[str, str], list[str]]:
         # Strip markdown fences if the LLM wraps code despite instructions
         content = re.sub(r"^```(?:typescript|ts)?\n?", "", content)
         content = re.sub(r"\n?```\s*$", "", content)
-        if filename in INFRASTRUCTURE_FILES:
+        if filename in BLOCKED_FILES:
             skipped.append(filename)
             continue
         if not (filename.endswith(".ts") or filename.endswith(".json")):
@@ -629,7 +636,7 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
     tools_ts = (target_dir / "src" / "tools.ts").read_text(encoding="utf-8")
     tool_types_path = target_dir / "src" / "tool-types.ts"
     tool_types_ts = tool_types_path.read_text(encoding="utf-8") if tool_types_path.exists() else ""
-    test_base_ts = (target_dir / "src" / "test-base.ts").read_text(encoding="utf-8")
+    test_base_ts = (RUNTIME_DIR / "src" / "test-base.ts").read_text(encoding="utf-8")
 
     # Step 3: Build system prompt and first user message
     combined_tools_ts = (

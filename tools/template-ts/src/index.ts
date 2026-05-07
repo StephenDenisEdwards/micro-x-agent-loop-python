@@ -18,7 +18,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-import { McpClient } from "./mcp-client.js";
+import { McpClient } from "../../_runtime/src/mcp-client.js";
 import {
   SERVERS,
   TOOL_NAME,

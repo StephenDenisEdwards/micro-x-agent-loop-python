@@ -12,7 +12,6 @@
     "build": "npm run check-tool-types && npm run typecheck"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "dotenv": "^16.4.0",
     "zod": "^3.25.0"

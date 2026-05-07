@@ -4,13 +4,13 @@
  * Provides fixture factories for generated task app tests.
  *
  * Usage in test files:
- *   import { makeJobserveJob, makeLinkedinJob, makeEmail } from "./test-base.js";
+ *   import { makeJobserveJob, makeLinkedinJob, makeEmail } from "../../_runtime/src/test-base.js";
  */
 
 export function makeJobserveJob(overrides?: Record<string, unknown>): Record<string, unknown> {
   return {
     title: "Senior Software Engineer",
-    rate: "\u00a3600 PER DAY",
+    rate: "£600 PER DAY",
     location: "London",
     duration: "6 months",
     ir35: "Outside IR35",

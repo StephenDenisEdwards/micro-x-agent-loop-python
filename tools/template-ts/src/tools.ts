@@ -6,7 +6,7 @@
  * types so it can't drift from the upstream MCP schema. See documentation/docs/guides/codegen-tool-types.md.
  */
 
-import type { McpClient } from "./mcp-client.js";
+import type { McpClient } from "../../_runtime/src/mcp-client.js";
 import type {
   // google
   GmailSearchArgs, GmailReadArgs, GmailSendArgs,
