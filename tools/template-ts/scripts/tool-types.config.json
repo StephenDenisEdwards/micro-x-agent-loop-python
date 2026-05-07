@@ -1,0 +1,114 @@
+{
+  "$schema_note": "Lists upstream MCP servers to introspect for type generation. Each server's dist/index.js is spawned via stdio, queried via tools/list, and its schemas converted to TypeScript. Add a server here when its tools are wrapped in src/tools.ts.",
+  "outputFile": "src/tool-types.ts",
+  "servers": [
+    {
+      "name": "google",
+      "entry": "../../mcp_servers/ts/packages/google/dist/index.js",
+      "env": {
+        "GOOGLE_CLIENT_ID": "schema-introspection-dummy",
+        "GOOGLE_CLIENT_SECRET": "schema-introspection-dummy",
+        "GOOGLE_REFRESH_TOKEN": "schema-introspection-dummy"
+      },
+      "tools": [
+        "gmail_search",
+        "gmail_read",
+        "gmail_send",
+        "calendar_list_events",
+        "calendar_create_event",
+        "calendar_get_event",
+        "contacts_search",
+        "contacts_list",
+        "contacts_get",
+        "contacts_create",
+        "contacts_update",
+        "contacts_delete"
+      ]
+    },
+    {
+      "name": "linkedin",
+      "entry": "../../mcp_servers/ts/packages/linkedin/dist/index.js",
+      "env": {
+        "LINKEDIN_CLIENT_ID": "schema-introspection-dummy",
+        "LINKEDIN_CLIENT_SECRET": "schema-introspection-dummy"
+      },
+      "tools": [
+        "linkedin_jobs",
+        "linkedin_job_detail",
+        "linkedin_draft_post",
+        "linkedin_draft_article",
+        "linkedin_publish_draft"
+      ]
+    },
+    {
+      "name": "web",
+      "entry": "../../mcp_servers/ts/packages/web/dist/index.js",
+      "env": {
+        "BRAVE_API_KEY": "schema-introspection-dummy"
+      },
+      "tools": [
+        "web_search",
+        "web_fetch"
+      ]
+    },
+    {
+      "name": "filesystem",
+      "entry": "../../mcp_servers/ts/packages/filesystem/dist/index.js",
+      "env": {
+        "USER_MEMORY_DIR": "C:/tmp/codegen-introspect-memory"
+      },
+      "tools": [
+        "read_file",
+        "write_file",
+        "bash"
+      ]
+    },
+    {
+      "name": "github",
+      "entry": "../../mcp_servers/ts/packages/github/dist/index.js",
+      "env": {
+        "GITHUB_TOKEN": "schema-introspection-dummy"
+      },
+      "tools": [
+        "list_repos",
+        "get_file",
+        "search_code",
+        "list_prs",
+        "get_pr",
+        "create_pr",
+        "list_issues",
+        "create_issue"
+      ]
+    },
+    {
+      "name": "anthropic-admin",
+      "entry": "../../mcp_servers/ts/packages/anthropic-admin/dist/index.js",
+      "env": {
+        "ANTHROPIC_ADMIN_API_KEY": "schema-introspection-dummy"
+      },
+      "tools": [
+        "anthropic_usage"
+      ]
+    },
+    {
+      "name": "interview-assist",
+      "entry": "../../mcp_servers/ts/packages/interview-assist/dist/index.js",
+      "tools": [
+        "ia_healthcheck",
+        "ia_list_recordings",
+        "ia_analyze_session",
+        "ia_evaluate_session",
+        "ia_compare_strategies",
+        "ia_tune_threshold",
+        "ia_regression_test",
+        "ia_create_baseline",
+        "ia_transcribe_once",
+        "stt_list_devices",
+        "stt_start_session",
+        "stt_get_updates",
+        "stt_get_session",
+        "stt_stop_session"
+      ]
+    }
+  ]
+}

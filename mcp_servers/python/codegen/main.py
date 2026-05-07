@@ -34,9 +34,9 @@ MAX_TOKENS = 16384
 MAX_TURNS = 10
 MAX_TEST_ROUNDS = 3
 # Infrastructure files in src/ that the LLM must not read or modify
-INFRASTRUCTURE_FILES = {"index.ts", "mcp-client.ts", "llm.ts", "tools.ts", "utils.ts", "test-base.ts"}
+INFRASTRUCTURE_FILES = {"index.ts", "mcp-client.ts", "llm.ts", "tools.ts", "tool-types.ts", "utils.ts", "test-base.ts"}
 # Directories/files to exclude when copying the template
-TEMPLATE_IGNORE = shutil.ignore_patterns("node_modules", "dist", "*.tsbuildinfo")
+TEMPLATE_IGNORE = shutil.ignore_patterns("node_modules", "dist", "*.tsbuildinfo", "scripts")
 
 READ_FILE_TOOL = {
     "name": "read_file",
@@ -362,18 +362,29 @@ Available imports (from files in the same src/ directory):
 - import {{ z }} from "zod"; (for TOOL_INPUT_SCHEMA)
 - import {{ ... }} from "./tools.js"; (typed MCP wrappers — signatures below)
 - import type {{ Clients }} from "./tools.js"; (type for the clients dict)
+- import type {{ ... }} from "./tool-types.js"; (auto-generated strict input/output types per MCP tool — use these whenever you need exact allowed values for a wrapper argument)
 - import {{ writeFile, appendFile }} from "./utils.js"; (both async)
   - await writeFile(path, content, config) — overwrites, returns resolved path string
   - await appendFile(path, content, config) — appends, returns resolved path string
   - When writing in stages, writeFile first, appendFile after.
 - import {{ createMessage, streamMessage, estimateCost, type Usage }} from "./llm.js"; (only if LLM calls needed)
+  - createMessage(model, maxTokens, messages, options?) → Promise<[text: string, usage: Usage]>
+  - streamMessage(model, maxTokens, messages, options?) → Promise<[text: string, usage: Usage]>
+  - messages is Anthropic.MessageParam[] (e.g. [{ role: "user", content: prompt }]); options is { system?, temperature? }
+  - Both return a tuple; destructure the text: const [text, usage] = await createMessage(...)
+  - Do NOT access .content on the return value — it is a string, not a Message object.
+  - Use a current model id. Valid options:
+    - claude-haiku-4-5-20251001 (cheap, fast — preferred for scoring/classification)
+    - claude-sonnet-4-6 (balanced — for harder reasoning or longer outputs)
+    - claude-opus-4-7 (most capable — only when explicitly required)
+  - Do NOT use claude-3-*, claude-3-5-*, or any 2024-dated model id — they are retired.
 - import {{ makeJobserveJob, makeLinkedinJob, makeEmail }} from "./test-base.js"; (test fixtures only)
 - Optional modules: collector.ts, scorer.ts, processor.ts — import with ./module.js extension
 
 IMPORTANT: All relative imports MUST use the .js extension (e.g. "./collector.js"), even for .ts files.
 This is required by Node16 module resolution with ESM.
 
-tools.ts signatures:
+tools.ts signatures (and tool-types.ts — the strict types they reference):
 {tools_ts}
 
 test-base.ts fixtures (use these exact field names and value formats in tests):
@@ -610,12 +621,24 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
     def _cleanup() -> None:
         shutil.rmtree(target_dir, ignore_errors=True)
 
-    # Step 2: Read tools.ts and test-base.ts for system prompt
+    # Step 2: Read tools.ts (+ generated tool-types.ts) and test-base.ts for system prompt.
+    # tool-types.ts holds the strict input/output types derived from the upstream MCP
+    # schemas (regenerated via `npm run regen-tool-types`). Feeding it alongside
+    # tools.ts lets the LLM see the real allowed values (enums etc.) for tool args
+    # — without it, the wrappers reference type aliases the LLM can't resolve.
     tools_ts = (target_dir / "src" / "tools.ts").read_text(encoding="utf-8")
+    tool_types_path = target_dir / "src" / "tool-types.ts"
+    tool_types_ts = tool_types_path.read_text(encoding="utf-8") if tool_types_path.exists() else ""
     test_base_ts = (target_dir / "src" / "test-base.ts").read_text(encoding="utf-8")
 
     # Step 3: Build system prompt and first user message
-    system_prompt = build_system_prompt(task_name, tools_ts, test_base_ts)
+    combined_tools_ts = (
+        f"// === src/tool-types.ts (generated from MCP schemas) ===\n{tool_types_ts}\n\n"
+        f"// === src/tools.ts (hand-written wrappers) ===\n{tools_ts}"
+        if tool_types_ts
+        else tools_ts
+    )
+    system_prompt = build_system_prompt(task_name, combined_tools_ts, test_base_ts)
     first_message = build_user_message(prompt)
     messages = [{"role": "user", "content": first_message}]
 

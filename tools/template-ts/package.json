@@ -6,7 +6,10 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "regen-tool-types": "node scripts/regen-tool-types.mjs",
+    "check-tool-types": "node scripts/regen-tool-types.mjs --check",
+    "build": "npm run check-tool-types && npm run typecheck"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
