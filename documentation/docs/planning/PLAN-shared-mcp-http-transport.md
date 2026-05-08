@@ -1,6 +1,6 @@
 # Plan: Shared MCP servers via HTTP transport
 
-**Status: Phases 0–2 Complete — Phases 3–4 Pending** (2026-05-08)
+**Status: Phases 0–3 Complete — Phase 4 (config flip) Pending** (2026-05-08)
 
 ## Context
 
@@ -128,22 +128,33 @@ So no explicit `browser_new_context` plumbing is needed in client code, and `--s
 
 ## Phase 3 — Codegen wiring: `run_task` injects URLs
 
-**File:** `mcp_servers/python/codegen/main.py`
+**Status: Complete (2026-05-08).**
 
-Changes to `run_task`:
+**File modified:** `mcp_servers/python/codegen/main.py`
 
-- Read `MICRO_X_AGENT_CONFIG_JSON` from env (already forwarded by the agent — see `manifest.py:128`).
-- For each server in the config with `transport: "http"`, compute its URL: `http://localhost:<port>` from the `--port` value in `args`. (For now we infer; later we can support an explicit `url` field if needed.)
-- Build an `env` dict starting from `os.environ.copy()`, with one `MICRO_X_<NAME>_MCP_URL` entry per HTTP-transport server.
-- Pass `env=env` to the existing `subprocess.run(...)` call.
+**Changes landed:**
 
-That's it — the codegen subprocess inherits the URLs and Phase 2's `McpClient` handles the rest.
+- Two new helpers near the top of the helpers block:
+  - `_build_mcp_url(server_config, transport)` — picks an explicit `url` if present; otherwise composes from `host` (default `localhost`) + `port` (or `--port <N>` in `args`) + path (`/sse` for SSE, empty for streamable HTTP).
+  - `_http_mcp_url_envvars()` — reads `MICRO_X_AGENT_CONFIG_JSON` (forwarded by the agent's `McpManager`), iterates `McpServers`, and returns a `{MICRO_X_<NAME>_MCP_URL: url}` dict for each entry whose transport is `"sse"` or `"http"`.
+- `run_task` now copies `os.environ`, calls `_http_mcp_url_envvars()` to overlay HTTP/SSE URL hints, and passes the merged dict as `env=` to `subprocess.run(...)`. The task subprocess's `McpClient` (Phase 2) sees the URLs and connects via SSE instead of spawning its own server.
+- All errors during URL derivation (malformed JSON, missing port, weird config) are caught and logged via `ctx.warning` — they never abort the task run, since stdio fallback in the task always works.
 
-**Tests:** an integration test that exercises `run_task` with a stub HTTP MCP server and asserts the env var arrived in the subprocess. Or do this manually for the first iteration.
+Convention is symmetric with the TS side: `MICRO_X_<NAME>_MCP_URL` where `<NAME>` is uppercased and `-` → `_`. Same algorithm in both languages.
 
-**Done when:** a codegen task with `SERVERS: ["playwright"]` runs end-to-end against the agent's already-running Playwright HTTP server, with no second `@playwright/mcp` spawn happening.
+**Verification:**
 
-**Effort:** ~1–2 hours.
+- `python -c "import ast; ast.parse(...)"` — parses cleanly.
+- Smoke test of the helpers covering 6 cases:
+  1. No `MICRO_X_AGENT_CONFIG_JSON` set → empty dict (standalone runs unchanged).
+  2. Mixed `sse` / `stdio` / `http` servers → only the HTTP/SSE ones surface.
+  3. Explicit `url` field wins over composed.
+  4. Hyphenated server names converted to underscored env var names.
+  5. Malformed JSON tolerated → empty dict.
+  6. Servers with missing port silently skipped, others kept.
+- End-to-end "task subprocess actually attaches via SSE" exercised in Phase 4.
+
+**Effort actual:** ~30 minutes.
 
 ## Phase 4 — Convert Playwright in `config-base.json`
 

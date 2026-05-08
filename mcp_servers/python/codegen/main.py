@@ -70,6 +70,64 @@ mcp = FastMCP("codegen")
 # ---------------------------------------------------------------------------
 
 
+def _http_mcp_url_envvars() -> dict[str, str]:
+    """Compute MICRO_X_<NAME>_MCP_URL env-var pairs for HTTP/SSE-transport
+    MCP servers in the agent's resolved config.
+
+    Reads `MICRO_X_AGENT_CONFIG_JSON` (forwarded by the agent's McpManager).
+    For each server with `transport: "sse"` or `transport: "http"`, derives
+    a URL from explicit `url` or composed from `host` + `port` (or
+    `--port <N>` in args). Returns empty dict if the env var is not set
+    (running the task standalone — falls back to stdio spawn).
+
+    Mirrors the convention used in tools/_runtime/src/mcp-client.ts so the
+    spawned task subprocess's McpClient picks up the same name. See
+    PLAN-shared-mcp-http-transport.md Phases 2 and 3.
+    """
+    raw = os.environ.get("MICRO_X_AGENT_CONFIG_JSON")
+    if not raw:
+        return {}
+    try:
+        config = json.loads(raw)
+    except Exception:
+        return {}
+
+    mcp_servers = config.get("McpServers") or {}
+    out: dict[str, str] = {}
+    for name, server_config in mcp_servers.items():
+        if not isinstance(server_config, dict):
+            continue
+        transport = server_config.get("transport", "stdio")
+        if transport not in ("sse", "http"):
+            continue
+        try:
+            url = _build_mcp_url(server_config, transport)
+        except Exception:
+            continue
+        envvar = f"MICRO_X_{name.upper().replace('-', '_')}_MCP_URL"
+        out[envvar] = url
+    return out
+
+
+def _build_mcp_url(server_config: dict, transport: str) -> str:
+    """Build the URL for an HTTP/SSE-transport server. Explicit `url` wins;
+    otherwise compose from `host` + `port` (or `--port <N>` in args)."""
+    if "url" in server_config:
+        return str(server_config["url"])
+    host = server_config.get("host") or "localhost"
+    port = server_config.get("port")
+    if port is None:
+        args = server_config.get("args") or []
+        for i, a in enumerate(args):
+            if a == "--port" and i + 1 < len(args):
+                port = args[i + 1]
+                break
+    if port is None:
+        raise ValueError("HTTP/SSE server has no port (set 'port' or include '--port <N>' in args)")
+    path = "/sse" if transport == "sse" else ""
+    return f"http://{host}:{port}{path}"
+
+
 def _error_result(message: str, task_name: str = "") -> CallToolResult:
     """Return a CallToolResult with isError=True."""
     structured = {"error": message}
@@ -816,6 +874,20 @@ async def run_task(ctx: Context, task_name: str,
     await ctx.info(f"Running npx tsx src/index.ts in tools/{task_name}/ ...")
     timed_out = False
     _MAX_OUTPUT = 10_000  # Cap stdout/stderr in structured result
+
+    # Build env for the subprocess, including MICRO_X_<NAME>_MCP_URL for any
+    # MCP server in the agent's config that uses HTTP/SSE transport. The
+    # task subprocess's McpClient will see these and connect to the agent's
+    # already-running server instead of spawning its own (resolves
+    # ISSUE-006 profile-lock contention for shared-state MCP servers like
+    # @playwright/mcp). See PLAN-shared-mcp-http-transport.md Phase 3.
+    subprocess_env = os.environ.copy()
+    try:
+        for env_name, env_url in _http_mcp_url_envvars().items():
+            subprocess_env[env_name] = env_url
+    except Exception as e:
+        await ctx.warning(f"Could not derive MCP URL env vars (ignoring): {e}")
+
     try:
         config_path = str(PROJECT_ROOT / "config.json")
         proc = subprocess.run(
@@ -825,6 +897,7 @@ async def run_task(ctx: Context, task_name: str,
             shell=_SHELL,
             stdin=subprocess.DEVNULL,
             timeout=timeout_seconds,
+            env=subprocess_env,
         )
         exit_code = proc.returncode
         stdout = proc.stdout.decode("utf-8", errors="replace")
