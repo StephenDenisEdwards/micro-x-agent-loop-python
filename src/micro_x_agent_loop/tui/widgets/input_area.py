@@ -1,4 +1,4 @@
-"""InputArea widget — multi-line text input with submit/newline bindings."""
+"""InputArea widget — multi-line text input that supports pasting."""
 
 from __future__ import annotations
 
@@ -7,25 +7,16 @@ from textual.binding import Binding
 from textual.events import Key
 from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import Input
+from textual.widgets import TextArea
 
 
 class InputArea(Widget):
-    """Single-line input at the bottom of the TUI.
+    """Multi-line input at the bottom of the TUI.
 
-    Enter submits the message.
-    """
-
-    DEFAULT_CSS = """
-    InputArea {
-        height: 3;
-        dock: bottom;
-        padding: 0 1;
-    }
-
-    InputArea Input {
-        dock: bottom;
-    }
+    - Plain Enter submits the message.
+    - Shift+Enter (or Ctrl+J as a fallback for terminals that don't
+      forward shift+enter) inserts a newline.
+    - Pasted multi-line content is preserved as-is until you submit.
     """
 
     BINDINGS = [
@@ -44,36 +35,48 @@ class InputArea(Widget):
 
     def __init__(self, *, id: str | None = None) -> None:  # noqa: A002
         super().__init__(id=id)
-        self._input: Input | None = None
+        self._textarea: TextArea | None = None
 
     def compose(self) -> ComposeResult:
-        inp = Input(placeholder="you> ", id="input-field")
-        self._input = inp
-        yield inp
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handle Enter — submit the message."""
-        text = event.value.strip()
-        if text:
-            self.post_message(self.Submitted(text))
-        if self._input is not None:
-            self._input.value = ""
+        ta = TextArea(id="input-field")
+        ta.show_line_numbers = False
+        self._textarea = ta
+        yield ta
 
     def on_key(self, event: Key) -> None:
-        """Handle Escape to cancel."""
+        """Intercept Enter (submit) and Shift+Enter / Ctrl+J (newline)."""
+        if event.key == "enter":
+            event.prevent_default()
+            event.stop()
+            self._submit()
+            return
+        if event.key in ("shift+enter", "ctrl+j"):
+            event.prevent_default()
+            event.stop()
+            if self._textarea is not None:
+                self._textarea.insert("\n")
+            return
         if event.key == "escape":
             self.post_message(self.CancelRequested())
 
+    def _submit(self) -> None:
+        if self._textarea is None:
+            return
+        text = self._textarea.text.strip()
+        if text:
+            self.post_message(self.Submitted(text))
+        self._textarea.text = ""
+
     def focus_input(self) -> None:
         """Focus the input."""
-        if self._input is not None:
-            self._input.focus()
+        if self._textarea is not None:
+            self._textarea.focus()
 
     @property
     def is_empty(self) -> bool:
-        return self._input is None or not self._input.value.strip()
+        return self._textarea is None or not self._textarea.text.strip()
 
     def set_disabled(self, disabled: bool) -> None:
         """Enable or disable the input."""
-        if self._input is not None:
-            self._input.disabled = disabled
+        if self._textarea is not None:
+            self._textarea.disabled = disabled

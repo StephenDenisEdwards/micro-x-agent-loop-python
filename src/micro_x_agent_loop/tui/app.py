@@ -10,7 +10,8 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import Hit, Hits, Provider
 from textual.containers import Horizontal
-from textual.widgets import Header, Input, Static
+from textual.message import Message
+from textual.widgets import Button, Header, Static, TextArea
 
 from micro_x_agent_loop.app_config import AppConfig
 from micro_x_agent_loop.bootstrap import AppRuntime
@@ -22,6 +23,29 @@ from micro_x_agent_loop.tui.widgets.session_sidebar import SessionSidebar
 from micro_x_agent_loop.tui.widgets.status_bar import StatusBar
 from micro_x_agent_loop.tui.widgets.task_panel import TaskPanel
 from micro_x_agent_loop.tui.widgets.tool_panel import ToolPanel
+
+
+class PromptTextArea(TextArea):
+    """TextArea that submits on Enter, inserts a newline on Shift+Enter / Ctrl+J.
+
+    Default TextArea binds Enter to insert a newline; we override that here.
+    """
+
+    BINDINGS = [
+        Binding("enter", "submit_prompt", "Submit", show=False),
+        Binding("shift+enter", "newline", "Newline", show=False),
+        Binding("ctrl+j", "newline", "Newline", show=False),
+    ]
+
+    class Submitted(Message):
+        """Posted when the user presses Enter to submit."""
+
+        def __init__(self, text: str) -> None:
+            super().__init__()
+            self.text = text
+
+    def action_submit_prompt(self) -> None:
+        self.post_message(self.Submitted(self.text))
 
 _NO_RESPONSE_MSG = (
     "No response from human — question timed out. Proceed with your best judgement or report that you cannot continue."
@@ -175,10 +199,6 @@ class AgentTUI(App[None]):
         margin: 0 1 0 1;
     }
 
-    .tool-inline {
-        margin: 0 1 0 3;
-    }
-
     .system-message {
         margin: 0 1 0 1;
     }
@@ -198,9 +218,26 @@ class AgentTUI(App[None]):
         padding: 0 1;
     }
 
-    #prompt-input {
+    #input-row {
+        height: auto;
+        min-height: 3;
+        max-height: 12;
         margin: 0 1;
+    }
+
+    #prompt-input {
+        height: auto;
+        min-height: 3;
+        max-height: 12;
+        width: 1fr;
+        border: solid $primary;
+    }
+
+    #send-button {
         height: 3;
+        min-width: 10;
+        margin-left: 1;
+        dock: right;
     }
 
     #status-bar {
@@ -268,7 +305,9 @@ class AgentTUI(App[None]):
             yield TaskPanel(id="task-panel")
             yield ToolPanel(id="tool-panel")
         yield LogPanel(id="log-panel")
-        yield Input(placeholder="Type a message... (Enter to send, Ctrl+P for commands)", id="prompt-input")
+        with Horizontal(id="input-row"):
+            yield PromptTextArea(id="prompt-input", show_line_numbers=False)
+            yield Button("Send", id="send-button", variant="primary")
         yield StatusBar(
             self._agent.session_accumulator,
             budget_usd=self._app_config.session_budget_usd,
@@ -319,18 +358,27 @@ class AgentTUI(App[None]):
         logger.add(log_panel.sink, level="INFO", format="{message}")
 
         self.query_one("#status-bar", StatusBar).refresh_metrics()
-        self.query_one("#prompt-input", Input).focus()
+        self.query_one("#prompt-input", TextArea).focus()
 
     # -- Input handling --
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handle user message submission via Enter."""
-        text = event.value.strip()
+    def on_prompt_text_area_submitted(self, event: PromptTextArea.Submitted) -> None:
+        """Handle Enter submission from the prompt input."""
+        self._submit_current_input()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle Send button click."""
+        if event.button.id == "send-button":
+            self._submit_current_input()
+
+    def _submit_current_input(self) -> None:
+        """Read the current input text, clear it, and dispatch to the agent."""
+        prompt_input = self.query_one("#prompt-input", PromptTextArea)
+        text = prompt_input.text.strip()
         if not text:
             return
 
-        # Clear input immediately
-        event.input.value = ""
+        prompt_input.text = ""
 
         if text.lower() in ("exit", "quit"):
             self.exit()
@@ -339,8 +387,6 @@ class AgentTUI(App[None]):
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.add_user_message(text)
 
-        # Disable input while agent is running
-        prompt_input = self.query_one("#prompt-input", Input)
         prompt_input.disabled = True
 
         self._running_task = asyncio.create_task(self._run_agent(text))
@@ -355,7 +401,7 @@ class AgentTUI(App[None]):
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.add_user_message(cmd)
 
-        prompt_input = self.query_one("#prompt-input", Input)
+        prompt_input = self.query_one("#prompt-input", TextArea)
         prompt_input.disabled = True
 
         self._running_task = asyncio.create_task(self._run_agent(cmd))
@@ -596,7 +642,7 @@ class AgentTUI(App[None]):
             chat_log = self.query_one("#chat-log", ChatLog)
             chat_log.add_error_message(str(ex))
         finally:
-            prompt_input = self.query_one("#prompt-input", Input)
+            prompt_input = self.query_one("#prompt-input", TextArea)
             prompt_input.disabled = False
             prompt_input.focus()
             status_bar = self.query_one("#status-bar", StatusBar)
@@ -614,12 +660,9 @@ class AgentTUI(App[None]):
         self.query_one("#chat-log", ChatLog).append_text(text)
 
     def on_tool_started(self, tool_use_id: str, tool_name: str) -> None:
-        self.query_one("#chat-log", ChatLog).add_tool_message(tool_name, "Running")
         self.query_one("#tool-panel", ToolPanel).tool_started(tool_use_id, tool_name)
 
     def on_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
-        status = "Error" if is_error else "Done"
-        self.query_one("#chat-log", ChatLog).add_tool_message(tool_name, status)
         self.query_one("#tool-panel", ToolPanel).tool_completed(tool_use_id, tool_name, is_error)
 
     def on_turn_complete(self, usage: dict[str, Any]) -> None:
