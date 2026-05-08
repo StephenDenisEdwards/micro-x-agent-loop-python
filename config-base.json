@@ -294,7 +294,8 @@
         "-y", "@playwright/mcp@latest",
         "--browser", "msedge",
         "--user-data-dir", "C:\\Users\\steph\\.playwright-mcp",
-        "--port", "8081"
+        "--port", "8081",
+        "--shared-browser-context"
       ]
     }
   }
