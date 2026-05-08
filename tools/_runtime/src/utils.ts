@@ -13,7 +13,15 @@ export function getOutputDir(config: Record<string, unknown>): string {
   return process.cwd();
 }
 
-function resolvePath(path: string, config?: Record<string, unknown>): string {
+/**
+ * Resolve a (possibly relative) path against config.WorkingDirectory.
+ * Use this anywhere a task touches an output file — including read paths
+ * (existence checks, reads of prior runs) — so reads and writes stay aligned.
+ */
+export function resolveOutputPath(
+  path: string,
+  config?: Record<string, unknown>,
+): string {
   if (isAbsolute(path)) return path;
   if (config) {
     return resolve(getOutputDir(config), path);
@@ -26,7 +34,7 @@ export async function writeFile(
   content: string,
   config?: Record<string, unknown>,
 ): Promise<string> {
-  const resolved = resolvePath(path, config);
+  const resolved = resolveOutputPath(path, config);
   await mkdir(dirname(resolved), { recursive: true });
   await fsWriteFile(resolved, content, "utf-8");
   return resolved;
@@ -37,7 +45,7 @@ export async function appendFile(
   content: string,
   config?: Record<string, unknown>,
 ): Promise<string> {
-  const resolved = resolvePath(path, config);
+  const resolved = resolveOutputPath(path, config);
   await mkdir(dirname(resolved), { recursive: true });
   await fsAppendFile(resolved, content, "utf-8");
   return resolved;

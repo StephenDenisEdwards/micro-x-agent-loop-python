@@ -1,0 +1,12 @@
+{
+  "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\resources\\documents",
+  "McpServers": {
+    "web": {
+      "transport": "stdio",
+      "command": "node",
+      "args": [
+        "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\web\\dist\\index.js"
+      ]
+    }
+  }
+}
