@@ -36,6 +36,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | **23** | [Local Model Ecosystems](PLAN-local-model-ecosystems.md) | Planned | — | — | Generic openai-compatible provider + named shortcuts for vLLM, LM Studio, LocalAI, etc. |
 | **24** | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | **In Progress** | — | — | Phase 1 code-complete (shared + echo). Pending: npm scope registration + publish. |
 | **25** | [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | **Completed** | — | — | Resolved [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). All 4 phases delivered. End-to-end smoke test discovered 23 Playwright tools over SSE; clean process-tree shutdown on Windows via taskkill /T. |
+| **26** | [JobServe MCP Server](PLAN-jobserve-mcp.md) | Planned | — | — | Replaces the failed `tools/jobserve_apply/` codegen experiment with a hand-written first-party MCP server that wraps the JobServe apply flow. Same architectural pattern as gmail/linkedin/web/github MCPs. ~1.5–2 days. |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
 <details>
@@ -73,7 +74,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | Superseded | 1 |
 | Draft | 1 |
 | Dropped | 1 |
-| Planned | 5 |
+| Planned | 6 |
 
 ## All Plans
 
@@ -123,3 +124,4 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | [Textual TUI](PLAN-textual-tui.md) | Completed | Opt-in Textual-based TUI (`--tui`), all 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md). Completed 2026-04-02 |
 | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | In Progress | Phase 1 code-complete (shared + echo). 6 phases: canary, worked example (`google`), fan out, automate. |
 | [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | Completed | Resolved [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). All 4 phases delivered: SSE/HTTP transport in `mcp_manager.py`, env-var-driven client in `_runtime/mcp-client.ts`, `MICRO_X_<NAME>_MCP_URL` injection in codegen `run_task`, config flip + Windows process-tree termination fix. |
+| [JobServe MCP Server](PLAN-jobserve-mcp.md) | Planned | Hand-written first-party MCP server for the JobServe apply flow. Replaces the failed codegen-driven `tools/jobserve_apply/` experiment with the same pattern used by gmail/linkedin/web/github MCPs. |
