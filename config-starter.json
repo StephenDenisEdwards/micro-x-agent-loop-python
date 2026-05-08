@@ -7,6 +7,23 @@
       "args": [
         "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\web\\dist\\index.js"
       ]
+    },
+    "filesystem": {
+      "transport": "stdio",
+      "command": "node",
+      "args": [
+        "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\filesystem\\dist\\index.js"
+      ]
+    },
+    "playwright": {
+      "transport": "sse",
+      "command": "npx.cmd",
+      "args": [
+        "-y", "@playwright/mcp@latest",
+        "--browser", "msedge",
+        "--user-data-dir", "C:\\Users\\steph\\.playwright-mcp",
+        "--port", "8081"
+      ]
     }
   }
 }
