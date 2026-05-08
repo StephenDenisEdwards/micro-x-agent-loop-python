@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sys
 from typing import Any
 
 from loguru import logger
@@ -303,14 +304,54 @@ class _ServerConnection:
         # (For stdio, the subprocess is owned by stdio_client's context manager
         # and is already gone by the time we get here.)
         if self._proc is not None and self._proc.returncode is None:
+            await self._terminate_process_tree()
+
+    async def _terminate_process_tree(self) -> None:
+        """Kill the spawned subprocess and any descendants.
+
+        On Windows, `npx.cmd` (and similar batch wrappers) spawn child Node
+        processes that are NOT terminated when the parent goes away —
+        `Process.terminate()` only kills the cmd.exe wrapper, leaving the
+        actual MCP server orphaned and still bound to its port. We use
+        `taskkill /F /T` to kill the whole process tree.
+
+        On POSIX, `terminate()` followed by `kill()` is sufficient because
+        the kernel forwards SIGTERM/SIGKILL to the npm/node children.
+        """
+        if self._proc is None:
+            return
+        pid = self._proc.pid
+        if sys.platform == "win32":
+            try:
+                kill_proc = await asyncio.create_subprocess_exec(
+                    "taskkill", "/F", "/T", "/PID", str(pid),
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                try:
+                    await asyncio.wait_for(kill_proc.wait(), timeout=_SHUTDOWN_TIMEOUT)
+                except asyncio.TimeoutError:
+                    pass
+            except Exception as ex:
+                logger.warning(f"taskkill failed for {self.name} (pid {pid}): {ex}")
+        else:
             try:
                 self._proc.terminate()
                 try:
                     await asyncio.wait_for(self._proc.wait(), timeout=_SHUTDOWN_TIMEOUT)
                 except asyncio.TimeoutError:
-                    self._proc.kill()
-                    await self._proc.wait()
+                    try:
+                        self._proc.kill()
+                        await self._proc.wait()
+                    except ProcessLookupError:
+                        pass
             except ProcessLookupError:
+                pass
+        # Reap the parent record so .returncode is populated.
+        if self._proc.returncode is None:
+            try:
+                await asyncio.wait_for(self._proc.wait(), timeout=_SHUTDOWN_TIMEOUT)
+            except asyncio.TimeoutError:
                 pass
 
 

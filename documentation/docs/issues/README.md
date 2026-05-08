@@ -48,7 +48,7 @@ Pointers to files, ADRs, other issues.
 | [ISSUE-003](ISSUE-003-ollama-tool-calling.md) | Ollama tool calling — working-example session log | 2026-03-23 | Reference |
 | [ISSUE-004](ISSUE-004-solid-dry-kiss-compliance-2026-04-01.md) | SOLID, DRY, and KISS compliance gaps | 2026-04-01 | Near Complete |
 | [ISSUE-005](ISSUE-005-bash-tool-bypasses-path-policy.md) | `bash` tool bypasses filesystem path policy | 2026-05-06 | Open |
-| [ISSUE-006](ISSUE-006-playwright-profile-contention.md) | Playwright profile contention between agent and codegen tasks | 2026-05-08 | Open |
+| [ISSUE-006](ISSUE-006-playwright-profile-contention.md) | Playwright profile contention between agent and codegen tasks | 2026-05-08 | Resolved (2026-05-08) |
 
 ## Conventions
 

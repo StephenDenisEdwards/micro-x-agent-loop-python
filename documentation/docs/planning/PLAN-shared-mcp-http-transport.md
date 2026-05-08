@@ -1,6 +1,6 @@
 # Plan: Shared MCP servers via HTTP transport
 
-**Status: Phases 0–3 Complete — Phase 4 (config flip) Pending** (2026-05-08)
+**Status: Completed (2026-05-08).** All four phases delivered. ISSUE-006 resolved.
 
 ## Context
 
@@ -158,11 +158,13 @@ Convention is symmetric with the TS side: `MICRO_X_<NAME>_MCP_URL` where `<NAME>
 
 ## Phase 4 — Convert Playwright in `config-base.json`
 
-The smallest change but goes last because Phases 1–3 must already work.
+**Status: Complete (2026-05-08).**
+
+`config-base.json`'s `playwright` entry is now:
 
 ```jsonc
 "playwright": {
-  "transport": "http",
+  "transport": "sse",
   "command": "npx.cmd",
   "args": [
     "-y", "@playwright/mcp@latest",
@@ -173,11 +175,37 @@ The smallest change but goes last because Phases 1–3 must already work.
 }
 ```
 
-Other servers stay stdio. This conversion is opt-in per server.
+(Used `transport: "sse"` rather than `"http"` since Phase 0 confirmed `@playwright/mcp` speaks SSE, not streamable HTTP. Other servers stay stdio.)
 
-**Done when:** a codegen task runs Playwright operations successfully. The `tools/jobserve_apply/` reproduction case from ISSUE-006 now works; profile-lock conflict gone. Any standalone task that doesn't go through the agent (e.g. an `npx tsx … --run` invocation outside the agent) still spawns its own Playwright server because no env var hint is present.
+**End-to-end smoke test (the actual Phase 4 verification):** ran a script that constructed an `McpManager` with just the playwright entry, called `connect_all()`, listed tools, and called `close()`:
 
-**Effort:** 5 minutes.
+```
+Connecting...
+MCP server 'playwright': 23 tool(s) discovered
+SUCCESS: discovered 23 tools
+First few: ['playwright__browser_close', 'playwright__browser_resize',
+            'playwright__browser_console_messages',
+            'playwright__browser_handle_dialog',
+            'playwright__browser_evaluate']
+Shutting down...
+MCP server 'playwright' shut down
+Clean shutdown
+port 8081 free (GOOD)
+```
+
+This validates Phases 1, 2 (transitively, since the same SSE wire format is used), and 4 against a real `@playwright/mcp` instance. Phase 3 (codegen `run_task` env injection actually causing a task subprocess to skip its own spawn) is exercised the next time someone runs a codegen task that lists `playwright` in `SERVERS`.
+
+### Bonus fix during Phase 4: Windows process-tree termination
+
+The first end-to-end run revealed that on Windows, terminating an `npx.cmd`-spawned subprocess only kills the cmd.exe wrapper — the actual Node process running `@playwright/mcp` is orphaned and keeps the port held. Symptom: after `McpManager.close()`, port 8081 was still `LISTENING`.
+
+Fix landed in the same commit:
+
+- `_ServerConnection._terminate_process_tree()` is now platform-aware. On Windows it uses `taskkill /F /T /PID <pid>` to kill the entire process tree. On POSIX it keeps the standard `terminate()` + `kill()` fallback (the kernel forwards signals to children, so no extra work needed).
+
+After the fix, the smoke test shows `port 8081 free (GOOD)` post-shutdown, with no orphan Edge or Node processes.
+
+**Effort actual:** 5 minutes for the config flip; ~30 minutes for the tree-kill fix that emerged from running it.
 
 ## Risk register
 

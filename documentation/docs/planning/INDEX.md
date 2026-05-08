@@ -35,7 +35,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | **22** | [Task Decomposition](PLAN-task-decomposition.md) | **Completed** | — | — | All 8 phases: MVP, hooks, multi-agent, TUI, session persistence, parallel execution |
 | **23** | [Local Model Ecosystems](PLAN-local-model-ecosystems.md) | Planned | — | — | Generic openai-compatible provider + named shortcuts for vLLM, LM Studio, LocalAI, etc. |
 | **24** | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | **In Progress** | — | — | Phase 1 code-complete (shared + echo). Pending: npm scope registration + publish. |
-| **25** | [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | **In Progress** | — | — | Resolves [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). Phases 0–3 complete: spike, `mcp_manager.py` SSE/HTTP transport, TS `mcp-client.ts` env-var SSE switch, codegen `run_task` env-var injection. Phase 4 (`config-base.json` flip + live verification) pending. |
+| **25** | [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | **Completed** | — | — | Resolved [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). All 4 phases delivered. End-to-end smoke test discovered 23 Playwright tools over SSE; clean process-tree shutdown on Windows via taskkill /T. |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
 <details>
@@ -66,7 +66,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 
 | Status | Count |
 |--------|-------|
-| Completed | 37 |
+| Completed | 38 |
 | Review | 1 |
 | Phase 2b Completed (remaining phases pending) | 1 |
 | Blocked | 1 |
@@ -122,4 +122,4 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | [Local Model Ecosystems](PLAN-local-model-ecosystems.md) | Planned | Generic openai-compatible provider for vLLM, LM Studio, LocalAI, llama.cpp, Jan, TGI, MLX |
 | [Textual TUI](PLAN-textual-tui.md) | Completed | Opt-in Textual-based TUI (`--tui`), all 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md). Completed 2026-04-02 |
 | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | In Progress | Phase 1 code-complete (shared + echo). 6 phases: canary, worked example (`google`), fan out, automate. |
-| [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | In Progress | Resolves [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). Phases 0–3 complete: spike, `mcp_manager.py` SSE/HTTP transport, TS `mcp-client.ts` env-var SSE switch, codegen `run_task` env-var injection. Phase 4 (config flip) pending. |
+| [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | Completed | Resolved [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). All 4 phases delivered: SSE/HTTP transport in `mcp_manager.py`, env-var-driven client in `_runtime/mcp-client.ts`, `MICRO_X_<NAME>_MCP_URL` injection in codegen `run_task`, config flip + Windows process-tree termination fix. |

@@ -6,7 +6,19 @@
 
 ## Status
 
-**Open** — design decision needed before any codegen task that drives a browser ships.
+**Resolved (2026-05-08)** — Option D implemented across four phases. See
+[PLAN-shared-mcp-http-transport.md](../planning/PLAN-shared-mcp-http-transport.md)
+for the implementation record. End-to-end smoke test discovered 23 tools
+from `@playwright/mcp` over SSE through the agent's `McpManager`, with
+clean process-tree teardown afterwards. Codegen tasks that list
+`playwright` in `SERVERS` will now attach to the agent's running server
+via SSE rather than spawning their own — no profile-lock contention.
+
+Commits:
+- `b3bdd79` — Phase 1, `mcp_manager.py` SSE/HTTP transport
+- `47d3b70` — Phase 2, TS `McpClient` env-var-driven SSE
+- `c1e8d27` — Phase 3, codegen `run_task` env injection
+- (Phase 4 commit pending; this issue update is part of it)
 
 ## Summary
 

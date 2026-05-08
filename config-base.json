@@ -288,12 +288,13 @@
       }
     },
     "playwright": {
-      "transport": "stdio",
+      "transport": "sse",
       "command": "npx.cmd",
       "args": [
         "-y", "@playwright/mcp@latest",
         "--browser", "msedge",
-        "--user-data-dir", "C:\\Users\\steph\\.playwright-mcp"
+        "--user-data-dir", "C:\\Users\\steph\\.playwright-mcp",
+        "--port", "8081"
       ]
     }
   }
