@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-04-28
+Last updated: 2026-05-08
 
 ## Priority Queue
 
@@ -35,6 +35,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | **22** | [Task Decomposition](PLAN-task-decomposition.md) | **Completed** | — | — | All 8 phases: MVP, hooks, multi-agent, TUI, session persistence, parallel execution |
 | **23** | [Local Model Ecosystems](PLAN-local-model-ecosystems.md) | Planned | — | — | Generic openai-compatible provider + named shortcuts for vLLM, LM Studio, LocalAI, etc. |
 | **24** | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | **In Progress** | — | — | Phase 1 code-complete (shared + echo). Pending: npm scope registration + publish. |
+| **25** | [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | Planned | — | — | Resolves [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md) (Playwright profile contention). 4 phases gated on a verification spike. |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
 <details>
@@ -72,7 +73,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | Superseded | 1 |
 | Draft | 1 |
 | Dropped | 1 |
-| Planned | 5 |
+| Planned | 6 |
 
 ## All Plans
 
@@ -121,3 +122,4 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | [Local Model Ecosystems](PLAN-local-model-ecosystems.md) | Planned | Generic openai-compatible provider for vLLM, LM Studio, LocalAI, llama.cpp, Jan, TGI, MLX |
 | [Textual TUI](PLAN-textual-tui.md) | Completed | Opt-in Textual-based TUI (`--tui`), all 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md). Completed 2026-04-02 |
 | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | In Progress | Phase 1 code-complete (shared + echo). 6 phases: canary, worked example (`google`), fan out, automate. |
+| [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | Planned | Resolves [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). Switches selected MCP servers (Playwright) from stdio to HTTP so agent and codegen subprocess can share one server instance. 4 phases gated on a verification spike. |
