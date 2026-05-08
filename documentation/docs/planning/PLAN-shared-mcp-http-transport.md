@@ -1,6 +1,6 @@
 # Plan: Shared MCP servers via HTTP transport
 
-**Status: Planned** (2026-05-08)
+**Status: Phase 0 Complete — Phases 1–4 Pending** (2026-05-08)
 
 ## Context
 
@@ -21,23 +21,55 @@ Lifecycle stays local: agent spawns the HTTP server as a subprocess at boot, kil
 
 ## Phase 0 — Verification spike (BLOCKS the rest of the work)
 
-Two empirical questions must be answered before any code lands. If either fails, the plan needs revision.
+**Status: Completed (2026-05-08). Both questions answered ✅. Plan is unblocked.**
 
-**0a. Does `@playwright/mcp` actually serve over HTTP?**
+**0a. Does `@playwright/mcp` actually serve over HTTP?** ✅ Yes.
 
-```powershell
-npx -y @playwright/mcp@latest --browser msedge --port 8081
+`@playwright/mcp@latest --help` advertises:
+
+```
+--port <port>    port to listen on for SSE transport.
 ```
 
-From a separate shell, hit it: `curl http://localhost:8081/sse` (or whatever endpoint it advertises — check `--help`). Expectation: an SSE-style streaming response or an MCP handshake reply. If `--port` isn't a real flag, look for the equivalent in the package's documentation. If there's no HTTP transport at all, Option D is dead and we either fork the package, switch to a different Playwright-MCP wrapper, or fall back to ISSUE-006 Option C.
+Started with `npx -y @playwright/mcp@latest --browser msedge --port 8082 --isolated --headless` and probed with curl:
 
-**0b. Does it isolate concurrent clients?**
+```
+$ curl -i http://localhost:8082/sse
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+...
+event: endpoint
+data: /sse?sessionId=ee3f3148-80fe-4d24-ad82-6f92171a2f09
+```
 
-Spin up one server. Connect twice from two trivial Node scripts using `@modelcontextprotocol/sdk`'s SSE client. From client A: `browser_new_context` then `browser_navigate(URL_A)`. From client B: same with `URL_B`. Verify each client sees its own page, no clobbering.
+Standard MCP SSE pattern: client connects to `/sse`, server returns a session-specific endpoint, MCP RPC then runs over that. Pins client-side libraries:
 
-If `@playwright/mcp` shares one active page across all clients, every client must explicitly carry a context handle on every call — feasible but adds friction throughout the codebase. Decide outcome here before proceeding.
+- Python (Phase 1): `mcp.client.sse.sse_client(url)`
+- TypeScript (Phase 2): `SSEClientTransport` from `@modelcontextprotocol/sdk/client/sse.js`
 
-**Output of phase 0:** documented yes/no on both questions, the actual SSE/HTTP URL format, and whether per-client `BrowserContext` works as expected. ~30–60 minutes.
+**0b. Does it isolate concurrent clients?** ✅ Yes (default behaviour).
+
+`--help` describes a `--shared-browser-context` flag: *"reuse the same browser context between all connected HTTP clients."* Default (without the flag) is per-client isolation.
+
+Empirically confirmed with a small SSE-client script (`spike-isolation.mjs`, deleted after the test): two clients connected to the same server, A navigated to `https://example.com`, B navigated to `https://example.org`, then each ran `browser_snapshot`. Result:
+
+```
+Client A sees: https://example.com/
+Client B sees: https://example.org/
+✅ ISOLATED — each client has its own context
+```
+
+So no explicit `browser_new_context` plumbing is needed in client code, and `--shared-browser-context` should NOT be added to the config — default isolation is what we want.
+
+**Useful flags discovered during the spike:**
+
+- `--port <N>` — already known; SSE transport.
+- `--host <host>` — defaults to `localhost`. Bind to `0.0.0.0` only if you need cross-machine.
+- `--isolated` — keep profile in memory, don't write to disk. Useful for tests, NOT for production where we want the persistent profile.
+- `--shared-browser-context` — opposite of what we want. Don't enable.
+- `--headless` — useful for CI or background runs. Production agent run still wants headed for the persistent-profile flow.
+
+**Output:** Phase 0 took ~10 minutes once the package was warmed up. Both blockers cleared.
 
 ## Phase 1 — Python side: `mcp_manager.py` learns HTTP
 
@@ -135,9 +167,9 @@ Other servers stay stdio. This conversion is opt-in per server.
 
 ## Open questions to resolve during implementation
 
-1. Which HTTP transport does `@playwright/mcp` actually serve — SSE, streamable-HTTP, or both? Phase 0 answers this and pins the client-side library calls.
+1. ~~Which HTTP transport does `@playwright/mcp` actually serve — SSE, streamable-HTTP, or both?~~ **Answered by Phase 0: SSE only.** Endpoint is `/sse`, MCP SSE pattern. Pins both Python (`sse_client`) and TS (`SSEClientTransport`) library choices.
 2. Port-allocation policy — start with hardcoded values per server in config; if conflicts become a real problem, add a discovery mechanism (read stdout for a "Listening on …" line, or scan a port range).
-3. Should `mcp-client.ts` (TypeScript) support both SSE and streamable-HTTP transports, or just match whichever Phase 1 picks for Python? Probably match-and-extend-later — keep code paths minimal.
+3. Should `mcp-client.ts` (TypeScript) support both SSE and streamable-HTTP transports, or just SSE? **SSE only for now** — that's what `@playwright/mcp` speaks. Add streamable-HTTP later only if a future server requires it.
 
 ## Acceptance criteria for the change as a whole
 
