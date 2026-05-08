@@ -60,16 +60,33 @@ user-data-dir simultaneously** — by design, because the cookie store,
 history database, and cache are SQLite / leveldb files that aren't safe
 under concurrent writers.
 
-**Important asymmetry:** the lock exists for the duration the *browser* is
-running, not the duration `@playwright/mcp` is running. `@playwright/mcp`
-launches the browser lazily on first use. So if the agent is alive but no
-Playwright tool has been called yet, the lock isn't held — another process
-could grab the profile. The conflict only manifests once both sides have
-actually opened a browser.
+**Two layers of eager-vs-lazy** govern when the lock is actually held:
 
-This asymmetry is what makes Option C (standalone script) practical:
-"don't use Playwright in the agent while the script is running" is a
-contract on the *browser*, not on the agent process itself.
+1. **Agent → MCP server: eager.** When the agent boots, `bootstrap.py`
+   calls `McpManager.connect_all()` (`mcp_manager.py:192-211`), which
+   iterates every server in `config-base.json`'s `McpServers` block and
+   spawns each as a subprocess — including `@playwright/mcp` — regardless
+   of whether you ever invoke a Playwright tool that session. (Generated
+   codegen tasks listed in `tools/manifest.json` are different: those use
+   `connect_on_demand` and only spawn on first call.)
+
+2. **MCP server → browser: lazy.** `@playwright/mcp` itself does **not**
+   launch Edge at startup. The browser is only launched on the first
+   `browser_navigate` / `browser_click` / etc. call from the agent. Until
+   that first call, no Edge process exists and the profile dir is not
+   locked.
+
+**Net effect:** at agent boot, the `@playwright/mcp` subprocess is running
+but the profile is NOT locked. A second `@playwright/mcp` (e.g. spawned
+by a codegen task subprocess) could in principle start without immediate
+contention. The collision materialises only at the moment one of them
+makes its first browser call against the shared `--user-data-dir`.
+
+This is what makes Option C (standalone script) practical: "don't use
+Playwright in the agent while the script is running" is a contract on the
+**browser** being open, not on the agent process being alive. So you
+can leave the agent up; you just can't ask it to drive a page during the
+window the script needs the profile.
 
 ## Why this isn't a quick fix
 
@@ -128,23 +145,63 @@ across runs; simplest possible architecture for the operator.
 remember to close the agent's browser session (or skip browser commands)
 before running the script.
 
-### Option D — Single Playwright source of truth, exposed to tasks via IPC
+### Option D — Single Playwright source of truth, multiple MCP clients
 
-Keep one `@playwright/mcp` running as the agent's server. Have codegen tasks
-that need a browser connect to it as MCP clients, rather than spawning their
-own. Requires a way for a child subprocess to discover the parent agent's
-running MCP servers (e.g. by inheriting an environment variable pointing at
-the parent's MCP transport).
+Keep exactly one `@playwright/mcp` running. Have both the agent and any
+codegen task attach to it as MCP clients rather than spawning their own.
+One MCP server → one Edge process → one profile-lock holder, ever. The
+contention class disappears.
 
-**Pros:** the persistent profile is always owned by exactly one process;
-tasks share the same logged-in browser; no per-task profile sprawl.
-**Cons:** non-trivial agent change. Today's `run_task` spawns its child
-subprocess with no MCP-discovery mechanism — the child reads `config-base.json`
-and re-spawns everything from scratch. Adding inheritance requires:
-(1) a way for the agent to expose its running MCP server endpoints to children,
-(2) the task's `index.ts` bootstrap to prefer "attach to existing" over
-"spawn new" when the env hint is present. Cross-cutting work in `bootstrap.py`,
-`mcp/`, `codegen/main.py`, and `template-ts/src/index.ts`.
+**Why it can't work today.** The agent's MCP servers run over stdio
+(`mcp_manager.py:_run_stdio` opens a stdin/stdout pipe pair per spawned
+server). Stdio is 1:1 — only the parent process holding the pipes can
+talk to that server. A codegen task subprocess has no access to those
+pipes, so its only option today is to bootstrap a fresh MCP server.
+
+**Concrete change points to make it work:**
+
+1. **Switch `@playwright/mcp` (and any other server you want to share)
+   from stdio to HTTP/SSE transport.** The MCP spec supports both;
+   `@playwright/mcp` exposes HTTP via a `--port <N>` flag. `config-base.json`
+   gets a transport: `"http"` field for that server entry, plus a port.
+2. **Teach `mcp_manager.py` to connect over HTTP** for servers configured
+   that way. The Python `mcp` library has `streamablehttp_client` /
+   SSE client helpers — small additional code path alongside the existing
+   stdio one. The `_run_stdio` private becomes one of two transport
+   strategies, picked by config.
+3. **Pass the URL down to codegen subprocesses.** Easiest: in
+   `codegen/main.py:run_task`, when spawning the child, inject env vars
+   like `MICRO_X_PLAYWRIGHT_MCP_URL=http://localhost:8081` (and the same
+   for any other shared server) into the `subprocess.run(..., env=...)`
+   call.
+4. **Teach `tools/template-ts/src/index.ts:connectUpstream` to prefer HTTP
+   when the env var is set.** Pseudocode: for each server in `SERVERS`,
+   look up `MICRO_X_<NAME>_MCP_URL`; if set, attach via HTTP client; if
+   not, fall back to spawning the configured `command` over stdio. Tasks
+   stay portable (still work standalone) but slot into the shared
+   architecture when launched under the agent.
+
+**What stays stdio:** servers without contention problems (gmail,
+linkedin, web, github, …) can keep their existing stdio bootstrap. This
+change only needs to apply where shared state matters. Playwright is
+the obvious case; others may appear later (database connections,
+long-running model servers, anything stateful).
+
+**Concurrency caveat:** `@playwright/mcp` must tolerate two MCP clients
+hitting it at once. Playwright SDK supports multiple `BrowserContext`
+per browser, so each client should get its own context to avoid them
+stepping on each other's pages. Worth verifying before committing —
+if `@playwright/mcp` naively shares the active page across all clients,
+the codegen task could clobber what the agent is doing mid-flow.
+
+**Pros:** the persistent profile is always owned by exactly one Edge
+process; tasks and agent share the same logged-in session; no per-task
+profile sprawl; same pattern reusable for any future stateful MCP
+server.
+**Cons:** real work in three places (`mcp_manager.py`,
+`codegen/main.py`, `template-ts/src/index.ts`); deployment now
+involves picking and managing ports for the HTTP-transport servers;
+context-isolation needs verifying server-side.
 
 ## Recommendation
 
