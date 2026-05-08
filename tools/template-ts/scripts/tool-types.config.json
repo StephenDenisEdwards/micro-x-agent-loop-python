@@ -1,5 +1,5 @@
 {
-  "$schema_note": "Lists upstream MCP servers to introspect for type generation. Each server's dist/index.js is spawned via stdio, queried via tools/list, and its schemas converted to TypeScript. Add a server here when its tools are wrapped in src/tools.ts.",
+  "$schema_note": "Lists upstream MCP servers to introspect for type generation. Each server is spawned via stdio (either as `node <entry>` for first-party packages, or via an arbitrary `command`/`args` for npx-fetched ones like @playwright/mcp), queried via tools/list, and its schemas converted to TypeScript. Add a server here when its tools are wrapped in src/tools.ts.",
   "outputFile": "src/tool-types.ts",
   "servers": [
     {
@@ -60,7 +60,9 @@
       "tools": [
         "read_file",
         "write_file",
-        "bash"
+        "bash",
+        "grep",
+        "glob"
       ]
     },
     {
@@ -108,6 +110,29 @@
         "stt_get_updates",
         "stt_get_session",
         "stt_stop_session"
+      ]
+    },
+    {
+      "name": "playwright",
+      "$note": "Third-party MCP server, fetched via npx. Uses stdio when --port is not passed.",
+      "command": "npx.cmd",
+      "args": [
+        "-y", "@playwright/mcp@latest",
+        "--browser", "msedge",
+        "--isolated",
+        "--headless"
+      ],
+      "tools": [
+        "browser_navigate",
+        "browser_snapshot",
+        "browser_click",
+        "browser_type",
+        "browser_select_option",
+        "browser_file_upload",
+        "browser_press_key",
+        "browser_evaluate",
+        "browser_close",
+        "browser_wait_for"
       ]
     }
   ]

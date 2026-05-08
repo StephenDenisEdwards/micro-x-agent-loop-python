@@ -36,14 +36,8 @@ ${MARKER}
 async function main() {
   const sections = [];
   for (const server of config.servers) {
-    const entryAbs = path.resolve(PKG_ROOT, server.entry);
-    if (!existsSync(entryAbs)) {
-      throw new Error(
-        `Server entry not found: ${entryAbs}\n` +
-        `Build the upstream MCP server first.`,
-      );
-    }
-    const tools = await listTools(entryAbs, server.env ?? {});
+    const spawnSpec = resolveSpawnSpec(server);
+    const tools = await listTools(spawnSpec, server.env ?? {});
     const wanted = new Set(server.tools);
     const found = new Map(tools.map((t) => [t.name, t]));
     for (const name of wanted) {
@@ -78,11 +72,44 @@ async function main() {
   process.stdout.write(`Wrote ${path.relative(process.cwd(), outputFile)} (${generated.length} bytes)\n`);
 }
 
-async function listTools(serverEntry, extraEnv) {
+/**
+ * Resolve a config entry to the spawn command + args.
+ *
+ * Two shapes are supported:
+ *   - Local first-party server: { "entry": "../../mcp_servers/.../dist/index.js" }
+ *     → spawn `node <entry>`, requires the package to be built.
+ *   - Third-party / npx-fetched server: { "command": "npx.cmd", "args": [...] }
+ *     → spawn that command directly. Use shell:true on Windows for .cmd files.
+ */
+function resolveSpawnSpec(server) {
+  if (server.command) {
+    return {
+      cmd: server.command,
+      args: server.args ?? [],
+      shell: server.command.endsWith(".cmd") || server.command.endsWith(".bat"),
+      label: `${server.command} ${(server.args ?? []).join(" ")}`,
+    };
+  }
+  if (!server.entry) {
+    throw new Error(`Server "${server.name}" must specify either "entry" or "command".`);
+  }
+  const entryAbs = path.resolve(PKG_ROOT, server.entry);
+  if (!existsSync(entryAbs)) {
+    throw new Error(
+      `Server entry not found: ${entryAbs}\n` +
+      `Build the upstream MCP server first.`,
+    );
+  }
+  return { cmd: "node", args: [entryAbs], shell: false, label: entryAbs };
+}
+
+async function listTools(spawnSpec, extraEnv) {
+  const { cmd, args: spawnArgs, shell, label } = spawnSpec;
   return new Promise((resolve, reject) => {
-    const child = spawn("node", [serverEntry], {
+    const child = spawn(cmd, spawnArgs, {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, ...extraEnv },
+      shell,
     });
     let stderrBuf = "";
     child.stderr.on("data", (d) => { stderrBuf += d.toString(); });
@@ -91,8 +118,8 @@ async function listTools(serverEntry, extraEnv) {
     const timer = setTimeout(() => {
       if (done) return;
       child.kill();
-      reject(new Error(`Timed out waiting for tools/list from ${serverEntry}\nstderr:\n${stderrBuf}`));
-    }, 15_000);
+      reject(new Error(`Timed out waiting for tools/list from ${label}\nstderr:\n${stderrBuf}`));
+    }, 30_000);
     child.on("error", (err) => { if (!done) { done = true; clearTimeout(timer); reject(err); } });
     child.stdout.on("data", (d) => {
       buf += d.toString();

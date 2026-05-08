@@ -26,6 +26,8 @@ import type {
   BashArgs, BashResult,
   ReadFileArgs, ReadFileResult,
   WriteFileArgs,
+  GrepArgs, GrepResult,
+  GlobArgs, GlobResult,
   // github
   ListReposArgs, GetFileArgs, SearchCodeArgs,
   ListPrsArgs, GetPrArgs, CreatePrArgs,
@@ -38,6 +40,10 @@ import type {
   IaRegressionTestArgs, IaCreateBaselineArgs, IaTranscribeOnceArgs,
   SttListDevicesArgs, SttStartSessionArgs, SttGetUpdatesArgs,
   SttGetSessionArgs, SttStopSessionArgs,
+  // playwright
+  BrowserNavigateArgs, BrowserSnapshotArgs, BrowserClickArgs,
+  BrowserTypeArgs, BrowserSelectOptionArgs, BrowserFileUploadArgs,
+  BrowserPressKeyArgs, BrowserEvaluateArgs, BrowserWaitForArgs,
 } from "./tool-types.js";
 
 export type Clients = Record<string, McpClient>;
@@ -380,6 +386,32 @@ export async function fsBash(
     stderr: r.stderr ?? "",
     exitCode: r.exit_code ?? 0,
   };
+}
+
+export async function fsGrep(
+  clients: Clients,
+  pattern: GrepArgs["pattern"],
+  options?: Omit<GrepArgs, "pattern">,
+): Promise<GrepResult> {
+  const args: GrepArgs = { pattern, ...options };
+  const result = await get(clients, "filesystem").callTool("grep", args);
+  if (typeof result === "string") {
+    return { mode: args.output_mode ?? "files_with_matches", results: result, match_count: 0, truncated: false };
+  }
+  return result as GrepResult;
+}
+
+export async function fsGlob(
+  clients: Clients,
+  pattern: GlobArgs["pattern"],
+  options?: Omit<GlobArgs, "pattern">,
+): Promise<GlobResult> {
+  const args: GlobArgs = { pattern, ...options };
+  const result = await get(clients, "filesystem").callTool("glob", args);
+  if (typeof result === "string") {
+    return { paths: result.split("\n").filter(Boolean), total: 0, truncated: false };
+  }
+  return result as GlobResult;
 }
 
 // ---------------------------------------------------------------------------
@@ -760,4 +792,89 @@ export async function sttStopSession(
   const args: SttStopSessionArgs = { session_id: sessionId };
   const result = await get(clients, "interview-assist").callTool("stt_stop_session", args);
   return typeof result === "string" ? result : String(result);
+}
+
+// ---------------------------------------------------------------------------
+// Playwright — Browser automation (via @playwright/mcp)
+//
+// IMPORTANT: the parameter for an element reference is `target` (a string from
+// browser_snapshot's [ref=eN] markers, OR a CSS-style selector). It is NOT
+// `ref` — that's just what the snapshot uses to label elements internally.
+// All these wrappers enforce the correct shape via tool-types.ts.
+// ---------------------------------------------------------------------------
+
+export async function browserNavigate(
+  clients: Clients, url: BrowserNavigateArgs["url"],
+): Promise<unknown> {
+  const args: BrowserNavigateArgs = { url };
+  return get(clients, "playwright").callTool("browser_navigate", args);
+}
+
+export async function browserSnapshot(
+  clients: Clients, options?: BrowserSnapshotArgs,
+): Promise<unknown> {
+  return get(clients, "playwright").callTool("browser_snapshot", options ?? {});
+}
+
+export async function browserClick(
+  clients: Clients,
+  target: BrowserClickArgs["target"],
+  options?: Omit<BrowserClickArgs, "target">,
+): Promise<unknown> {
+  const args: BrowserClickArgs = { target, ...(options ?? {}) };
+  return get(clients, "playwright").callTool("browser_click", args);
+}
+
+export async function browserType(
+  clients: Clients,
+  target: BrowserTypeArgs["target"],
+  text: BrowserTypeArgs["text"],
+  options?: Omit<BrowserTypeArgs, "target" | "text">,
+): Promise<unknown> {
+  const args: BrowserTypeArgs = { target, text, ...(options ?? {}) };
+  return get(clients, "playwright").callTool("browser_type", args);
+}
+
+export async function browserSelectOption(
+  clients: Clients,
+  target: BrowserSelectOptionArgs["target"],
+  values: BrowserSelectOptionArgs["values"],
+  options?: Omit<BrowserSelectOptionArgs, "target" | "values">,
+): Promise<unknown> {
+  const args: BrowserSelectOptionArgs = { target, values, ...(options ?? {}) };
+  return get(clients, "playwright").callTool("browser_select_option", args);
+}
+
+export async function browserFileUpload(
+  clients: Clients,
+  paths: NonNullable<BrowserFileUploadArgs["paths"]>,
+): Promise<unknown> {
+  const args: BrowserFileUploadArgs = { paths };
+  return get(clients, "playwright").callTool("browser_file_upload", args);
+}
+
+export async function browserPressKey(
+  clients: Clients, key: BrowserPressKeyArgs["key"],
+): Promise<unknown> {
+  const args: BrowserPressKeyArgs = { key };
+  return get(clients, "playwright").callTool("browser_press_key", args);
+}
+
+export async function browserEvaluate(
+  clients: Clients,
+  fn: BrowserEvaluateArgs["function"],
+  options?: Omit<BrowserEvaluateArgs, "function">,
+): Promise<unknown> {
+  const args: BrowserEvaluateArgs = { function: fn, ...(options ?? {}) };
+  return get(clients, "playwright").callTool("browser_evaluate", args);
+}
+
+export async function browserClose(clients: Clients): Promise<unknown> {
+  return get(clients, "playwright").callTool("browser_close", {});
+}
+
+export async function browserWaitFor(
+  clients: Clients, options: BrowserWaitForArgs,
+): Promise<unknown> {
+  return get(clients, "playwright").callTool("browser_wait_for", options);
 }

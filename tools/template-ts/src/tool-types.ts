@@ -282,6 +282,40 @@ export type WriteFileResult = {
   size_bytes: number; /**  (integer) */
 };
 
+/** Search file contents using ripgrep. Supports regex, glob/type filters, and three output modes. Respects .gitignore by default. USE THIS — not read_file — whenever you are looking for something and don't already know the exact file. Reading whole files to scan for a string wastes tokens; grep returns only the matching lines (or filenames). Narrow with `glob` or `type` to avoid searching the whole tree. Prefer this over `bash grep` — it is cross-platform and structured. read_file is for when you have a specific path and need its full contents. */
+export type GrepArgs = {
+  pattern: string; /** Regex pattern (ripgrep/Rust regex syntax) (min 1 chars) */
+  path?: string; /** File or directory to search. Defaults to working dir. */
+  glob?: string; /** Glob filter, e.g. "*.ts" or "src/**\/*.py" */
+  type?: string; /** File type filter, e.g. "ts", "py", "rust" */
+  output_mode?: "content" | "files_with_matches" | "count"; /**  (default: "files_with_matches") */
+  case_insensitive?: boolean; /**  (default: false) */
+  line_numbers?: boolean; /** Show line numbers (content mode only) (default: true) */
+  context?: number; /** Lines of context before/after each match (integer, 0–20) */
+  multiline?: boolean; /** Allow patterns to span lines (. matches \n) (default: false) */
+  head_limit?: number; /**  (integer, 1–5000, default: 250) */
+};
+
+export type GrepResult = {
+  mode: "content" | "files_with_matches" | "count";
+  results: string;
+  match_count: number; /**  (integer) */
+  truncated: boolean;
+};
+
+/** Find files by name pattern, e.g. "**\/*.ts" or "src/**\/*.{js,jsx}". Returns paths sorted by mtime (newest first). Use grep for content search. */
+export type GlobArgs = {
+  pattern: string; /** Glob pattern (fast-glob/micromatch syntax) (min 1 chars) */
+  path?: string; /** Root to search from. Defaults to working dir. */
+  head_limit?: number; /**  (integer, 1–5000, default: 250) */
+};
+
+export type GlobResult = {
+  paths: Array<string>;
+  total: number; /**  (integer) */
+  truncated: boolean;
+};
+
 // ----------------------------------------------------------------------
 // github
 // ----------------------------------------------------------------------
@@ -532,3 +566,93 @@ export type SttStopSessionArgs = {
 };
 
 export type SttStopSessionResult = Record<string, unknown>;
+
+// ----------------------------------------------------------------------
+// playwright
+// ----------------------------------------------------------------------
+
+/** Close the page */
+export type BrowserCloseArgs = Record<string, never>;
+
+export type BrowserCloseResult = Record<string, unknown>;
+
+/** Evaluate JavaScript expression on page or element */
+export type BrowserEvaluateArgs = {
+  element?: string; /** Human-readable element description used to obtain permission to interact with the element */
+  target?: string; /** Exact target element reference from the page snapshot, or a unique element selector */
+  function: string; /** () => { /* code *\/ } or (element) => { /* code *\/ } when element is provided */
+  filename?: string; /** Filename to save the result to. If not provided, result is returned as text. */
+};
+
+export type BrowserEvaluateResult = Record<string, unknown>;
+
+/** Upload one or multiple files */
+export type BrowserFileUploadArgs = {
+  paths?: Array<string>; /** The absolute paths to the files to upload. Can be single file or multiple files. If omitted, file chooser is cancelled. */
+};
+
+export type BrowserFileUploadResult = Record<string, unknown>;
+
+/** Press a key on the keyboard */
+export type BrowserPressKeyArgs = {
+  key: string; /** Name of the key to press or a character to generate, such as `ArrowLeft` or `a` */
+};
+
+export type BrowserPressKeyResult = Record<string, unknown>;
+
+/** Type text into editable element */
+export type BrowserTypeArgs = {
+  element?: string; /** Human-readable element description used to obtain permission to interact with the element */
+  target: string; /** Exact target element reference from the page snapshot, or a unique element selector */
+  text: string; /** Text to type into the element */
+  submit?: boolean; /** Whether to submit entered text (press Enter after) */
+  slowly?: boolean; /** Whether to type one character at a time. Useful for triggering key handlers in the page. By default entire text is filled in at once. */
+};
+
+export type BrowserTypeResult = Record<string, unknown>;
+
+/** Navigate to a URL */
+export type BrowserNavigateArgs = {
+  url: string; /** The URL to navigate to */
+};
+
+export type BrowserNavigateResult = Record<string, unknown>;
+
+/** Capture accessibility snapshot of the current page, this is better than screenshot */
+export type BrowserSnapshotArgs = {
+  target?: string; /** Exact target element reference from the page snapshot, or a unique element selector */
+  filename?: string; /** Save snapshot to markdown file instead of returning it in the response. */
+  depth?: number; /** Limit the depth of the snapshot tree */
+  boxes?: boolean; /** Include each element's bounding box as [box=x,y,width,height] in the snapshot. Coordinates are viewport-relative, in CSS pixels (Element.getBoundingClientRect) */
+};
+
+export type BrowserSnapshotResult = Record<string, unknown>;
+
+/** Perform click on a web page */
+export type BrowserClickArgs = {
+  element?: string; /** Human-readable element description used to obtain permission to interact with the element */
+  target: string; /** Exact target element reference from the page snapshot, or a unique element selector */
+  doubleClick?: boolean; /** Whether to perform a double click instead of a single click */
+  button?: "left" | "right" | "middle"; /** Button to click, defaults to left */
+  modifiers?: Array<"Alt" | "Control" | "ControlOrMeta" | "Meta" | "Shift">; /** Modifier keys to press */
+};
+
+export type BrowserClickResult = Record<string, unknown>;
+
+/** Select an option in a dropdown */
+export type BrowserSelectOptionArgs = {
+  element?: string; /** Human-readable element description used to obtain permission to interact with the element */
+  target: string; /** Exact target element reference from the page snapshot, or a unique element selector */
+  values: Array<string>; /** Array of values to select in the dropdown. This can be a single value or multiple values. */
+};
+
+export type BrowserSelectOptionResult = Record<string, unknown>;
+
+/** Wait for text to appear or disappear or a specified time to pass */
+export type BrowserWaitForArgs = {
+  time?: number; /** The time to wait in seconds */
+  text?: string; /** The text to wait for */
+  textGone?: string; /** The text to wait for to disappear */
+};
+
+export type BrowserWaitForResult = Record<string, unknown>;
