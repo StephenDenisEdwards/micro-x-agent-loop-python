@@ -290,7 +290,11 @@
     "playwright": {
       "transport": "stdio",
       "command": "npx.cmd",
-      "args": ["-y", "@playwright/mcp@latest", "--browser", "msedge"]
+      "args": [
+        "-y", "@playwright/mcp@latest",
+        "--browser", "msedge",
+        "--user-data-dir", "C:\\Users\\steph\\.playwright-mcp"
+      ]
     }
   }
 }
