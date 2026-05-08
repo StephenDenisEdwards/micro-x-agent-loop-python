@@ -32,10 +32,6 @@ ChatLog {
     margin: 0 1 0 1;
 }
 
-.tool-inline {
-    margin: 0 1 0 3;
-}
-
 .system-message {
     margin: 0 1 0 1;
 }

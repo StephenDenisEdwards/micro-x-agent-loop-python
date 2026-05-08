@@ -107,12 +107,6 @@ class ChatLog(VerticalScroll):
         self._streaming_md = None
         self._streaming_buffer = ""
 
-    def add_tool_message(self, tool_name: str, status: str) -> None:
-        """Show an inline tool status line."""
-        block = Static(f"  [dim]{escape(status)} {escape(tool_name)}[/dim]", classes="tool-inline")
-        self.mount(block)
-        self.scroll_end(animate=False)
-
     def add_system_message(self, text: str) -> None:
         """Append a system message."""
         block = Static(f"[dim]{escape(text)}[/dim]", classes="system-message")
