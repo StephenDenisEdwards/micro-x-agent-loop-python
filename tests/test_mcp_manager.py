@@ -10,8 +10,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from micro_x_agent_loop.mcp.mcp_manager import (
     McpManager,
     _build_proxies,
+    _build_url,
+    _extract_port,
     _mcp_logging_callback,
     _ServerConnection,
+    _wait_for_port,
     add_notification_channel,
     remove_notification_channel,
 )
@@ -410,6 +413,152 @@ class McpManagerTests(unittest.TestCase):
             await mgr.close()
             conn.stop.assert_called_once()
             self.assertEqual([], mgr._connections)
+
+        asyncio.run(go())
+
+
+# ---------------------------------------------------------------------------
+# HTTP/SSE transport helpers
+# ---------------------------------------------------------------------------
+
+
+class ExtractPortTests(unittest.TestCase):
+    def test_explicit_port_field(self) -> None:
+        self.assertEqual(8081, _extract_port({"port": 8081}))
+
+    def test_explicit_port_field_string(self) -> None:
+        self.assertEqual(8081, _extract_port({"port": "8081"}))
+
+    def test_inferred_from_args(self) -> None:
+        config = {"args": ["-y", "@playwright/mcp", "--port", "9000", "--browser", "msedge"]}
+        self.assertEqual(9000, _extract_port(config))
+
+    def test_explicit_field_wins_over_args(self) -> None:
+        config = {"port": 1234, "args": ["--port", "5678"]}
+        self.assertEqual(1234, _extract_port(config))
+
+    def test_no_port_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            _extract_port({"args": ["-y", "@playwright/mcp"]})
+
+    def test_dangling_port_flag_raises(self) -> None:
+        # `--port` at the end of args with no value
+        with self.assertRaises(ValueError):
+            _extract_port({"args": ["-y", "@playwright/mcp", "--port"]})
+
+
+class BuildUrlTests(unittest.TestCase):
+    def test_explicit_url_wins(self) -> None:
+        self.assertEqual(
+            "http://example.com/sse",
+            _build_url({"url": "http://example.com/sse"}, "/ignored"),
+        )
+
+    def test_inferred_default_host(self) -> None:
+        config = {"port": 8081}
+        self.assertEqual("http://localhost:8081/sse", _build_url(config, "/sse"))
+
+    def test_inferred_custom_host(self) -> None:
+        config = {"port": 8081, "host": "0.0.0.0"}
+        self.assertEqual("http://0.0.0.0:8081/sse", _build_url(config, "/sse"))
+
+    def test_empty_path(self) -> None:
+        self.assertEqual("http://localhost:8081", _build_url({"port": 8081}, ""))
+
+
+class WaitForPortTests(unittest.TestCase):
+    @staticmethod
+    def _open_listening_socket() -> tuple[Any, int]:
+        import socket
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        sock.listen(1)
+        port = sock.getsockname()[1]
+        return sock, port
+
+    def test_succeeds_when_port_listening(self) -> None:
+        async def go() -> None:
+            sock, port = self._open_listening_socket()
+            try:
+                # Should return without raising — the port accepts connections.
+                await _wait_for_port("127.0.0.1", port, timeout=2.0)
+            finally:
+                sock.close()
+
+        asyncio.run(go())
+
+    def test_times_out_when_port_closed(self) -> None:
+        async def go() -> None:
+            # Bind to grab a free port, then close so it's NOT in use.
+            sock, port = self._open_listening_socket()
+            sock.close()
+            with self.assertRaises(TimeoutError):
+                await _wait_for_port("127.0.0.1", port, timeout=0.5)
+
+        asyncio.run(go())
+
+
+# ---------------------------------------------------------------------------
+# transport switching in start()
+# ---------------------------------------------------------------------------
+
+
+class StartTransportSwitchTests(unittest.TestCase):
+    """Verify start() dispatches to the right _run_* method by transport."""
+
+    @staticmethod
+    def _setup_mocks(conn: _ServerConnection) -> tuple[AsyncMock, AsyncMock, AsyncMock]:
+        stdio = AsyncMock()
+        sse = AsyncMock()
+        http = AsyncMock()
+        conn._run_stdio = stdio  # type: ignore[method-assign]
+        conn._run_sse = sse  # type: ignore[method-assign]
+        conn._run_http = http  # type: ignore[method-assign]
+        return stdio, sse, http
+
+    def test_default_transport_is_stdio(self) -> None:
+        async def go() -> None:
+            conn = _ServerConnection("srv")
+            stdio, sse, http = self._setup_mocks(conn)
+            await conn.start({"command": "x"})
+            await asyncio.wait_for(conn._task, timeout=1.0)
+            stdio.assert_called_once()
+            sse.assert_not_called()
+            http.assert_not_called()
+
+        asyncio.run(go())
+
+    def test_sse_transport_dispatches(self) -> None:
+        async def go() -> None:
+            conn = _ServerConnection("srv")
+            stdio, sse, http = self._setup_mocks(conn)
+            await conn.start({"transport": "sse", "command": "x", "port": 8081})
+            await asyncio.wait_for(conn._task, timeout=1.0)
+            sse.assert_called_once()
+            stdio.assert_not_called()
+            http.assert_not_called()
+
+        asyncio.run(go())
+
+    def test_http_transport_dispatches(self) -> None:
+        async def go() -> None:
+            conn = _ServerConnection("srv")
+            stdio, sse, http = self._setup_mocks(conn)
+            await conn.start({"transport": "http", "url": "http://x"})
+            await asyncio.wait_for(conn._task, timeout=1.0)
+            http.assert_called_once()
+            stdio.assert_not_called()
+            sse.assert_not_called()
+
+        asyncio.run(go())
+
+    def test_unknown_transport_records_error(self) -> None:
+        async def go() -> None:
+            conn = _ServerConnection("srv")
+            await conn.start({"transport": "carrier-pigeon"})
+            with self.assertRaises(ValueError):
+                await conn.wait_ready()
 
         asyncio.run(go())
 

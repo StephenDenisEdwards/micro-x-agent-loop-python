@@ -1,6 +1,6 @@
 # Plan: Shared MCP servers via HTTP transport
 
-**Status: Phase 0 Complete — Phases 1–4 Pending** (2026-05-08)
+**Status: Phases 0–1 Complete — Phases 2–4 Pending** (2026-05-08)
 
 ## Context
 
@@ -73,22 +73,33 @@ So no explicit `browser_new_context` plumbing is needed in client code, and `--s
 
 ## Phase 1 — Python side: `mcp_manager.py` learns HTTP
 
-**Files:** `src/micro_x_agent_loop/mcp/mcp_manager.py`
+**Status: Complete (2026-05-08).**
 
-Changes:
+**Files modified:**
+- `src/micro_x_agent_loop/mcp/mcp_manager.py` — transport switching, subprocess spawn, port polling.
+- `tests/test_mcp_manager.py` — 19 new unit tests (16 ExtractPort/BuildUrl/WaitForPort/StartTransportSwitch).
 
-- Read a new optional `transport: "stdio" | "http"` field per server in `_server_configs`. Default `"stdio"` for backwards compatibility.
-- For `transport: "http"` servers in `_ServerConnection.start`:
-  1. Spawn the subprocess with the configured `command`/`args` (where `args` includes `--port <N>`). Same lifecycle as today — agent owns the process, kills it on shutdown.
-  2. Poll `http://localhost:<port>` until ready (200ms intervals, 30s timeout). On timeout, log and raise.
-  3. Connect via the Python `mcp` library's HTTP/SSE client transport (likely `mcp.client.sse.sse_client` or `streamablehttp_client` — the spike confirms which).
-- The existing `_run_stdio` becomes one of two transport strategies, picked by config.
+**Changes landed:**
 
-**Tests:** existing stdio path keeps working unchanged. Add one test that mocks an HTTP MCP endpoint (use `aiohttp` test server or similar) and verifies `mcp_manager` connects and discovers tools.
+- New `transport` field in server config; values `"stdio"` (default), `"sse"`, or `"http"`. Existing stdio configs unchanged.
+- New module-level helpers:
+  - `_extract_port(config)` — reads `port` field or scans `args` for `--port <N>`.
+  - `_build_url(config, path)` — uses explicit `url` field or composes `http://<host>:<port><path>`.
+  - `_wait_for_port(host, port, timeout)` — polls TCP with 200 ms backoff and 30 s default timeout.
+- `_ServerConnection` gained `_proc: asyncio.subprocess.Process | None` to track spawned children.
+- New `_spawn_subprocess` helper called by both HTTP-flavoured transports; preserves env-merge logic and `MICRO_X_AGENT_CONFIG_JSON` forwarding.
+- `_run_sse` (new): spawn → wait for port → connect via `mcp.client.sse.sse_client` against `/sse` endpoint.
+- `_run_http` (rewritten): spawn → wait for port → connect via `streamable_http_client`. Preserves "attach to a pre-running URL" by skipping spawn when no `command` is configured.
+- `start()` dispatches to `_run_stdio` / `_run_sse` / `_run_http` based on the `transport` field; unknown transports raise `ValueError`.
+- `stop()` now also terminates the spawned subprocess (with `kill` fallback after `_SHUTDOWN_TIMEOUT`) so HTTP/SSE-spawned servers don't leak.
 
-**Done when:** changing only `playwright`'s entry in `config-base.json` to `transport: "http"` (with `--port 8081` in args) boots the agent successfully and the agent can drive a browser via Playwright over HTTP. All other servers remain stdio and unaffected.
+**Verification:**
+- 35/35 unit tests pass in `test_mcp_manager.py`.
+- `mypy src/micro_x_agent_loop/mcp/mcp_manager.py` — clean.
+- 55/55 pass across `test_mcp_manager.py + test_mcp_tool_proxy.py + test_bootstrap.py` — no regressions to consumers.
+- End-to-end "boot the agent with playwright on HTTP and watch it work" is deferred to Phase 4 (config flip), since changing `config-base.json` for that test belongs naturally there.
 
-**Effort:** ~half a day.
+**Effort actual:** ~1.5 hours.
 
 ## Phase 2 — TypeScript side: `_runtime/src/mcp-client.ts` learns HTTP
 
