@@ -1,5 +1,13 @@
 /**
- * Lightweight MCP stdio client for connecting to MCP servers and calling tools.
+ * Lightweight MCP client for connecting to MCP servers and calling tools.
+ *
+ * Picks the transport at connect-time:
+ *   - If MICRO_X_<NAME>_MCP_URL env var is set (where <NAME> is the server
+ *     name uppercased with `-` replaced by `_`), connect via SSE to that
+ *     URL — used by codegen subprocesses that should attach to a server
+ *     already running in the parent agent. See ISSUE-006 / Phase D.
+ *   - Otherwise, spawn the configured `command` over stdio (default
+ *     standalone behaviour, unchanged).
  *
  * Usage:
  *   const client = new McpClient("my-server");
@@ -12,7 +20,15 @@
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+type ClientTransport = StdioClientTransport | SSEClientTransport;
+
+/** Build the env var name a server's URL would be in: `MICRO_X_<UPPER_SNAKE>_MCP_URL`. */
+export function mcpUrlEnvVar(serverName: string): string {
+  return `MICRO_X_${serverName.toUpperCase().replace(/-/g, "_")}_MCP_URL`;
+}
 
 const SHUTDOWN_TIMEOUT_MS = 5000;
 const MAX_RETRIES = 3;
@@ -34,24 +50,39 @@ function isTransientError(err: unknown): boolean {
 export class McpClient {
   readonly name: string;
   private client: Client | null = null;
-  private transport: StdioClientTransport | null = null;
+  private transport: ClientTransport | null = null;
 
   constructor(name: string) {
     this.name = name;
   }
 
+  /**
+   * Connect to the MCP server.
+   *
+   * Transport is picked from env: if `MICRO_X_<NAME>_MCP_URL` is set, connect
+   * to that URL via SSE (attaching to a server already running in the parent
+   * agent). Otherwise, spawn the given `command` and talk to it over stdio.
+   *
+   * The `command`/`args`/`env` parameters are still required so the caller
+   * stays portable — if the env hint isn't present (e.g. running the task
+   * standalone), the stdio spawn path is used unchanged.
+   */
   async connect(
     command: string,
     args: string[],
     env?: Record<string, string>,
   ): Promise<void> {
-    const mergedEnv = { ...process.env, ...env } as Record<string, string>;
-
-    this.transport = new StdioClientTransport({
-      command,
-      args,
-      env: mergedEnv,
-    });
+    const httpUrl = process.env[mcpUrlEnvVar(this.name)];
+    if (httpUrl) {
+      this.transport = new SSEClientTransport(new URL(httpUrl));
+    } else {
+      const mergedEnv = { ...process.env, ...env } as Record<string, string>;
+      this.transport = new StdioClientTransport({
+        command,
+        args,
+        env: mergedEnv,
+      });
+    }
 
     this.client = new Client(
       { name: `task-client-${this.name}`, version: "0.1.0" },

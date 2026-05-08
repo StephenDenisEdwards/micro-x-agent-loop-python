@@ -1,6 +1,6 @@
 # Plan: Shared MCP servers via HTTP transport
 
-**Status: Phases 0–1 Complete — Phases 2–4 Pending** (2026-05-08)
+**Status: Phases 0–2 Complete — Phases 3–4 Pending** (2026-05-08)
 
 ## Context
 
@@ -103,24 +103,28 @@ So no explicit `browser_new_context` plumbing is needed in client code, and `--s
 
 ## Phase 2 — TypeScript side: `_runtime/src/mcp-client.ts` learns HTTP
 
-**Files:**
+**Status: Complete (2026-05-08).**
 
-- `tools/_runtime/src/mcp-client.ts` — the `McpClient` wrapper used by every codegen task.
-- `tools/template-ts/src/index.ts:connectUpstream` — only if it needs to know about the env var directly; ideally not.
+**Files modified:**
+- `tools/_runtime/src/mcp-client.ts` — env-var-driven transport switch in `McpClient.connect()`.
+- `tools/jobserve_rss_aggregator/src/collector.test.ts` — fixed an unrelated pre-existing `stripHtml` test fixture that had been broken since the entity-decoding-order fix earlier in the day.
 
-Changes to `McpClient.connect()`:
+**Changes landed:**
 
-- Before deciding on transport, look up `MICRO_X_${name.toUpperCase().replaceAll('-','_')}_MCP_URL` in `process.env`.
-- If set: instantiate `SSEClientTransport` from `@modelcontextprotocol/sdk/client/sse.js` (or `StreamableHTTPClientTransport` if the spike showed that's what `@playwright/mcp` speaks) using `new URL(url)`. Skip the `command`/`args` spawn entirely.
-- If not set: fall back to the current `StdioClientTransport` spawn. Existing behaviour preserved.
+- New helper `mcpUrlEnvVar(name)` → `MICRO_X_${UPPER_SNAKE}_MCP_URL`. Exported so other code (e.g. `connectUpstream`) can use the same convention.
+- `McpClient.connect()` checks `process.env[mcpUrlEnvVar(this.name)]` first. If set, instantiates `SSEClientTransport(new URL(url))`. If not, falls back to the existing `StdioClientTransport` spawn — standalone task runs are unchanged.
+- The `transport` field type widened from `StdioClientTransport | null` to `ClientTransport | null` (a union of stdio and SSE — both expose the `close()` we use).
+- Public signature `connect(command, args, env)` unchanged. Callers stay portable.
+- The header doc-comment updated to describe both transports and the env-var convention.
 
-The `McpClient.connect()` external signature stays `(command, args, env)` — the transport switch happens internally. `connectUpstream` doesn't need to know.
+`connectUpstream` in `tools/template-ts/src/index.ts` did not need to change — the transport switch happens internally to `McpClient`.
 
-**Tests:** add a test that exports `MICRO_X_PLAYWRIGHT_MCP_URL=...` and verifies the client picks SSE transport instead of stdio. The migrated tasks' existing test suites (`jobserve_rss_aggregator`, etc.) should keep passing unchanged.
+**Verification:**
+- `tsc --noEmit` clean for all three migrated tasks (jobserve_rss_aggregator, jobserve_email_scraper, linkedin_job_scraper).
+- All three tasks' `npm test` suites pass after fixing the unrelated `stripHtml` test: 18 + 12 + 9 = **39/39**.
+- End-to-end "task subprocess attaches to agent's running playwright via SSE" lives in Phase 4, exercised by the live config flip.
 
-**Done when:** running a task standalone (`npx tsx src/index.ts --run`) still works as before, and running it with `MICRO_X_PLAYWRIGHT_MCP_URL` set in the env attaches it to that URL instead of spawning a new server.
-
-**Effort:** ~half a day.
+**Effort actual:** ~30 minutes (excluding the side-quest `stripHtml` test fix).
 
 ## Phase 3 — Codegen wiring: `run_task` injects URLs
 
