@@ -181,6 +181,25 @@ pipes, so its only option today is to bootstrap a fresh MCP server.
    stay portable (still work standalone) but slot into the shared
    architecture when launched under the agent.
 
+**Transport vs lifecycle — they're independent.** Switching to HTTP
+transport does NOT mean the server moves out-of-process or out-of-tree.
+The agent still spawns the HTTP-transport server as a subprocess at
+boot (same `McpManager` lifecycle as today), passes it `--port <N>` so
+it serves over HTTP loopback instead of stdio pipes, and connects to
+`http://localhost:<N>`. Lifecycle ownership is unchanged: agent boot
+spawns it, agent shutdown kills it.
+
+The only change is the wire protocol. Stdio is 1:1 (only the parent
+holding the pipes can talk to the child); HTTP loopback supports
+multiple concurrent clients on the same local machine. That's what
+unlocks "agent and codegen subprocess share one MCP server."
+
+A nice side-effect — not a goal — is that HTTP also makes future
+relocation possible (run Playwright as a Windows service, in a Docker
+container, on another machine) by just changing the URL. Stdio can't
+do that. But for the immediate contention fix: agent-spawned, local,
+talking on `localhost`. Same operational model as today.
+
 **What stays stdio:** servers without contention problems (gmail,
 linkedin, web, github, …) can keep their existing stdio bootstrap. This
 change only needs to apply where shared state matters. Playwright is
