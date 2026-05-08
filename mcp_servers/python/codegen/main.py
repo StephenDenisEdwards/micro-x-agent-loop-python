@@ -838,17 +838,52 @@ async def run_task(ctx: Context, task_name: str,
         await ctx.error(f"Failed to run task: {e}")
         return _error_result(f"Failed to run task: {e}", task_name)
 
-    output = stdout
-    if stderr:
-        output += "\n--- stderr ---\n" + stderr
+    # Extract __USAGE__ sentinel emitted by _runtime/src/llm.ts on subprocess exit.
+    # Strip it from the visible stderr so the user doesn't see the raw line.
+    usage: dict | None = None
+    cleaned_stderr_lines: list[str] = []
+    for line in stderr.splitlines():
+        if line.startswith("__USAGE__:"):
+            try:
+                usage = json.loads(line[len("__USAGE__:"):])
+            except Exception:
+                pass
+            continue
+        cleaned_stderr_lines.append(line)
+    stderr = "\n".join(cleaned_stderr_lines)
 
-    structured = {
+    structured: dict = {
         "task_name": task_name,
         "exit_code": exit_code,
         "stdout": stdout[-_MAX_OUTPUT:],
         "stderr": stderr[-_MAX_OUTPUT:],
         "timed_out": timed_out,
     }
+
+    # Build the visible text content. If the runtime emitted a __USAGE__
+    # sentinel, prepend it as a prominent banner so the agent's summary
+    # mentions it (LLMs tend to drop trailing detail when summarising).
+    output_parts: list[str] = []
+    if usage is not None:
+        structured["_usage"] = usage
+        cost = usage.get("cost_usd", 0.0)
+        calls = usage.get("calls", 0)
+        model = usage.get("model", "?")
+        in_tok = usage.get("input_tokens", 0)
+        out_tok = usage.get("output_tokens", 0)
+        output_parts.append(
+            "=== TOOL LLM USAGE (NOT counted in /cost) ===\n"
+            f"  model:    {model}\n"
+            f"  calls:    {calls}\n"
+            f"  tokens:   {in_tok:,} in / {out_tok:,} out\n"
+            f"  cost_usd: ${cost:.4f}\n"
+            "=============================================\n"
+            "Please surface this cost block to the user verbatim in your reply.\n"
+        )
+    output_parts.append(stdout)
+    if stderr:
+        output_parts.append("--- stderr ---\n" + stderr)
+    output = "\n".join(output_parts)
 
     if timed_out:
         msg = f"Task timed out after {timeout_seconds} seconds."

@@ -94,7 +94,9 @@ export async function createMessage(
   }
   const response = await client.messages.create(params);
   const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-  return [text, extractUsage(response, model)];
+  const usage = extractUsage(response, model);
+  recordUsage(usage);
+  return [text, usage];
 }
 
 export async function streamMessage(
@@ -117,5 +119,56 @@ export async function streamMessage(
   stream.on("text", (text) => process.stdout.write(text));
   const response = await stream.finalMessage();
   const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-  return [text, extractUsage(response, model)];
+  const usage = extractUsage(response, model);
+  recordUsage(usage);
+  return [text, usage];
 }
+
+// ---------------------------------------------------------------------------
+// Module-level usage accumulator. Every createMessage / streamMessage call is
+// folded in automatically. On subprocess exit (beforeExit), if any LLM calls
+// were made, a `__USAGE__:` sentinel line is written to stderr. codegen
+// run_task parses this and surfaces it in its CallToolResult.
+//
+// Per-task code does not need to opt in — importing createMessage is enough.
+// ---------------------------------------------------------------------------
+
+let _accumulator: Usage = emptyUsage();
+let _callCount = 0;
+
+function recordUsage(usage: Usage): void {
+  _accumulator = addUsage(_accumulator, usage);
+  _callCount++;
+}
+
+interface UsageReport {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+  model: string;
+  cost_usd: number;
+  calls: number;
+}
+
+function buildUsageReport(): UsageReport | null {
+  if (_callCount === 0) return null;
+  return {
+    input_tokens: _accumulator.inputTokens,
+    output_tokens: _accumulator.outputTokens,
+    cache_read_input_tokens: _accumulator.cacheReadInputTokens,
+    cache_creation_input_tokens: _accumulator.cacheCreationInputTokens,
+    model: _accumulator.model,
+    cost_usd: estimateCost(_accumulator),
+    calls: _callCount,
+  };
+}
+
+let _exitHandlerWritten = false;
+process.on("beforeExit", () => {
+  if (_exitHandlerWritten) return;
+  const report = buildUsageReport();
+  if (!report) return;
+  process.stderr.write("__USAGE__:" + JSON.stringify(report) + "\n");
+  _exitHandlerWritten = true;
+});
