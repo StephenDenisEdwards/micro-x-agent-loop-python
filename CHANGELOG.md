@@ -4,6 +4,9 @@ All notable changes to micro-x-agent-loop-python are documented here, grouped by
 
 ## 2026-05-09
 
+### Features
+- **`read_file` now returns `cat -n`-style line-numbered text with `offset` / `limit` parameters.** Default returns up to 2000 lines from line 1; pass `offset` / `limit` to read a specific window. Truncation marker (`[truncated at line N of M — use offset=N+1 to continue]`) tells the model when there's more. Empty files return `(file is empty)`; offsets past EOF return a clear hint. Binary files (null byte in the first 8 KB) are refused with an explicit error rather than dumping raw bytes. `.docx` extraction is unchanged but now line-numbered. Quoting `<path>:<line>` from the output is now natural — important groundwork for the upcoming `edit_file` tool. **Backwards-incompatible** for any consumer that relied on the raw text format of the `text` content block; the agent and codegen subprocess do not, so no in-tree caller is affected.
+
 ### Behavioural changes (potentially breaking)
 - **`write_file`, `append_file`, and `read_file` now enforce path containment.** All three tools route paths through `PathPolicy` (`resolveAllowed` with `realpath`). Absolute paths outside `FILESYSTEM_WORKING_DIR` and `FILESYSTEM_ALLOWED_DIRS` are now rejected with an error naming the env var; symlinks pointing out of the allowed roots are also rejected. Closes the asymmetry flagged in [ISSUE-005](documentation/docs/issues/ISSUE-005-bash-tool-bypasses-path-policy.md) §75 (search tools were gated; file tools were open). `bash` remains unconstrained — see ISSUE-005 for the threat-model statement. Workflows that read or wrote outside the workspace via these tools need to add the extra root to `FILESYSTEM_ALLOWED_DIRS`.
 

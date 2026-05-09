@@ -4,20 +4,34 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x-ai/mcp-shared";
 import { resolveAllowed, type PathPolicy } from "../paths.js";
 
+const DEFAULT_LIMIT = 2000;
+const MAX_LIMIT = 10000;
+const BINARY_SNIFF_BYTES = 8 * 1024;
+const LINE_NUM_WIDTH = 6;
+
 export function registerReadFile(server: McpServer, logger: Logger, policy: PathPolicy): void {
   server.registerTool(
     "read_file",
     {
       description:
-        "Read the contents of a file and return it as text. Supports plain text files and .docx documents. " +
-        "Path must be inside FILESYSTEM_WORKING_DIR or FILESYSTEM_ALLOWED_DIRS — absolute paths outside the allowed roots are rejected.",
+        "Read a file as cat -n-style line-numbered text. Supports plain text and .docx documents. " +
+        "Use offset and limit for large files — by default the first 2000 lines are returned. " +
+        "Quote `<path>:<line>` coordinates from the output when referring back to the file or feeding into edit_file. " +
+        "Path must be inside FILESYSTEM_WORKING_DIR or FILESYSTEM_ALLOWED_DIRS — absolute paths outside the allowed roots are rejected. " +
+        "Binary files are refused (null-byte sniff over the first 8 KB).",
       inputSchema: {
         path: z.string().min(1).describe("Absolute or relative path to the file to read"),
+        offset: z.number().int().min(1).optional().describe("1-based line number to start reading from. Default: 1"),
+        limit: z.number().int().min(1).max(MAX_LIMIT).optional().describe(`Max lines to return. Default: ${DEFAULT_LIMIT}, hard max: ${MAX_LIMIT}`),
       },
       outputSchema: {
         content: z.string(),
         path: z.string(),
         size_bytes: z.number().int(),
+        total_lines: z.number().int(),
+        start_line: z.number().int(),
+        end_line: z.number().int(),
+        truncated: z.boolean(),
       },
       annotations: {
         readOnlyHint: true,
@@ -27,35 +41,88 @@ export function registerReadFile(server: McpServer, logger: Logger, policy: Path
     async (input) => {
       const startTime = Date.now();
       const requestId = crypto.randomUUID();
+      const offset = input.offset ?? 1;
+      const limit = input.limit ?? DEFAULT_LIMIT;
 
-      logger.info({ tool: "read_file", request_id: requestId, path: input.path }, "tool_call_start");
+      logger.info(
+        { tool: "read_file", request_id: requestId, path: input.path, offset, limit },
+        "tool_call_start",
+      );
 
       try {
         const resolvedPath = await resolveAllowed(policy, input.path, { mustExist: true });
 
-        let content: string;
-
+        let rawText: string;
         if (resolvedPath.toLowerCase().endsWith(".docx")) {
-          content = await readDocx(resolvedPath);
+          // .docx is a zip; binary detection would always reject it. Skip the check
+          // and let mammoth surface decode errors if the file is malformed.
+          rawText = await readDocx(resolvedPath);
         } else {
-          content = await readFile(resolvedPath, "utf-8");
+          const buf = await readFile(resolvedPath);
+          if (isBinary(buf)) {
+            const msg = `refusing to read binary file: ${resolvedPath} (null byte detected in first ${BINARY_SNIFF_BYTES} bytes)`;
+            logger.warn({ tool: "read_file", request_id: requestId, path: resolvedPath }, "binary_refused");
+            return {
+              content: [{ type: "text" as const, text: msg }],
+              isError: true,
+            };
+          }
+          rawText = buf.toString("utf-8");
         }
 
+        const allLines = splitLines(rawText);
+        const totalLines = allLines.length;
+
+        const startIndex = offset - 1;
+        const endIndex = Math.min(startIndex + limit, totalLines);
+        const slicedLines = startIndex < totalLines ? allLines.slice(startIndex, endIndex) : [];
+        const startLine = slicedLines.length > 0 ? offset : 0;
+        const endLine = slicedLines.length > 0 ? offset + slicedLines.length - 1 : 0;
+        const truncated = endIndex < totalLines;
+
+        let formatted: string;
+        if (totalLines === 0) {
+          formatted = "(file is empty)";
+        } else if (slicedLines.length === 0) {
+          formatted = `(offset ${offset} is past end of file — file has ${totalLines} lines)`;
+        } else {
+          const formattedLines = slicedLines.map((line, i) => {
+            const lineNum = String(offset + i).padStart(LINE_NUM_WIDTH, " ");
+            return `${lineNum}\t${line}`;
+          });
+          formatted = formattedLines.join("\n");
+          if (truncated) {
+            formatted += `\n\n[truncated at line ${endLine} of ${totalLines} — use offset=${endLine + 1} to continue, or raise limit]`;
+          }
+        }
+
+        const sizeBytes = Buffer.byteLength(rawText, "utf-8");
         const durationMs = Date.now() - startTime;
         logger.info(
-          { tool: "read_file", request_id: requestId, duration_ms: durationMs, outcome: "success", size_bytes: Buffer.byteLength(content) },
+          {
+            tool: "read_file",
+            request_id: requestId,
+            duration_ms: durationMs,
+            outcome: "success",
+            size_bytes: sizeBytes,
+            total_lines: totalLines,
+            returned_lines: slicedLines.length,
+            truncated,
+          },
           "tool_call_end",
         );
 
-        const structured = {
-          content,
-          path: resolvedPath,
-          size_bytes: Buffer.byteLength(content),
-        };
-
         return {
-          structuredContent: structured,
-          content: [{ type: "text" as const, text: content }],
+          structuredContent: {
+            content: formatted,
+            path: resolvedPath,
+            size_bytes: sizeBytes,
+            total_lines: totalLines,
+            start_line: startLine,
+            end_line: endLine,
+            truncated,
+          },
+          content: [{ type: "text" as const, text: formatted }],
         };
       } catch (err: unknown) {
         const durationMs = Date.now() - startTime;
@@ -73,6 +140,25 @@ export function registerReadFile(server: McpServer, logger: Logger, policy: Path
       }
     },
   );
+}
+
+function isBinary(buf: Buffer): boolean {
+  const len = Math.min(buf.length, BINARY_SNIFF_BYTES);
+  for (let i = 0; i < len; i++) {
+    if (buf[i] === 0) return true;
+  }
+  return false;
+}
+
+function splitLines(text: string): string[] {
+  if (text === "") return [];
+  const lines = text.split("\n");
+  // A trailing newline produces a phantom empty element — drop it so total_lines
+  // matches what `wc -l` would report for a well-formed text file.
+  if (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  return lines;
 }
 
 async function readDocx(filePath: string): Promise<string> {

@@ -29,7 +29,7 @@ Source: `mcp_servers/ts/packages/filesystem/src/`.
 |---|---|---|
 | `grep` (ripgrep) | Good. Three output modes; respects `.gitignore`; path-policy gated; opinionated description ("USE THIS — not read_file") | Verify all three output modes are wired and described |
 | `glob` (fast-glob) | Good. mtime-sorted; path-policy gated | Description is one line — no anti-pattern guidance |
-| `read_file` | Reads text + `.docx`. Path-policy gated (since 2026-05-09). **Still missing: line numbers, offset/limit** | Model can't quote `file:line`, can't read large files cheaply |
+| `read_file` | Reads text + `.docx`. Path-policy gated, line-numbered `cat -n` output, `offset`/`limit`, binary refusal (since 2026-05-09) | None remaining |
 | `write_file` | Full overwrite only. Path-policy gated (since 2026-05-09) | Forces full-file rewrites even for one-line changes |
 | `append_file` | Append only. Path-policy gated (since 2026-05-09) | OK for logs; not a substitute for edits |
 | `bash` | Full shell. 30 s timeout. **No path policy, no allowlist, no CWD pinning** (`bash.ts:9-77`). One-line description | Tracked under [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) |
@@ -193,14 +193,16 @@ Tests: not-found, directory refusal, successful delete + `/rewind` round-trip.
 
 **Deliverable:** new tool + tests + `ToolFormatting` entry. Independent of Phase 2 — can ship in either order.
 
-### Phase 3 — Upgrade `read_file`
+### Phase 3 — Upgrade `read_file` — **Completed 2026-05-09**
 
-Currently `read_file` is `readFile(path, "utf-8")` and returns raw text. Upgrade to:
+Shipped:
 
-1. **Line-numbered output** in `cat -n` format (matches Claude Code's `Read` exactly so the model's output instincts transfer).
-2. **`offset` and `limit` parameters** for large files. Default: read up to 2000 lines from line 1.
-3. ~~**Path policy gating**~~ — **Completed 2026-05-09** alongside Phase 3b. `read_file` now routes paths through `resolveAllowed(policy, path, { mustExist: true })`. Closes the read-path slice of ISSUE-005 §75.
-4. Optional: warn / refuse on binary files. Explicit error rather than dumping raw bytes.
+1. **Line-numbered output** in `cat -n` format — 6-char right-padded line number, tab, line content. Matches the convention Claude Code's `Read` uses; the model's output instincts (quoting `path:line`) transfer cleanly.
+2. **`offset` and `limit` parameters** — 1-based offset, default limit 2000, hard max 10000. Truncation marker `[truncated at line N of M — use offset=N+1 to continue]` appended when the slice doesn't reach EOF, so the model knows there's more. Empty files return `(file is empty)`; offsets past EOF return a clear hint.
+3. **Path policy gating** — already done alongside Phase 3b (`resolveAllowed(policy, path, { mustExist: true })`).
+4. **Binary refusal** — null-byte sniff over first 8 KB; clear error rather than dumping raw bytes. `.docx` exempt from the check (zip would always trip it).
+
+Structured output extended with `total_lines`, `start_line`, `end_line`, `truncated`. `.docx` handling unchanged (`mammoth` extraction); `offset`/`limit` apply to the extracted text.
 
 The line-numbered output is what makes `edit_file` ergonomic — the model can quote `file:line` from `read_file` output and feed coordinates back into edits.
 
