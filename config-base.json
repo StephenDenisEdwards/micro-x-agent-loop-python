@@ -94,6 +94,7 @@
     "filesystem__write_file": { "format": "key_value" },
     "filesystem__append_file": { "format": "key_value" },
     "filesystem__edit_file": { "format": "key_value" },
+    "filesystem__delete_file": { "format": "key_value" },
     "filesystem__save_memory": { "format": "key_value" },
     "web__web_fetch": { "format": "text", "field": "content" },
     "web__web_search": { "format": "table", "max_rows": 20 },

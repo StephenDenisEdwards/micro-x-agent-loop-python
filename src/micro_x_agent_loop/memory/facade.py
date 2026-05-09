@@ -16,9 +16,11 @@ _MUTATING_TOOL_NAMES = {
     "write_file",
     "append_file",
     "edit_file",
+    "delete_file",
     "filesystem__write_file",
     "filesystem__append_file",
     "filesystem__edit_file",
+    "filesystem__delete_file",
 }
 
 

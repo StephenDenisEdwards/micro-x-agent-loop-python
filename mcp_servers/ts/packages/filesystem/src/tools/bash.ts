@@ -20,6 +20,7 @@ export function registerBash(server: McpServer, logger: Logger, workingDir: stri
         "sed / awk for edits → use edit_file (exact-string, atomic). " +
         "echo > file → use write_file. " +
         "echo >> file → use append_file. " +
+        "rm <file> → use delete_file (checkpointed — /rewind restores). bash rm is for directories (rm -r / rmdir) and bulk deletion only. " +
         "Cross-platform pitfall: the shell is cmd.exe on Windows and /bin/sh elsewhere — quoting, chain operators (`;` vs `&`), and path conventions differ. The dedicated FS tools sidestep this. " +
         "NOT SANDBOXED: bash is NOT gated by FILESYSTEM_ALLOWED_DIRS — it can read or write anywhere the process has permission. Reach for dedicated tools first.",
       inputSchema: {

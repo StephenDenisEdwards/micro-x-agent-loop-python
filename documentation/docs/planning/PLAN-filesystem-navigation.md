@@ -181,7 +181,19 @@ Phase 2 is a **hard prerequisite** of the `edit_file` line in Phase 1's directiv
 
 `edit-file.ts` + `index.ts` registration + Python-side `predict_touched_paths` wiring + unit and integration tests + `ToolFormatting` config entry + description rewrite. Phase 1's `edit_file` directive activates only after this lands.
 
-### Phase 2b — Add `delete_file` MCP tool
+### Phase 2b — Add `delete_file` MCP tool — **Completed 2026-05-09**
+
+Shipped at `mcp_servers/ts/packages/filesystem/src/tools/delete-file.ts`, registered in `index.ts`. See [tool README](../design/tools/delete-file/README.md).
+
+Implementation matches the spec below. Notes:
+- Containment via `resolveAllowed(policy, path, { mustExist: false })`, then explicit `stat` for the friendly file-not-found and directory-refusal messages.
+- Mutation tracking via the existing `tool_input["path"]` flow — `delete_file` and `filesystem__delete_file` added to `_MUTATING_TOOL_NAMES` in `src/micro_x_agent_loop/memory/facade.py`. Snapshot happens *before* `unlink` so `/rewind` restores the file with its original contents.
+- `bash.ts` description and the system-prompt `_FS_NAVIGATION_DIRECTIVE` both now route single-file deletes to `delete_file`; `bash rm` is reframed as "directories and bulk deletion only".
+- `ToolFormatting` entry: `{"format": "key_value"}` in `config-base.json`.
+
+Tests deferred (no harness in the filesystem package; vitest setup is a separate PR — same status as Phase 2 / 3 / 3b).
+
+The original spec follows for reference.
 
 Small companion to Phase 2. Removes the last common reason to reach for `bash` for everyday FS work, completing the "bash as last resort" framing.
 

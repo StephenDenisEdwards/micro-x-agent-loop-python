@@ -225,6 +225,7 @@ and contained to the workspace via `FILESYSTEM_WORKING_DIR` + `FILESYSTEM_ALLOWE
 | Edit a few lines of a file | `edit_file` (exact-string, atomic) | `write_file` to rewrite the whole file / `bash sed` / `awk` |
 | Create a new file | `write_file` | `bash echo > file` |
 | Append to an existing file | `append_file` | `bash echo >> file` |
+| Delete a single file | `delete_file` (checkpointed — `/rewind` restores it) | `bash rm` |
 
 `bash` is appropriate for running tests, git commands, build tools, package managers, and \
 anything no dedicated tool covers. It is **not** path-policy-gated and is **not** OS-sandboxed — \
