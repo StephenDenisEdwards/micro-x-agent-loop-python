@@ -10,6 +10,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import Hit, Hits, Provider
 from textual.containers import Horizontal
+from textual.events import Key
 from textual.message import Message
 from textual.widgets import Button, Header, Static, TextArea
 
@@ -26,13 +27,18 @@ from micro_x_agent_loop.tui.widgets.tool_panel import ToolPanel
 
 
 class PromptTextArea(TextArea):
-    """TextArea that submits on Enter, inserts a newline on Shift+Enter / Ctrl+J.
+    """TextArea that submits on Enter and inserts a newline on Ctrl+Enter.
 
-    Default TextArea binds Enter to insert a newline; we override that here.
+    Plain Enter submits the prompt — TextArea's parent ``_on_key`` would
+    otherwise insert a newline and stop the event before the ``enter`` BINDING
+    could fire, so we intercept ``enter`` in ``_on_key`` and call
+    ``action_submit_prompt`` directly. Ctrl+Enter is the primary newline key;
+    Shift+Enter and Ctrl+J are fallbacks for terminals that don't forward
+    ctrl+enter (many do not — it often arrives as plain enter).
     """
 
     BINDINGS = [
-        Binding("enter", "submit_prompt", "Submit", show=False),
+        Binding("ctrl+enter", "newline", "Newline", show=False),
         Binding("shift+enter", "newline", "Newline", show=False),
         Binding("ctrl+j", "newline", "Newline", show=False),
     ]
@@ -44,8 +50,19 @@ class PromptTextArea(TextArea):
             super().__init__()
             self.text = text
 
+    async def _on_key(self, event: Key) -> None:
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            self.action_submit_prompt()
+            return
+        await super()._on_key(event)
+
     def action_submit_prompt(self) -> None:
         self.post_message(self.Submitted(self.text))
+
+    def action_newline(self) -> None:
+        self.insert("\n")
 
 _NO_RESPONSE_MSG = (
     "No response from human — question timed out. Proceed with your best judgement or report that you cannot continue."
