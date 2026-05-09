@@ -17,10 +17,11 @@ export function registerGrep(server: McpServer, logger: Logger, policy: PathPoli
     {
       description:
         "Search file contents using ripgrep. Respects .gitignore by default. " +
-        "Three output modes via output_mode — pick the cheapest that gives you what you need: " +
-        "files_with_matches (default — paths only, cheapest), " +
-        "count (per-file match counts), " +
-        "content (matching lines, with optional context and line_numbers). " +
+        "PICK THE RIGHT output_mode — the wrong mode wastes a turn: " +
+        "`content` if you need the matching LINES (e.g. \"list all headings\", \"show me where X is set\", \"find the error message\") — returns `path:line:text`. " +
+        "`files_with_matches` (the default) ONLY if a list of filenames answers the question (e.g. \"which files import X\"). " +
+        "`count` if you only need how-many-per-file. " +
+        "When in doubt, the user almost always wants `content` — `files_with_matches` is cheap because it discards the answer; do not pick it unless filenames alone are the answer. " +
         "USE THIS — not read_file — whenever you are looking for something and don't already know the exact file. " +
         "Reading whole files to scan for a string wastes tokens; grep returns only what matched. " +
         "Narrow with `glob` or `type` to avoid searching the whole tree. " +
@@ -31,7 +32,11 @@ export function registerGrep(server: McpServer, logger: Logger, policy: PathPoli
         path: z.string().optional().describe("File or directory to search. Defaults to working dir."),
         glob: z.string().optional().describe('Glob filter, e.g. "*.ts" or "src/**/*.py"'),
         type: z.string().optional().describe('File type filter, e.g. "ts", "py", "rust"'),
-        output_mode: OutputMode.default("files_with_matches"),
+        output_mode: OutputMode.default("files_with_matches").describe(
+          "`content` for matching lines (use this when the user wants matches/lines/headings/the actual text); " +
+            "`files_with_matches` (default) for just filenames (use only when filenames alone answer the question); " +
+            "`count` for per-file match counts.",
+        ),
         case_insensitive: z.boolean().default(false),
         line_numbers: z.boolean().default(true).describe("Show line numbers (content mode only)"),
         context: z.number().int().min(0).max(20).optional().describe("Lines of context before/after each match"),
