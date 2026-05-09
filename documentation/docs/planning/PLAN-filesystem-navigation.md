@@ -27,16 +27,16 @@ Source: `mcp_servers/ts/packages/filesystem/src/`.
 
 | Tool | Status | Gap |
 |---|---|---|
-| `grep` (ripgrep) | Good. Three output modes; respects `.gitignore`; path-policy gated; opinionated description ("USE THIS — not read_file") | Verify all three output modes are wired and described |
-| `glob` (fast-glob) | Good. mtime-sorted; path-policy gated | Description is one line — no anti-pattern guidance |
+| `grep` (ripgrep) | Good. Three output modes (named explicitly in the description since 2026-05-09); respects `.gitignore`; path-policy gated; opinionated description ("USE THIS — not read_file") | None remaining |
+| `glob` (fast-glob) | Good. mtime-sorted; path-policy gated; opinionated description (since 2026-05-09) | None remaining |
 | `read_file` | Reads text + `.docx`. Path-policy gated, line-numbered `cat -n` output, `offset`/`limit`, binary refusal (since 2026-05-09) | None remaining |
 | `write_file` | Full overwrite only. Path-policy gated (since 2026-05-09) | Forces full-file rewrites even for one-line changes |
 | `append_file` | Append only. Path-policy gated (since 2026-05-09) | OK for logs; not a substitute for edits |
-| `bash` | Full shell. 30 s timeout. **No path policy, no allowlist, no CWD pinning** (`bash.ts:9-77`). One-line description | Tracked under [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) |
+| `bash` | Full shell. 30 s timeout. cwd pinned to `workingDir`. **No path policy, no allowlist.** Opinionated description (since 2026-05-09) — points the model at dedicated tools and warns that bash is not sandboxed | Containment tracked under [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) (Phase 4) |
 | `edit_file` | Shipped 2026-05-09. Exact-string replacement, uniqueness check, CRLF/BOM preservation, atomic write, binary + size refusal, checkpoint-tracked | None remaining |
-| System-prompt FS guidance | Only a `tool_search` directive; FS tool selection lives inside individual descriptions | No global "use Read not cat / Grep not bash grep / Edit not sed" rule |
-| Parallelism guidance | Mentioned only for `spawn_subagent` (`_TASK_DECOMPOSITION_DIRECTIVE`) | No directive telling the model to batch independent FS calls |
-| Explore sub-agent | Exists (`spawn_subagent` with `agent_type=explore`) | Underused — system prompt does not actively push delegation |
+| System-prompt FS guidance | `_FS_NAVIGATION_DIRECTIVE` shipped 2026-05-09 — table-form tool selection + parallelism + explore-delegation + editing workflow | None remaining |
+| Parallelism guidance | Now part of `_FS_NAVIGATION_DIRECTIVE` (since 2026-05-09) — explicit "two greps + read_file in one response finish in time of slowest" | None remaining |
+| Explore sub-agent | Exists; system prompt now actively pushes delegation past ~3 grep/glob queries (since 2026-05-09) | Verification eval set still pending under Phase 5 |
 
 ## What Claude Code does differently
 
@@ -54,23 +54,20 @@ See **Reference material** below for source links. Key patterns worth borrowing:
 
 Phases are ordered by leverage-per-effort. Phases 1–2 are independent and can land in parallel; phases 3+ build on 1–2.
 
-### Phase 1 — Prompt and tool-description rewrite (no code logic)
+### Phase 1 — Prompt and tool-description rewrite — **Completed 2026-05-09**
 
-Cheap, high-impact, all in `system_prompt.py` and the TypeScript tool registrations.
+Shipped:
 
-1. **Add an FS-navigation directive** to `system_prompt.py` alongside `_TOOL_SEARCH_DIRECTIVE` and `_TASK_DECOMPOSITION_DIRECTIVE`. Suggested skeleton:
-   - Prefer `read_file` over `bash cat` / `head` / `tail`.
-   - Prefer `grep` over `bash grep` / `rg`.
-   - Prefer `glob` over `bash find` / `ls -R`.
-   - Prefer `edit_file` over `bash sed` / `awk` (once Phase 2 lands).
-   - Use `bash` only when no dedicated tool fits.
-2. **Add a parallel-execution directive**: *"If multiple FS lookups have no data dependency, issue them in a single assistant response so the harness can run them concurrently."* This is honest — `turn_engine.py:459` already does `asyncio.gather`.
-3. **Add an explore-sub-agent directive**: *"For broad codebase exploration that needs more than ~3 grep/glob queries, spawn the `explore` sub-agent so search output stays in its context, not yours."*
-4. **Rewrite `bash` tool description** to include the anti-patterns above and warn about cross-platform pitfalls. Today's description is one line.
-5. **Rewrite `read_file` and `glob` descriptions** to match the opinionated style of `grep`'s description (which already says *"USE THIS — not read_file…"*).
-6. **Verify `grep`'s three output modes** (content / files\_with\_matches / count) are exposed and clearly documented in the description so the model picks the cheapest mode.
+1. **`_FS_NAVIGATION_DIRECTIVE`** added to `system_prompt.py`, included whenever `compact=False`. Covers tool selection (table form), parallel execution, the explore-sub-agent threshold (~3 grep/glob queries), and the read_file → quote → edit_file editing workflow. Excluded from compact mode where small context windows can't afford it.
+2. **Parallel execution** called out in the directive — references `asyncio.gather` for accuracy. (Two greps + read_file in one response finish in the time of the slowest, not the sum.)
+3. **Explore sub-agent** delegation called out with the ~3-query threshold and the rationale (sub-agent's tool output stays in its context).
+4. **`bash` tool description** rewritten end-to-end: USE FOR / DO NOT USE for / cross-platform pitfall / NOT SANDBOXED. The DO NOT USE list maps every shell-FS antipattern to its dedicated-tool replacement.
+5. **`glob` description** rewritten in the opinionated style; explicitly tells the model to prefer it over `bash find` / `ls -R` and where to go for content vs full-file reads.
+6. **`grep` description** updated to name all three `output_mode` values (`files_with_matches`, `count`, `content`) with their cost ordering, so the model picks the cheapest mode that answers the question.
 
-**Deliverable:** one PR. Pure text changes. No behaviour change to tools.
+`read_file` and `edit_file` descriptions were already rewritten in Phase 3 and Phase 2 respectively.
+
+**Deliverable shipped:** one commit. Pure text changes — no behavioural change to any tool.
 
 ### Phase 2 — Add `edit_file` MCP tool — **Completed 2026-05-09**
 

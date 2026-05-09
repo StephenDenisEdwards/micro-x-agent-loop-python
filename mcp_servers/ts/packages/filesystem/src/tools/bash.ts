@@ -10,7 +10,18 @@ export function registerBash(server: McpServer, logger: Logger, workingDir: stri
   server.registerTool(
     "bash",
     {
-      description: "Execute a shell command and return its output (stdout + stderr).",
+      description:
+        "Execute a shell command in the workspace working directory. Returns combined stdout + stderr, exit code, and a timed_out flag. " +
+        "USE FOR: running tests (pytest, npm test), git commands, build tools (npm run build, cargo build), package managers (npm install, pip install), and anything no dedicated tool covers. " +
+        "DO NOT USE for filesystem work — there are dedicated tools that are cross-platform, structured, and path-contained: " +
+        "cat / head / tail → use read_file (line-numbered, offset/limit). " +
+        "grep / rg → use grep (ripgrep, three output modes). " +
+        "find / ls -R → use glob (mtime-sorted). " +
+        "sed / awk for edits → use edit_file (exact-string, atomic). " +
+        "echo > file → use write_file. " +
+        "echo >> file → use append_file. " +
+        "Cross-platform pitfall: the shell is cmd.exe on Windows and /bin/sh elsewhere — quoting, chain operators (`;` vs `&`), and path conventions differ. The dedicated FS tools sidestep this. " +
+        "NOT SANDBOXED: bash is NOT gated by FILESYSTEM_ALLOWED_DIRS — it can read or write anywhere the process has permission. Reach for dedicated tools first.",
       inputSchema: {
         command: z.string().describe("The shell command to execute"),
       },

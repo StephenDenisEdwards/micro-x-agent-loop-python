@@ -16,12 +16,15 @@ export function registerGrep(server: McpServer, logger: Logger, policy: PathPoli
     "grep",
     {
       description:
-        "Search file contents using ripgrep. Supports regex, glob/type filters, and three output modes. " +
-        "Respects .gitignore by default. " +
+        "Search file contents using ripgrep. Respects .gitignore by default. " +
+        "Three output modes via output_mode — pick the cheapest that gives you what you need: " +
+        "files_with_matches (default — paths only, cheapest), " +
+        "count (per-file match counts), " +
+        "content (matching lines, with optional context and line_numbers). " +
         "USE THIS — not read_file — whenever you are looking for something and don't already know the exact file. " +
-        "Reading whole files to scan for a string wastes tokens; grep returns only the matching lines (or filenames). " +
+        "Reading whole files to scan for a string wastes tokens; grep returns only what matched. " +
         "Narrow with `glob` or `type` to avoid searching the whole tree. " +
-        "Prefer this over `bash grep` — it is cross-platform and structured. " +
+        "Prefer this over `bash grep` / `rg` — it is cross-platform, structured, and path-contained. " +
         "read_file is for when you have a specific path and need its full contents.",
       inputSchema: {
         pattern: z.string().min(1).describe("Regex pattern (ripgrep/Rust regex syntax)"),

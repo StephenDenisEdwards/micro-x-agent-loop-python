@@ -12,8 +12,10 @@ export function registerGlob(server: McpServer, logger: Logger, policy: PathPoli
     "glob",
     {
       description:
-        'Find files by name pattern, e.g. "**/*.ts" or "src/**/*.{js,jsx}". ' +
-        "Returns paths sorted by mtime (newest first). Use grep for content search.",
+        'Find files by name pattern using fast-glob (e.g. "**/*.ts", "src/**/*.{js,jsx}", "tests/**/test_*.py"). ' +
+        "Returns absolute paths sorted by mtime (newest first). Searches the workspace working dir plus any FILESYSTEM_ALLOWED_DIRS roots. " +
+        "USE THIS — not bash find / ls -R — to discover files. It is cross-platform, structured (clean list of absolute paths), and path-contained. " +
+        "For content search use grep. For reading a file you already know the path of use read_file.",
       inputSchema: {
         pattern: z.string().min(1).describe("Glob pattern (fast-glob/micromatch syntax)"),
         path: z.string().optional().describe("Root to search from. Defaults to working dir."),

@@ -209,6 +209,47 @@ Constants (hardcoded in app):
 """
 
 
+_FS_NAVIGATION_DIRECTIVE = """\
+
+
+# Filesystem Navigation
+
+For filesystem work, use the dedicated tools — not `bash`. They are cross-platform, structured, \
+and contained to the workspace via `FILESYSTEM_WORKING_DIR` + `FILESYSTEM_ALLOWED_DIRS`.
+
+| Want to … | Use | Don't use |
+|-----------|-----|-----------|
+| Read a file | `read_file` (line-numbered, supports `offset`/`limit`) | `bash cat` / `head` / `tail` |
+| Search file contents | `grep` (ripgrep, three output modes) | `bash grep` / `rg` |
+| Find files by name pattern | `glob` (mtime-sorted, fast-glob) | `bash find` / `ls -R` |
+| Edit a few lines of a file | `edit_file` (exact-string, atomic) | `write_file` to rewrite the whole file / `bash sed` / `awk` |
+| Create a new file | `write_file` | `bash echo > file` |
+| Append to an existing file | `append_file` | `bash echo >> file` |
+
+`bash` is appropriate for running tests, git commands, build tools, package managers, and \
+anything no dedicated tool covers. It is **not** path-policy-gated and is **not** OS-sandboxed — \
+prefer the dedicated tools for any read or write.
+
+## Parallel execution
+
+If multiple FS lookups have no data dependency, issue them in a single assistant response. The \
+harness runs same-turn tool calls concurrently via `asyncio.gather`. Two greps and a read_file \
+in one response finish in the time of the slowest, not the sum.
+
+## Delegate broad exploration
+
+For exploratory work that needs more than ~3 grep/glob queries (e.g. "how does module X work", \
+"what calls function Y across the codebase"), spawn an `explore` sub-agent rather than running \
+them inline. The sub-agent's tool output stays in its context, not yours.
+
+## Editing workflow
+
+When changing existing code: `read_file` (with `offset`/`limit` if large) → quote the exact \
+context you'll change → `edit_file` with that quoted context as `old_string`. Provide enough \
+surrounding context to make the match unique — `edit_file` enforces uniqueness.\
+"""
+
+
 _TASK_DECOMPOSITION_DIRECTIVE = """\
 
 
@@ -412,6 +453,8 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
         prompt += _USER_MEMORY_GUIDANCE
     if tool_search_active:
         prompt += _TOOL_SEARCH_DIRECTIVE
+    if not compact:
+        prompt += _FS_NAVIGATION_DIRECTIVE
     if task_decomposition_enabled and not compact:
         prompt += _TASK_DECOMPOSITION_DIRECTIVE
     if not compact:
