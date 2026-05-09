@@ -280,20 +280,72 @@ See [WhatsApp MCP](tools/whatsapp-mcp/README.md) for the full setup guide.
 
 See [Configuration Reference](../operations/config.md#mcpservers) for the full config format.
 
+## Provider Schema Conversion
+
+The `Tool` protocol gives every tool the same canonical shape (`name`, `description`, `input_schema`), but each LLM provider expects tool schemas in its own native format. Conversion happens in **two stages**, with the Anthropic-style canonical dict as the pivot:
+
+```
+register Tool(name, description, input_schema)
+  → ProviderPool.convert_tools(provider_name=...)         (provider_pool.py:254)
+    → <Provider>.convert_tools(...)                       Stage 1
+      → canonicalise_tools()                              (tool.py)
+  → stream_chat(tools=<canonical list>)
+    → _to_<provider>_tools(...)                           Stage 2
+```
+
+### Stage 1 — `Tool` protocol → canonical Anthropic-style dict
+
+Every provider implements `convert_tools(tools: list[Tool]) -> list[dict]` (declared on `LLMProvider` at `provider.py:58-60`) and delegates to the shared `canonicalise_tools()` helper in `tool.py`. The result is the lowest-common-denominator superset shape: `{"name", "description", "input_schema"}`.
+
+| Provider | Implementation |
+|----------|----------------|
+| Anthropic | `anthropic_provider.py:27-28` → `canonicalise_tools()` |
+| OpenAI | `openai_provider.py:139-140` → `canonicalise_tools()` |
+| Ollama | inherits `OpenAIProvider` (`ollama_provider.py:8`) |
+| Gemini | `gemini_provider.py:137-138` → `canonicalise_tools()` |
+
+`ProviderPool.convert_tools(tools, provider_name=...)` (`provider_pool.py:254-261`) is the entry point most callers use — it dispatches to the named provider's `convert_tools`, falling back to `_fallback_provider`.
+
+### Stage 2 — canonical → native API shape, inside `stream_chat`
+
+Each provider's `stream_chat` takes the already-canonical `tools: list[dict]` and reshapes it for its own SDK before issuing the request:
+
+| Provider | Conversion site | Native shape |
+|----------|-----------------|--------------|
+| Anthropic | `anthropic_provider.py:71-75, 97` | Pass-through. With prompt-cache enabled, copies the list and stamps `cache_control` on the last tool entry |
+| OpenAI | `_to_openai_tools()` at `openai_provider.py:108-116`, called at `:193` | `{"type": "function", "function": {"name", "description", "parameters": <input_schema>}}` |
+| Ollama | inherits OpenAI's `_to_openai_tools` | Same as OpenAI; `_build_stream_kwargs` adds `tool_choice="auto"` (`ollama_provider.py:43-44`) |
+| Gemini | `_to_gemini_tools()` at `gemini_provider.py:108-122`, called at `:159` | `types.Tool(function_declarations=[FunctionDeclaration(name, description, parameters=<input_schema>)])` |
+
+### Symmetric inbound normalization
+
+Each provider also normalizes its own response back into the same Anthropic-style internal format. `stream_chat` returns `(message, tool_use_blocks, stop_reason, usage)` where each `tool_use` block looks like `{"type": "tool_use", "id": ..., "name": ..., "input": {...}}` regardless of which provider produced it. The conversions on the way in mirror the ones on the way out (e.g. OpenAI `tool_calls[].function` → `tool_use` block at `openai_provider.py:281-301`).
+
+This is what lets `TurnEngine` classify and dispatch tool calls (`turn_engine.py:255-272`) without knowing or caring which provider was used — it only ever inspects `block["name"]` and `block["input"]`.
+
+### Pseudo-tools ride the same pipeline
+
+Pseudo-tools (`tool_search`, `ask_user`, `spawn_subagent`, the four `task_*` tools) are registered as ordinary `Tool` objects with `name`, `description`, and `input_schema`. Both stages above process them exactly like MCP tools, so a single registration is enough for the LLM to "see" the tool through any provider. The only thing that differs is **execution**: classification at `turn_engine.py:261-272` routes them to inline handlers in the engine instead of dispatching to an MCP server.
+
 ## Pseudo-Tools
 
 Pseudo-tools are tool schemas sent to the LLM that are **not** backed by MCP servers. They are handled inline in `turn_engine.py` — no MCP execution, no spinner, no checkpoint, no event callbacks. Results are returned directly as `tool_result` messages.
 
 | Pseudo-Tool | Module | Purpose | Activation |
 |-------------|--------|---------|------------|
-| `tool_search` | `tool_search.py` | On-demand tool discovery — LLM searches for tools by keyword, matching schemas are loaded for the current turn | Opt-in via `ToolSearchEnabled` config |
-| `ask_user` | `ask_user.py` | Human-in-the-loop questioning — LLM pauses to ask the user a clarifying question with optional structured choices | Always-on |
+| `tool_search` | `tool_search.py` | On-demand tool discovery — LLM searches for tools by keyword (or via embeddings), matching schemas are loaded for the current turn | Opt-in via `ToolSearchEnabled` config |
+| `ask_user` | routed through `AgentChannel.ask_user` | Human-in-the-loop questioning — LLM pauses to ask the user a clarifying question with optional structured choices | Always-on (when a channel is present) |
+| `spawn_subagent` | `sub_agent.py` (`SubAgentRunner`) | Spawn an `explore` / `summarize` / `general` sub-agent in its own context window | Opt-in via `SubAgentsEnabled` config |
+| `task_create` | `tasks/manager.py` | Create a task in `.micro_x/tasks.db` (with optional dependencies) | Opt-in via `TaskDecompositionEnabled` config |
+| `task_update` | `tasks/manager.py` | Update task status / fields; triggers mutation listeners | Opt-in via `TaskDecompositionEnabled` config |
+| `task_list` | `tasks/manager.py` | List tasks with filters (status, owner, parent) | Opt-in via `TaskDecompositionEnabled` config |
+| `task_get` | `tasks/manager.py` | Fetch a single task by id | Opt-in via `TaskDecompositionEnabled` config |
 
-Both pseudo-tools follow the same pattern in `turn_engine.py`: blocks are classified in a three-way split (search / ask_user / regular), pseudo-tool results are collected into `inline_results`, and if no regular tools are present, the loop continues immediately without creating a checkpoint.
+All pseudo-tools follow the same pattern in `turn_engine.py:255-272`: each `tool_use` block is classified into one of **five buckets** — `tool_search` / `ask_user` / `spawn_subagent` / `task_*` / regular. Pseudo-tool results are collected into `inline_results`, and if no regular tools are present, the loop appends those results and continues immediately without creating a checkpoint or invoking the MCP execution path.
 
-When pseudo-tools and regular tools appear in the same LLM response, pseudo-tool results are handled first, then regular tools execute in parallel, and all results are merged in the original block order before being appended to the conversation.
+When pseudo-tools and regular tools appear in the same LLM response, pseudo-tool results are handled first, then regular tools execute in parallel via `asyncio.gather` (`turn_engine.py:459`), and all results are merged before being appended to the conversation.
 
-See [Ask User Plan](../planning/PLAN-ask-user.md) and [Tool Search Plan](../planning/PLAN-tool-search.md) for implementation details.
+See [Ask User Plan](../planning/PLAN-ask-user.md), [Tool Search Plan](../planning/PLAN-tool-search.md), [Sub-Agents Plan](../planning/PLAN-sub-agents.md), and [Task Decomposition Design](DESIGN-task-decomposition.md) for implementation details.
 
 ## Adding a New Tool
 
