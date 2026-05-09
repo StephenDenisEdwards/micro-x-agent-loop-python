@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-05-09 (Phase 3b shipped)
+Last updated: 2026-05-09 (Filesystem Navigation plan completed: all of Phases 1, 2, 2b, 3, 3b, 4, 5 shipped)
 
 ## Priority Queue
 
@@ -37,7 +37,6 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | **24** | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | **In Progress** | — | — | Phase 1 code-complete (shared + echo). Pending: npm scope registration + publish. |
 | **25** | [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | **Completed** | — | — | Resolved [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). All 4 phases delivered. End-to-end smoke test discovered 23 Playwright tools over SSE; clean process-tree shutdown on Windows via taskkill /T. |
 | **26** | [JobServe MCP Server](PLAN-jobserve-mcp.md) | Planned | — | — | Replaces the failed `tools/jobserve_apply/` codegen experiment with a hand-written first-party MCP server that wraps the JobServe apply flow. Same architectural pattern as gmail/linkedin/web/github MCPs. ~1.5–2 days. |
-| **27** | [Filesystem Navigation](PLAN-filesystem-navigation.md) | **In Progress** | — | — | Make the agent fluent at FS work à la Claude Code. **Shipped 2026-05-09:** Phases 1, 2, 2b, 3, 3b, **4** — full file-tool surface (`read_file` line-numbered + `offset`/`limit`, `write_file` / `append_file` / `edit_file` / `delete_file` all path-contained and checkpoint-tracked), `bash` containment via default-on path guard + opt-in allowlist, opinionated descriptions, FS-navigation directive in system prompt. **[ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) resolved in its accident-prevention scope** (adversarial portion explicitly downgraded to OS-level work). Remaining: Phase 5 (explore-sub-agent eval set). ~0.5 day remaining. |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
 <details>
@@ -58,6 +57,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | — | [TypeScript Codegen Template](PLAN-typescript-codegen-template.md) | Completed |
 | — | [Codegen Parameterisation](PLAN-codegen-parameterisation.md) | Completed |
 | — | [Codegen Hardening](PLAN-codegen-hardening.md) | Completed |
+| — | [Filesystem Navigation](PLAN-filesystem-navigation.md) | Completed 2026-05-09 — all 6 active phases (1, 2, 2b, 3, 3b, 4, 5) shipped; Phase 6 (image/PDF/notebook) deferred until a use case appears; ISSUE-005 resolved in accident-prevention scope |
 
 </details>
 
@@ -68,9 +68,8 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 
 | Status | Count |
 |--------|-------|
-| Completed | 38 |
+| Completed | 39 |
 | Review | 1 |
-| Phase 2b Completed (remaining phases pending) | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |

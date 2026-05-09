@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "description": "Eval prompts that verify the FS-navigation directive (Phase 1) actually shifts model behaviour. All prompts are READ-ONLY against the agent's own codebase — no edits, no fixture setup needed.",
+  "scoring": {
+    "ignore_tools": [
+      "tool_search",
+      "ask_user",
+      "task_create",
+      "task_update",
+      "task_list",
+      "task_get"
+    ],
+    "comment": "Discovery and pseudo-tools are not what the directive is about; ignore them when checking expectations."
+  },
+  "prompts": [
+    {
+      "id": "narrow-read-single-file",
+      "category": "narrow",
+      "prompt": "Read the file `src/micro_x_agent_loop/system_prompt.py` and tell me how many directive constants (variables ending in _DIRECTIVE) it defines.",
+      "expect": {
+        "must_use": ["filesystem__read_file"],
+        "must_not_use": ["filesystem__bash", "filesystem__write_file"],
+        "must_not_spawn_subagent": true
+      },
+      "rationale": "Single known-path read. Should NOT spawn explore (only one file). Should NOT use bash cat."
+    },
+    {
+      "id": "narrow-glob-single-dir",
+      "category": "narrow",
+      "prompt": "List every TypeScript file under `mcp_servers/ts/packages/filesystem/src/tools/` (just the filenames).",
+      "expect": {
+        "must_use": ["filesystem__glob"],
+        "must_not_use": ["filesystem__bash"],
+        "must_not_spawn_subagent": true
+      },
+      "rationale": "Pattern-based file discovery. Should use glob, not bash find or ls -R."
+    },
+    {
+      "id": "narrow-grep-known-symbol",
+      "category": "narrow",
+      "prompt": "In `src/micro_x_agent_loop/memory/facade.py`, find the line that defines `_MUTATING_TOOL_NAMES` and tell me which tool names are in it.",
+      "expect": {
+        "must_use": ["filesystem__grep"],
+        "must_not_use": ["filesystem__bash"],
+        "must_not_spawn_subagent": true
+      },
+      "rationale": "Targeted content search in a known file. Should use grep (cheaper than reading the whole file), not bash grep."
+    },
+    {
+      "id": "broad-cross-codebase-callers",
+      "category": "broad",
+      "prompt": "Find every file across the repository that references `resolveAllowed` and summarise what each one does with it.",
+      "expect": {
+        "must_use": ["filesystem__grep", "filesystem__read_file"],
+        "must_not_use": ["filesystem__bash"]
+      },
+      "rationale": "Broad search-then-read. grep to find files, read_file to inspect each. Reads of independent files should be issued in parallel where possible (not scored programmatically — see README)."
+    },
+    {
+      "id": "broad-find-all-implementations",
+      "category": "broad",
+      "prompt": "List every place the symbol `predict_touched_paths` appears in the Python source under `src/`, and for each one tell me whether it's a definition or a call site.",
+      "expect": {
+        "must_use": ["filesystem__grep"],
+        "must_not_use": ["filesystem__bash"]
+      },
+      "rationale": "Symbol search across a tree. grep is the cheapest tool. read_file may also be used to disambiguate definitions from calls — that's fine."
+    },
+    {
+      "id": "broad-locate-config-keys",
+      "category": "broad",
+      "prompt": "Find all the `FILESYSTEM_*` environment variables this project's filesystem MCP server reads. Cite the file:line for each.",
+      "expect": {
+        "must_use": ["filesystem__grep"],
+        "must_not_use": ["filesystem__bash"]
+      },
+      "rationale": "Pattern search across multiple files. grep with the right pattern handles it."
+    },
+    {
+      "id": "vague-explain-subsystem",
+      "category": "vague",
+      "prompt": "How does the task decomposition system in this codebase work? Walk me through the lifecycle of a task from creation to completion.",
+      "expect": {
+        "must_spawn_subagent": true,
+        "must_not_use": ["filesystem__bash"]
+      },
+      "rationale": "Open-ended exploration that will need many greps + reads. Should spawn explore so search noise stays in the sub-agent's context."
+    },
+    {
+      "id": "vague-architecture-question",
+      "category": "vague",
+      "prompt": "What's the relationship between `Agent`, `TurnEngine`, and `ProviderPool` in this codebase? Explain how a single user prompt flows through them.",
+      "expect": {
+        "must_spawn_subagent": true,
+        "must_not_use": ["filesystem__bash"]
+      },
+      "rationale": "Multi-file architecture question. Three entry points, each likely needing its own read. Explore sub-agent keeps the digest in its context only."
+    }
+  ]
+}

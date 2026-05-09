@@ -1,6 +1,6 @@
 # Plan: Filesystem Navigation Capability
 
-**Status: Planned** (2026-05-09)
+**Status: Completed (2026-05-09)** — Phases 1, 2, 2b, 3, 3b, 4, 5 all shipped on 2026-05-09. Phase 6 (image / PDF / notebook reading) is **deferred** — no concrete use case has appeared. ISSUE-005 is resolved in its accident-prevention scope (adversarial portion explicitly out of scope, requires OS-level isolation).
 
 ## Context
 
@@ -326,7 +326,19 @@ The path-guard tokenizer must handle both platforms; test matrix must include bo
 
 Phase 4 (with Phase 3b) delivers **Option A** with the path guard default-on, satisfying ISSUE-005 acceptance criteria §62-69. **Option B** is explicitly deferred with re-evaluation criteria above. **Option C** (OS sandboxing) remains out of scope. Residual adversarial risk is acknowledged in the bash tool description rather than papered over.
 
-### Phase 5 — Promote the `explore` sub-agent + behavioural eval set (post Phase 1)
+### Phase 5 — Promote the `explore` sub-agent + behavioural eval set — **Completed 2026-05-09**
+
+Shipped at `tests/evals/filesystem-navigation/`:
+
+- `prompts.json` — eight read-only prompts across three categories (3 narrow, 3 broad, 2 vague) with per-prompt `expect` blocks (`must_use` / `must_not_use` / `must_spawn_subagent` / `must_not_spawn_subagent`) and `rationale` fields documenting the design intent.
+- `run.py` — Python runner (~250 lines, ruff + mypy clean). Invokes the agent autonomously per prompt with a unique session_id, parses `metrics.jsonl` for `tool_execution` events scoped to that session, scores observed tool families against expectations, supports `--retries N` for non-determinism, `--only ID[,ID]` for targeted runs, `--output PATH` for structured JSON output. Exit code 0 if the 80% threshold is met.
+- `README.md` — purpose, how-it-works, prompt-categories table, how-to-run, cost note, limitations (parallelism not scored programmatically; eval is read-only; single-model verification by default), tuning loop.
+
+The eval is read-only against the agent's own codebase — no fixture setup needed, no risk of mutating the repo. `tool_search` / `ask_user` / `task_*` are explicitly excluded from scoring (they're discovery / orchestration plumbing, not the FS-tool selection the directive is about).
+
+Backs acceptance criteria #1 and #2 of this plan.
+
+The original spec follows for reference.
 
 Phase 1 adds the directive; this phase verifies it actually changes behaviour and provides the eval set that the acceptance criteria reference.
 
