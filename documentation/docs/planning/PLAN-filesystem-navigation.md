@@ -29,9 +29,9 @@ Source: `mcp_servers/ts/packages/filesystem/src/`.
 |---|---|---|
 | `grep` (ripgrep) | Good. Three output modes; respects `.gitignore`; path-policy gated; opinionated description ("USE THIS — not read_file") | Verify all three output modes are wired and described |
 | `glob` (fast-glob) | Good. mtime-sorted; path-policy gated | Description is one line — no anti-pattern guidance |
-| `read_file` | Minimal. Reads text + `.docx`. **No line numbers, no offset/limit, no path policy** (`read-file.ts:7-77`) | Major capability gap — model can't quote `file:line`, can't read large files cheaply |
-| `write_file` | Full overwrite only. No path policy | Forces full-file rewrites even for one-line changes |
-| `append_file` | Append only. No path policy | OK for logs; not a substitute for edits |
+| `read_file` | Reads text + `.docx`. Path-policy gated (since 2026-05-09). **Still missing: line numbers, offset/limit** | Model can't quote `file:line`, can't read large files cheaply |
+| `write_file` | Full overwrite only. Path-policy gated (since 2026-05-09) | Forces full-file rewrites even for one-line changes |
+| `append_file` | Append only. Path-policy gated (since 2026-05-09) | OK for logs; not a substitute for edits |
 | `bash` | Full shell. 30 s timeout. **No path policy, no allowlist, no CWD pinning** (`bash.ts:9-77`). One-line description | Tracked under [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) |
 | **`edit_file`** | **Missing** | Highest-leverage capability gap |
 | System-prompt FS guidance | Only a `tool_search` directive; FS tool selection lives inside individual descriptions | No global "use Read not cat / Grep not bash grep / Edit not sed" rule |
@@ -199,7 +199,7 @@ Currently `read_file` is `readFile(path, "utf-8")` and returns raw text. Upgrade
 
 1. **Line-numbered output** in `cat -n` format (matches Claude Code's `Read` exactly so the model's output instincts transfer).
 2. **`offset` and `limit` parameters** for large files. Default: read up to 2000 lines from line 1.
-3. **Path policy gating** (closes part of ISSUE-005 for the read path).
+3. ~~**Path policy gating**~~ — **Completed 2026-05-09** alongside Phase 3b. `read_file` now routes paths through `resolveAllowed(policy, path, { mustExist: true })`. Closes the read-path slice of ISSUE-005 §75.
 4. Optional: warn / refuse on binary files. Explicit error rather than dumping raw bytes.
 
 The line-numbered output is what makes `edit_file` ergonomic — the model can quote `file:line` from `read_file` output and feed coordinates back into edits.
@@ -208,9 +208,9 @@ The line-numbered output is what makes `edit_file` ergonomic — the model can q
 
 **Deliverable:** updated `read-file.ts` + description rewrite. Backwards-incompatible for any consumer reading the raw text via `structuredContent.content`, but the agent only consumes the `text` content block. (Codegen subprocesses also call MCP tools — confirm none depend on the raw `read_file` output before merging.)
 
-### Phase 3b — Migrate `write_file` / `append_file` onto `PathPolicy` — **Completed 2026-05-09**
+### Phase 3b — Migrate `write_file` / `append_file` (and `read_file`) onto `PathPolicy` — **Completed 2026-05-09**
 
-Shipped as a standalone change ahead of the rest of the plan. `write_file` and `append_file` now route paths through `resolveAllowed(policy, path, { mustExist: false })`; absolute paths outside `FILESYSTEM_WORKING_DIR` / `FILESYSTEM_ALLOWED_DIRS` are rejected; symlinks pointing outside are caught by `realpath`. Documented in `documentation/docs/setup/mcp-servers.md`, `documentation/docs/design/tools/write-file/README.md`, and `CHANGELOG.md` (2026-05-09 entry).
+Shipped as standalone changes ahead of the rest of the plan. All three file tools now route paths through `resolveAllowed(policy, path, ...)` (write/append use `mustExist: false`; read uses `mustExist: true`). Absolute paths outside `FILESYSTEM_WORKING_DIR` / `FILESYSTEM_ALLOWED_DIRS` are rejected; symlinks pointing outside are caught by `realpath`. Documented in `documentation/docs/setup/mcp-servers.md`, the per-tool design READMEs, and `CHANGELOG.md` (2026-05-09 entry). Closes ISSUE-005 §75 in its entirety for the file tools — `bash` containment remains pending under Phase 4.
 
 Carved out of the original Phase 4. [ISSUE-005's Related section](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) flags the asymmetry: `grep` and `glob` enforce containment, but `write_file` and `append_file` do not — "backwards" given the write tools are higher-risk. Phase 3 migrates `read_file`; this phase finishes the job.
 

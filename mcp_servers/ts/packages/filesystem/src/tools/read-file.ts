@@ -1,15 +1,16 @@
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x-ai/mcp-shared";
+import { resolveAllowed, type PathPolicy } from "../paths.js";
 
-export function registerReadFile(server: McpServer, logger: Logger, workingDir: string): void {
+export function registerReadFile(server: McpServer, logger: Logger, policy: PathPolicy): void {
   server.registerTool(
     "read_file",
     {
       description:
-        "Read the contents of a file and return it as text. Supports plain text files and .docx documents.",
+        "Read the contents of a file and return it as text. Supports plain text files and .docx documents. " +
+        "Path must be inside FILESYSTEM_WORKING_DIR or FILESYSTEM_ALLOWED_DIRS — absolute paths outside the allowed roots are rejected.",
       inputSchema: {
         path: z.string().min(1).describe("Absolute or relative path to the file to read"),
       },
@@ -30,9 +31,7 @@ export function registerReadFile(server: McpServer, logger: Logger, workingDir: 
       logger.info({ tool: "read_file", request_id: requestId, path: input.path }, "tool_call_start");
 
       try {
-        const resolvedPath = path.isAbsolute(input.path)
-          ? input.path
-          : path.resolve(workingDir, input.path);
+        const resolvedPath = await resolveAllowed(policy, input.path, { mustExist: true });
 
         let content: string;
 

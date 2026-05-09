@@ -10,15 +10,16 @@ Read the contents of a file and return it as text.
 
 ## Behavior
 
-- **Relative paths:** Resolved against `WorkingDirectory` from `config.json` if configured
+- **Relative paths:** Resolved against `FILESYSTEM_WORKING_DIR`
 - **Encoding:** UTF-8
 - **Supported formats:** Plain text files and `.docx` documents
-- **`.docx` support:** Uses `python-docx` to extract paragraph text
+- **`.docx` support:** Extracted via `mammoth`
+- **Containment:** Path must resolve (via `realpath`) to somewhere inside `FILESYSTEM_WORKING_DIR` or `FILESYSTEM_ALLOWED_DIRS`. Absolute paths outside the allowed roots are rejected with an error naming the env var. Symlinks pointing outside are caught by `realpath`. (`bash` is *not* gated this way — see [ISSUE-005](../../../issues/ISSUE-005-bash-tool-bypasses-path-policy.md).)
 
 ## Implementation
 
 - Server: `mcp_servers/ts/packages/filesystem/src/tools/read-file.ts`
-- Path resolution: relative paths resolved against `FILESYSTEM_WORKING_DIR` env var
+- Path resolution + containment: `resolveAllowed(policy, path, { mustExist: true })` from `paths.ts`
 - `.docx` files are detected by extension and extracted via `mammoth`
 - Large file output may be truncated by the agent's `MaxToolResultChars` limit
 
