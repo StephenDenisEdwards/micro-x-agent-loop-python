@@ -1,8 +1,8 @@
 {
-  "email_summary": {
-    "tool_name": "email_summary",
-    "description": "Reads the last N emails from Gmail inbox and writes a markdown summary file.",
-    "created": "2026-03-11",
+  "jobserve_email_scraper": {
+    "tool_name": "jobserve_email_scraper",
+    "description": "Scrapes job listings from JobServe emails and appends them to a markdown file.",
+    "created": "2026-05-06",
     "server": {
       "transport": "stdio",
       "command": "npx",
@@ -12,13 +12,13 @@
         "--config",
         "../../config.json"
       ],
-      "cwd": "tools/email_summary/"
+      "cwd": "tools/jobserve_email_scraper/"
     }
   },
-  "daily_job_search": {
-    "tool_name": "daily_job_search",
-    "description": "Generates a daily job search report by searching Gmail and LinkedIn for AI contract roles, scoring them, and writing a markdown report.",
-    "created": "2026-04-14",
+  "linkedin_job_scraper": {
+    "tool_name": "linkedin_job_scraper",
+    "description": "Search LinkedIn for recent job listings relevant to a CV and append full job specs to a markdown file.",
+    "created": "2026-05-06",
     "server": {
       "transport": "stdio",
       "command": "npx",
@@ -28,13 +28,13 @@
         "--config",
         "../../config.json"
       ],
-      "cwd": "tools/daily_job_search/"
+      "cwd": "tools/linkedin_job_scraper/"
     }
   },
-  "job_search": {
-    "tool_name": "job_search",
-    "description": "Search Gmail and LinkedIn for job alerts, score them, and generate a ranked markdown report.",
-    "created": "2026-04-14",
+  "jobserve_rss_aggregator": {
+    "tool_name": "jobserve_rss_aggregator",
+    "description": "Aggregate job listings from RSS feeds and score them against a CV using Claude LLM",
+    "created": "2026-05-07",
     "server": {
       "transport": "stdio",
       "command": "npx",
@@ -44,7 +44,23 @@
         "--config",
         "../../config.json"
       ],
-      "cwd": "tools/job_search/"
+      "cwd": "tools/jobserve_rss_aggregator/"
+    }
+  },
+  "jobserve_apply": {
+    "tool_name": "jobserve_apply",
+    "description": "Automatically applies to high-scoring JobServe jobs listed in a markdown file using a logged-in Playwright browser.",
+    "created": "2026-05-08",
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/jobserve_apply/"
     }
   }
 }
