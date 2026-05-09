@@ -24,6 +24,25 @@ from micro_x_agent_loop.usage import UsageResult
 _encoding = tiktoken.get_encoding("cl100k_base")
 
 
+# Tool results carried verbatim through compaction. These are tools whose results
+# are deterministic, content-bearing, and explicitly fetched by the model — the
+# model usually wants the exact bytes back (quote a line, feed into edit_file,
+# etc.). Summarising them defeats the purpose, breaks the read -> edit_file
+# workflow, and forces a re-read if the content is needed again.
+#
+# Tools NOT on this list (bash, web fetch, sub-agent results) get summarised
+# normally — their outputs can be huge and undirected, so summarisation is the
+# right move.
+_VERBATIM_TOOL_NAMES: set[str] = {
+    "read_file",
+    "filesystem__read_file",
+    "grep",
+    "filesystem__grep",
+    "glob",
+    "filesystem__glob",
+}
+
+
 @runtime_checkable
 class CompactionStrategy(Protocol):
     async def maybe_compact(self, messages: list[dict]) -> list[dict]: ...
@@ -78,31 +97,50 @@ class SummarizeCompactionStrategy:
         if compact_end <= compact_start:
             return messages
 
-        compactable = messages[compact_start:compact_end]
+        # Identify verbatim message pairs in the compactable range. These will
+        # be carried through the compaction unchanged — only the non-verbatim
+        # messages get summarised.
+        verbatim_indices = _find_verbatim_indices(messages, compact_start, compact_end)
+        verbatim_set = set(verbatim_indices)
+        summarisable = [
+            messages[i] for i in range(compact_start, compact_end) if i not in verbatim_set
+        ]
+
+        compactable_count = compact_end - compact_start
+
+        if not summarisable:
+            logger.info(
+                f"Compaction: all {compactable_count} compactable messages are verbatim"
+                f" tool results (read_file/grep/glob) — skipping summarisation"
+            )
+            return messages
+
+        verbatim_msgs = [messages[i] for i in verbatim_indices]
 
         logger.info(
             f"Compaction: estimated ~{estimated:,} tokens, threshold {self._threshold_tokens:,}"
-            f" — compacting {len(compactable)} messages"
+            f" — compacting {len(summarisable)} of {compactable_count} messages"
+            f" ({len(verbatim_msgs)} verbatim tool-result messages preserved)"
         )
 
         try:
-            summary, usage = await _summarize(self._provider, self._model, compactable)
+            summary, usage = await _summarize(self._provider, self._model, summarisable)
         except Exception as ex:
             logger.warning(f"Compaction failed: {ex}. Falling back to history trimming.")
             return messages
 
-        result = _rebuild_messages(messages, compact_end, summary)
+        result = _rebuild_messages(messages, compact_end, summary, verbatim_msgs)
 
         tokens_after = estimate_tokens(result)
         summary_tokens = len(_encoding.encode(summary))
         freed = estimated - tokens_after
         logger.info(
-            f"Compaction: summarized {len(compactable)} messages into ~{summary_tokens:,} tokens,"
-            f" freed ~{freed:,} estimated tokens"
+            f"Compaction: summarized {len(summarisable)} messages into ~{summary_tokens:,} tokens,"
+            f" preserved {len(verbatim_msgs)} verbatim, freed ~{freed:,} estimated tokens"
         )
 
         if self._on_compaction_completed is not None:
-            self._on_compaction_completed(usage, estimated, tokens_after, len(compactable))
+            self._on_compaction_completed(usage, estimated, tokens_after, compactable_count)
 
         return result
 
@@ -194,6 +232,10 @@ Preserve these details precisely:
 Do NOT include raw tool output data (job descriptions, email bodies, etc.) —
 just note what was retrieved and key findings.
 
+NOTE: file-read tool results (read_file, grep, glob) are preserved verbatim
+outside this summary — you do not need to repeat their contents. Just note
+which files were read and what was being looked for.
+
 Format as a concise narrative summary.
 
 ---
@@ -224,6 +266,62 @@ async def _summarize(
     return text, usage
 
 
+def _has_verbatim_tool_use(msg: dict) -> bool:
+    """True if this assistant message contains any tool_use block whose name
+    is in ``_VERBATIM_TOOL_NAMES``. A single verbatim call anchors the whole
+    message — mixed batches (e.g. read_file + edit_file in one response) are
+    treated as verbatim too, which is harmless because the non-verbatim
+    results in the same batch are tiny status strings.
+    """
+    if msg.get("role") != "assistant":
+        return False
+    content = msg.get("content", [])
+    if not isinstance(content, list):
+        return False
+    for block in content:
+        if (
+            isinstance(block, dict)
+            and block.get("type") == "tool_use"
+            and block.get("name", "") in _VERBATIM_TOOL_NAMES
+        ):
+            return True
+    return False
+
+
+def _is_user_tool_result_message(msg: dict) -> bool:
+    """True if this user message contains only ``tool_result`` blocks (the
+    typical post-tool-use message).
+    """
+    if msg.get("role") != "user":
+        return False
+    content = msg.get("content", [])
+    if not isinstance(content, list) or not content:
+        return False
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != "tool_result":
+            return False
+    return True
+
+
+def _find_verbatim_indices(messages: list[dict], start: int, end: int) -> list[int]:
+    """Indices in ``[start, end)`` whose messages should survive compaction
+    verbatim. Returns the assistant tool_use messages that contain at least
+    one verbatim tool call, plus the immediately-following user tool_result
+    messages they pair with.
+    """
+    verbatim: list[int] = []
+    i = start
+    while i < end:
+        if _has_verbatim_tool_use(messages[i]):
+            verbatim.append(i)
+            if i + 1 < end and _is_user_tool_result_message(messages[i + 1]):
+                verbatim.append(i + 1)
+                i += 2
+                continue
+        i += 1
+    return verbatim
+
+
 def _adjust_boundary(messages: list[dict], start: int, end: int) -> int:
     while end > start + 1:
         boundary_msg = messages[end - 1]
@@ -246,6 +344,7 @@ def _rebuild_messages(
     messages: list[dict],
     compact_end: int,
     summary: str,
+    verbatim_msgs: list[dict] | None = None,
 ) -> list[dict]:
     first_msg = messages[0]
     original_content = first_msg.get("content", "")
@@ -257,18 +356,32 @@ def _rebuild_messages(
     merged_content = original_content + "\n\n[CONTEXT SUMMARY]\n" + summary + "\n[END CONTEXT SUMMARY]"
     merged_first = {"role": "user", "content": merged_content}
 
+    verbatim_msgs = verbatim_msgs or []
     tail = messages[compact_end:]
 
-    result = [merged_first]
+    result: list[dict] = [merged_first]
 
-    # Insert assistant ack if needed for role alternation
-    if tail and tail[0].get("role") == "user":
-        result.append(
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": "Understood. Continuing with the current task."}],
-            }
-        )
+    # Insert verbatim tool-result pairs (assistant tool_use + user tool_result)
+    # in chronological order. They alternate naturally so no role-fixup is
+    # needed within the verbatim block. The merged_first is role=user, and
+    # verbatim_msgs[0] (when present) is always role=assistant by construction
+    # in _find_verbatim_indices.
+    result.extend(verbatim_msgs)
+
+    # Role alternation between the last item in `result` and the first item
+    # in `tail`. The last item is either merged_first (user) or the final
+    # verbatim msg (user — verbatim pairs end with the tool_result). Either
+    # way the next item must be assistant; if tail[0] is user, insert an ack.
+    if tail and tail[0].get("role") == result[-1].get("role"):
+        if result[-1].get("role") == "user":
+            result.append(
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Understood. Continuing with the current task."}],
+                }
+            )
+        else:
+            result.append({"role": "user", "content": "Continuing."})
 
     result.extend(tail)
     return result
