@@ -6,7 +6,16 @@
 
 ## Status
 
-**Open** — design decision needed before implementation.
+**Resolved (accident-prevention scope) — 2026-05-09.** Option A shipped:
+
+- File tools (`grep`, `glob`, `read_file`, `write_file`, `append_file`, `edit_file`, `delete_file`) now all enforce `PathPolicy` with `realpath` symlink-escape defence. (Migrated 2026-05-09; closes the asymmetry called out in §75.)
+- `bash` ships `FILESYSTEM_BASH_PATH_GUARD=true` by default — rejects commands referencing absolute paths or `..` traversal that resolve outside `FILESYSTEM_WORKING_DIR` / `FILESYSTEM_ALLOWED_DIRS`. Opt-out via `=false`.
+- `bash` allowlist `FILESYSTEM_BASH_ALLOWED_COMMANDS` shipped opt-in (three modes: unset / empty = deny-all kill switch / comma-separated first-token list).
+- Bash tool description and per-tool README explicitly document the limits — string-level filters, trivially bypassable, accident prevention only.
+
+**Adversarial portion explicitly out of scope.** A determined or prompt-injected agent can defeat string-level filters via `sh -c`, env-var indirection, base64 pipelines, write-then-execute, command substitution. Real isolation requires OS-level controls (containers, AppArmor, Windows Job Objects, sandbox-exec). Re-evaluate Option B (replace `bash` with structured tools — `git_command`, `run_tests`, `mkdir`/`mv`/`rm`) if any of: untrusted prompts, multi-tenant use, or sandbox-incompatible deployment.
+
+See [PLAN-filesystem-navigation](../planning/PLAN-filesystem-navigation.md) Phase 4 for the implementation rationale and trade-offs.
 
 ## Summary
 

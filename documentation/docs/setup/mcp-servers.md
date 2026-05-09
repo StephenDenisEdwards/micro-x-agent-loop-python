@@ -31,6 +31,8 @@ File read/write operations and user memory.
 | `FILESYSTEM_WORKING_DIR` | No | Root directory the agent can access. Defaults to current working directory |
 | `FILESYSTEM_ALLOWED_DIRS` | No | Extra roots `grep` / `glob` / `read_file` / `write_file` / `append_file` / `edit_file` / `delete_file` may access, separated by the platform path delimiter (`;` on Windows, `:` elsewhere). Absolute paths outside the working dir + extra roots are rejected. `bash` is **not** gated by this — see [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) |
 | `FILESYSTEM_EDIT_MAX_BYTES` | No | Maximum file size `edit_file` will load (default: 5 MB). Files larger than this are refused with a clear error |
+| `FILESYSTEM_BASH_PATH_GUARD` | No | Reject `bash` commands that reference absolute paths or `..` traversal resolving outside `FILESYSTEM_WORKING_DIR` / `FILESYSTEM_ALLOWED_DIRS`. **Default: ON.** Set to `false` / `0` / `no` / `off` to disable. Accident prevention only — string-level filter, trivially bypassable; not adversarial sandboxing. See [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) |
+| `FILESYSTEM_BASH_ALLOWED_COMMANDS` | No | Comma-separated list of permitted first-tokens for `bash`. **Three modes:** unset = no filter (default); empty string `""` = deny-all kill switch; `git,npm,pytest,...` = first-token allowlist. Pipes / chains / subshells / command substitution are **not** decomposed and **not** checked — first token only. Same caveats as `FILESYSTEM_BASH_PATH_GUARD` |
 | `USER_MEMORY_DIR` | No | Directory for persistent user memory. If unset, the `save_memory` tool is not registered |
 | `USER_MEMORY_MAX_LINES` | No | Max lines in memory file (default: 200) |
 

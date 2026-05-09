@@ -11,11 +11,44 @@ Execute shell commands on the local machine.
 ## Behavior
 
 - **Windows:** Runs via `cmd.exe /c <command>`
-- **macOS/Linux:** Runs via system shell
+- **macOS/Linux:** Runs via `/bin/sh -c <command>`
 - **Timeout:** 30 seconds — process is killed if exceeded
 - **Output:** Returns combined stdout + stderr
 - **Exit code:** Non-zero exit codes are appended to the output
-- **Working directory:** Uses `WorkingDirectory` from `config.json` if configured
+- **Working directory:** Uses `FILESYSTEM_WORKING_DIR` (the spawned process's `cwd`)
+
+## Containment (accident prevention only — NOT adversarial sandboxing)
+
+`bash` is the only filesystem tool that is not gated by `PathPolicy`. To catch obvious accidents, two opt-in env-var knobs apply *before* execution. **Both are string-level filters and trivially bypassable** by a determined or prompt-injected agent (`sh -c "..."`, env-var indirection, base64 pipelines, write-then-execute). Real isolation requires OS-level controls (containers, AppArmor, Windows Job Objects). See [ISSUE-005](../../../issues/ISSUE-005-bash-tool-bypasses-path-policy.md).
+
+### `FILESYSTEM_BASH_PATH_GUARD` — default ON
+
+When enabled, the command is tokenised (whitespace + `=` split, with quote chars stripped to expose paths inside them). Any token that looks like:
+
+- a POSIX absolute path (`/...`), or
+- a Windows drive-letter path (`C:\...`, `C:/...`), or
+- a Windows UNC path (`\\server\share`), or
+- a `..` traversal that resolves outside the workspace
+
+is checked via `realpath` against `FILESYSTEM_WORKING_DIR` + `FILESYSTEM_ALLOWED_DIRS`. If any candidate lands outside, the command is refused with a clear error naming the env vars.
+
+Set `FILESYSTEM_BASH_PATH_GUARD=false` (or `0` / `no` / `off`) to disable.
+
+The default-on choice gives no-config users real protection against the common accident class (`cd ../..` → `rm -rf .`, `cat /etc/passwd` typo, etc.). Workflows that legitimately need to write outside the workspace via `bash` should add the destination to `FILESYSTEM_ALLOWED_DIRS` rather than disabling the guard.
+
+### `FILESYSTEM_BASH_ALLOWED_COMMANDS` — opt-in, three modes
+
+| Setting | Behaviour |
+|---------|-----------|
+| Unset | No filter — every command runs (default) |
+| Empty string `""` | Deny-all kill switch |
+| `git,npm,pytest,...` | Allowlist — only commands whose **first token** matches |
+
+Pipes (`\| head`), chains (`&& rm`), subshells (`(rm ...)`), and command substitution (`$(...)`, backticks) are **not** decomposed and **not** checked. This is documented as a known gap, not a security claim — adding a real shell parser doesn't close the bypasses listed above either.
+
+## What's already in place — not new
+
+- **Cwd pinning.** Every command runs with `cwd: workingDir` regardless of inherited shell state. This was already true before Phase 4 of [PLAN-filesystem-navigation](../../../planning/PLAN-filesystem-navigation.md). It prevents inherited-shell-state leakage on the *initial* cwd; the model can still `cd` mid-command — that's what the path guard covers.
 
 ## Mutation Tracking
 

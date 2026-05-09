@@ -42,6 +42,15 @@ export async function resolveAllowed(
   );
 }
 
+export async function isPathAllowed(policy: PathPolicy, candidate: string): Promise<boolean> {
+  try {
+    await resolveAllowed(policy, candidate, { mustExist: false });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isInside(target: string, root: string): boolean {
   const t = IS_WINDOWS ? target.toLowerCase() : target;
   const r = IS_WINDOWS ? root.toLowerCase() : root;

@@ -32,7 +32,7 @@ Source: `mcp_servers/ts/packages/filesystem/src/`.
 | `read_file` | Reads text + `.docx`. Path-policy gated, line-numbered `cat -n` output, `offset`/`limit`, binary refusal (since 2026-05-09) | None remaining |
 | `write_file` | Full overwrite only. Path-policy gated (since 2026-05-09) | Forces full-file rewrites even for one-line changes |
 | `append_file` | Append only. Path-policy gated (since 2026-05-09) | OK for logs; not a substitute for edits |
-| `bash` | Full shell. 30 s timeout. cwd pinned to `workingDir`. **No path policy, no allowlist.** Opinionated description (since 2026-05-09) — points the model at dedicated tools and warns that bash is not sandboxed | Containment tracked under [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) (Phase 4) |
+| `bash` | Full shell. 30 s timeout. cwd pinned to `workingDir`. Default-on path guard (`FILESYSTEM_BASH_PATH_GUARD`) rejects absolute-path / `..`-traversal references outside the workspace; opt-in first-token allowlist (`FILESYSTEM_BASH_ALLOWED_COMMANDS`) with deny-all kill-switch mode. Opinionated description; explicitly states this is accident prevention only (since 2026-05-09) | None remaining for accident-prevention scope. Adversarial sandboxing remains OS-level work — out of scope (see [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) Resolved status) |
 | `edit_file` | Shipped 2026-05-09. Exact-string replacement, uniqueness check, CRLF/BOM preservation, atomic write, binary + size refusal, checkpoint-tracked | None remaining |
 | System-prompt FS guidance | `_FS_NAVIGATION_DIRECTIVE` shipped 2026-05-09 — table-form tool selection + parallelism + explore-delegation + editing workflow | None remaining |
 | Parallelism guidance | Now part of `_FS_NAVIGATION_DIRECTIVE` (since 2026-05-09) — explicit "two greps + read_file in one response finish in time of slowest" | None remaining |
@@ -258,7 +258,17 @@ Changes:
 
 **Deliverable:** updated `write-file.ts`, `append-file.ts`, `index.ts`; tests for absolute-path rejection and `FILESYSTEM_ALLOWED_DIRS` opt-in round-trip; release-note entry.
 
-### Phase 4 — Bash containment (close ISSUE-005)
+### Phase 4 — Bash containment (close ISSUE-005) — **Completed 2026-05-09**
+
+Shipped at `mcp_servers/ts/packages/filesystem/src/tools/bash.ts`, with reusable `isPathAllowed` helper added to `paths.ts`. See [tool README](../design/tools/bash/README.md) and the updated [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) for the resolution statement.
+
+Implementation matches the spec below:
+- `FILESYSTEM_BASH_PATH_GUARD` ships **default ON**. Tokenisation: whitespace + `=` split with quote stripping; flags POSIX absolute, Windows drive-letter, UNC, and `..` traversal; resolves each candidate via `realpath` and rejects if outside `FILESYSTEM_WORKING_DIR` / `FILESYSTEM_ALLOWED_DIRS`. Error message names both env vars so the user knows how to opt out or extend roots.
+- `FILESYSTEM_BASH_ALLOWED_COMMANDS` opt-in three-state semantics implemented exactly as specified (unset / empty = deny-all kill switch / comma-separated first-token list). Allowlist refusal message explicitly notes the pipe/chain/subshell decomposition gap.
+- Bash tool description rewritten to include both env vars and the explicit "ACCIDENT PREVENTION only — NOT adversarial sandboxing" framing per ISSUE-005 §66.
+- Per-tool README (`design/tools/bash/README.md`) gets a full Containment section detailing both knobs, the threat model, and the cwd-pinning-is-already-done note.
+- Setup doc (`setup/mcp-servers.md`) has rows for both new env vars under the filesystem server table.
+- ISSUE-005 status moved to **Resolved (accident-prevention scope)** with the adversarial portion explicitly downgraded and Option B re-evaluation criteria documented.
 
 Framed explicitly as **accident prevention**, not adversarial robustness. A determined agent can defeat string-level filters trivially — `sh -c "..."`, command substitution, env-var indirection, write-then-execute, base64-decoded pipelines, in-shell `cd`. Real isolation requires OS-level controls (containers, AppArmor, sandbox-exec, Windows Job Objects) and is **out of scope** for this plan.
 
