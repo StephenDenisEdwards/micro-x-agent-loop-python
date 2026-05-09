@@ -6,6 +6,7 @@ import { registerBash } from "./tools/bash.js";
 import { registerReadFile } from "./tools/read-file.js";
 import { registerWriteFile } from "./tools/write-file.js";
 import { registerAppendFile } from "./tools/append-file.js";
+import { registerEditFile } from "./tools/edit-file.js";
 import { registerSaveMemory } from "./tools/save-memory.js";
 import { registerGrep } from "./tools/grep.js";
 import { registerGlob } from "./tools/glob.js";
@@ -29,6 +30,7 @@ registerBash(server, logger, workingDir);
 registerReadFile(server, logger, policy);
 registerWriteFile(server, logger, policy);
 registerAppendFile(server, logger, policy);
+registerEditFile(server, logger, policy);
 registerGrep(server, logger, policy);
 registerGlob(server, logger, policy);
 

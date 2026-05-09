@@ -33,7 +33,7 @@ Source: `mcp_servers/ts/packages/filesystem/src/`.
 | `write_file` | Full overwrite only. Path-policy gated (since 2026-05-09) | Forces full-file rewrites even for one-line changes |
 | `append_file` | Append only. Path-policy gated (since 2026-05-09) | OK for logs; not a substitute for edits |
 | `bash` | Full shell. 30 s timeout. **No path policy, no allowlist, no CWD pinning** (`bash.ts:9-77`). One-line description | Tracked under [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) |
-| **`edit_file`** | **Missing** | Highest-leverage capability gap |
+| `edit_file` | Shipped 2026-05-09. Exact-string replacement, uniqueness check, CRLF/BOM preservation, atomic write, binary + size refusal, checkpoint-tracked | None remaining |
 | System-prompt FS guidance | Only a `tool_search` directive; FS tool selection lives inside individual descriptions | No global "use Read not cat / Grep not bash grep / Edit not sed" rule |
 | Parallelism guidance | Mentioned only for `spawn_subagent` (`_TASK_DECOMPOSITION_DIRECTIVE`) | No directive telling the model to batch independent FS calls |
 | Explore sub-agent | Exists (`spawn_subagent` with `agent_type=explore`) | Underused — system prompt does not actively push delegation |
@@ -72,10 +72,20 @@ Cheap, high-impact, all in `system_prompt.py` and the TypeScript tool registrati
 
 **Deliverable:** one PR. Pure text changes. No behaviour change to tools.
 
-### Phase 2 — Add `edit_file` MCP tool
+### Phase 2 — Add `edit_file` MCP tool — **Completed 2026-05-09**
 
-The single biggest capability gap. New file at
-`mcp_servers/ts/packages/filesystem/src/tools/edit-file.ts`, registered in `index.ts`. Aligns with [ADR-015](../architecture/decisions/ADR-015-all-tools-as-typescript-mcp-servers.md) — TypeScript MCP server, no Python tool code.
+Shipped at `mcp_servers/ts/packages/filesystem/src/tools/edit-file.ts`, registered in `index.ts`. Aligns with [ADR-015](../architecture/decisions/ADR-015-all-tools-as-typescript-mcp-servers.md). See [tool README](../design/tools/edit-file/README.md) for the full reference. Implementation matches the spec below; deltas worth noting:
+
+- Atomic write uses same-dir `.<base>.<uuid>.tmp` + `fsync` + `rename`.
+- EOL detection samples the first 64 KB; `old_string` / `new_string` are normalised to the file's EOL before matching.
+- BOM is preserved (3-byte sniff, prepended on write if present).
+- Binary refusal scans the first 8 KB for null bytes; size cap is 5 MB by default, configurable via `FILESYSTEM_EDIT_MAX_BYTES`.
+- Mutation tracking: `edit_file` and `filesystem__edit_file` added to `_MUTATING_TOOL_NAMES` in `src/micro_x_agent_loop/memory/facade.py`. The existing checkpoint flow reads `tool_input["path"]` so no `predict_touched_paths` subclass was needed.
+- `ToolFormatting` entry: `{"format": "key_value"}` in `config-base.json`.
+
+Deferred per the spec: `multi_edit` (asyncio.gather covers the use case), regex matching.
+
+The original spec follows for reference.
 
 #### Tool surface
 

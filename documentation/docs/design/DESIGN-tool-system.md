@@ -70,6 +70,7 @@ Currently tracked mutations:
 |------|----------|-------|
 | `filesystem__write_file` | Strict | Returns `[path]` from tool input |
 | `filesystem__append_file` | Strict | Returns `[path]` from tool input |
+| `filesystem__edit_file` | Strict | Returns `[path]` from tool input |
 | `filesystem__bash` | Best-effort | Parses the shell command to extract likely mutated paths via `bash_command_parser.extract_mutated_paths()` (Python client-side) |
 
 By default (`CheckpointWriteToolsOnly=true`), only `write_file` and `append_file` are tracked. Set `CheckpointWriteToolsOnly=false` to also track bash mutations.
@@ -99,7 +100,7 @@ Most first-party tools are implemented as TypeScript MCP servers in `mcp_servers
 
 | Server | Tools | Key Credential |
 |--------|-------|----------------|
-| `filesystem` | bash, read_file, write_file, append_file, save_memory | `FILESYSTEM_WORKING_DIR`, `USER_MEMORY_DIR` |
+| `filesystem` | bash, read_file, write_file, append_file, edit_file, save_memory, grep, glob | `FILESYSTEM_WORKING_DIR`, `FILESYSTEM_ALLOWED_DIRS`, `USER_MEMORY_DIR` |
 | `web` | web_fetch, web_search | `BRAVE_API_KEY` |
 | `linkedin` | linkedin_jobs, linkedin_job_detail | _(scraping)_ |
 | `github` | list_prs, get_pr, create_pr, list_issues, create_issue, get_file, search_code, list_repos | `GITHUB_TOKEN` |
