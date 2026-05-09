@@ -3,12 +3,13 @@ import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x-ai/mcp-shared";
+import { resolveAllowed, type PathPolicy } from "../paths.js";
 
-export function registerWriteFile(server: McpServer, logger: Logger, workingDir: string): void {
+export function registerWriteFile(server: McpServer, logger: Logger, policy: PathPolicy): void {
   server.registerTool(
     "write_file",
     {
-      description: "Write content to a file, creating it if it doesn't exist. Parent directories are created automatically.",
+      description: "Write content to a file, creating it if it doesn't exist. Parent directories are created automatically. Path must be inside FILESYSTEM_WORKING_DIR or FILESYSTEM_ALLOWED_DIRS — absolute paths outside the allowed roots are rejected.",
       inputSchema: {
         path: z.string().min(1).describe("Absolute or relative path to the file to write"),
         content: z.string().describe("The content to write to the file"),
@@ -30,9 +31,7 @@ export function registerWriteFile(server: McpServer, logger: Logger, workingDir:
       logger.info({ tool: "write_file", request_id: requestId, path: input.path }, "tool_call_start");
 
       try {
-        const resolvedPath = path.isAbsolute(input.path)
-          ? input.path
-          : path.resolve(workingDir, input.path);
+        const resolvedPath = await resolveAllowed(policy, input.path, { mustExist: false });
 
         await mkdir(path.dirname(resolvedPath), { recursive: true });
         await writeFile(resolvedPath, input.content, "utf-8");

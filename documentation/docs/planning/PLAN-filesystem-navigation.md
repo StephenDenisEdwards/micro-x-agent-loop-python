@@ -208,7 +208,9 @@ The line-numbered output is what makes `edit_file` ergonomic — the model can q
 
 **Deliverable:** updated `read-file.ts` + description rewrite. Backwards-incompatible for any consumer reading the raw text via `structuredContent.content`, but the agent only consumes the `text` content block. (Codegen subprocesses also call MCP tools — confirm none depend on the raw `read_file` output before merging.)
 
-### Phase 3b — Migrate `write_file` / `append_file` onto `PathPolicy`
+### Phase 3b — Migrate `write_file` / `append_file` onto `PathPolicy` — **Completed 2026-05-09**
+
+Shipped as a standalone change ahead of the rest of the plan. `write_file` and `append_file` now route paths through `resolveAllowed(policy, path, { mustExist: false })`; absolute paths outside `FILESYSTEM_WORKING_DIR` / `FILESYSTEM_ALLOWED_DIRS` are rejected; symlinks pointing outside are caught by `realpath`. Documented in `documentation/docs/setup/mcp-servers.md`, `documentation/docs/design/tools/write-file/README.md`, and `CHANGELOG.md` (2026-05-09 entry).
 
 Carved out of the original Phase 4. [ISSUE-005's Related section](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) flags the asymmetry: `grep` and `glob` enforce containment, but `write_file` and `append_file` do not — "backwards" given the write tools are higher-risk. Phase 3 migrates `read_file`; this phase finishes the job.
 

@@ -11,15 +11,16 @@ Write content to a file, creating it and any parent directories if they don't ex
 
 ## Behavior
 
-- **Relative paths:** Resolved against `WorkingDirectory` from `config.json` if configured
+- **Relative paths:** Resolved against `FILESYSTEM_WORKING_DIR`
 - **Encoding:** UTF-8
-- **Directory creation:** Parent directories are created automatically via `pathlib.Path.mkdir(parents=True, exist_ok=True)`
+- **Directory creation:** Parent directories are created automatically
 - **Overwrites:** If the file already exists, its contents are replaced
+- **Containment:** Path must resolve (via `realpath`) to somewhere inside `FILESYSTEM_WORKING_DIR` or `FILESYSTEM_ALLOWED_DIRS`. Absolute paths outside the allowed roots are rejected with an error naming the env var. Symlinks pointing outside are caught by `realpath`. (`bash` is *not* gated this way — see [ISSUE-005](../../../issues/ISSUE-005-bash-tool-bypasses-path-policy.md).)
 
 ## Implementation
 
 - Server: `mcp_servers/ts/packages/filesystem/src/tools/write-file.ts`
-- Path resolution: same logic as `read_file` (relative to `FILESYSTEM_WORKING_DIR`)
+- Path resolution + containment: `resolveAllowed(policy, path, { mustExist: false })` from `paths.ts`
 - Auto-creates parent directories
 
 ## Example

@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-05-09
+Last updated: 2026-05-09 (Phase 3b shipped)
 
 ## Priority Queue
 
@@ -37,7 +37,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | **24** | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | **In Progress** | — | — | Phase 1 code-complete (shared + echo). Pending: npm scope registration + publish. |
 | **25** | [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | **Completed** | — | — | Resolved [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). All 4 phases delivered. End-to-end smoke test discovered 23 Playwright tools over SSE; clean process-tree shutdown on Windows via taskkill /T. |
 | **26** | [JobServe MCP Server](PLAN-jobserve-mcp.md) | Planned | — | — | Replaces the failed `tools/jobserve_apply/` codegen experiment with a hand-written first-party MCP server that wraps the JobServe apply flow. Same architectural pattern as gmail/linkedin/web/github MCPs. ~1.5–2 days. |
-| **27** | [Filesystem Navigation](PLAN-filesystem-navigation.md) | Planned | — | — | Make the agent fluent at FS work à la Claude Code. Phases: prompt/description rewrite, new `edit_file` tool, `read_file` line-numbers/offset/limit, bash hardening (closes [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md)), explore-sub-agent promotion. ~3–4 days for phases 1–4. |
+| **27** | [Filesystem Navigation](PLAN-filesystem-navigation.md) | **In Progress** | — | — | Make the agent fluent at FS work à la Claude Code. Phase 3b (`write_file`/`append_file` PathPolicy migration) **shipped 2026-05-09** — closes the search-gated/write-open asymmetry from [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) §75. Remaining phases: prompt/description rewrite, new `edit_file` tool, `read_file` line-numbers/offset/limit, bash containment, explore-sub-agent promotion. ~3 days remaining. |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
 <details>

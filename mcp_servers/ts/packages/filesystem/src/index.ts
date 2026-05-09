@@ -27,8 +27,8 @@ const server = createServer({
 // Register all tools
 registerBash(server, logger, workingDir);
 registerReadFile(server, logger, workingDir);
-registerWriteFile(server, logger, workingDir);
-registerAppendFile(server, logger, workingDir);
+registerWriteFile(server, logger, policy);
+registerAppendFile(server, logger, policy);
 registerGrep(server, logger, policy);
 registerGlob(server, logger, policy);
 

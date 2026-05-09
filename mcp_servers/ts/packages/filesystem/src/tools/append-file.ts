@@ -1,16 +1,17 @@
 import { appendFile, access } from "node:fs/promises";
-import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x-ai/mcp-shared";
+import { resolveAllowed, type PathPolicy } from "../paths.js";
 
-export function registerAppendFile(server: McpServer, logger: Logger, workingDir: string): void {
+export function registerAppendFile(server: McpServer, logger: Logger, policy: PathPolicy): void {
   server.registerTool(
     "append_file",
     {
       description:
         "Append content to the end of a file. The file must already exist. " +
-        "Use this to write large files in stages — create the file with write_file first, then append additional sections.",
+        "Use this to write large files in stages — create the file with write_file first, then append additional sections. " +
+        "Path must be inside FILESYSTEM_WORKING_DIR or FILESYSTEM_ALLOWED_DIRS — absolute paths outside the allowed roots are rejected.",
       inputSchema: {
         path: z.string().min(1).describe("Absolute or relative path to the file to append to"),
         content: z.string().describe("The content to append to the file"),
@@ -32,11 +33,9 @@ export function registerAppendFile(server: McpServer, logger: Logger, workingDir
       logger.info({ tool: "append_file", request_id: requestId, path: input.path }, "tool_call_start");
 
       try {
-        const resolvedPath = path.isAbsolute(input.path)
-          ? input.path
-          : path.resolve(workingDir, input.path);
+        const resolvedPath = await resolveAllowed(policy, input.path, { mustExist: false });
 
-        // Check file exists (error if not)
+        // Check file exists (error if not) — preserved for the friendly "use write_file" message
         try {
           await access(resolvedPath);
         } catch {

@@ -29,6 +29,7 @@ File read/write operations and user memory.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `FILESYSTEM_WORKING_DIR` | No | Root directory the agent can access. Defaults to current working directory |
+| `FILESYSTEM_ALLOWED_DIRS` | No | Extra roots `grep` / `glob` / `write_file` / `append_file` may access, separated by the platform path delimiter (`;` on Windows, `:` elsewhere). Absolute paths outside the working dir + extra roots are rejected. `bash` is **not** gated by this — see [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) |
 | `USER_MEMORY_DIR` | No | Directory for persistent user memory. If unset, the `save_memory` tool is not registered |
 | `USER_MEMORY_MAX_LINES` | No | Max lines in memory file (default: 200) |
 
