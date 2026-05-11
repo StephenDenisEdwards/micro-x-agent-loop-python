@@ -1,0 +1,15 @@
+{
+  "Base": "config-base.json",
+  "Model": "claude-opus-4-6-20260204",
+  "RoutingFeedbackEnabled": false,
+  "SemanticRoutingEnabled": false,
+  "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python",
+  "McpServers": {
+    "filesystem": {
+      "env": {
+        "FILESYSTEM_WORKING_DIR": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python"
+      }
+    }
+  },
+  "LogLevel": "INFO"
+}

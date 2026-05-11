@@ -1,0 +1,12 @@
+{
+  "Base": "config-testing-haiku-baseline.json",
+  "WorkingDirectory": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python",
+  "McpServers": {
+    "filesystem": {
+      "env": {
+        "FILESYSTEM_WORKING_DIR": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python"
+      }
+    }
+  },
+  "LogLevel": "INFO"
+}
