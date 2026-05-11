@@ -72,11 +72,21 @@ export function registerGlob(server: McpServer, logger: Logger, policy: PathPoli
           "tool_call_end",
         );
 
-        const text =
-          (kept.length ? kept.join("\n") : "(no matches)")
-          + (truncated
-            ? `\n\n[truncated to ${input.head_limit} of ${sorted.length} — narrow the pattern]`
-            : "");
+        let text: string;
+        if (!kept.length) {
+          text = "(no matches)";
+        } else if (truncated) {
+          const pct = Math.max(1, Math.round((input.head_limit / sorted.length) * 100));
+          const bumpedLimit = Math.min(5000, sorted.length);
+          const escapedPattern = input.pattern.replace(/"/g, '\\"');
+          const pathArg = input.path ? `, path="${input.path}"` : "";
+          text =
+            kept.join("\n") +
+            `\n\n[Output truncated: showed first ${input.head_limit} of ${sorted.length} paths (${pct}%).\n` +
+            ` To see more: glob(pattern="${escapedPattern}"${pathArg}, head_limit=${bumpedLimit}) — or narrow the pattern]`;
+        } else {
+          text = kept.join("\n");
+        }
 
         return {
           structuredContent: { paths: kept, total: sorted.length, truncated },

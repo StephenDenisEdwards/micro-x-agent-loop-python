@@ -22,7 +22,7 @@ export function registerGrep(server: McpServer, logger: Logger, policy: PathPoli
         "`files_with_matches` (the default) ONLY if a list of filenames answers the question (e.g. \"which files import X\"). " +
         "`count` if you only need how-many-per-file. " +
         "When in doubt, the user almost always wants `content` — `files_with_matches` is cheap because it discards the answer; do not pick it unless filenames alone are the answer. " +
-        "USE THIS — not read_file — whenever you are looking for something and don't already know the exact file. " +
+        "USE THIS — not read_file — whenever you are extracting specific lines, patterns, or sections, even when you know the file path. " +
         "Reading whole files to scan for a string wastes tokens; grep returns only what matched. " +
         "Narrow with `glob` or `type` to avoid searching the whole tree. " +
         "Prefer this over `bash grep` / `rg` — it is cross-platform, structured, and path-contained. " +
@@ -83,12 +83,21 @@ export function registerGrep(server: McpServer, logger: Logger, policy: PathPoli
           "tool_call_end",
         );
 
-        const text = !results
-          ? "(no matches)"
-          : results
-            + (truncated
-              ? `\n\n[truncated to ${input.head_limit} of ${lines.length} lines — narrow with glob/type or raise head_limit]`
-              : "");
+        let text: string;
+        if (!results) {
+          text = "(no matches)";
+        } else if (truncated) {
+          const pct = Math.max(1, Math.round((input.head_limit / lines.length) * 100));
+          const bumpedLimit = Math.min(5000, lines.length);
+          const escapedPattern = input.pattern.replace(/"/g, '\\"');
+          const pathArg = input.path ? `, path="${input.path}"` : "";
+          text =
+            results +
+            `\n\n[Output truncated: showed first ${input.head_limit} of ${lines.length} matches (${pct}%).\n` +
+            ` To see more: grep(pattern="${escapedPattern}"${pathArg}, head_limit=${bumpedLimit}) — or narrow with glob/type/pattern]`;
+        } else {
+          text = results;
+        }
 
         return {
           structuredContent: { mode: input.output_mode, results, match_count: totalCount, truncated },

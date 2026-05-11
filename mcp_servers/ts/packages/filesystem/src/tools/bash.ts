@@ -6,6 +6,7 @@ import { isPathAllowed, type PathPolicy } from "../paths.js";
 
 const IS_WINDOWS = process.platform === "win32";
 const TIMEOUT_MS = 30_000;
+const MAX_BUFFER = 10 * 1024 * 1024;
 
 const WIN_DRIVE_RE = /^[A-Za-z]:[\\/]/;
 const UNC_PREFIX = "\\\\";
@@ -60,6 +61,7 @@ export function registerBash(
         stderr: z.string(),
         exit_code: z.number().int(),
         timed_out: z.boolean(),
+        output_truncated: z.boolean(),
       },
       annotations: {
         readOnlyHint: false,
@@ -123,7 +125,11 @@ export function registerBash(
             duration_ms: durationMs,
             exit_code: result.exit_code,
             timed_out: result.timed_out,
-            outcome: result.exit_code === 0 && !result.timed_out ? "success" : "error",
+            output_truncated: result.output_truncated,
+            outcome:
+              result.exit_code === 0 && !result.timed_out && !result.output_truncated
+                ? "success"
+                : "error",
           },
           "tool_call_end",
         );
@@ -131,13 +137,24 @@ export function registerBash(
         const textParts: string[] = [];
         const combined = result.stdout + result.stderr;
         if (combined) textParts.push(combined.trimEnd());
-        if (result.timed_out) textParts.push(`[timed out after ${TIMEOUT_MS / 1000}s]`);
-        else if (result.exit_code !== 0) textParts.push(`[exit code ${result.exit_code}]`);
+        if (result.timed_out) {
+          textParts.push(`[timed out after ${TIMEOUT_MS / 1000}s]`);
+        } else if (result.output_truncated) {
+          const cap = formatBytes(MAX_BUFFER);
+          textParts.push(
+            `[Output truncated: command emitted >${cap} to stdout+stderr; ` +
+              `output cut at the ${cap} boundary and the process was killed.\n` +
+              ` To capture more: redirect to a file (e.g., \`command > /tmp/out.log 2>&1\`) and ` +
+              `use read_file with offset/limit, or narrow via head/tail/grep in the command itself]`,
+          );
+        } else if (result.exit_code !== 0) {
+          textParts.push(`[exit code ${result.exit_code}]`);
+        }
 
         return {
           structuredContent: { ...result },
           content: [{ type: "text" as const, text: textParts.join("\n") || "(no output)" }],
-          isError: result.exit_code !== 0 || result.timed_out,
+          isError: result.exit_code !== 0 || result.timed_out || result.output_truncated,
         };
       } catch (err: unknown) {
         const durationMs = Date.now() - startTime;
@@ -278,6 +295,7 @@ interface BashResult {
   stderr: string;
   exit_code: number;
   timed_out: boolean;
+  output_truncated: boolean;
 }
 
 function runCommand(command: string, cwd: string): Promise<BashResult> {
@@ -291,12 +309,36 @@ function runCommand(command: string, cwd: string): Promise<BashResult> {
       {
         cwd,
         timeout: TIMEOUT_MS,
-        maxBuffer: 10 * 1024 * 1024, // 10 MB
+        maxBuffer: MAX_BUFFER,
         windowsHide: true,
       },
       (error, stdout, stderr) => {
+        // maxBuffer overflow also sets error.killed, so detect it FIRST and
+        // distinguish from a real timeout-kill.
+        const outputTruncated =
+          !!error
+          && "code" in error
+          && error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER_EXCEEDED";
+
+        if (outputTruncated) {
+          resolve({
+            stdout: stdout ?? "",
+            stderr: stderr ?? "",
+            exit_code: -1,
+            timed_out: false,
+            output_truncated: true,
+          });
+          return;
+        }
+
         if (error && "killed" in error && error.killed) {
-          resolve({ stdout: stdout ?? "", stderr: stderr ?? "", exit_code: -1, timed_out: true });
+          resolve({
+            stdout: stdout ?? "",
+            stderr: stderr ?? "",
+            exit_code: -1,
+            timed_out: true,
+            output_truncated: false,
+          });
           return;
         }
 
@@ -310,8 +352,15 @@ function runCommand(command: string, cwd: string): Promise<BashResult> {
           stderr: stderr ?? "",
           exit_code: exitCode,
           timed_out: false,
+          output_truncated: false,
         });
       },
     );
   });
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n}B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)}KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)}MB`;
 }

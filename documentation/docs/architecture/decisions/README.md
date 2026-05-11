@@ -45,3 +45,5 @@ What becomes easier or more difficult to do because of this change?
 | [ADR-019](ADR-019-typescript-codegen-template.md) | TypeScript codegen template | Proposed |
 | [ADR-020](ADR-020-semantic-model-routing.md) | Semantic model routing across providers | Accepted |
 | [ADR-021](ADR-021-same-family-provider-fallback.md) | Same-family provider fallback | Accepted |
+| [ADR-022](ADR-022-textual-tui-for-cli.md) | Textual TUI for CLI | Accepted |
+| [ADR-023](ADR-023-file-handling-truncation-signaling.md) | Truncation signaling for file-handling MCP tools | Accepted |

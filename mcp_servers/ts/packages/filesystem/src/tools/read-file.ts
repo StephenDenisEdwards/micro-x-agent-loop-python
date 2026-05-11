@@ -15,6 +15,11 @@ export function registerReadFile(server: McpServer, logger: Logger, policy: Path
     {
       description:
         "Read a file as cat -n-style line-numbered text. Supports plain text and .docx documents. " +
+        "PREFER `grep` even when you know the path — if you only need specific lines, headings, or patterns " +
+        "(e.g. \"list the headings\", \"find the Score lines\", \"extract all links\"), grep returns just the matches " +
+        "instead of the whole file. Use read_file when you genuinely need the file's full content, are reading " +
+        "top-to-bottom for comprehension, or need to discover the file's structure before targeted extraction " +
+        "(in which case slice with offset=1, limit=60 first, then switch to grep). " +
         "Use offset and limit for large files — by default the first 2000 lines are returned. " +
         "Quote `<path>:<line>` coordinates from the output when referring back to the file or feeding into edit_file. " +
         "Path must be inside FILESYSTEM_WORKING_DIR or FILESYSTEM_ALLOWED_DIRS — absolute paths outside the allowed roots are rejected. " +
@@ -72,6 +77,7 @@ export function registerReadFile(server: McpServer, logger: Logger, policy: Path
 
         const allLines = splitLines(rawText);
         const totalLines = allLines.length;
+        const sizeBytes = Buffer.byteLength(rawText, "utf-8");
 
         const startIndex = offset - 1;
         const endIndex = Math.min(startIndex + limit, totalLines);
@@ -92,11 +98,15 @@ export function registerReadFile(server: McpServer, logger: Logger, policy: Path
           });
           formatted = formattedLines.join("\n");
           if (truncated) {
-            formatted += `\n\n[truncated at line ${endLine} of ${totalLines} — use offset=${endLine + 1} to continue, or raise limit]`;
+            const shownBytes = Buffer.byteLength(slicedLines.join("\n"), "utf-8");
+            const linePct = Math.max(1, Math.round((slicedLines.length / totalLines) * 100));
+            const nextOffset = endLine + 1;
+            formatted +=
+              `\n\n[Output truncated: showed lines ${startLine}-${endLine} of ${totalLines} ` +
+              `(${linePct}%, ${formatBytes(shownBytes)} of ${formatBytes(sizeBytes)}).\n` +
+              ` To read more: read_file(path="${resolvedPath}", offset=${nextOffset}, limit=${limit})]`;
           }
         }
-
-        const sizeBytes = Buffer.byteLength(rawText, "utf-8");
         const durationMs = Date.now() - startTime;
         logger.info(
           {
@@ -148,6 +158,12 @@ function isBinary(buf: Buffer): boolean {
     if (buf[i] === 0) return true;
   }
   return false;
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n}B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)}KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)}MB`;
 }
 
 function splitLines(text: string): string[] {
