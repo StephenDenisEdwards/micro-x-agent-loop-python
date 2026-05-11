@@ -13,6 +13,23 @@
         "../../config.json"
       ],
       "cwd": "tools/jobserve_email_scraper/"
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "email_count": {
+          "type": "number",
+          "default": 2,
+          "description": "Number of most recent emails to process"
+        },
+        "output_file": {
+          "type": "string",
+          "default": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\JobServe-Emails-Raw-by-micro-x-ai.md",
+          "description": "Output markdown file path"
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   },
   "linkedin_job_scraper": {
@@ -29,6 +46,28 @@
         "../../config.json"
       ],
       "cwd": "tools/linkedin_job_scraper/"
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "hours": {
+          "type": "number",
+          "default": 24,
+          "description": "How many hours back to search"
+        },
+        "output_file": {
+          "type": "string",
+          "default": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\LinkedIn-Emails-Raw-by-micro-x-ai.md",
+          "description": "Output markdown file path"
+        },
+        "max_jobs": {
+          "type": "number",
+          "default": 20,
+          "description": "Maximum jobs to retrieve"
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   },
   "jobserve_rss_aggregator": {
@@ -45,6 +84,23 @@
         "../../config.json"
       ],
       "cwd": "tools/jobserve_rss_aggregator/"
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "output_file": {
+          "type": "string",
+          "default": "jobsearch/results/jobserve-current-feed.md",
+          "description": "Where to write the aggregated job listings"
+        },
+        "min_score_threshold": {
+          "type": "number",
+          "default": 0,
+          "description": "Minimum score to include in output (0-100)"
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   },
   "jobserve_apply": {
@@ -61,6 +117,28 @@
         "../../config.json"
       ],
       "cwd": "tools/jobserve_apply/"
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "input_file": {
+          "type": "string",
+          "default": "jobsearch/results/jobserve-current-feed.md",
+          "description": "Path to the jobserve markdown file (resolved via WorkingDirectory)"
+        },
+        "dry_run": {
+          "type": "boolean",
+          "default": false,
+          "description": "Do everything except click the final submit button"
+        },
+        "max_jobs": {
+          "type": "number",
+          "default": 10,
+          "description": "Safety cap on number of applications per run"
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   }
 }
