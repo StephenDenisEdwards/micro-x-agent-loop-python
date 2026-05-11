@@ -342,6 +342,8 @@ class AgentTUI(App[None]):
         model_label = f"{self._app_config.provider_name}:{self._app_config.model}"
         self.sub_title = model_label
 
+        self._apply_panel_visibility_config()
+
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.add_banner(_STARTUP_BANNER_MARKUP)
         chat_log.add_system_message(f"Config: {self._config_source}")
@@ -429,6 +431,17 @@ class AgentTUI(App[None]):
             self._running_task.cancel()
             chat_log = self.query_one("#chat-log", ChatLog)
             chat_log.add_system_message("[Interrupted]")
+
+    def _apply_panel_visibility_config(self) -> None:
+        """Apply Tui*Visible config defaults to panel display state at startup."""
+        cfg = self._app_config
+        sidebar = self.query_one("#session-sidebar", SessionSidebar)
+        sidebar.display = cfg.tui_session_sidebar_visible
+        if sidebar.display:
+            self._refresh_session_sidebar()
+        self.query_one("#tool-panel", ToolPanel).display = cfg.tui_tool_panel_visible
+        self.query_one("#task-panel", TaskPanel).display = cfg.tui_task_panel_visible
+        self.query_one("#log-panel", LogPanel).display = cfg.tui_log_panel_visible
 
     def action_toggle_sessions(self) -> None:
         """Toggle the session sidebar visibility."""

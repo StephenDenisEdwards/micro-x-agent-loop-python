@@ -130,6 +130,11 @@ class AppConfig:
     # Display
     markdown_rendering_enabled: bool
     status_bar_enabled: bool
+    # TUI panel default visibility
+    tui_session_sidebar_visible: bool
+    tui_log_panel_visible: bool
+    tui_tool_panel_visible: bool
+    tui_task_panel_visible: bool
 
 
 def _expand_config(data: dict, config_dir: Path) -> dict:
@@ -426,6 +431,10 @@ def parse_app_config(config: dict) -> AppConfig:
         session_budget_usd=float(config.get("SessionBudgetUSD", DEFAULT_SESSION_BUDGET_USD)),
         markdown_rendering_enabled=_to_bool(config.get("MarkdownRenderingEnabled", True), default=True),
         status_bar_enabled=_to_bool(config.get("StatusBarEnabled", True), default=True),
+        tui_session_sidebar_visible=_to_bool(config.get("TuiSessionSidebarVisible", True), default=True),
+        tui_log_panel_visible=_to_bool(config.get("TuiLogPanelVisible", True), default=True),
+        tui_tool_panel_visible=_to_bool(config.get("TuiToolPanelVisible", True), default=True),
+        tui_task_panel_visible=_to_bool(config.get("TuiTaskPanelVisible", False), default=False),
     )
 
 
