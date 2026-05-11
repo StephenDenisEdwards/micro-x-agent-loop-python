@@ -13,20 +13,20 @@ if not exist .venv\Scripts\python.exe (
 )
 .venv\Scripts\pip install -q .
 
-REM MCP servers: build if not already built
-if not exist mcp_servers\ts\packages\filesystem\dist\index.js (
-    where node >nul 2>&1 || (
-        echo WARNING: Node.js not found - MCP tools will not be available.
-        echo Install Node.js 18+: https://nodejs.org/en/download
-        goto :mcp_done
-    )
-    echo Building MCP servers...
-    pushd mcp_servers\ts
-    call npm install
-    call npm run build
-    popd
-    echo MCP servers built.
+REM MCP servers: install deps if missing, always rebuild so source edits take effect
+where node >nul 2>&1 || (
+    echo WARNING: Node.js not found - MCP tools will not be available.
+    echo Install Node.js 18+: https://nodejs.org/en/download
+    goto :mcp_done
 )
+pushd mcp_servers\ts
+if not exist node_modules (
+    echo Installing MCP server dependencies...
+    call npm install
+)
+echo Building MCP servers...
+call npm run build
+popd
 :mcp_done
 
 REM Run the agent
