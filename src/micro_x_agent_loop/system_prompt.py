@@ -205,7 +205,18 @@ Constants (hardcoded in app):
 - Profile should capture user identity / preferences — things set once, updated rarely
 - When in doubt, put it in profile rather than run params (cleaner tool interface)
 - For simple one-off prompts with no obvious parameters, skip this process and generate directly
-- If the user says "just generate it" or similar, skip negotiation and generate with defaults\
+- If the user says "just generate it" or similar, skip negotiation and generate with defaults
+
+## Running generated tasks
+
+Generated tasks are NOT registered as individual MCP tools. To run one:
+
+1. Call `codegen__list_tasks()` to see available tasks and their input schemas.
+2. Call `codegen__run_task(task_name="<name>", params={...})` with parameters \
+matching the task's input schema.
+
+If you have just generated a task, the parameters and defaults are in the \
+generation summary — you can call `run_task` directly without `list_tasks` first.\
 """
 
 

@@ -2,7 +2,8 @@
 
 Tools:
   generate_code(task_name, prompt, model?) — generate a task app via mini agentic loop
-  run_task(task_name) — run a previously generated task app
+  list_tasks() — list previously generated task apps with their input schemas
+  run_task(task_name, params?) — run a previously generated task app with parameters
 """
 
 import asyncio
@@ -269,8 +270,42 @@ def _extract_text(messages: list[dict], start: int = 0) -> str:
     return text
 
 
+def _describe_task_sync(task_dir: Path) -> tuple[bool, dict | str]:
+    """Run `npx tsx src/index.ts --describe` in the task and parse the JSON it
+    prints to stdout. Returns (ok, payload-or-error-string).
+
+    The describe handler is provided by template-ts and prints a JSON object
+    with keys tool_name, description, input_schema (JSON Schema). Requires
+    node_modules to be installed.
+    """
+    try:
+        proc = subprocess.run(
+            ["npx", "tsx", "src/index.ts", "--describe"],
+            cwd=str(task_dir),
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            shell=_SHELL,
+            timeout=60,
+        )
+        if proc.returncode != 0:
+            stderr = proc.stderr.decode("utf-8", errors="replace")
+            return False, f"--describe exited {proc.returncode}: {stderr[-500:]}"
+        stdout = proc.stdout.decode("utf-8", errors="replace").strip()
+        if not stdout:
+            return False, "--describe produced no output"
+        return True, json.loads(stdout)
+    except subprocess.TimeoutExpired:
+        return False, "--describe timed out after 60 seconds"
+    except Exception as e:
+        return False, f"--describe failed: {e}"
+
+
 def _update_manifest(task_name: str, target_dir: Path, files: dict[str, str]) -> None:
-    """Add or update an entry in tools/manifest.json for the generated task."""
+    """Add or update an entry in tools/manifest.json for the generated task.
+
+    The entry includes the tool's JSON Schema captured via `--describe` so the
+    agent can introspect parameters without spawning the task as an MCP server.
+    """
     manifest_path = PROJECT_ROOT / "tools" / "manifest.json"
 
     # Read existing manifest or create new one
@@ -291,10 +326,29 @@ def _update_manifest(task_name: str, target_dir: Path, files: dict[str, str]) ->
     if desc_match:
         description = desc_match.group(1)
 
-    manifest[task_name] = {
+    # Capture the JSON Schema from the generated app. zodToJsonSchema can fail
+    # if the LLM emitted a non-standard Zod type — record the failure but still
+    # write the manifest entry so the task is discoverable.
+    input_schema: dict | None = None
+    describe_error: str | None = None
+    describe_ok, payload = _describe_task_sync(target_dir)
+    if describe_ok and isinstance(payload, dict):
+        schema = payload.get("input_schema")
+        if isinstance(schema, dict):
+            input_schema = schema
+        # Prefer values from the live module over regex parsing
+        if isinstance(payload.get("tool_name"), str):
+            tool_name = payload["tool_name"]
+        if isinstance(payload.get("description"), str):
+            description = payload["description"]
+    else:
+        describe_error = payload if isinstance(payload, str) else "unknown describe error"
+
+    entry: dict = {
         "tool_name": tool_name,
         "description": description,
         "created": date.today().isoformat(),
+        "input_schema": input_schema,
         "server": {
             "transport": "stdio",
             "command": "npx",
@@ -302,7 +356,10 @@ def _update_manifest(task_name: str, target_dir: Path, files: dict[str, str]) ->
             "cwd": f"tools/{task_name}/",
         },
     }
+    if describe_error:
+        entry["describe_error"] = describe_error
 
+    manifest[task_name] = entry
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
@@ -834,8 +891,12 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
             f"Validation: FAILED after {validation.get('test_rounds', 0)} round(s)"
         )
 
-    summary_lines.append(f"Standalone: codegen__run_task(task_name=\"{task_name}\")")
-    summary_lines.append(f"MCP server: registered in tools/manifest.json — use tool_search to discover")
+    summary_lines.append(
+        f"Run it with: codegen__run_task(task_name=\"{task_name}\", params={{...}})"
+    )
+    summary_lines.append(
+        "Use codegen__list_tasks() to see the input schema for this and other generated tasks."
+    )
 
     await ctx.info("Done.")
     return CallToolResult(
@@ -846,15 +907,101 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
 
 
 @mcp.tool()
+async def list_tasks(ctx: Context) -> CallToolResult:
+    """List previously generated task apps with their descriptions and input schemas.
+
+    Reads tools/manifest.json. For entries that do not yet have an input_schema
+    (e.g. tasks generated before this field existed), runs `--describe` on the
+    task and writes the schema back to the manifest opportunistically.
+    """
+    await ctx.info("list_tasks()")
+    manifest_path = PROJECT_ROOT / "tools" / "manifest.json"
+    if not manifest_path.exists():
+        return CallToolResult(
+            content=[TextContent(type="text", text="No tasks generated yet.")],
+            structuredContent={"tasks": []},
+            isError=False,
+        )
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return _error_result(f"Failed to read manifest: {e}")
+
+    tasks: list[dict] = []
+    manifest_dirty = False
+    for task_name, entry in manifest.items():
+        if not isinstance(entry, dict):
+            continue
+        task_dir = PROJECT_ROOT / "tools" / task_name
+        if not task_dir.exists():
+            continue  # Skip stale entries pointing at deleted directories
+
+        # Backfill input_schema for legacy entries — only if node_modules exists.
+        if entry.get("input_schema") is None and (task_dir / "node_modules").exists():
+            ok, payload = await asyncio.to_thread(_describe_task_sync, task_dir)
+            if ok and isinstance(payload, dict):
+                schema = payload.get("input_schema")
+                if isinstance(schema, dict):
+                    entry["input_schema"] = schema
+                    manifest_dirty = True
+
+        tasks.append({
+            "task_name": task_name,
+            "tool_name": entry.get("tool_name", task_name),
+            "description": entry.get("description", ""),
+            "input_schema": entry.get("input_schema"),
+            "created": entry.get("created"),
+        })
+
+    if manifest_dirty:
+        try:
+            manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        except Exception as e:
+            await ctx.warning(f"Could not write backfilled schemas to manifest: {e}")
+
+    # Build a compact text summary in addition to the structured payload.
+    lines = [f"{len(tasks)} task(s):"]
+    for t in tasks:
+        lines.append(f"  {t['task_name']} — {t['description']}")
+        schema = t.get("input_schema") or {}
+        props = (schema.get("properties") or {}) if isinstance(schema, dict) else {}
+        required = set((schema.get("required") or []) if isinstance(schema, dict) else [])
+        for pname, pschema in props.items():
+            if not isinstance(pschema, dict):
+                continue
+            ptype = pschema.get("type", "?")
+            req = "required" if pname in required else "optional"
+            desc = pschema.get("description", "")
+            default = f", default={pschema['default']!r}" if "default" in pschema else ""
+            lines.append(f"    - {pname}: {ptype} ({req}{default}) {desc}".rstrip())
+        if t.get("input_schema") is None:
+            lines.append("    (input schema not yet captured — call codegen__run_task to trigger)")
+
+    return CallToolResult(
+        content=[TextContent(type="text", text="\n".join(lines))],
+        structuredContent={"tasks": tasks},
+        isError=False,
+    )
+
+
+@mcp.tool()
 async def run_task(ctx: Context, task_name: str,
+                   params: dict | None = None,
                    timeout_seconds: int = 600) -> CallToolResult:
-    """Run a previously generated TypeScript task app.
+    """Run a previously generated TypeScript task app with parameters.
 
     Args:
         task_name: Name of the task (e.g. "job_search"). Must exist under tools/<task_name>/.
+        params: Dict of input parameters matching the task's input_schema (see
+            codegen__list_tasks). Defaults to {} — the task will use defaults
+            for any parameter with a default, and Zod will reject the call if
+            any required parameter is missing.
         timeout_seconds: Maximum time to allow the task to run (default 600 = 10 minutes).
     """
-    await ctx.info(f"run_task(task_name={task_name!r})")
+    if params is None:
+        params = {}
+    await ctx.info(f"run_task(task_name={task_name!r}, params={params!r})")
     task_dir = PROJECT_ROOT / "tools" / task_name
     if not task_dir.exists():
         await ctx.error(f"Task directory not found: tools/{task_name}/")
@@ -890,8 +1037,11 @@ async def run_task(ctx: Context, task_name: str,
 
     try:
         config_path = str(PROJECT_ROOT / "config.json")
+        cmd = ["npx", "tsx", "src/index.ts", "--run", "--config", config_path]
+        if params:
+            cmd.extend(["--params", json.dumps(params)])
         proc = subprocess.run(
-            ["npx", "tsx", "src/index.ts", "--run", "--config", config_path],
+            cmd,
             cwd=str(task_dir),
             capture_output=True,
             shell=_SHELL,
