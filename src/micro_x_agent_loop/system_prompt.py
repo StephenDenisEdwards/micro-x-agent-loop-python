@@ -232,6 +232,7 @@ and contained to the workspace via `FILESYSTEM_WORKING_DIR` + `FILESYSTEM_ALLOWE
 |-----------|-----|-----------|
 | Read a file | `read_file` (line-numbered, supports `offset`/`limit`) | `bash cat` / `head` / `tail` |
 | Search file contents | `grep` (ripgrep, three output modes) | `bash grep` / `rg` |
+| Count lines or pattern matches | `grep` with `output_mode: "count"`, or read_file's `total_lines` structured field | counting from `read_file` content |
 | Find files by name pattern | `glob` (mtime-sorted, fast-glob) | `bash find` / `ls -R` |
 | Edit a few lines of a file | `edit_file` (exact-string, atomic) | `write_file` to rewrite the whole file / `bash sed` / `awk` |
 | Create a new file | `write_file` | `bash echo > file` |
@@ -241,6 +242,20 @@ and contained to the workspace via `FILESYSTEM_WORKING_DIR` + `FILESYSTEM_ALLOWE
 `bash` is appropriate for running tests, git commands, build tools, package managers, and \
 anything no dedicated tool covers. It is **not** path-policy-gated and is **not** OS-sandboxed — \
 prefer the dedicated tools for any read or write.
+
+## Counting and enumerating
+
+When the user asks "how many X", "list all X", or anything that requires a precise count:
+
+- For a count of pattern occurrences (e.g. "how many `## ` headings", "how many TODOs"): \
+use `grep` with `output_mode: "count"`. Returns the integer directly.
+- For total lines in a file: read `read_file`'s structured `total_lines` field, or call \
+`grep` with `output_mode: "count"` and `pattern: "."`. Never estimate from formatted content.
+- For "list all X" over a file: run `grep` on the marker pattern with \
+`output_mode: "content"` to get every match deterministically, then enumerate from \
+those results. Do not summarise into groups or tiers unless the user asks for a summary.
+- Do NOT count by reading file content and tallying yourself — models are unreliable at \
+this for files over ~50 lines and will silently invent plausible-looking numbers.
 
 ## Parallel execution
 

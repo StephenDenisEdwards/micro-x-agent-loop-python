@@ -41,6 +41,7 @@
   "ToolResultSummarizationModel": "#Model",
   "ToolResultSummarizationThreshold": 4000,
   "ToolResultOverrides": {
+    "filesystem__read_file": { "MaxChars": 1000000 },
     "google__gmail_read": { "Summarize": false, "MaxChars": 200000 },
     "web__web_fetch": { "Summarize": false, "MaxChars": 200000 }
   },
