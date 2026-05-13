@@ -19,7 +19,7 @@
   "TuiSessionSidebarVisible": true,
   "TuiLogPanelVisible": true,
   "TuiToolPanelVisible": true,
-  "TuiTaskPanelVisible": false,
+  "TuiTaskPanelVisible": true,
   "MemoryMaxSessions": 200,
   "MemoryMaxMessagesPerSession": 5000,
   "MemoryRetentionDays": 30,

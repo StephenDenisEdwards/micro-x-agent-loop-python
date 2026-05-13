@@ -27,6 +27,7 @@ def _make_router() -> tuple[CommandRouter, dict[str, list]]:
             "debug",
             "routing",
             "compact",
+            "codegen_task_list",
             "unknown",
         )
     }
@@ -74,6 +75,9 @@ def _make_router() -> tuple[CommandRouter, dict[str, list]]:
     async def on_compact(cmd: str) -> None:
         calls["compact"].append(cmd)
 
+    async def on_codegen_task_list(cmd: str) -> None:
+        calls["codegen_task_list"].append(cmd)
+
     def on_unknown(cmd: str) -> None:
         calls["unknown"].append(cmd)
 
@@ -92,6 +96,7 @@ def _make_router() -> tuple[CommandRouter, dict[str, list]]:
         on_debug=on_debug,
         on_routing=on_routing,
         on_compact=on_compact,
+        on_codegen_task_list=on_codegen_task_list,
         on_unknown=on_unknown,
     )
     return router, calls

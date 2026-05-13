@@ -236,6 +236,7 @@ class Agent:
             on_debug=self._command_handler.handle_debug,
             on_routing=self._command_handler.handle_routing,
             on_compact=self._command_handler.handle_compact,
+            on_codegen_task_list=self._command_handler.handle_codegen_task_list,
             on_unknown=self._command_handler.on_unknown_command,
         )
 

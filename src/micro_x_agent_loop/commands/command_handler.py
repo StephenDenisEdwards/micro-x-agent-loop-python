@@ -98,6 +98,7 @@ class CommandHandler:
         self._print(f"{p}- /routing")
         self._print(f"{p}- /routing tasks | providers | stages | recent")
         self._print(f"{p}- /compact [tail N]")
+        self._print(f"{p}- /codegen-task-list")
         self._print(f"{p}- /console-log-level [TRACE|DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL|OFF]")
         self._print(f"{p}- /debug show-api-payload [N]")
         if self._user_memory_enabled:
@@ -290,6 +291,42 @@ class CommandHandler:
                 return
 
         self._print(f"{self._p}Usage: /memory | /memory list | /memory edit | /memory reset")
+
+    # -- /codegen-task-list --
+
+    async def handle_codegen_task_list(self, command: str) -> None:
+        project_root = Path.cwd()
+        manifest_path = project_root / "tools" / "manifest.json"
+        if not manifest_path.exists():
+            self._print(f"{self._p}No generated tool manifest found: {manifest_path}")
+            return
+
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception as ex:
+            self._print(f"{self._p}Failed to read manifest: {ex}")
+            return
+
+        if not isinstance(manifest, dict) or not manifest:
+            self._print(f"{self._p}No tasks in manifest.")
+            return
+
+        entries: list[tuple[str, str, str]] = []
+        for task_name, entry in manifest.items():
+            if not isinstance(entry, dict):
+                continue
+            created = str(entry.get("created", "—"))
+            description = str(entry.get("description", "")).strip() or "(no description)"
+            entries.append((task_name, created, description))
+
+        entries.sort(key=lambda row: (row[1], row[0]), reverse=True)
+
+        name_width = max(len(name) for name, _, _ in entries)
+        date_width = max(len(created) for _, created, _ in entries)
+
+        self._print(f"{self._p}Codegen tasks ({len(entries)} in tools/manifest.json):")
+        for name, created, description in entries:
+            self._print(f"{self._p}  {name:<{name_width}}  {created:<{date_width}}  {description}")
 
     # -- /tools --
 

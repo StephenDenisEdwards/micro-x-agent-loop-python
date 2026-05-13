@@ -21,6 +21,7 @@ class CommandRouter:
         on_debug: Callable[[str], Awaitable[None]],
         on_routing: Callable[[str], Awaitable[None]],
         on_compact: Callable[[str], Awaitable[None]],
+        on_codegen_task_list: Callable[[str], Awaitable[None]],
         on_unknown: Callable[[str], None],
     ) -> None:
         self._on_help = on_help
@@ -37,6 +38,7 @@ class CommandRouter:
         self._on_debug = on_debug
         self._on_routing = on_routing
         self._on_compact = on_compact
+        self._on_codegen_task_list = on_codegen_task_list
         self._on_unknown = on_unknown
 
     async def try_handle(self, user_message: str) -> bool | str:
@@ -92,6 +94,9 @@ class CommandRouter:
             return True
         if trimmed.startswith("/compact"):
             await self._on_compact(trimmed)
+            return True
+        if trimmed.startswith("/codegen-task-list"):
+            await self._on_codegen_task_list(trimmed)
             return True
 
         self._on_unknown(trimmed)

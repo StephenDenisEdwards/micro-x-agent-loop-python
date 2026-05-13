@@ -434,7 +434,7 @@ def parse_app_config(config: dict) -> AppConfig:
         tui_session_sidebar_visible=_to_bool(config.get("TuiSessionSidebarVisible", True), default=True),
         tui_log_panel_visible=_to_bool(config.get("TuiLogPanelVisible", True), default=True),
         tui_tool_panel_visible=_to_bool(config.get("TuiToolPanelVisible", True), default=True),
-        tui_task_panel_visible=_to_bool(config.get("TuiTaskPanelVisible", False), default=False),
+        tui_task_panel_visible=_to_bool(config.get("TuiTaskPanelVisible", True), default=True),
     )
 
 

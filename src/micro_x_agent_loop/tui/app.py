@@ -107,6 +107,7 @@ _SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/memory list", "List user memory files"),
     ("/debug show-api-payload", "Show last API payload"),
     ("/tasks", "Toggle task decomposition panel"),
+    ("/codegen-task-list", "List codegen tasks in tools/manifest.json"),
 ]
 
 # Available Textual themes
