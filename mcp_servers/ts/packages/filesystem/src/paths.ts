@@ -6,15 +6,25 @@ const IS_WINDOWS = process.platform === "win32";
 export interface PathPolicy {
   workingDir: string;
   extraAllowed: string[];
+  readonly: string[];
 }
 
-export function loadPathPolicy(workingDir: string, allowedDirsEnv: string | undefined): PathPolicy {
-  const extras = (allowedDirsEnv ?? "")
-    .split(path.delimiter)
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .map((p) => path.resolve(p));
-  return { workingDir: path.resolve(workingDir), extraAllowed: extras };
+export function loadPathPolicy(
+  workingDir: string,
+  allowedDirsEnv: string | undefined,
+  readonlyDirsEnv?: string | undefined,
+): PathPolicy {
+  const parseList = (env: string | undefined): string[] =>
+    (env ?? "")
+      .split(path.delimiter)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => path.resolve(p));
+  return {
+    workingDir: path.resolve(workingDir),
+    extraAllowed: parseList(allowedDirsEnv),
+    readonly: parseList(readonlyDirsEnv),
+  };
 }
 
 export async function resolveAllowed(
@@ -29,7 +39,7 @@ export async function resolveAllowed(
     ? await realpath(resolved)
     : await realpathExistingAncestor(resolved);
 
-  const roots = [policy.workingDir, ...policy.extraAllowed];
+  const roots = [policy.workingDir, ...policy.extraAllowed, ...policy.readonly];
   for (const root of roots) {
     const realRoot = await realpath(root).catch(() => root);
     if (isInside(real, realRoot)) return real;
@@ -40,6 +50,19 @@ export async function resolveAllowed(
     `Path "${raw}" is outside the allowed roots. Allowed:\n${allowed}\n` +
     `(set FILESYSTEM_ALLOWED_DIRS to add more, separated by "${path.delimiter}")`,
   );
+}
+
+export async function requireWritable(policy: PathPolicy, resolved: string): Promise<void> {
+  if (policy.readonly.length === 0) return;
+  for (const root of policy.readonly) {
+    const realRoot = await realpath(root).catch(() => root);
+    if (isInside(resolved, realRoot)) {
+      throw new Error(
+        `Path "${resolved}" is in a read-only root (${root}). ` +
+        `Mutating operations (write_file, append_file, edit_file, delete_file) are not permitted here.`,
+      );
+    }
+  }
 }
 
 export async function isPathAllowed(policy: PathPolicy, candidate: string): Promise<boolean> {

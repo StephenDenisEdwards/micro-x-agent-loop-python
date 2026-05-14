@@ -1,4 +1,4 @@
-"""Integration tests for GitHub template wrappers (tools/template-py/tools.py).
+"""Integration tests for GitHub template wrappers (codegen-templates/template-py/tools.py).
 
 Tests the full stack: Python wrapper -> McpClient -> MCP server -> GitHub API.
 Verifies that structuredContent propagates correctly and wrappers return
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "tools" / "template-py"
+TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "codegen-templates" / "template-py"
 
 
 def _load_module(name: str, file_path: Path):

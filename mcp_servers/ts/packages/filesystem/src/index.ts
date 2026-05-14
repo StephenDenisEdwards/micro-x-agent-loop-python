@@ -18,7 +18,11 @@ const logger = createLogger("mcp-filesystem");
 const workingDir = process.env.FILESYSTEM_WORKING_DIR || process.cwd();
 const memoryDir = process.env.USER_MEMORY_DIR || "";
 const maxMemoryLines = parseInt(process.env.USER_MEMORY_MAX_LINES || "200", 10);
-const policy = loadPathPolicy(workingDir, process.env.FILESYSTEM_ALLOWED_DIRS);
+const policy = loadPathPolicy(
+  workingDir,
+  process.env.FILESYSTEM_ALLOWED_DIRS,
+  process.env.FILESYSTEM_READONLY_DIRS,
+);
 
 const server = createServer({
   name: "filesystem",

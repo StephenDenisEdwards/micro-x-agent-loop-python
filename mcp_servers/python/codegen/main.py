@@ -29,7 +29,7 @@ load_dotenv()
 
 PROJECT_ROOT = Path(os.environ.get("PROJECT_ROOT", ""))
 WORKING_DIR = Path(os.environ.get("WORKING_DIR", ""))
-TEMPLATE_DIR = PROJECT_ROOT / "tools" / "template-ts"
+TEMPLATE_DIR = PROJECT_ROOT / "codegen-templates" / "template-ts"
 RUNTIME_DIR = PROJECT_ROOT / "tools" / "_runtime"
 DEFAULT_MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 16384
@@ -142,7 +142,7 @@ def _error_result(message: str, task_name: str = "") -> CallToolResult:
 
 
 def copy_template(task_name: str, max_attempts: int = 20) -> tuple[Path, str]:
-    """Copy tools/template-ts/ to tools/<task_name>/ (excluding node_modules).
+    """Copy codegen-templates/template-ts/ to tools/<task_name>/ (excluding node_modules).
 
     If it already exists, append _2, _3, etc. Uses copytree's own
     FileExistsError to avoid TOCTOU races with concurrent calls.
@@ -274,7 +274,7 @@ def _describe_task_sync(task_dir: Path) -> tuple[bool, dict | str]:
     """Run `npx tsx src/index.ts --describe` in the task and parse the JSON it
     prints to stdout. Returns (ok, payload-or-error-string).
 
-    The describe handler is provided by template-ts and prints a JSON object
+    The describe handler is provided by codegen-templates/template-ts/ and prints a JSON object
     with keys tool_name, description, input_schema (JSON Schema). Requires
     node_modules to be installed.
     """

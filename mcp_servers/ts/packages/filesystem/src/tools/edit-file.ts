@@ -3,7 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x-ai/mcp-shared";
-import { resolveAllowed, type PathPolicy } from "../paths.js";
+import { resolveAllowed, requireWritable, type PathPolicy } from "../paths.js";
 
 const BINARY_SNIFF_BYTES = 8 * 1024;
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
@@ -63,6 +63,7 @@ export function registerEditFile(server: McpServer, logger: Logger, policy: Path
         }
 
         const resolvedPath = await resolveAllowed(policy, input.path, { mustExist: false });
+        await requireWritable(policy, resolvedPath);
 
         let st;
         try {

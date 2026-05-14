@@ -2,7 +2,7 @@ import { unlink, stat } from "node:fs/promises";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x-ai/mcp-shared";
-import { resolveAllowed, type PathPolicy } from "../paths.js";
+import { resolveAllowed, requireWritable, type PathPolicy } from "../paths.js";
 
 export function registerDeleteFile(server: McpServer, logger: Logger, policy: PathPolicy): void {
   server.registerTool(
@@ -38,6 +38,7 @@ export function registerDeleteFile(server: McpServer, logger: Logger, policy: Pa
 
       try {
         const resolvedPath = await resolveAllowed(policy, input.path, { mustExist: false });
+        await requireWritable(policy, resolvedPath);
 
         let st;
         try {

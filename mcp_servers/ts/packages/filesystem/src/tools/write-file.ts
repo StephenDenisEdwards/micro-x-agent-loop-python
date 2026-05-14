@@ -3,7 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x-ai/mcp-shared";
-import { resolveAllowed, type PathPolicy } from "../paths.js";
+import { resolveAllowed, requireWritable, type PathPolicy } from "../paths.js";
 
 export function registerWriteFile(server: McpServer, logger: Logger, policy: PathPolicy): void {
   server.registerTool(
@@ -32,6 +32,7 @@ export function registerWriteFile(server: McpServer, logger: Logger, policy: Pat
 
       try {
         const resolvedPath = await resolveAllowed(policy, input.path, { mustExist: false });
+        await requireWritable(policy, resolvedPath);
 
         await mkdir(path.dirname(resolvedPath), { recursive: true });
         await writeFile(resolvedPath, input.content, "utf-8");

@@ -216,6 +216,8 @@
       "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\filesystem\\dist\\index.js"],
       "env": {
         "FILESYSTEM_WORKING_DIR": "C:\\Users\\steph\\source\\repos\\resources\\documents",
+        "FILESYSTEM_ALLOWED_DIRS": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\tools",
+        "FILESYSTEM_READONLY_DIRS": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\tools\\_runtime",
         "USER_MEMORY_DIR": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\.micro_x\\memory",
         "USER_MEMORY_MAX_LINES": "200"
       }

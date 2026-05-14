@@ -22,10 +22,9 @@ store/
 node_modules/
 .vscode/
 
-# Agent-generated task apps (only templates, _runtime, and windows-vhs are tracked)
+# Agent-generated task apps (only _runtime and windows-vhs are tracked here;
+# templates live in codegen-templates/ outside the agent's writable root).
 tools/*/
-!tools/template-py/
-!tools/template-ts/
 !tools/windows-vhs/
 !tools/_runtime/
 tools/_runtime/node_modules/

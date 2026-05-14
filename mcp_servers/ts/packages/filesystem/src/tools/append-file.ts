@@ -2,7 +2,7 @@ import { appendFile, access } from "node:fs/promises";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x-ai/mcp-shared";
-import { resolveAllowed, type PathPolicy } from "../paths.js";
+import { resolveAllowed, requireWritable, type PathPolicy } from "../paths.js";
 
 export function registerAppendFile(server: McpServer, logger: Logger, policy: PathPolicy): void {
   server.registerTool(
@@ -34,6 +34,7 @@ export function registerAppendFile(server: McpServer, logger: Logger, policy: Pa
 
       try {
         const resolvedPath = await resolveAllowed(policy, input.path, { mustExist: false });
+        await requireWritable(policy, resolvedPath);
 
         // Check file exists (error if not) — preserved for the friendly "use write_file" message
         try {
