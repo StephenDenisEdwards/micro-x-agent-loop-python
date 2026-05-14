@@ -523,6 +523,58 @@ class ToolResultOverridesTests(unittest.TestCase):
         recorded = events.tool_call_records[0]["result_text"]
         self.assertIn("[OUTPUT TRUNCATED", recorded)
 
+    def test_override_wildcard_prefix_matches_tool(self) -> None:
+        """A ``*``-suffixed key applies to every tool with that prefix."""
+        long_result = "p" * 80_000
+        tool = FakeTool(name="playwright__browser_snapshot", execute_result=long_result)
+
+        sum_provider = MagicMock()
+        sum_provider.create_message = AsyncMock(
+            return_value=("nope", UsageResult(input_tokens=10, output_tokens=5, model="sm"))
+        )
+
+        events = RecordingEvents()
+        engine = _make_engine(
+            self._make_tool_use_provider("playwright__browser_snapshot"),
+            events,
+            tools=[tool],
+            summarization_provider=sum_provider,
+            summarization_model="sm",
+            summarization_enabled=True,
+            summarization_threshold=100,
+            tool_result_overrides={
+                "playwright__*": ToolResultOverride(summarize=False, max_chars=0),
+            },
+        )
+
+        asyncio.run(engine.run(messages=[], user_message="snapshot"))
+
+        sum_provider.create_message.assert_not_called()
+        recorded = events.tool_call_records[0]["result_text"]
+        self.assertNotIn("[OUTPUT TRUNCATED", recorded)
+        self.assertGreaterEqual(len(recorded), 80_000)
+
+    def test_exact_key_wins_over_wildcard(self) -> None:
+        """Exact-name override is preferred to a wildcard match."""
+        long_result = "p" * 80_000
+        tool = FakeTool(name="playwright__browser_evaluate", execute_result=long_result)
+
+        events = RecordingEvents()
+        engine = _make_engine(
+            self._make_tool_use_provider("playwright__browser_evaluate"),
+            events,
+            tools=[tool],
+            tool_result_overrides={
+                "playwright__*": ToolResultOverride(max_chars=0),
+                "playwright__browser_evaluate": ToolResultOverride(max_chars=10_000),
+            },
+        )
+
+        asyncio.run(engine.run(messages=[], user_message="evaluate"))
+
+        recorded = events.tool_call_records[0]["result_text"]
+        self.assertIn("[OUTPUT TRUNCATED", recorded)
+
     def test_override_threshold_overrides_global(self) -> None:
         """Per-tool Threshold beats global threshold even when global enabled is on."""
         result = "x" * 500  # below the per-tool threshold of 1000

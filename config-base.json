@@ -43,7 +43,8 @@
   "ToolResultOverrides": {
     "filesystem__read_file": { "MaxChars": 1000000 },
     "google__gmail_read": { "Summarize": false, "MaxChars": 200000 },
-    "web__web_fetch": { "Summarize": false, "MaxChars": 200000 }
+    "web__web_fetch": { "Summarize": false, "MaxChars": 200000 },
+    "playwright__*": { "Summarize": false, "MaxChars": 0 }
   },
   "SmartCompactionTriggerEnabled": true,
   "ConciseOutputEnabled": true,

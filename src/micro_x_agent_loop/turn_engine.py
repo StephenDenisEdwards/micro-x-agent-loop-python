@@ -522,11 +522,21 @@ class TurnEngine:
         override leaves as ``None`` falls through. Truncation always runs (with the
         resolved cap); summarization runs only when ``summarize_enabled`` is True
         and the result length exceeds ``threshold``.
+
+        Override keys are matched exact-first; if no exact match is found, keys
+        ending in ``*`` are tried as prefix matches (first match in insertion
+        order wins). This lets a single entry cover all tools from one MCP
+        server, e.g. ``"playwright__*"``.
         """
         summarize = self._summarization_enabled
         threshold = self._summarization_threshold
         max_chars = self._max_tool_result_chars
         override = self._tool_result_overrides.get(tool_name)
+        if override is None:
+            for key, candidate in self._tool_result_overrides.items():
+                if key.endswith("*") and tool_name.startswith(key[:-1]):
+                    override = candidate
+                    break
         if override is not None:
             if override.summarize is not None:
                 summarize = override.summarize
