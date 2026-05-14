@@ -139,6 +139,41 @@ class VerbatimToolResultTests(unittest.TestCase):
         )
         self.assertIn("VERBATIM_FILE_BYTES_KEEP_ME", flat)
 
+    def test_playwright_result_survives_compaction_via_wildcard(self) -> None:
+        # Playwright tools are exempted via the "playwright__*" wildcard
+        # entry in _VERBATIM_TOOL_NAMES, so a browser_snapshot result should
+        # be carried through compaction unchanged.
+        messages = [
+            {"role": "user", "content": "seed"},
+            {"role": "assistant", "content": [{"type": "text", "text": "padding " * 200}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "tu1", "name": "playwright__browser_snapshot", "input": {}},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "tu1", "content": "PLAYWRIGHT_DOM_KEEP_ME"},
+                ],
+            },
+            {"role": "assistant", "content": [{"type": "text", "text": "more padding " * 200}]},
+            {"role": "user", "content": "tail"},
+        ]
+        strategy = SummarizeCompactionStrategy(FakeProvider(), "m", threshold_tokens=1, protected_tail_messages=1)
+        out = asyncio.run(strategy.maybe_compact(messages))
+        flat = "".join(
+            block.get("content", "") if isinstance(block.get("content"), str)
+            else "".join(
+                str(b.get("text") or b.get("content") or "")
+                for b in block.get("content", [])
+                if isinstance(b, dict)
+            )
+            for block in out
+        )
+        self.assertIn("PLAYWRIGHT_DOM_KEEP_ME", flat)
+
     def test_bash_result_does_not_survive_compaction_verbatim(self) -> None:
         # Same shape but with bash instead of read_file — bash is NOT in
         # _VERBATIM_TOOL_NAMES, so its result should be summarised away.

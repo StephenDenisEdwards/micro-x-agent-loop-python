@@ -40,7 +40,20 @@ _VERBATIM_TOOL_NAMES: set[str] = {
     "filesystem__grep",
     "glob",
     "filesystem__glob",
+    "playwright__*",
 }
+
+
+def _is_verbatim_tool_name(name: str) -> bool:
+    """True if a tool's name is in the verbatim whitelist. Supports exact
+    matches and ``*``-suffix prefix matches (e.g. ``playwright__*``).
+    """
+    if name in _VERBATIM_TOOL_NAMES:
+        return True
+    for entry in _VERBATIM_TOOL_NAMES:
+        if entry.endswith("*") and name.startswith(entry[:-1]):
+            return True
+    return False
 
 
 @runtime_checkable
@@ -282,7 +295,7 @@ def _has_verbatim_tool_use(msg: dict) -> bool:
         if (
             isinstance(block, dict)
             and block.get("type") == "tool_use"
-            and block.get("name", "") in _VERBATIM_TOOL_NAMES
+            and _is_verbatim_tool_name(block.get("name", ""))
         ):
             return True
     return False
