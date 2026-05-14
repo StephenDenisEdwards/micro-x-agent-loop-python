@@ -37,6 +37,50 @@ from micro_x_agent_loop.usage import UsageResult, estimate_cost
 from micro_x_agent_loop.voice_runtime import VoiceRuntime
 
 
+def _is_safe_message_head(msg: dict) -> bool:
+    """True if ``msg`` can safely sit at ``messages[0]`` of an Anthropic request:
+    role is ``user`` and content is not solely ``tool_result`` blocks (whose
+    matching ``tool_use`` would have been trimmed away).
+    """
+    if msg.get("role") != "user":
+        return False
+    content = msg.get("content", "")
+    if isinstance(content, str):
+        return True
+    if not isinstance(content, list):
+        return False
+    return any(isinstance(b, dict) and b.get("type") != "tool_result" for b in content)
+
+
+def _find_safe_trim_count(messages: list[dict], max_messages: int) -> int:
+    """Return how many leading messages can be dropped to bring the list to
+    at most ``max_messages`` without leaving an orphan ``tool_result`` at the
+    head. Returns 0 when no safe boundary exists in the trim range.
+    """
+    if max_messages <= 0 or len(messages) <= max_messages:
+        return 0
+    target = len(messages) - max_messages
+    safe = target
+    while safe < len(messages) and not _is_safe_message_head(messages[safe]):
+        safe += 1
+    if safe >= len(messages):
+        return 0
+    return safe
+
+
+def _repair_orphan_head(messages: list[dict]) -> tuple[list[dict], int]:
+    """Drop leading messages from ``messages`` until the head is safe to send
+    to Anthropic. Returns ``(repaired, dropped_count)``. Used after loading a
+    persisted session that may have been corrupted by older trim logic.
+    """
+    drop = 0
+    while drop < len(messages) and not _is_safe_message_head(messages[drop]):
+        drop += 1
+    if drop == 0:
+        return messages, 0
+    return messages[drop:], drop
+
+
 class Agent:
     _LINE_PREFIX = "assistant> "
     _LINE_PREFIX_AUTONOMOUS = ""
@@ -244,7 +288,14 @@ class Agent:
         session_id = self._memory.active_session_id
         if not self._memory_enabled or session_id is None:
             return
-        self._messages = self._memory.load_messages(session_id)
+        loaded = self._memory.load_messages(session_id)
+        repaired, dropped = _repair_orphan_head(loaded)
+        if dropped > 0:
+            logger.warning(
+                f"Session {session_id}: dropped {dropped} leading message(s) with orphan tool_result "
+                f"blocks before the head — likely corrupted by an earlier trim bug"
+            )
+        self._messages = repaired
         logger.info(f"Loaded {len(self._messages)} persisted messages for session {session_id}")
         self._inject_task_summary()
 
@@ -585,18 +636,25 @@ class Agent:
         self._session_accumulator.context_messages = len(self._messages)
 
     def _trim_conversation_history(self) -> None:
-        if self._max_conversation_messages <= 0:
+        safe = _find_safe_trim_count(self._messages, self._max_conversation_messages)
+        if safe == 0:
+            target = max(0, len(self._messages) - self._max_conversation_messages)
+            if target > 0:
+                logger.info(
+                    f"Conversation history trim skipped — no safe boundary found "
+                    f"(target={target}, len={len(self._messages)})"
+                )
             return
-        if len(self._messages) <= self._max_conversation_messages:
-            return
-
-        remove_count = len(self._messages) - self._max_conversation_messages
-        if remove_count > 0:
+        target = len(self._messages) - self._max_conversation_messages
+        if safe != target:
             logger.info(
-                f"Conversation history trimmed - removed {remove_count} oldest message(s) "
-                f"to stay within the {self._max_conversation_messages} message limit"
+                f"Conversation history trim adjusted {target} -> {safe} to avoid orphaning tool_result"
             )
-            del self._messages[:remove_count]
+        logger.info(
+            f"Conversation history trimmed - removed {safe} oldest message(s) "
+            f"to stay within the {self._max_conversation_messages} message limit"
+        )
+        del self._messages[:safe]
 
     def on_append_message(self, role: str, content: str | list[dict]) -> str | None:
         self._messages.append({"role": role, "content": content})
