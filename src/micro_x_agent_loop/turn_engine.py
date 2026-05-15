@@ -329,19 +329,13 @@ class TurnEngine:
                 turn_iteration += 1
                 continue
 
-            # Execute regular tool calls
-            if self._channel is not None:
-                for b in regular_blocks:
-                    self._channel.emit_tool_started(b["id"], b["name"])
-            try:
-                self._events.on_ensure_checkpoint_for_turn(regular_blocks)
-                regular_results = await self.execute_tools(
-                    regular_blocks, last_assistant_message_id=last_assistant_message_id
-                )
-            finally:
-                if self._channel is not None:
-                    for b in regular_blocks:
-                        self._channel.emit_tool_completed(b["id"], b["name"], False)
+            # Execute regular tool calls. emit_tool_started/completed are now
+            # fired per-tool from inside execute_tools so the channel sees the
+            # tool_input on start and result metadata on completion.
+            self._events.on_ensure_checkpoint_for_turn(regular_blocks)
+            regular_results = await self.execute_tools(
+                regular_blocks, last_assistant_message_id=last_assistant_message_id
+            )
 
             # Combine results in original order
             if inline_results:
@@ -379,6 +373,8 @@ class TurnEngine:
             tool_input = block["input"]
 
             self._events.on_tool_started(tool_use_id, tool_name)
+            if self._channel is not None:
+                self._channel.emit_tool_started(tool_use_id, tool_name, tool_input=tool_input)
 
             if tool is None:
                 content = f'Error: unknown tool "{tool_name}"'
@@ -392,6 +388,11 @@ class TurnEngine:
                 )
                 self._events.on_tool_completed(tool_use_id, tool_name, True)
                 self._events.on_tool_executed(tool_name, len(content), 0.0, True)
+                if self._channel is not None:
+                    self._channel.emit_tool_completed(
+                        tool_use_id, tool_name, True,
+                        result_chars=len(content),
+                    )
                 return {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
@@ -408,7 +409,7 @@ class TurnEngine:
                     raise RuntimeError(tool_result.text)
                 formatted = self._formatter.format(tool_name, tool_result.text, tool_result.structured)
                 summarize, threshold, max_chars = self._resolve_tool_result_overrides(tool_name)
-                result_text = self._truncate_tool_result(formatted, tool_name, max_chars)
+                result_text, was_truncated = self._truncate_tool_result(formatted, tool_name, max_chars)
                 result_text, was_summarized = await self._summarize_tool_result(
                     result_text, tool_name, summarize, threshold
                 )
@@ -430,6 +431,14 @@ class TurnEngine:
                     False,
                     was_summarized=was_summarized,
                 )
+                if self._channel is not None:
+                    self._channel.emit_tool_completed(
+                        tool_use_id, tool_name, False,
+                        result_chars=len(result_text),
+                        was_summarized=was_summarized,
+                        was_truncated=was_truncated,
+                        duration_ms=duration_ms,
+                    )
                 return {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
@@ -449,6 +458,12 @@ class TurnEngine:
                 )
                 self._events.on_tool_completed(tool_use_id, tool_name, True)
                 self._events.on_tool_executed(tool_name, len(content), duration_ms, True)
+                if self._channel is not None:
+                    self._channel.emit_tool_completed(
+                        tool_use_id, tool_name, True,
+                        result_chars=len(content),
+                        duration_ms=duration_ms,
+                    )
                 return {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
@@ -598,15 +613,15 @@ class TurnEngine:
         )
         self._events.on_api_call_completed(usage, f"nested:{tool_name}")
 
-    def _truncate_tool_result(self, result: str, tool_name: str, max_chars: int) -> str:
+    def _truncate_tool_result(self, result: str, tool_name: str, max_chars: int) -> tuple[str, bool]:
         if max_chars <= 0 or len(result) <= max_chars:
-            return result
+            return result, False
 
         original_length = len(result)
         truncated = result[:max_chars]
         message = f"\n\n[OUTPUT TRUNCATED: Showing {max_chars:,} of {original_length:,} characters from {tool_name}]"
         logger.warning(f"{tool_name} output truncated from {original_length:,} to {max_chars:,} chars")
-        return truncated + message
+        return truncated + message, True
 
     def _record_api_payload(
         self,

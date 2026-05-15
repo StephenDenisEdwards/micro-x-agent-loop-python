@@ -24,15 +24,23 @@ class TextualChannelTests(unittest.TestCase):
 
     def test_emit_tool_started(self) -> None:
         self.channel.emit_tool_started("id-1", "read_file")
-        self.mock_app.on_tool_started.assert_called_once_with("id-1", "read_file")
+        self.mock_app.on_tool_started.assert_called_once_with(
+            "id-1", "read_file", tool_input=None,
+        )
 
     def test_emit_tool_completed(self) -> None:
         self.channel.emit_tool_completed("id-1", "read_file", False)
-        self.mock_app.on_tool_completed.assert_called_once_with("id-1", "read_file", False)
+        self.mock_app.on_tool_completed.assert_called_once_with(
+            "id-1", "read_file", False,
+            result_chars=0, was_summarized=False, was_truncated=False, duration_ms=0.0,
+        )
 
     def test_emit_tool_completed_error(self) -> None:
         self.channel.emit_tool_completed("id-1", "read_file", True)
-        self.mock_app.on_tool_completed.assert_called_once_with("id-1", "read_file", True)
+        self.mock_app.on_tool_completed.assert_called_once_with(
+            "id-1", "read_file", True,
+            result_chars=0, was_summarized=False, was_truncated=False, duration_ms=0.0,
+        )
 
     def test_emit_turn_complete(self) -> None:
         usage: dict[str, Any] = {"tokens": 100}

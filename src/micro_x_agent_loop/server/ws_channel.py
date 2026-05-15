@@ -32,18 +32,35 @@ class WebSocketChannel:
     def emit_text_delta(self, text: str) -> None:
         asyncio.ensure_future(self._send({"type": "text_delta", "text": text}))
 
-    def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
+    def emit_tool_started(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        *,
+        tool_input: dict[str, Any] | None = None,
+    ) -> None:
         asyncio.ensure_future(
             self._send(
                 {
                     "type": "tool_started",
                     "tool_use_id": tool_use_id,
                     "tool": tool_name,
+                    "tool_input": tool_input,
                 }
             )
         )
 
-    def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
+    def emit_tool_completed(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        is_error: bool,
+        *,
+        result_chars: int = 0,
+        was_summarized: bool = False,
+        was_truncated: bool = False,
+        duration_ms: float = 0.0,
+    ) -> None:
         asyncio.ensure_future(
             self._send(
                 {
@@ -51,6 +68,10 @@ class WebSocketChannel:
                     "tool_use_id": tool_use_id,
                     "tool": tool_name,
                     "error": is_error,
+                    "result_chars": result_chars,
+                    "was_summarized": was_summarized,
+                    "was_truncated": was_truncated,
+                    "duration_ms": duration_ms,
                 }
             )
         )

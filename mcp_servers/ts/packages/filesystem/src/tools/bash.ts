@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x-ai/mcp-shared";
@@ -7,6 +8,38 @@ import { isPathAllowed, type PathPolicy } from "../paths.js";
 const IS_WINDOWS = process.platform === "win32";
 const TIMEOUT_MS = 30_000;
 const MAX_BUFFER = 10 * 1024 * 1024;
+
+/**
+ * Always use a real POSIX bash. On Windows that means Git for Windows
+ * (or WSL bash, or any user-supplied bash). The previous behaviour of
+ * falling back to cmd.exe broke every POSIX idiom the LLM produced
+ * (pipes, redirections containing `<`, `/tmp/...`, `&&`, etc).
+ */
+const RESOLVED_BASH_SHELL = resolveBashShell();
+
+function resolveBashShell(): string {
+  const override = process.env.FILESYSTEM_BASH_SHELL?.trim();
+  if (override) return override;
+
+  if (!IS_WINDOWS) return "/bin/bash";
+
+  // Git for Windows is the de-facto bash on Windows dev machines.
+  const candidates: string[] = [
+    "C:\\Program Files\\Git\\bin\\bash.exe",
+    "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+    "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+  ];
+  if (process.env.PROGRAMFILES) {
+    candidates.push(`${process.env.PROGRAMFILES}\\Git\\bin\\bash.exe`);
+  }
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  throw new Error(
+    "filesystem__bash: no bash shell found. Install Git for Windows " +
+      "(https://git-scm.com/download/win) or set FILESYSTEM_BASH_SHELL to a bash binary.",
+  );
+}
 
 const WIN_DRIVE_RE = /^[A-Za-z]:[\\/]/;
 const UNC_PREFIX = "\\\\";
@@ -27,6 +60,7 @@ export function registerBash(
 
   logger.info(
     {
+      bash_shell: RESOLVED_BASH_SHELL,
       bash_path_guard: pathGuardEnabled,
       bash_allowlist_mode: allowlist.mode,
       bash_allowlist_size: allowlist.set.size,
@@ -48,7 +82,7 @@ export function registerBash(
         "echo > file → use write_file. " +
         "echo >> file → use append_file. " +
         "rm <file> → use delete_file (checkpointed — /rewind restores). bash rm is for directories (rm -r / rmdir) and bulk deletion only. " +
-        "Cross-platform pitfall: the shell is cmd.exe on Windows and /bin/sh elsewhere — quoting, chain operators (`;` vs `&`), and path conventions differ. The dedicated FS tools sidestep this. " +
+        "Shell: POSIX bash on every platform (Git for Windows on Windows). Pipes, `&&`/`||`, `$(...)`, `/tmp/...`, `<`/`>` redirection, single/double quoting, here-docs all work as in any standard bash. " +
         "Containment (ACCIDENT PREVENTION only — NOT adversarial sandboxing). " +
         "FILESYSTEM_BASH_PATH_GUARD (default ON, set =false to disable) rejects commands that reference absolute paths or `..` traversal resolving outside FILESYSTEM_WORKING_DIR / FILESYSTEM_ALLOWED_DIRS. " +
         "FILESYSTEM_BASH_ALLOWED_COMMANDS (opt-in, comma-separated) restricts execution to commands whose FIRST token is in the list — pipes, chains, subshells, and command substitution are NOT decomposed. Set to empty string for a kill switch. " +
@@ -300,12 +334,9 @@ interface BashResult {
 
 function runCommand(command: string, cwd: string): Promise<BashResult> {
   return new Promise((resolve) => {
-    const shell = IS_WINDOWS ? "cmd.exe" : "/bin/sh";
-    const shellArgs = IS_WINDOWS ? ["/c", command] : ["-c", command];
-
     const child = execFile(
-      shell,
-      shellArgs,
+      RESOLVED_BASH_SHELL,
+      ["-c", command],
       {
         cwd,
         timeout: TIMEOUT_MS,

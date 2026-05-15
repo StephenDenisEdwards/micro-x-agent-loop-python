@@ -24,11 +24,35 @@ class TextualChannel:
     def emit_text_delta(self, text: str) -> None:
         self._app.on_text_delta(text)
 
-    def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
-        self._app.on_tool_started(tool_use_id, tool_name)
+    def emit_tool_started(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        *,
+        tool_input: dict[str, Any] | None = None,
+    ) -> None:
+        self._app.on_tool_started(tool_use_id, tool_name, tool_input=tool_input)
 
-    def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
-        self._app.on_tool_completed(tool_use_id, tool_name, is_error)
+    def emit_tool_completed(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        is_error: bool,
+        *,
+        result_chars: int = 0,
+        was_summarized: bool = False,
+        was_truncated: bool = False,
+        duration_ms: float = 0.0,
+    ) -> None:
+        self._app.on_tool_completed(
+            tool_use_id,
+            tool_name,
+            is_error,
+            result_chars=result_chars,
+            was_summarized=was_summarized,
+            was_truncated=was_truncated,
+            duration_ms=duration_ms,
+        )
 
     def emit_turn_complete(self, usage: dict[str, Any]) -> None:
         self._app.on_turn_complete(usage)

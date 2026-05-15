@@ -340,9 +340,12 @@ export async function webSearch(
 }
 
 export async function webFetch(
-  clients: Clients, url: WebFetchArgs["url"], maxChars: WebFetchArgs["maxChars"] = 50000,
+  clients: Clients, url: WebFetchArgs["url"], maxChars?: WebFetchArgs["maxChars"],
 ): Promise<WebFetchResult | null> {
-  const args: WebFetchArgs = { url, maxChars };
+  // No default cap — the agent's ToolResultOverrides is the authoritative
+  // truncation/summarisation layer. Pass `maxChars` only when the task
+  // genuinely wants to limit at the source (e.g. a fast probe).
+  const args: WebFetchArgs = { url, ...(maxChars !== undefined ? { maxChars } : {}) };
   const result = await get(clients, "web").callTool("web_fetch", args);
   if (typeof result === "string") return null;
   return result as WebFetchResult;

@@ -26,7 +26,14 @@ export function registerGrep(server: McpServer, logger: Logger, policy: PathPoli
         "Reading whole files to scan for a string wastes tokens; grep returns only what matched. " +
         "Narrow with `glob` or `type` to avoid searching the whole tree. " +
         "Prefer this over `bash grep` / `rg` — it is cross-platform, structured, and path-contained. " +
-        "read_file is for when you have a specific path and need its full contents.",
+        "read_file is for when you have a specific path and need its full contents. " +
+        "EXCEPTION — single-line files: this tool is *line-oriented*. On a file emitted as one long line " +
+        "(minified JSON, RSS feeds, single-line HTML, one-line CSV header) `output_mode: \"count\"` returns 1 " +
+        "and `output_mode: \"content\"` returns the entire file as the single matching \"line\" — likely " +
+        "blowing your context window and triggering tool-result truncation/summarisation. For occurrence " +
+        "counts or per-match listings on such content, switch to `bash`: `grep -o PATTERN file | wc -l` for " +
+        "a count, `grep -oE PATTERN file` to list each match. `-o` is the only mode that decomposes a long " +
+        "line into one-match-per-line; this tool has no equivalent.",
       inputSchema: {
         pattern: z.string().min(1).describe("Regex pattern (ripgrep/Rust regex syntax)"),
         path: z.string().optional().describe("File or directory to search. Defaults to working dir."),

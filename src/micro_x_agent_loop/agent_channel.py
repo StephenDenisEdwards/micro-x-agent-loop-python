@@ -75,12 +75,33 @@ class AgentChannel(Protocol):
         """Called for each text token from the LLM stream."""
         ...
 
-    def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
-        """Called when a tool begins execution."""
+    def emit_tool_started(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        *,
+        tool_input: dict[str, Any] | None = None,
+    ) -> None:
+        """Called when a tool begins execution. ``tool_input`` is the arg dict."""
         ...
 
-    def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
-        """Called when a tool finishes execution."""
+    def emit_tool_completed(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        is_error: bool,
+        *,
+        result_chars: int = 0,
+        was_summarized: bool = False,
+        was_truncated: bool = False,
+        duration_ms: float = 0.0,
+    ) -> None:
+        """Called when a tool finishes execution.
+
+        ``result_chars``: length of the tool result that entered conversation.
+        ``was_summarized`` / ``was_truncated``: whether the agent's overrides fired.
+        ``duration_ms``: wall-clock time from tool_started.
+        """
         ...
 
     def emit_turn_complete(self, usage: dict[str, Any]) -> None:
@@ -148,7 +169,13 @@ class TerminalChannel:
                 self._first_delta_in_turn = False
             print(text, end="", flush=True)
 
-    def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
+    def emit_tool_started(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        *,
+        tool_input: dict[str, Any] | None = None,
+    ) -> None:
         if self._markdown:
             self._ensure_renderer()
             assert self._renderer is not None
@@ -159,7 +186,17 @@ class TerminalChannel:
             self._spinner = PlainSpinner(prefix=self._line_prefix, label=f" Running {tool_name}...")
             self._spinner.start()
 
-    def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
+    def emit_tool_completed(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        is_error: bool,
+        *,
+        result_chars: int = 0,
+        was_summarized: bool = False,
+        was_truncated: bool = False,
+        duration_ms: float = 0.0,
+    ) -> None:
         if self._markdown:
             if self._renderer is not None:
                 self._renderer.stop_spinner()
@@ -278,10 +315,26 @@ class BufferedChannel:
     def emit_text_delta(self, text: str) -> None:
         self.text += text
 
-    def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
+    def emit_tool_started(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        *,
+        tool_input: dict[str, Any] | None = None,
+    ) -> None:
         self.tool_events.append(("started", tool_use_id, tool_name))
 
-    def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
+    def emit_tool_completed(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        is_error: bool,
+        *,
+        result_chars: int = 0,
+        was_summarized: bool = False,
+        was_truncated: bool = False,
+        duration_ms: float = 0.0,
+    ) -> None:
         self.tool_events.append(("completed", tool_use_id, tool_name))
 
     def emit_turn_complete(self, usage: dict[str, Any]) -> None:
@@ -321,10 +374,26 @@ class BrokerChannel:
     def emit_text_delta(self, text: str) -> None:
         pass
 
-    def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
+    def emit_tool_started(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        *,
+        tool_input: dict[str, Any] | None = None,
+    ) -> None:
         pass
 
-    def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
+    def emit_tool_completed(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        is_error: bool,
+        *,
+        result_chars: int = 0,
+        was_summarized: bool = False,
+        was_truncated: bool = False,
+        duration_ms: float = 0.0,
+    ) -> None:
         pass
 
     def emit_turn_complete(self, usage: dict[str, Any]) -> None:

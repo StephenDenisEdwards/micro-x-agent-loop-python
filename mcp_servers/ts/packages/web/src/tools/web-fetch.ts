@@ -1,11 +1,12 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Logger } from "@micro-x-ai/mcp-shared";
 import { ValidationError, UpstreamError, resilientFetch } from "@micro-x-ai/mcp-shared";
 import { htmlToText } from "../html-to-text.js";
 
-const DEFAULT_MAX_CHARS = 50_000;
-const MAX_RESPONSE_BYTES = 2_000_000; // 2 MB
+const MAX_RESPONSE_BYTES = 2_000_000; // 2 MB — hard safety cap on raw bytes
 const TIMEOUT_MS = 30_000;
 
 const USER_AGENT =
@@ -27,16 +28,26 @@ export function registerWebFetch(server: McpServer, logger: Logger): void {
         "Use only for plain HTML with no JavaScript, JSON/REST APIs, RSS feeds, robots.txt, " +
         "or other text endpoints. Does NOT execute JavaScript, follow auth flows, " +
         "or render single-page apps — for those, use the browser_* tools (Playwright) instead. " +
-        "If the response from this tool looks empty or JS-skeleton, switch to browser_navigate.",
+        "If the response from this tool looks empty or JS-skeleton, switch to browser_navigate. " +
+        "Pass `save_to_file` when you intend to grep/count/filter the result rather than read it — " +
+        "the extracted content is written to that path and only metadata comes back, keeping the " +
+        "conversation context small. Plain `web_fetch` (no `save_to_file`) returns the full content " +
+        "inline for cases where you need to read it.",
       inputSchema: {
         url: z.string().min(1).describe("The HTTP or HTTPS URL to fetch"),
         maxChars: z
           .number()
           .int()
           .min(1)
-          .default(DEFAULT_MAX_CHARS)
           .describe(
-            `Maximum characters of content to return (default ${DEFAULT_MAX_CHARS}). Content beyond this limit is truncated with a notice.`,
+            "Optional cap on returned content characters. If omitted, the full extracted content is returned (subject only to the 2 MB raw-response byte cap). The agent applies its own `ToolResultOverrides` policy on top of whatever this tool returns.",
+          )
+          .optional(),
+        save_to_file: z
+          .string()
+          .min(1)
+          .describe(
+            "Optional filesystem path (absolute, or relative to the MCP server's working directory). When set, the extracted content is written to this path and the response body contains only metadata (no content). Use when you intend to operate on the data (grep/count/filter) rather than read it. Parent directories are created if missing; the file is overwritten if it exists.",
           )
           .optional(),
       },
@@ -49,6 +60,7 @@ export function registerWebFetch(server: McpServer, logger: Logger): void {
         content: z.string(),
         content_length: z.number().int(),
         truncated: z.boolean(),
+        saved_to: z.string().optional(),
       },
       annotations: {
         readOnlyHint: true,
@@ -58,9 +70,13 @@ export function registerWebFetch(server: McpServer, logger: Logger): void {
     async (input) => {
       const startTime = Date.now();
       const requestId = crypto.randomUUID();
-      const maxChars = input.maxChars ?? DEFAULT_MAX_CHARS;
+      const maxChars = input.maxChars;
+      const saveToFile = input.save_to_file;
 
-      logger.info({ tool: "web_fetch", request_id: requestId, url: input.url }, "tool_call_start");
+      logger.info(
+        { tool: "web_fetch", request_id: requestId, url: input.url, save_to_file: saveToFile },
+        "tool_call_start",
+      );
 
       try {
         // Validate URL scheme
@@ -74,6 +90,14 @@ export function registerWebFetch(server: McpServer, logger: Logger): void {
         if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
           throw new ValidationError("URL must use http or https scheme");
         }
+
+        // Resolve save_to_file against the MCP server's working directory if
+        // it's a relative path. The agent's mcp_manager sets cwd to the
+        // workspace working dir, so this matches what filesystem__grep and
+        // read_file see.
+        const resolvedSaveToFile = saveToFile !== undefined
+          ? resolve(process.cwd(), saveToFile)
+          : undefined;
 
         // Fetch with redirect following, timeout, and retry on transient errors
         const response = await resilientFetch(input.url, {
@@ -115,12 +139,31 @@ export function registerWebFetch(server: McpServer, logger: Logger): void {
           content = bodyText;
         }
 
-        // Truncate if needed
+        // Truncate only when the caller explicitly requests a cap.
+        // Otherwise return the full extracted content; the agent's
+        // `ToolResultOverrides` is the authoritative truncation layer.
         const originalLength = content.length;
         let truncated = false;
-        if (originalLength > maxChars) {
+        if (maxChars !== undefined && originalLength > maxChars) {
           content = content.slice(0, maxChars);
           truncated = true;
+        }
+
+        // save_to_file: write extracted content to disk and return metadata
+        // only — keeps the conversation small for grep/count/filter workflows.
+        // Parent dirs are created if missing; relative paths are resolved
+        // against the MCP server's working directory (see resolvedSaveToFile).
+        let savedTo: string | undefined;
+        if (resolvedSaveToFile !== undefined) {
+          try {
+            await mkdir(dirname(resolvedSaveToFile), { recursive: true });
+            await writeFile(resolvedSaveToFile, content, "utf-8");
+            savedTo = resolvedSaveToFile;
+          } catch (err) {
+            throw new UpstreamError(
+              `Failed to write content to ${resolvedSaveToFile}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
         }
 
         const durationMs = Date.now() - startTime;
@@ -133,6 +176,7 @@ export function registerWebFetch(server: McpServer, logger: Logger): void {
             status_code: response.status,
             content_length: originalLength,
             truncated,
+            saved_to: savedTo,
           },
           "tool_call_end",
         );
@@ -145,16 +189,22 @@ export function registerWebFetch(server: McpServer, logger: Logger): void {
         if (title) textParts.push(`Title: ${title}`);
 
         const lengthStr = truncated
-          ? `${maxChars.toLocaleString()} chars (truncated from ${originalLength.toLocaleString()})`
+          ? `${content.length.toLocaleString()} chars (truncated from ${originalLength.toLocaleString()})`
           : `${originalLength.toLocaleString()} chars`;
         textParts.push(`Length: ${lengthStr}`);
-        textParts.push("");
-        textParts.push("--- Content ---");
-        textParts.push("");
-        textParts.push(content);
-        if (truncated) {
+
+        if (savedTo !== undefined) {
+          // Metadata-only mode: omit --- Content --- section
+          textParts.push(`Saved to: ${savedTo}`);
+        } else {
           textParts.push("");
-          textParts.push(`[Content truncated at ${maxChars.toLocaleString()} characters]`);
+          textParts.push("--- Content ---");
+          textParts.push("");
+          textParts.push(content);
+          if (truncated) {
+            textParts.push("");
+            textParts.push(`[Content truncated at ${content.length.toLocaleString()} characters]`);
+          }
         }
 
         const structured = {
@@ -163,9 +213,12 @@ export function registerWebFetch(server: McpServer, logger: Logger): void {
           status_code: response.status,
           content_type: contentType,
           title,
-          content,
+          // In save_to_file mode, content stays empty so the file is the
+          // canonical place to read from; in inline mode it carries the data.
+          content: savedTo !== undefined ? "" : content,
           content_length: originalLength,
           truncated,
+          ...(savedTo !== undefined ? { saved_to: savedTo } : {}),
         };
 
         return {

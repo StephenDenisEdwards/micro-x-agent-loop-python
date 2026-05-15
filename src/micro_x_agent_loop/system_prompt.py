@@ -243,19 +243,84 @@ and contained to the workspace via `FILESYSTEM_WORKING_DIR` + `FILESYSTEM_ALLOWE
 anything no dedicated tool covers. It is **not** path-policy-gated and is **not** OS-sandboxed — \
 prefer the dedicated tools for any read or write.
 
+## Fetching large content (keeping the conversation small)
+
+Decide first what you'll do with the result, then pick the fetch shape. \
+Throughout this section, `./.fetch/x.…` is used as the on-disk staging path. \
+Use a path *inside one of the allowed filesystem roots* — \
+`filesystem__grep` and `read_file` will refuse paths outside them. \
+Do NOT use `/tmp/` or `C:\\Temp\\` — those locations are not in the \
+allowed-roots policy and reads from there will be rejected.
+
+- **Operate on it** (grep, count, filter, extract): keep it out of conversation context. \
+The whole document does not need to enter your tokens just so you can run a count. Two \
+ways, either is fine:
+  - `web_fetch(url="…", save_to_file="./.fetch/x.rss")` — server writes the extracted \
+content to the file and returns only metadata (path, content_length, status, title, \
+content_type). Preferred for HTML pages because htmlToText extraction still runs.
+  - `bash: curl -s URL -o ./.fetch/x.rss` — raw bytes go to disk, conversation sees nothing. \
+Preferred for non-HTML (RSS, JSON, binary) or when you want exactly the upstream bytes.
+- **Reason about it** (read, summarise, quote, answer questions about content): use \
+plain `web_fetch(url="…")` — the full extracted content comes back inline because you \
+actually need to look at it.
+
+Anti-pattern: calling `web_fetch` to retrieve a 280 KB document, then asking yourself \
+"how many `<item>` tags?". The 280 KB sits in your context for the rest of the session, \
+costing tokens on every subsequent turn, and you can't reliably count it anyway. Fetch \
+to a file (either route above) and `grep -o … | wc -l` it.
+
 ## Counting and enumerating
 
-When the user asks "how many X", "list all X", or anything that requires a precise count:
+**RULE: never produce a count or an enumeration from text — yours, a tool result's, or \
+a prior turn's. Always shell out.** This is non-negotiable for any collection larger \
+than ~10 items. Models silently round to 10 / 20 / 30 / 50 / 100 when they didn't really \
+count, and *"I already retrieved it"* is the most common excuse for skipping the shell \
+call. **It is not an exception.** The conversation buffer is not a `grep` substitute.
 
-- For a count of pattern occurrences (e.g. "how many `## ` headings", "how many TODOs"): \
-use `grep` with `output_mode: "count"`. Returns the integer directly.
-- For total lines in a file: read `read_file`'s structured `total_lines` field, or call \
-`grep` with `output_mode: "count"` and `pattern: "."`. Never estimate from formatted content.
-- For "list all X" over a file: run `grep` on the marker pattern with \
-`output_mode: "content"` to get every match deterministically, then enumerate from \
-those results. Do not summarise into groups or tiers unless the user asks for a summary.
-- Do NOT count by reading file content and tallying yourself — models are unreliable at \
-this for files over ~50 lines and will silently invent plausible-looking numbers.
+### Recipes (use the one that matches your situation)
+
+- **Count occurrences in a file on disk:** \
+`grep` (the filesystem MCP tool) with `output_mode: "count"` returns the integer directly. \
+**Caveat — load-bearing:** `filesystem__grep` is *line-oriented* (like every grep is by \
+default). `output_mode: "count"` counts matching *lines*, and `output_mode: "content"` \
+returns matching *lines verbatim*. On a single-line file (minified JSON, one-line RSS, \
+HTML emitted on one line, one-line CSV header) "the matching line" is *the entire file* \
+— a count of 1 and `output_mode: "content"` returning the whole document. \
+**For any input you are not certain is multi-line, use `bash` instead:** \
+`grep -o PATTERN file | wc -l` for counts (one match per line, then `wc -l`), or \
+`grep -oE PATTERN file` to list matches. `-o` is the only flag that decomposes a long \
+line into one-match-per-line; `filesystem__grep` has no equivalent flag and will pull the \
+whole file back through its result if you try.
+- **Count occurrences in a fetched document you have not yet retrieved:** \
+`curl -s URL | grep -o PATTERN | wc -l`. One bash call, deterministic.
+- **Count occurrences in content already in your context** (RSS feed already returned \
+by `web_fetch`, JSON already returned by an API call, a large tool result from a prior \
+turn): \
+  1. `write_file(path="./.fetch/buf.txt", content=<the content>)` \
+  2. `bash`: `grep -o PATTERN ./.fetch/buf.txt | wc -l` \
+\
+  Do NOT count by scanning the in-memory content. You *will* miscount, and you will \
+  not notice that you miscounted. The fact that the data is right there in your \
+  context window is not a licence to skip the tool call.
+- **List items rather than count them:** same shape, use `grep -oE PATTERN` (no \
+`wc -l`) — every match on its own line, ready for enumeration.
+- **Total lines in a file:** read `read_file`'s structured `total_lines` field, or call \
+`grep` with `output_mode: "count"` and `pattern: "."`.
+
+### Anti-patterns (do not do this)
+
+- *"Based on the RSS feed I already retrieved, I count 30 `<item>` tags."* \
+Wrong. Even with the data sitting in your context, save and grep.
+- *"The response contains roughly 20-30 entries."* \
+Wrong. Counts in this codebase are never approximate; always shell out for a precise \
+integer.
+- *"`grep -c '<item>'`"* on a single-line RSS / minified document. \
+Wrong shape. `grep -c` counts matching lines. Use `grep -o ... | wc -l`.
+
+Models are unreliable at counting any input over ~10 items and will silently invent \
+plausible-looking numbers that round to nice values. This failure mode applies equally \
+to on-disk files, in-memory tool results, and conversation history. The rule is the \
+same in all three cases: shell out, never eyeball.
 
 ## Parallel execution
 
@@ -420,6 +485,28 @@ dashboard", or names a well-known interactive site (Gmail, LinkedIn, GitHub UI, 
 any SPA), use `browser_*`, not `web_fetch`."""
 
 
+def filesystem_roots_from_mcp_config(mcp_servers: dict) -> tuple[list[str], list[str]]:
+    """Extract (extra_allowed_dirs, readonly_dirs) from the filesystem MCP
+    server's env block. The MCP server itself reads these from
+    ``FILESYSTEM_ALLOWED_DIRS`` and ``FILESYSTEM_READONLY_DIRS`` (split on
+    ``os.pathsep``); we surface the same values to the model in the system
+    prompt so it knows the paths are reachable.
+    """
+    import os
+
+    fs = mcp_servers.get("filesystem") if isinstance(mcp_servers, dict) else None
+    env = fs.get("env", {}) if isinstance(fs, dict) else {}
+    if not isinstance(env, dict):
+        return [], []
+
+    def _split(value: object) -> list[str]:
+        if not isinstance(value, str):
+            return []
+        return [p.strip() for p in value.split(os.pathsep) if p.strip()]
+
+    return _split(env.get("FILESYSTEM_ALLOWED_DIRS")), _split(env.get("FILESYSTEM_READONLY_DIRS"))
+
+
 def get_system_prompt(
     *,
     user_memory: str = "",
@@ -428,6 +515,8 @@ def get_system_prompt(
     tool_search_active: bool = False,
     task_decomposition_enabled: bool = False,
     working_directory: str | None = None,
+    extra_allowed_dirs: list[str] | None = None,
+    readonly_dirs: list[str] | None = None,
     autonomous: bool = False,
     hitl_enabled: bool = False,
     compact: bool = False,
@@ -474,6 +563,17 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
         prompt += "All relative file paths and shell commands should be relative to this directory. "
         prompt += "When the user asks to list files, read files, or perform operations without "
         prompt += "specifying a path, use this directory as the default."
+    if extra_allowed_dirs or readonly_dirs:
+        prompt += "\n\nYou also have filesystem access to these additional roots:"
+        for d in extra_allowed_dirs or []:
+            prompt += f"\n- {d} (read/write)"
+        for d in readonly_dirs or []:
+            prompt += f"\n- {d} (read-only — read_file, grep, glob work; write_file, append_file, edit_file, delete_file will be rejected)"
+        prompt += (
+            "\nFiles under these roots are absolutely accessible — use the filesystem tools "
+            "directly on their full paths. Do not refuse a request just because a path is "
+            "outside your working directory."
+        )
     if user_memory:
         prompt += f"\n\n# User Memory\n\n{user_memory}"
     if user_memory_enabled and not compact:

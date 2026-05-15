@@ -691,11 +691,37 @@ class AgentTUI(App[None]):
     def on_text_delta(self, text: str) -> None:
         self.query_one("#chat-log", ChatLog).append_text(text)
 
-    def on_tool_started(self, tool_use_id: str, tool_name: str) -> None:
-        self.query_one("#tool-panel", ToolPanel).tool_started(tool_use_id, tool_name)
+    def on_tool_started(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        *,
+        tool_input: dict[str, Any] | None = None,
+    ) -> None:
+        self.query_one("#tool-panel", ToolPanel).tool_started(
+            tool_use_id, tool_name, tool_input=tool_input,
+        )
 
-    def on_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None:
-        self.query_one("#tool-panel", ToolPanel).tool_completed(tool_use_id, tool_name, is_error)
+    def on_tool_completed(
+        self,
+        tool_use_id: str,
+        tool_name: str,
+        is_error: bool,
+        *,
+        result_chars: int = 0,
+        was_summarized: bool = False,
+        was_truncated: bool = False,
+        duration_ms: float = 0.0,
+    ) -> None:
+        self.query_one("#tool-panel", ToolPanel).tool_completed(
+            tool_use_id,
+            tool_name,
+            is_error,
+            result_chars=result_chars,
+            was_summarized=was_summarized,
+            was_truncated=was_truncated,
+            duration_ms=duration_ms,
+        )
 
     def on_turn_complete(self, usage: dict[str, Any]) -> None:
         self.query_one("#status-bar", StatusBar).refresh_metrics()

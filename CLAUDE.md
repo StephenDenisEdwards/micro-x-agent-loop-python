@@ -208,6 +208,7 @@ After completing any feature work or committing changes:
 - Do not use `git add -A` — stage specific files only
 - Do not skip pre-commit hooks (`--no-verify`)
 - Do not leave mypy errors — run `mypy src/` and fix before considering work complete
+- Do not add char-truncation defaults to MCP servers, codegen templates, or per-task `tools.ts` wrappers — truncation/summarisation policy lives only in the agent's `ToolResultOverrides` config. See [ADR-024](documentation/docs/architecture/decisions/ADR-024-single-layer-tool-result-truncation.md).
 
 ## Documentation
 
