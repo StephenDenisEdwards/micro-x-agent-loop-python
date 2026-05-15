@@ -15,7 +15,7 @@ from micro_x_agent_loop.mcp.mcp_manager import McpManager
 from micro_x_agent_loop.memory import CheckpointManager, EventEmitter, MemoryStore, SessionManager, prune_memory
 from micro_x_agent_loop.memory.event_sink import AsyncEventSink
 from micro_x_agent_loop.provider import create_provider
-from micro_x_agent_loop.system_prompt import get_system_prompt
+from micro_x_agent_loop.system_prompt import filesystem_roots_from_mcp_config, get_system_prompt
 
 
 @dataclass
@@ -165,6 +165,8 @@ async def bootstrap_runtime(
     # Build routing policies dict with resolved provider/model references
     routing_policies = dict(app.routing_policies) if app.routing_policies else {}
 
+    fs_extra_allowed, fs_readonly = filesystem_roots_from_mcp_config(app.mcp_server_configs)
+
     agent = Agent(
         AgentConfig(
             model=app.model,
@@ -179,6 +181,8 @@ async def bootstrap_runtime(
                 concise_output_enabled=app.concise_output_enabled,
                 task_decomposition_enabled=app.task_decomposition_enabled,
                 working_directory=app.working_directory,
+                extra_allowed_dirs=fs_extra_allowed,
+                readonly_dirs=fs_readonly,
                 autonomous=autonomous,
                 hitl_enabled=hitl_enabled,
                 compact=app.provider_name == "ollama",
