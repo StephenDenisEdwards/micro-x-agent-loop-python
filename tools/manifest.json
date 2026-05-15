@@ -1,144 +1,106 @@
 {
-  "jobserve_email_scraper": {
-    "tool_name": "jobserve_email_scraper",
-    "description": "Scrapes job listings from JobServe emails and appends them to a markdown file.",
-    "created": "2026-05-06",
-    "server": {
-      "transport": "stdio",
-      "command": "npx",
-      "args": [
-        "tsx",
-        "src/index.ts",
-        "--config",
-        "../../config.json"
-      ],
-      "cwd": "tools/jobserve_email_scraper/"
-    },
+  "jobserve-processor": {
+    "tool_name": "jobserve-processor",
+    "description": "Processes JobServe job alert emails, retrieves full job specifications, scores them against a CV, and writes a markdown report.",
+    "created": "2026-05-14",
     "input_schema": {
       "type": "object",
       "properties": {
-        "email_count": {
+        "days_back": {
           "type": "number",
-          "default": 2,
-          "description": "Number of most recent emails to process"
-        },
-        "output_file": {
-          "type": "string",
-          "default": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\JobServe-Emails-Raw-by-micro-x-ai.md",
-          "description": "Output markdown file path"
-        }
-      },
-      "additionalProperties": false,
-      "$schema": "http://json-schema.org/draft-07/schema#"
-    }
-  },
-  "linkedin_job_scraper": {
-    "tool_name": "linkedin_job_scraper",
-    "description": "Search LinkedIn for recent job listings relevant to a CV and append full job specs to a markdown file.",
-    "created": "2026-05-06",
-    "server": {
-      "transport": "stdio",
-      "command": "npx",
-      "args": [
-        "tsx",
-        "src/index.ts",
-        "--config",
-        "../../config.json"
-      ],
-      "cwd": "tools/linkedin_job_scraper/"
-    },
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "hours": {
-          "type": "number",
-          "default": 24,
-          "description": "How many hours back to search"
-        },
-        "output_file": {
-          "type": "string",
-          "default": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\LinkedIn-Emails-Raw-by-micro-x-ai.md",
-          "description": "Output markdown file path"
+          "default": 1,
+          "description": "Override days_back from profile"
         },
         "max_jobs": {
           "type": "number",
-          "default": 20,
-          "description": "Maximum jobs to retrieve"
-        }
-      },
-      "additionalProperties": false,
-      "$schema": "http://json-schema.org/draft-07/schema#"
-    }
-  },
-  "jobserve_rss_aggregator": {
-    "tool_name": "jobserve_rss_aggregator",
-    "description": "Aggregate job listings from RSS feeds and score them against a CV using Claude LLM",
-    "created": "2026-05-07",
-    "server": {
-      "transport": "stdio",
-      "command": "npx",
-      "args": [
-        "tsx",
-        "src/index.ts",
-        "--config",
-        "../../config.json"
-      ],
-      "cwd": "tools/jobserve_rss_aggregator/"
-    },
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "output_file": {
-          "type": "string",
-          "default": "jobsearch/results/jobserve-current-feed.md",
-          "description": "Where to write the aggregated job listings"
-        },
-        "min_score_threshold": {
-          "type": "number",
-          "default": 0,
-          "description": "Minimum score to include in output (0-100)"
-        }
-      },
-      "additionalProperties": false,
-      "$schema": "http://json-schema.org/draft-07/schema#"
-    }
-  },
-  "jobserve_apply": {
-    "tool_name": "jobserve_apply",
-    "description": "Automatically applies to high-scoring JobServe jobs listed in a markdown file using a logged-in Playwright browser.",
-    "created": "2026-05-08",
-    "server": {
-      "transport": "stdio",
-      "command": "npx",
-      "args": [
-        "tsx",
-        "src/index.ts",
-        "--config",
-        "../../config.json"
-      ],
-      "cwd": "tools/jobserve_apply/"
-    },
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "input_file": {
-          "type": "string",
-          "default": "jobsearch/results/jobserve-current-feed.md",
-          "description": "Path to the jobserve markdown file (resolved via WorkingDirectory)"
+          "default": 100,
+          "description": "Override max_jobs from profile"
         },
         "dry_run": {
           "type": "boolean",
           "default": false,
-          "description": "Do everything except click the final submit button"
-        },
-        "max_jobs": {
-          "type": "number",
-          "default": 10,
-          "description": "Safety cap on number of applications per run"
+          "description": "If true, extract links but do not fetch specs"
         }
       },
       "additionalProperties": false,
       "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/jobserve-processor/"
+    }
+  },
+  "jobserve-processor_2": {
+    "tool_name": "jobserve-processor_2",
+    "description": "Process JobServe job alert emails, fetch full job specs, rank against CV, and write markdown report.",
+    "created": "2026-05-14",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/jobserve-processor_2/"
+    }
+  },
+  "jobserve-processor_3": {
+    "tool_name": "jobserve-processor_3",
+    "description": "Process JobServe job alert emails, retrieve full specs, rank against CV, and write a markdown report.",
+    "created": "2026-05-14",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/jobserve-processor_3/"
+    }
+  },
+  "jobserve-processor_4": {
+    "tool_name": "jobserve-processor_4",
+    "description": "Processes JobServe job alert emails, retrieves full job specs from JobServe pages, and produces a ranked markdown report.",
+    "created": "2026-05-14",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/jobserve-processor_4/"
     }
   }
 }
