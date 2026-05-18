@@ -22,6 +22,9 @@ store/
 node_modules/
 .vscode/
 
+# Project-managed ripgrep binary (scripts/fetch_ripgrep.py — ADR-025)
+.tools/
+
 # Tool apps under tools/ are now version-controlled (source only).
 # Build/dependency artifacts stay ignored via the global rules above:
 # node_modules/ (line ~22), dist/ (line ~13), *.tsbuildinfo (line ~43),
