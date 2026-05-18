@@ -18,7 +18,7 @@ from micro_x_agent_loop.memory import CheckpointManager, EventEmitter, MemorySto
 from micro_x_agent_loop.memory.event_sink import AsyncEventSink
 from micro_x_agent_loop.native_tools import build_native_tools
 from micro_x_agent_loop.provider import create_provider
-from micro_x_agent_loop.system_prompt import filesystem_roots_from_mcp_config, get_system_prompt
+from micro_x_agent_loop.system_prompt import filesystem_roots_from_config, get_system_prompt
 
 
 @dataclass
@@ -179,7 +179,7 @@ async def bootstrap_runtime(
     # Build routing policies dict with resolved provider/model references
     routing_policies = dict(app.routing_policies) if app.routing_policies else {}
 
-    fs_extra_allowed, fs_readonly = filesystem_roots_from_mcp_config(app.mcp_server_configs)
+    fs_extra_allowed, fs_readonly = filesystem_roots_from_config(app.filesystem_config)
 
     agent = Agent(
         AgentConfig(

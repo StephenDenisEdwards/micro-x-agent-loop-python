@@ -9,46 +9,39 @@ import os
 import unittest
 
 from micro_x_agent_loop.system_prompt import (
-    filesystem_roots_from_mcp_config,
+    filesystem_roots_from_config,
     get_system_prompt,
 )
 
 
-class FilesystemRootsFromMcpConfigTests(unittest.TestCase):
+class FilesystemRootsFromConfigTests(unittest.TestCase):
     def test_empty_config_returns_empty_lists(self) -> None:
-        extra, ro = filesystem_roots_from_mcp_config({})
+        extra, ro = filesystem_roots_from_config({})
         self.assertEqual([], extra)
         self.assertEqual([], ro)
 
-    def test_no_filesystem_block(self) -> None:
-        extra, ro = filesystem_roots_from_mcp_config({"other": {"env": {}}})
+    def test_non_dict(self) -> None:
+        extra, ro = filesystem_roots_from_config(None)
         self.assertEqual([], extra)
         self.assertEqual([], ro)
 
-    def test_no_env(self) -> None:
-        extra, ro = filesystem_roots_from_mcp_config({"filesystem": {}})
+    def test_missing_keys(self) -> None:
+        extra, ro = filesystem_roots_from_config({"WorkingDir": "C:\\wd"})
         self.assertEqual([], extra)
         self.assertEqual([], ro)
 
     def test_parses_split_by_pathsep(self) -> None:
-        joined_extra = os.pathsep.join(["C:\\path one", "C:\\path two"])
-        joined_ro = "C:\\path three"
-        config = {
-            "filesystem": {
-                "env": {
-                    "FILESYSTEM_ALLOWED_DIRS": joined_extra,
-                    "FILESYSTEM_READONLY_DIRS": joined_ro,
-                }
-            }
+        cfg = {
+            "AllowedDirs": os.pathsep.join(["C:\\path one", "C:\\path two"]),
+            "ReadonlyDirs": "C:\\path three",
         }
-        extra, ro = filesystem_roots_from_mcp_config(config)
+        extra, ro = filesystem_roots_from_config(cfg)
         self.assertEqual(["C:\\path one", "C:\\path two"], extra)
         self.assertEqual(["C:\\path three"], ro)
 
     def test_skips_blank_entries(self) -> None:
-        joined = os.pathsep.join(["C:\\real", "", "  "])
-        config = {"filesystem": {"env": {"FILESYSTEM_ALLOWED_DIRS": joined}}}
-        extra, _ = filesystem_roots_from_mcp_config(config)
+        cfg = {"AllowedDirs": os.pathsep.join(["C:\\real", "", "  "])}
+        extra, _ = filesystem_roots_from_config(cfg)
         self.assertEqual(["C:\\real"], extra)
 
 

@@ -476,18 +476,18 @@ dashboard", or names a well-known interactive site (Gmail, LinkedIn, GitHub UI, 
 any SPA), use `browser_*`, not `web_fetch`."""
 
 
-def filesystem_roots_from_mcp_config(mcp_servers: dict) -> tuple[list[str], list[str]]:
-    """Extract (extra_allowed_dirs, readonly_dirs) from the filesystem MCP
-    server's env block. The MCP server itself reads these from
-    ``FILESYSTEM_ALLOWED_DIRS`` and ``FILESYSTEM_READONLY_DIRS`` (split on
-    ``os.pathsep``); we surface the same values to the model in the system
-    prompt so it knows the paths are reachable.
+def filesystem_roots_from_config(fs_cfg: dict | None) -> tuple[list[str], list[str]]:
+    """Extract (extra_allowed_dirs, readonly_dirs) from the top-level
+    ``Filesystem`` config block (ADR-025: native filesystem tools are
+    configured here, not via an MCP server env block). ``AllowedDirs`` /
+    ``ReadonlyDirs`` are os.pathsep-joined strings; we surface the same
+    values to the model in the system prompt so it knows the paths are
+    reachable. Pre-ADR-025 callers passed the MCP env block; this now
+    reads the dedicated config block.
     """
     import os
 
-    fs = mcp_servers.get("filesystem") if isinstance(mcp_servers, dict) else None
-    env = fs.get("env", {}) if isinstance(fs, dict) else {}
-    if not isinstance(env, dict):
+    if not isinstance(fs_cfg, dict):
         return [], []
 
     def _split(value: object) -> list[str]:
@@ -495,7 +495,7 @@ def filesystem_roots_from_mcp_config(mcp_servers: dict) -> tuple[list[str], list
             return []
         return [p.strip() for p in value.split(os.pathsep) if p.strip()]
 
-    return _split(env.get("FILESYSTEM_ALLOWED_DIRS")), _split(env.get("FILESYSTEM_READONLY_DIRS"))
+    return _split(fs_cfg.get("AllowedDirs")), _split(fs_cfg.get("ReadonlyDirs"))
 
 
 def get_system_prompt(
