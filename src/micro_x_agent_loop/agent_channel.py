@@ -308,7 +308,12 @@ class BufferedChannel:
 
     def __init__(self) -> None:
         self.text = ""
-        self.tool_events: list[tuple[str, str, str]] = []  # (event, tool_use_id, tool_name)
+        # Back-compat 3-tuple stream: (event, tool_use_id, tool_name).
+        # Existing tests assert on this exact shape — do not widen it.
+        self.tool_events: list[tuple[str, str, str]] = []
+        # Rich per-call records, one dict per tool_use_id, merged across
+        # started/completed. The behavioural-eval harness asserts on these.
+        self.tool_records: list[dict[str, Any]] = []
         self.errors: list[str] = []
         self.turn_usages: list[dict[str, Any]] = []
 
@@ -323,6 +328,19 @@ class BufferedChannel:
         tool_input: dict[str, Any] | None = None,
     ) -> None:
         self.tool_events.append(("started", tool_use_id, tool_name))
+        self.tool_records.append(
+            {
+                "tool_use_id": tool_use_id,
+                "tool_name": tool_name,
+                "tool_input": tool_input,
+                "status": "started",
+                "is_error": None,
+                "result_chars": None,
+                "was_summarized": None,
+                "was_truncated": None,
+                "duration_ms": None,
+            }
+        )
 
     def emit_tool_completed(
         self,
@@ -336,6 +354,33 @@ class BufferedChannel:
         duration_ms: float = 0.0,
     ) -> None:
         self.tool_events.append(("completed", tool_use_id, tool_name))
+        # Update the matching started record in place; fall back to a fresh
+        # record if completion arrives without a start (defensive).
+        record = next(
+            (
+                r
+                for r in reversed(self.tool_records)
+                if r["tool_use_id"] == tool_use_id and r["status"] == "started"
+            ),
+            None,
+        )
+        if record is None:
+            record = {
+                "tool_use_id": tool_use_id,
+                "tool_name": tool_name,
+                "tool_input": None,
+            }
+            self.tool_records.append(record)
+        record.update(
+            {
+                "status": "completed",
+                "is_error": is_error,
+                "result_chars": result_chars,
+                "was_summarized": was_summarized,
+                "was_truncated": was_truncated,
+                "duration_ms": duration_ms,
+            }
+        )
 
     def emit_turn_complete(self, usage: dict[str, Any]) -> None:
         self.turn_usages.append(usage)
