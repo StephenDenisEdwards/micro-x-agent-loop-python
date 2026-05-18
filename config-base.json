@@ -262,11 +262,6 @@
         "INTERVIEW_ASSIST_REPO": "C:\\Users\\steph\\source\\repos\\interview-assist-2"
       }
     },
-    "system-info": {
-      "transport": "stdio",
-      "command": "dotnet",
-      "args": ["run", "--no-build", "--project", "C:\\Users\\steph\\source\\repos\\mcp-servers\\system-info\\src"]
-    },
     "whatsapp": {
       "transport": "stdio",
       "command": "C:\\Users\\steph\\source\\repos\\whatsapp-mcp\\whatsapp-mcp-server\\.venv\\Scripts\\python.exe",

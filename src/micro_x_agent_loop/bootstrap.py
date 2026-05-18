@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from micro_x_agent_loop.agent import Agent
 from micro_x_agent_loop.agent_channel import BrokerChannel, BufferedChannel, TerminalChannel
 from micro_x_agent_loop.agent_config import AgentConfig
@@ -14,6 +16,7 @@ from micro_x_agent_loop.logging_config import setup_logging
 from micro_x_agent_loop.mcp.mcp_manager import McpManager
 from micro_x_agent_loop.memory import CheckpointManager, EventEmitter, MemoryStore, SessionManager, prune_memory
 from micro_x_agent_loop.memory.event_sink import AsyncEventSink
+from micro_x_agent_loop.native_tools import build_native_tools
 from micro_x_agent_loop.provider import create_provider
 from micro_x_agent_loop.system_prompt import filesystem_roots_from_mcp_config, get_system_prompt
 
@@ -77,6 +80,17 @@ async def bootstrap_runtime(
     if app.mcp_server_configs:
         mcp_manager = McpManager(app.mcp_server_configs, resolved_config=resolved_config)
         tools = await mcp_manager.connect_all()
+
+    # Native in-process tools (core first-party capability — not MCP).
+    # Listed at startup the same way MCP servers are. See ADR amending ADR-015.
+    native_tools = build_native_tools(app)
+    if native_tools:
+        tools.extend(native_tools)
+        logger.info(
+            "Native tools: {n} tool(s) registered ({names})",
+            n=len(native_tools),
+            names=", ".join(t.name for t in native_tools),
+        )
 
     # Generated codegen tasks are invoked exclusively via codegen__run_task —
     # they are no longer registered as individual MCP tools. See
