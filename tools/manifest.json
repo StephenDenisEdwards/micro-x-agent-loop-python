@@ -1,88 +1,6 @@
 {
   "jobserve-processor": {
     "tool_name": "jobserve-processor",
-    "description": "Processes JobServe job alert emails, retrieves full job specifications, scores them against a CV, and writes a markdown report.",
-    "created": "2026-05-14",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "days_back": {
-          "type": "number",
-          "default": 1,
-          "description": "Override days_back from profile"
-        },
-        "max_jobs": {
-          "type": "number",
-          "default": 100,
-          "description": "Override max_jobs from profile"
-        },
-        "dry_run": {
-          "type": "boolean",
-          "default": false,
-          "description": "If true, extract links but do not fetch specs"
-        }
-      },
-      "additionalProperties": false,
-      "$schema": "http://json-schema.org/draft-07/schema#"
-    },
-    "server": {
-      "transport": "stdio",
-      "command": "npx",
-      "args": [
-        "tsx",
-        "src/index.ts",
-        "--config",
-        "../../config.json"
-      ],
-      "cwd": "tools/jobserve-processor/"
-    }
-  },
-  "jobserve-processor_2": {
-    "tool_name": "jobserve-processor_2",
-    "description": "Process JobServe job alert emails, fetch full job specs, rank against CV, and write markdown report.",
-    "created": "2026-05-14",
-    "input_schema": {
-      "type": "object",
-      "properties": {},
-      "additionalProperties": false,
-      "$schema": "http://json-schema.org/draft-07/schema#"
-    },
-    "server": {
-      "transport": "stdio",
-      "command": "npx",
-      "args": [
-        "tsx",
-        "src/index.ts",
-        "--config",
-        "../../config.json"
-      ],
-      "cwd": "tools/jobserve-processor_2/"
-    }
-  },
-  "jobserve-processor_3": {
-    "tool_name": "jobserve-processor_3",
-    "description": "Process JobServe job alert emails, retrieve full specs, rank against CV, and write a markdown report.",
-    "created": "2026-05-14",
-    "input_schema": {
-      "type": "object",
-      "properties": {},
-      "additionalProperties": false,
-      "$schema": "http://json-schema.org/draft-07/schema#"
-    },
-    "server": {
-      "transport": "stdio",
-      "command": "npx",
-      "args": [
-        "tsx",
-        "src/index.ts",
-        "--config",
-        "../../config.json"
-      ],
-      "cwd": "tools/jobserve-processor_3/"
-    }
-  },
-  "jobserve-processor_4": {
-    "tool_name": "jobserve-processor_4",
     "description": "Processes JobServe job alert emails, retrieves full job specs from JobServe pages, and produces a ranked markdown report.",
     "created": "2026-05-14",
     "input_schema": {
@@ -100,7 +18,7 @@
         "--config",
         "../../config.json"
       ],
-      "cwd": "tools/jobserve-processor_4/"
+      "cwd": "tools/jobserve-processor/"
     }
   }
 }

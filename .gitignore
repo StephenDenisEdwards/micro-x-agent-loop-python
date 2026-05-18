@@ -22,12 +22,10 @@ store/
 node_modules/
 .vscode/
 
-# Agent-generated task apps (only _runtime and windows-vhs are tracked here;
-# templates live in codegen-templates/ outside the agent's writable root).
-tools/*/
-!tools/windows-vhs/
-!tools/_runtime/
-tools/_runtime/node_modules/
+# Tool apps under tools/ are now version-controlled (source only).
+# Build/dependency artifacts stay ignored via the global rules above:
+# node_modules/ (line ~22), dist/ (line ~13), *.tsbuildinfo (line ~43),
+# __pycache__/ (line ~1).
 
 # Generated demo recordings
 *.gif
