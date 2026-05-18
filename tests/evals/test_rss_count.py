@@ -24,8 +24,6 @@ import pytest
 from tests.evals.harness import (
     assert_answer_matches,
     assert_cost_under,
-    assert_tool_not_used,
-    assert_tool_used,
     run_eval,
 )
 
@@ -42,7 +40,16 @@ _TRUE_COUNT = len(re.findall(r"<item>", _FIXTURE.read_text(encoding="utf-8")))
 
 
 @pytest.mark.eval
-def test_rss_item_count_shells_out_to_bash() -> None:
+def test_rss_item_count_is_correct_and_cheap() -> None:
+    """The real goal: the agent returns the EXACT count, cheaply, without
+    eyeballing it. It must NOT mandate a specific tool — the earlier
+    'must use bash, not grep' assertion was premised on the now-disproven
+    belief that filesystem__grep count mode returns 1 on single-line files
+    (it uses ripgrep --count-matches and returns 50 correctly). See
+    ISSUE-007 §"Correction (2026-05-18)". Either filesystem__grep
+    output_mode=count OR a bash occurrence count is acceptable; eyeballing
+    is not.
+    """
     assert _TRUE_COUNT == 50, f"fixture drift: expected 50 items, fixture has {_TRUE_COUNT}"
 
     result = run_eval(
@@ -53,15 +60,15 @@ def test_rss_item_count_shells_out_to_bash() -> None:
         extra_allowed_dirs=[str(_FIXTURE.parent)],
     )
 
-    # The fix is about tool *selection*: the agent must shell out for an
-    # exact count, not eyeball it or use the line-oriented filesystem__grep
-    # on a single-line file.
-    assert_tool_used(result, "filesystem__bash")
-    assert_tool_not_used(result, "filesystem__grep")
-
-    # And it must actually get the count right.
+    # 1. Correct answer (the actual objective).
     assert_answer_matches(result, rf"\b{_TRUE_COUNT}\b")
 
-    # Cheap when it works (one bash call). The broken path burns several
-    # failed tool calls + retries and costs ~10x this.
+    # 2. It used *a* counting tool rather than eyeballing — the genuine
+    #    failure mode. Tool choice (grep count vs bash) is free.
+    used = result.started_tools()
+    assert any(
+        t in used for t in ("filesystem__grep", "filesystem__bash")
+    ), f"expected a counting tool (grep/bash), got: {used}"
+
+    # 3. Cheap. The pathological path burns failed calls + retries.
     assert_cost_under(result, 0.05)

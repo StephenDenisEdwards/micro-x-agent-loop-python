@@ -267,55 +267,46 @@ actually need to look at it.
 Anti-pattern: calling `web_fetch` to retrieve a 280 KB document, then asking yourself \
 "how many `<item>` tags?". The 280 KB sits in your context for the rest of the session, \
 costing tokens on every subsequent turn, and you can't reliably count it anyway. Fetch \
-to a file (either route above) and `grep -o … | wc -l` it.
+to a file (either route above) and `filesystem__grep` `output_mode:"count"` it.
 
 ## Counting and enumerating
 
-**RULE: never produce a count or an enumeration from text — yours, a tool result's, or \
-a prior turn's. Always shell out.** This is non-negotiable for any collection larger \
-than ~10 items. Models silently round to 10 / 20 / 30 / 50 / 100 when they didn't really \
-count, and *"I already retrieved it"* is the most common excuse for skipping the shell \
-call. **It is not an exception.** The conversation buffer is not a `grep` substitute.
+**RULE: never produce a count or an enumeration by eyeballing text — yours, a tool \
+result's, or a prior turn's. Use a tool.** Non-negotiable for any collection larger than \
+~10 items. Models silently round to 10 / 20 / 30 / 50 / 100 when they didn't really \
+count, and *"I already retrieved it"* is the most common excuse for skipping the tool \
+call. **It is not an exception.** The conversation buffer is not a substitute for grep.
 
-### Recipes (use the one that matches your situation)
+### Recipes
 
-- **Count occurrences in a file on disk:** \
-`grep` (the filesystem MCP tool) with `output_mode: "count"` returns the integer directly. \
-**Caveat — load-bearing:** `filesystem__grep` is *line-oriented* (like every grep is by \
-default). `output_mode: "count"` counts matching *lines*, and `output_mode: "content"` \
-returns matching *lines verbatim*. On a single-line file (minified JSON, one-line RSS, \
-HTML emitted on one line, one-line CSV header) "the matching line" is *the entire file* \
-— a count of 1 and `output_mode: "content"` returning the whole document. \
-**For any input you are not certain is multi-line, use `bash` instead:** \
-`grep -o PATTERN file | wc -l` for counts (one match per line, then `wc -l`), or \
-`grep -oE PATTERN file` to list matches. `-o` is the only flag that decomposes a long \
-line into one-match-per-line; `filesystem__grep` has no equivalent flag and will pull the \
-whole file back through its result if you try.
-- **Count occurrences in a fetched document you have not yet retrieved:** \
-`curl -s URL | grep -o PATTERN | wc -l`. One bash call, deterministic.
-- **Count occurrences in content already in your context** (RSS feed already returned \
-by `web_fetch`, JSON already returned by an API call, a large tool result from a prior \
-turn): \
-  1. `write_file(path="./.fetch/buf.txt", content=<the content>)` \
-  2. `bash`: `grep -o PATTERN ./.fetch/buf.txt | wc -l` \
-\
-  Do NOT count by scanning the in-memory content. You *will* miscount, and you will \
-  not notice that you miscounted. The fact that the data is right there in your \
-  context window is not a licence to skip the tool call.
-- **List items rather than count them:** same shape, use `grep -oE PATTERN` (no \
-`wc -l`) — every match on its own line, ready for enumeration.
-- **Total lines in a file:** read `read_file`'s structured `total_lines` field, or call \
-`grep` with `output_mode: "count"` and `pattern: "."`.
+- **Count occurrences in a file on disk:** `grep` (the filesystem MCP tool) with \
+`output_mode: "count"`. It counts *occurrences* (ripgrep `--count-matches`), and is \
+**correct even on single-line files** (minified JSON, one-line RSS/HTML): 50 `<item>` \
+on one line returns 50. Prefer this — it is first-party, path-contained, cross-platform. \
+(The old "grep count returns 1 on single-line files, use bash" guidance was wrong and \
+has been removed — that was `grep -c` line-counting, which `filesystem__grep` does not do.)
+- **Count occurrences in a document you have not yet retrieved:** fetch it to a path \
+inside the allowed roots (`web_fetch(save_to_file=…)` or `bash: curl -s URL -o …`), then \
+`filesystem__grep` `output_mode:"count"` it. Keeps the document out of conversation context.
+- **Count occurrences in content already in your context:** \
+  `write_file` it to an allowed-roots path, then `filesystem__grep` `output_mode:"count"`. \
+  Do NOT count by scanning the in-memory content — you *will* miscount and not notice.
+- **List/extract the matches (not just count):** `filesystem__grep` \
+`output_mode:"content"` for multi-line files. **One real caveat:** content mode is \
+*line-oriented* — on a single-line file the whole file is one matching "line", so it \
+returns the entire document. To decompose a long single line into one-match-per-line, \
+use `bash`: `grep -oE PATTERN file`. (This is the *only* place the single-line caveat \
+genuinely bites — it is a content/listing limitation, not a counting one.)
+- **Total lines in a file:** use `read_file`'s structured `total_lines` field. (Do *not* \
+use grep count with pattern `.` — that counts character matches, not lines.)
 
 ### Anti-patterns (do not do this)
 
-- *"Based on the RSS feed I already retrieved, I count 30 `<item>` tags."* \
-Wrong. Even with the data sitting in your context, save and grep.
-- *"The response contains roughly 20-30 entries."* \
-Wrong. Counts in this codebase are never approximate; always shell out for a precise \
-integer.
-- *"`grep -c '<item>'`"* on a single-line RSS / minified document. \
-Wrong shape. `grep -c` counts matching lines. Use `grep -o ... | wc -l`.
+- *"Based on the data I already retrieved, I count ~30."* — eyeballed; always tool it.
+- *"Roughly 20-30 entries."* — counts here are never approximate; get the exact integer.
+- *"`bash grep -c PATTERN file`" to count occurrences* — `-c` counts matching *lines*, \
+not occurrences. Use `filesystem__grep` `output_mode:"count"` (occurrences, correct on \
+single-line), or `bash grep -o PATTERN file | wc -l`.
 
 Models are unreliable at counting any input over ~10 items and will silently invent \
 plausible-looking numbers that round to nice values. This failure mode applies equally \

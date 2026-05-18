@@ -88,6 +88,19 @@ So the concrete `web_fetch` failure thread is not lost behind the architectural 
 
 This residual item is the canonical example for the first behavioural eval (see [PLAN-behavioural-eval-suite](../planning/PLAN-behavioural-eval-suite.md)). The candidate one-line fix (drop `tool_search_only` from the `factual_lookup` policy in `config-base.json`, or add a second `tool_search` query before counting) is **deliberately not applied yet** — per this issue's own thesis, it should be applied *behind a failing eval*, not blind. Applying it without the eval would be fix #8 in the same anti-pattern.
 
+### Correction (2026-05-18) — the grep premise was false
+
+Writing characterization tests for the native filesystem port (ADR-025, F2) **disproved a load-bearing assumption above and throughout this issue.** Verified directly against the frozen 50-item single-line RSS fixture:
+
+- `filesystem__grep` `output_mode:"count"` runs ripgrep **`--count-matches`** (occurrences), **not** `--count` (lines). On the single-line RSS it returns **50 — correct.** `rg --count` would return 1, but `filesystem__grep` never uses that flag.
+
+So the recurring narrative — *"grep count returns 1 on single-line files, so the agent must use bash; the bug is that bash isn't loaded"* — **was factually wrong.** `filesystem__grep` count mode was always correct for this. Consequences:
+
+- The original eval-run-#2 "failure" was **the eval's own assertion** (`assert_tool_used(filesystem__bash)` / `assert_tool_not_used(filesystem__grep)`) being wrong, *not* grep or the agent being wrong. An agent that used `filesystem__grep` count mode would have answered 50 correctly. We never actually verified a wrong *answer* — we assumed it from the wrong-tool assertion failing first.
+- The `system_prompt.py` counting directive (the "single-line → use bash" steering) was corrected on 2026-05-18 to state the verified behaviour (count mode correct incl. single-line; the genuine line-oriented limit is *content* mode only).
+- The Phase-1 eval (`tests/evals/test_rss_count.py`) was corrected to assert the real goal — the agent returns the correct count cheaply — instead of mandating a specific tool premised on the false belief.
+- This is itself the textbook ISSUE-007 failure: a prose belief that never matched verified tool behaviour, propagated into an issue doc, a system-prompt directive, and an eval, costing days. It was caught only by a characterization test that actually ran the tool. **The remaining genuine question** (does `tool_search_only` narrowing on `factual_lookup` still mis-route / under-equip the model?) stands on its own and must be assessed by a corrected eval, not the disproven grep story.
+
 ## Why no single fix closes it
 
 The failure mode is not in any one of the layers — it is in the relationship between them. The LLM at runtime reads all the prose contracts and tries to find a path that satisfies all of them. When it cannot find one (two contracts disagree), the model either:
