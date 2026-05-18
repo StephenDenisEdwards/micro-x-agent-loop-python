@@ -352,13 +352,22 @@ class AgentTUI(App[None]):
         chat_log.add_system_message(f"[{model_label}] (type 'exit' to quit, Ctrl+P for command palette)")
         if self._app_config.memory_enabled and self._agent.active_session_id:
             chat_log.add_system_message(f"Memory: enabled (session: {self._agent.active_session_id})")
-        if self._runtime.mcp_tools:
-            mcp_names: dict[str, list[str]] = {}
-            for t in self._runtime.mcp_tools:
+        def _grouped(tools: list) -> dict[str, list[str]]:
+            groups: dict[str, list[str]] = {}
+            for t in tools:
                 server, _, tool_name = t.name.partition("__")
-                mcp_names.setdefault(server, []).append(tool_name or t.name)
+                groups.setdefault(server, []).append(tool_name or t.name)
+            return groups
+
+        if self._runtime.mcp_tools:
             chat_log.add_system_message("MCP servers:")
-            for server, tool_names in mcp_names.items():
+            for server, tool_names in _grouped(self._runtime.mcp_tools).items():
+                chat_log.add_system_message(f"  {server}:")
+                for name in tool_names:
+                    chat_log.add_system_message(f"    - {name}")
+        if self._runtime.native_tools:
+            chat_log.add_system_message("Native tools (in-process):")
+            for server, tool_names in _grouped(self._runtime.native_tools).items():
                 chat_log.add_system_message(f"  {server}:")
                 for name in tool_names:
                     chat_log.add_system_message(f"    - {name}")

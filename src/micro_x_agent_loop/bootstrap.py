@@ -28,6 +28,7 @@ class AppRuntime:
     memory_store: MemoryStore | None
     event_sink: AsyncEventSink | None
     mcp_tools: list
+    native_tools: list
     log_descriptions: list[str]
 
 
@@ -80,6 +81,11 @@ async def bootstrap_runtime(
     if app.mcp_server_configs:
         mcp_manager = McpManager(app.mcp_server_configs, resolved_config=resolved_config)
         tools = await mcp_manager.connect_all()
+
+    # Snapshot the MCP-proxied tools before native tools are merged in, so
+    # startup banners can present them under the correct heading (native
+    # tools are NOT MCP servers — ADR-025).
+    mcp_proxied_tools = list(tools)
 
     # Native in-process tools (core first-party capability — not MCP).
     # Listed at startup the same way MCP servers are. See ADR amending ADR-015.
@@ -260,6 +266,7 @@ async def bootstrap_runtime(
         mcp_manager=mcp_manager,
         memory_store=memory_store,
         event_sink=event_sink,
-        mcp_tools=tools,
+        mcp_tools=mcp_proxied_tools,
+        native_tools=native_tools,
         log_descriptions=log_descriptions,
     )

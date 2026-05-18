@@ -77,13 +77,22 @@ async def run_repl(
 
     print(f"Config: {config_source}")
     print(f"micro-x-agent-loop [{app.provider_name}:{app.model}] (type 'exit' to quit, '/help' for commands)")
-    if runtime.mcp_tools:
-        mcp_names: dict[str, list[str]] = {}
-        for t in runtime.mcp_tools:
+    def _grouped(tool_list: list) -> dict[str, list[str]]:
+        groups: dict[str, list[str]] = {}
+        for t in tool_list:
             server, _, tool_name = t.name.partition("__")
-            mcp_names.setdefault(server, []).append(tool_name or t.name)
+            groups.setdefault(server, []).append(tool_name or t.name)
+        return groups
+
+    if runtime.mcp_tools:
         logger.info("MCP servers:")
-        for server, tool_names in mcp_names.items():
+        for server, tool_names in _grouped(runtime.mcp_tools).items():
+            logger.info(f"  {server}:")
+            for name in tool_names:
+                logger.info(f"    - {name}")
+    if runtime.native_tools:
+        logger.info("Native tools (in-process):")
+        for server, tool_names in _grouped(runtime.native_tools).items():
             logger.info(f"  {server}:")
             for name in tool_names:
                 logger.info(f"    - {name}")
