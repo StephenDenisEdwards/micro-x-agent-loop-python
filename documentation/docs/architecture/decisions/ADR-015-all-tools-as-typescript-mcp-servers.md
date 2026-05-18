@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted — **amended by [ADR-025](./ADR-025-native-core-tools-mcp-for-subsystems.md)** (2026-05-18). The blanket "*all* tools are TypeScript MCP servers" rule no longer holds: lightweight core primitives (system-info, filesystem) are native in-process tools. MCP remains correct for external integrations and heavyweight isolatable subsystems (e.g. codegen).
 
 ## Context
 
