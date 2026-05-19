@@ -33,7 +33,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.evals.harness import assert_answer_matches, assert_cost_under, run_eval
+from tests.evals.harness import EvalResult, assert_answer_matches, run_eval
 
 # The numbered configuration under evaluation. Bump this (and only this,
 # holding prompt/fixture/assertions constant) to walk the config series.
@@ -53,18 +53,30 @@ _TRUE_COUNT = len(re.findall(r"<item>", _FIXTURE.read_text(encoding="utf-8")))
 _MAX_RESULT_CHARS = 4_000
 
 
-def _trajectory(result: object) -> str:
-    """Human-readable tool trace for the failure message — this is the
-    artefact we discuss after each run to decide the next config move."""
-    lines = []
-    for rec in result.channel.tool_records:  # type: ignore[attr-defined]
-        rc = rec.get("result_chars")
+def _readout(result: EvalResult) -> str:
+    """Per-run record we discuss after each run to decide the next config
+    move. Cost is *recorded, not gated* — it is the optimization axis across
+    the numbered config series, and the absolute figure is cache-warmth
+    bimodal (cold pays ~30k cache-creation tokens, warm pays cache-read), so
+    a hard per-run ceiling would flake rather than signal. Compare cost and
+    cache_hit_ratio across configs; gate only on behaviour."""
+    lines = [
+        f"  config={_CONFIG}  model={result.model}",
+        f"  cost=${result.cost_usd:.5f}  "
+        f"cache_created={result.cache_creation_tokens} "
+        f"cache_read={result.cache_read_tokens} "
+        f"hit_ratio={result.cache_hit_ratio():.0%}",
+        "  tools:",
+    ]
+    for rec in result.channel.tool_records:
         lines.append(
-            f"  {rec['tool_name']}  "
+            f"    {rec['tool_name']}  "
             f"input={rec.get('tool_input')!r}  "
-            f"result_chars={rc}"
+            f"result_chars={rec.get('result_chars')}"
         )
-    return "\n".join(lines) or "  (no tools called)"
+    if not result.channel.tool_records:
+        lines.append("    (no tools called)")
+    return "\n".join(lines)
 
 
 @pytest.mark.eval
@@ -86,7 +98,9 @@ def test_count_job_items_deterministically_without_loading_file() -> None:
         f"top-level Model / #Model inheritance)"
     )
 
-    traj = _trajectory(result)
+    readout = _readout(result)
+    # Always surface the per-run record (cost is recorded data, not a gate).
+    print(f"\n[eval record]\n{readout}")
 
     # Criterion 1 — deterministic, correct answer.
     assert_answer_matches(result, rf"\b{_TRUE_COUNT}\b")
@@ -102,9 +116,8 @@ def test_count_job_items_deterministically_without_loading_file() -> None:
     too_big = [(n, c) for n, c in sizes if c >= _MAX_RESULT_CHARS]
     assert not too_big, (
         f"a tool dumped file content into context "
-        f"(>= {_MAX_RESULT_CHARS} chars): {too_big}\n"
-        f"trajectory:\n{traj}"
+        f"(>= {_MAX_RESULT_CHARS} chars): {too_big}\n{readout}"
     )
 
-    # Backstop — eyeballing 285 KB burns tokens; a counting path is cheap.
-    assert_cost_under(result, 0.05)
+    # Cost is NOT asserted — see _readout(). It is recorded for cross-config
+    # comparison in the sweep, not a per-run pass/fail gate.

@@ -47,10 +47,19 @@ DEFAULT_CONFIG = "config-base.json"
 class EvalResult:
     """What an eval can assert against. ``channel`` is the live
     ``BufferedChannel``; ``model`` is the model the config resolved to and
-    the run was pinned to; the helpers below wrap common assertions."""
+    the run was pinned to. ``cost_usd`` / ``cache_creation_tokens`` /
+    ``cache_read_tokens`` are snapshotted from the agent's
+    ``SessionAccumulator`` at end of run — the same single source the TUI
+    status bar, ``metrics.jsonl`` and the session budget cap read. (The
+    channel's ``turn_usages`` is never populated on the direct agent-loop
+    path the harness drives, so it must not be used for cost.) Costed
+    against the ``Pricing`` config, not provider-billed."""
 
     channel: BufferedChannel
     model: str
+    cost_usd: float
+    cache_creation_tokens: int
+    cache_read_tokens: int
 
     @property
     def text(self) -> str:
@@ -63,8 +72,13 @@ class EvalResult:
     def records_for(self, tool_name: str) -> list[dict[str, Any]]:
         return [r for r in self.channel.tool_records if r["tool_name"] == tool_name]
 
-    def total_cost_usd(self) -> float:
-        return sum(float(u.get("estimated_cost_usd", 0.0)) for u in self.channel.turn_usages)
+    def cache_hit_ratio(self) -> float:
+        """Cache-read share of cached input — a sweep cost signal. Cold
+        process pays cache *creation* (~1.25x), warm pays cache *read*
+        (~0.1x); a config that destroys the cache shows up here, not just
+        in the volatile absolute cost."""
+        total = self.cache_creation_tokens + self.cache_read_tokens
+        return self.cache_read_tokens / total if total else 0.0
 
 
 def _allow_fixture_dir(raw_config: dict[str, Any], extra_allowed_dirs: list[str]) -> None:
@@ -157,7 +171,16 @@ async def _run_eval_async(
     ) as (agent, channel, model):
         for prompt in prompts:
             await agent.run(prompt)
-    return EvalResult(channel=channel, model=model)
+        # Snapshot the accumulator *before* the context manager tears the
+        # runtime down — same single source the TUI/metrics/budget cap use.
+        acc = agent.session_accumulator
+        return EvalResult(
+            channel=channel,
+            model=model,
+            cost_usd=float(acc.total_cost_usd),
+            cache_creation_tokens=int(acc.total_cache_creation_tokens),
+            cache_read_tokens=int(acc.total_cache_read_tokens),
+        )
 
 
 def run_eval(
@@ -216,8 +239,12 @@ def assert_answer_matches(result: EvalResult, pattern: str) -> None:
 
 
 def assert_cost_under(result: EvalResult, usd: float) -> None:
-    actual = result.total_cost_usd()
-    assert actual < usd, f"cost ${actual:.4f} exceeded ceiling ${usd:.4f}"
+    assert result.cost_usd < usd, (
+        f"cost ${result.cost_usd:.4f} exceeded ceiling ${usd:.4f} "
+        f"(cache: {result.cache_creation_tokens} created / "
+        f"{result.cache_read_tokens} read, hit-ratio "
+        f"{result.cache_hit_ratio():.0%})"
+    )
 
 
 def assert_tool_sequence(
