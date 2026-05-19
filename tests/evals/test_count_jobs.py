@@ -64,7 +64,7 @@ _MAX_RESULT_CHARS = 4_000
 _MAX_ITERATIONS = 4
 
 
-def _readout(result: EvalResult) -> str:
+def _readout(prompt: str, result: EvalResult) -> str:
     """Per-run record we discuss after each run to decide the next config
     move. Cost is *recorded, not gated* — it is the optimization axis across
     the numbered config series, and the absolute figure is cache-warmth
@@ -72,6 +72,8 @@ def _readout(result: EvalResult) -> str:
     a hard per-run ceiling would flake rather than signal. Compare cost and
     cache_hit_ratio across configs; gate only on behaviour."""
     lines = [
+        f"  prompt:  {prompt}",
+        f"  ANSWER:  {result.text!r}",
         f"  config={_CONFIG}  model={result.model}",
         f"  cost=${result.cost_usd:.5f}  "
         f"cache_created={result.cache_creation_tokens} "
@@ -97,8 +99,9 @@ def test_count_jobs_requires_schema_discovery() -> None:
         f"fixture drift: expected 50 <item> elements, fixture has {_TRUE_COUNT}"
     )
 
+    prompt = f"count the number of jobs in {_FIXTURE}"
     result = run_eval(
-        f"count the number of jobs in {_FIXTURE}",
+        prompt,
         config_path=_CONFIG,
         extra_allowed_dirs=[str(_FIXTURE.parent)],
         max_iterations=_MAX_ITERATIONS,
@@ -111,7 +114,7 @@ def test_count_jobs_requires_schema_discovery() -> None:
         f"top-level Model / #Model inheritance)"
     )
 
-    readout = _readout(result)
+    readout = _readout(prompt, result)
     # Always surface the per-run record (cost is recorded data, not a gate).
     print(f"\n[eval record]\n{readout}")
 
@@ -130,15 +133,23 @@ def test_count_jobs_requires_schema_discovery() -> None:
     # Criterion 2 — the whole file never entered the LLM context. Together
     # with criterion 1 this means the agent discovered the right element and
     # counted it with a tool, rather than eyeballing or guessing.
-    sizes = [
-        (rec["tool_name"], rec["result_chars"])
+    # A result that was summarized is a violation too: summarization only
+    # fires on a large result, so it means the agent pulled the file and the
+    # shrink merely hid it from this check (the "fake pass").
+    offenders = [
+        (
+            rec["tool_name"],
+            rec.get("result_chars"),
+            "summarized" if rec.get("was_summarized") else "oversized",
+        )
         for rec in result.channel.tool_records
-        if rec.get("result_chars") is not None
+        if rec.get("was_summarized")
+        or (rec.get("result_chars") is not None and rec["result_chars"] >= _MAX_RESULT_CHARS)
     ]
-    too_big = [(n, c) for n, c in sizes if c >= _MAX_RESULT_CHARS]
-    assert not too_big, (
-        f"a tool dumped file content into context "
-        f"(>= {_MAX_RESULT_CHARS} chars): {too_big}\n{readout}"
+    assert not offenders, (
+        f"a tool pulled file content into context (>= {_MAX_RESULT_CHARS} "
+        f"chars, or summarized — summarization hides a large read): "
+        f"{offenders}\n{readout}"
     )
 
     # Cost is NOT asserted — see _readout(). It is recorded for cross-config
