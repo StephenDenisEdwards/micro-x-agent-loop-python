@@ -233,26 +233,43 @@ _CONFIG_REF_RE = re.compile(r"^#(\w+)$")
 
 
 def _expand_config_refs(data: dict) -> dict:
-    """Expand ``#KeyName`` references in top-level string values.
+    """Expand ``#KeyName`` references in string values at *any* depth.
 
     A value like ``"#Model"`` resolves to the value of the ``Model`` key in the
-    same config dict.  Only single-level, top-level references are supported —
-    the referenced key must exist and must not itself be a ``#`` reference.
+    same config dict.  References always resolve against the **top-level**
+    config regardless of nesting depth — e.g. ``#Provider`` inside a
+    ``RoutingPolicies`` entry resolves to the top-level ``Provider`` key.  Only
+    single-level references are supported: the referenced key must exist at the
+    top level, and its value is taken verbatim (a referenced value that is
+    itself a ``#`` reference is not further expanded).
+
+    Recursing into nested dicts/lists is what makes ``config-base.json``'s
+    ``RoutingPolicies`` (written with ``#Provider``/``#Model``) usable directly
+    or via inheritance without each variant having to restate the block.
     """
-    resolved: dict = {}
-    for key, value in data.items():
+
+    def _resolve(value: object) -> object:
         if isinstance(value, str):
             m = _CONFIG_REF_RE.match(value.strip())
             if m:
                 ref_key = m.group(1)
                 if ref_key not in data:
                     raise KeyError(
-                        f"Config key {key!r} references #{ref_key} but {ref_key!r} is not defined in the config"
+                        f"Config references #{ref_key} but {ref_key!r} is not defined in the config"
                     )
-                resolved[key] = data[ref_key]
-                continue
-        resolved[key] = value
-    return resolved
+                # Single-level: take the top-level value as-is (unchanged
+                # semantics from the previous top-level-only resolver).
+                return data[ref_key]
+            return value
+        if isinstance(value, dict):
+            return {k: _resolve(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [_resolve(v) for v in value]
+        return value
+
+    result = _resolve(data)
+    assert isinstance(result, dict)
+    return result
 
 
 def _expand_env_vars(data: object) -> object:

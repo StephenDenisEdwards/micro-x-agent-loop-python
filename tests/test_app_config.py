@@ -199,6 +199,32 @@ class ExpandConfigRefsTests(unittest.TestCase):
         result = _expand_config_refs(data)
         self.assertEqual(result["Description"], "Use #Model for details")
 
+    def test_refs_resolve_inside_nested_dicts_against_top_level(self) -> None:
+        # Regression: #Provider/#Model inside RoutingPolicies were never
+        # expanded (resolver was top-level-only), crashing routing on any
+        # config that inherits config-base's policies without overriding them.
+        data = {
+            "Provider": "anthropic",
+            "Model": "claude-sonnet-4-5-20250929",
+            "RoutingPolicies": {
+                "factual_lookup": {"provider": "#Provider", "model": "#Model"},
+                "tool_continuation": {"provider": "#Provider", "model": "#Model"},
+            },
+        }
+        result = _expand_config_refs(data)
+        self.assertEqual(
+            result["RoutingPolicies"]["factual_lookup"],
+            {"provider": "anthropic", "model": "claude-sonnet-4-5-20250929"},
+        )
+        self.assertEqual(
+            result["RoutingPolicies"]["tool_continuation"]["provider"], "anthropic"
+        )
+
+    def test_refs_resolve_inside_lists(self) -> None:
+        data = {"Model": "claude", "Models": ["#Model", "gpt-4o", "#Model"]}
+        result = _expand_config_refs(data)
+        self.assertEqual(result["Models"], ["claude", "gpt-4o", "claude"])
+
 
 class ResolveConfigWithBaseTests(unittest.TestCase):
     """Tests for _resolve_config_with_base and base config merging."""
