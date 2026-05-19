@@ -5,6 +5,7 @@
   "Temperature": 0.7,
   "MaxToolResultChars": 40000,
   "MaxConversationMessages": 50,
+  "MaxAgenticIterations": 15,
   "CompactionStrategy": "summarize",
   "CompactionThresholdTokens": 80000,
   "ProtectedTailMessages": 6,

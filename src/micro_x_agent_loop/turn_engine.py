@@ -9,6 +9,7 @@ from loguru import logger
 
 from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
+from micro_x_agent_loop.constants import DEFAULT_MAX_AGENTIC_ITERATIONS
 from micro_x_agent_loop.provider_pool import ProviderPool, RoutingTarget
 from micro_x_agent_loop.routing_strategy import RoutingStrategy
 from micro_x_agent_loop.sub_agent import SPAWN_SUBAGENT_SCHEMA, SubAgentRunner, SubAgentType
@@ -39,6 +40,7 @@ class TurnEngine:
         tool_map: dict[str, Tool],
         max_tool_result_chars: int,
         max_tokens_retries: int,
+        max_agentic_iterations: int = DEFAULT_MAX_AGENTIC_ITERATIONS,
         events: TurnEvents,
         channel: AgentChannel | None = None,
         summarization_provider: Any | None = None,
@@ -73,6 +75,7 @@ class TurnEngine:
         self._tool_map = tool_map
         self._max_tool_result_chars = max_tool_result_chars
         self._max_tokens_retries = max_tokens_retries
+        self._max_agentic_iterations = max_agentic_iterations
         self._events = events
         self._channel = channel
         self._summarization_provider = summarization_provider
@@ -134,6 +137,20 @@ class TurnEngine:
         pinned_target: RoutingTarget | None = None  # Set on iteration 0 if pin_continuation
 
         while True:
+            if turn_iteration >= self._max_agentic_iterations:
+                # Hard safety rail: the loop is otherwise unbounded (exits only
+                # when the model stops requesting tools). Stop cleanly — mirror
+                # the max_tokens give-up path; no exception.
+                if self._channel is not None:
+                    self._channel.emit_error(
+                        f"Stopped: agentic turn cap reached "
+                        f"({self._max_agentic_iterations} iterations) without "
+                        f"converging. Raise MaxAgenticIterations if the task "
+                        f"legitimately needs more tool steps."
+                    )
+                self._events.on_turn_cap_reached(turn_iteration)
+                return current_user_message_id, last_assistant_message_id
+
             system_prompt = resolve_system_prompt(self._system_prompt_template)
 
             # When tool search is globally active, send only the search tool + loaded tools

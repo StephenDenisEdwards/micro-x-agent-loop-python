@@ -224,6 +224,7 @@ class Agent:
         # --- Tool result & conversation limits ---
         self._max_tool_result_chars = c.max_tool_result_chars
         self._max_conversation_messages = c.max_conversation_messages
+        self._max_agentic_iterations = c.max_agentic_iterations
         self._compaction_strategy = c.compaction_strategy
         self._memory_enabled = c.memory_enabled
 
@@ -320,6 +321,7 @@ class Agent:
             tool_map=self._tool_map,
             max_tool_result_chars=self._max_tool_result_chars,
             max_tokens_retries=self._MAX_TOKENS_RETRIES,
+            max_agentic_iterations=self._max_agentic_iterations,
             events=self,
             channel=self._channel,
             summarization_provider=c.summarization_provider,
@@ -703,6 +705,16 @@ class Agent:
         )
         emit_metric(metric)
         self._memory.emit_event("metric.api_call", metric)
+
+    def on_turn_cap_reached(self, iterations: int) -> None:
+        # Behavioural signal (set regardless of metrics_enabled): the turn
+        # stopped because it hit MaxAgenticIterations, not because the model
+        # finished. Surfaced via SessionAccumulator so evals can assert on it.
+        self._session_accumulator.turn_cap_reached = True
+        logger.warning(
+            "Agentic turn cap reached: {n} iterations (MaxAgenticIterations)",
+            n=iterations,
+        )
 
     def on_tool_executed(
         self,

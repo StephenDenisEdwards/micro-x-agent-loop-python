@@ -11,6 +11,7 @@ from pathlib import Path
 from micro_x_agent_loop.constants import (
     DEFAULT_COMPACTION_THRESHOLD_TOKENS,
     DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_MAX_AGENTIC_ITERATIONS,
     DEFAULT_MAX_CONVERSATION_MESSAGES,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_TOOL_RESULT_CHARS,
@@ -61,6 +62,7 @@ class AppConfig:
     temperature: float
     max_tool_result_chars: int
     max_conversation_messages: int
+    max_agentic_iterations: int
     compaction_strategy_name: str
     compaction_threshold_tokens: int
     protected_tail_messages: int
@@ -379,6 +381,7 @@ def parse_app_config(config: dict) -> AppConfig:
         temperature=float(config.get("Temperature", 0.7)),
         max_tool_result_chars=int(config.get("MaxToolResultChars", DEFAULT_MAX_TOOL_RESULT_CHARS)),
         max_conversation_messages=int(config.get("MaxConversationMessages", DEFAULT_MAX_CONVERSATION_MESSAGES)),
+        max_agentic_iterations=int(config.get("MaxAgenticIterations", DEFAULT_MAX_AGENTIC_ITERATIONS)),
         compaction_strategy_name=config.get("CompactionStrategy", "none").lower(),
         compaction_threshold_tokens=int(config.get("CompactionThresholdTokens", DEFAULT_COMPACTION_THRESHOLD_TOKENS)),
         protected_tail_messages=int(config.get("ProtectedTailMessages", DEFAULT_PROTECTED_TAIL_MESSAGES)),

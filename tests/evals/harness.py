@@ -60,6 +60,9 @@ class EvalResult:
     cost_usd: float
     cache_creation_tokens: int
     cache_read_tokens: int
+    # True if the turn stopped because it hit MaxAgenticIterations (the cap)
+    # rather than the model finishing — a hard "agent thrashed" signal.
+    turn_cap_reached: bool
 
     @property
     def text(self) -> str:
@@ -114,6 +117,7 @@ async def eval_session(
     *,
     config_path: str = DEFAULT_CONFIG,
     extra_allowed_dirs: list[str] | None = None,
+    max_iterations: int | None = None,
 ) -> AsyncIterator[tuple[Any, BufferedChannel, str]]:
     """Async context manager: yields ``(agent, channel, model)`` for one or
     more ``await agent.run(prompt)`` calls (multi-turn evals reuse the
@@ -137,6 +141,11 @@ async def eval_session(
             f"(got {pinned_model!r}). Check Base inheritance / #Model resolution."
         )
     _allow_fixture_dir(raw_config, extra_allowed_dirs or [])
+    if max_iterations is not None:
+        # Per-eval override of the config-level general cap (config-base
+        # "MaxAgenticIterations"). Injected pre-parse so it flows the normal
+        # config path into the agent loop.
+        raw_config["MaxAgenticIterations"] = max_iterations
 
     app = parse_app_config(raw_config)
     env = resolve_runtime_env(app.provider_name)
@@ -165,9 +174,12 @@ async def _run_eval_async(
     *,
     config_path: str,
     extra_allowed_dirs: list[str] | None,
+    max_iterations: int | None,
 ) -> EvalResult:
     async with eval_session(
-        config_path=config_path, extra_allowed_dirs=extra_allowed_dirs
+        config_path=config_path,
+        extra_allowed_dirs=extra_allowed_dirs,
+        max_iterations=max_iterations,
     ) as (agent, channel, model):
         for prompt in prompts:
             await agent.run(prompt)
@@ -180,6 +192,7 @@ async def _run_eval_async(
             cost_usd=float(acc.total_cost_usd),
             cache_creation_tokens=int(acc.total_cache_creation_tokens),
             cache_read_tokens=int(acc.total_cache_read_tokens),
+            turn_cap_reached=bool(acc.turn_cap_reached),
         )
 
 
@@ -188,16 +201,20 @@ def run_eval(
     *,
     config_path: str = DEFAULT_CONFIG,
     extra_allowed_dirs: list[str] | None = None,
+    max_iterations: int | None = None,
 ) -> EvalResult:
     """Sync entry point for eval test functions. Pass a list of prompts for
     a multi-turn eval (same session, sequential turns). The model is whatever
-    ``config_path`` resolves to — see module docstring."""
+    ``config_path`` resolves to — see module docstring. ``max_iterations``
+    overrides the config-level ``MaxAgenticIterations`` cap for this run;
+    check ``result.turn_cap_reached`` to assert the agent didn't thrash."""
     prompts = [prompt] if isinstance(prompt, str) else list(prompt)
     return asyncio.run(
         _run_eval_async(
             prompts,
             config_path=config_path,
             extra_allowed_dirs=extra_allowed_dirs,
+            max_iterations=max_iterations,
         )
     )
 

@@ -37,6 +37,8 @@ class TurnEvents(Protocol):
 
     def on_api_call_completed(self, usage: UsageResult, call_type: str) -> None: ...
 
+    def on_turn_cap_reached(self, iterations: int) -> None: ...
+
     def on_tool_executed(
         self,
         tool_name: str,
@@ -97,6 +99,9 @@ class BaseTurnEvents:
         return
 
     def on_api_call_completed(self, usage: UsageResult, call_type: str) -> None:
+        return
+
+    def on_turn_cap_reached(self, iterations: int) -> None:
         return
 
     def on_tool_executed(

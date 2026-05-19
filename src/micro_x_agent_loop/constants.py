@@ -73,6 +73,15 @@ DEFAULT_SUBAGENT_MAX_TOKENS = 4096
 DEFAULT_SUBAGENT_MODEL = ""  # empty = inherit from parent
 
 # ---------------------------------------------------------------------------
+# Agentic loop
+# ---------------------------------------------------------------------------
+# Hard cap on tool-use iterations within a single agent turn. The main loop
+# is otherwise unbounded (it exits only when the model stops requesting
+# tools); this is the safety rail against a non-converging prompt thrashing
+# tool calls indefinitely. Overridable per-config via "MaxAgenticIterations".
+DEFAULT_MAX_AGENTIC_ITERATIONS = 15
+
+# ---------------------------------------------------------------------------
 # Budget
 # ---------------------------------------------------------------------------
 DEFAULT_SESSION_BUDGET_USD = 0.0  # 0 = no budget limit

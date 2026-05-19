@@ -132,6 +132,7 @@ class SessionAccumulator:
     total_cache_read_tokens: int = 0
     total_cost_usd: float = 0.0
     total_api_calls: int = 0
+    turn_cap_reached: bool = False
     total_tool_calls: int = 0
     total_tool_errors: int = 0
     total_compaction_events: int = 0
@@ -154,6 +155,7 @@ class SessionAccumulator:
         self.total_cache_read_tokens = 0
         self.total_cost_usd = 0.0
         self.total_api_calls = 0
+        self.turn_cap_reached = False
         self.total_tool_calls = 0
         self.total_tool_errors = 0
         self.total_compaction_events = 0

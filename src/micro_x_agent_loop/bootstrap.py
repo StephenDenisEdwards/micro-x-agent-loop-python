@@ -210,6 +210,7 @@ async def bootstrap_runtime(
             autonomous=autonomous,
             max_tool_result_chars=app.max_tool_result_chars,
             max_conversation_messages=app.max_conversation_messages,
+            max_agentic_iterations=app.max_agentic_iterations,
             compaction_strategy=compaction_strategy,
             memory_enabled=app.memory_enabled,
             memory_store=memory_store,

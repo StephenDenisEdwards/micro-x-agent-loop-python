@@ -51,6 +51,7 @@ class AgentComponents:
     compact_system_prompt: str
     max_tool_result_chars: int
     max_conversation_messages: int
+    max_agentic_iterations: int
     compaction_strategy: Any
     memory_enabled: bool
     memory: ActiveMemoryFacade | NullMemoryFacade
@@ -247,6 +248,7 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
         compact_system_prompt=compact_system_prompt,
         max_tool_result_chars=config.max_tool_result_chars,
         max_conversation_messages=config.max_conversation_messages,
+        max_agentic_iterations=config.max_agentic_iterations,
         compaction_strategy=config.compaction_strategy,
         memory_enabled=config.memory_enabled,
         memory=memory,

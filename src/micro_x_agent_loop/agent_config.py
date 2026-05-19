@@ -8,6 +8,7 @@ from micro_x_agent_loop.compaction import CompactionStrategy, NoneCompactionStra
 if TYPE_CHECKING:
     from micro_x_agent_loop.app_config import ToolResultOverride
 from micro_x_agent_loop.constants import (
+    DEFAULT_MAX_AGENTIC_ITERATIONS,
     DEFAULT_MAX_CONVERSATION_MESSAGES,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_TOOL_RESULT_CHARS,
@@ -123,6 +124,7 @@ class AgentConfig:
     system_prompt: str = ""
     max_tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
     max_conversation_messages: int = DEFAULT_MAX_CONVERSATION_MESSAGES
+    max_agentic_iterations: int = DEFAULT_MAX_AGENTIC_ITERATIONS
     compaction_strategy: CompactionStrategy = field(default_factory=NoneCompactionStrategy)
     memory_enabled: bool = False
     session_id: str | None = None
