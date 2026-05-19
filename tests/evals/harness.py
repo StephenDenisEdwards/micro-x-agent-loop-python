@@ -1,14 +1,23 @@
 """Eval harness — constructs the real Agent exactly as ``--run`` does
-(``cli.dispatch.run_oneshot``), with the model pinned, a ``BufferedChannel``
-injected, and clean shutdown. Assertion helpers read the channel's rich
-``tool_records`` / ``text`` / ``turn_usages``.
+(``cli.dispatch.run_oneshot``), a ``BufferedChannel`` injected, and clean
+shutdown. Assertion helpers read the channel's rich ``tool_records`` /
+``text`` / ``turn_usages``.
+
+The **config is the unit under test and the source of truth for the model**.
+The harness does not accept or force a test-supplied model: it loads the
+fully-resolved config (``Base`` inheritance + ``#``-ref expansion already
+applied by ``load_json_config``) and uses the model that config resolves to,
+recording it on the result as ``EvalResult.model``. Reproducibility comes
+from the numbered, committed config file, not from a constant pinned in the
+test. Routing cannot drift the model mid-run because the resolved config
+(``RoutingPolicies`` / ``pin_continuation``) governs that.
 
 Eval test files stay trivial:
 
     from tests.evals.harness import run_eval, assert_tool_used
 
     def test_x():
-        r = run_eval("prompt", model="claude-haiku-4-5-20251001")
+        r = run_eval("prompt", config_path="config-anthropic-eval-0001.json")
         assert_tool_used(r, "filesystem__bash")
 """
 
@@ -37,13 +46,15 @@ DEFAULT_CONFIG = "config-base.json"
 @dataclass
 class EvalResult:
     """What an eval can assert against. ``channel`` is the live
-    ``BufferedChannel``; the helpers below wrap common assertions."""
+    ``BufferedChannel``; ``model`` is the model the config resolved to and
+    the run was pinned to; the helpers below wrap common assertions."""
 
     channel: BufferedChannel
+    model: str
 
     @property
     def text(self) -> str:
-        return self.channel.text
+        return str(self.channel.text)
 
     def started_tools(self) -> list[str]:
         """Tool names in the order they began executing."""
@@ -87,22 +98,30 @@ def _allow_fixture_dir(raw_config: dict[str, Any], extra_allowed_dirs: list[str]
 @contextlib.asynccontextmanager
 async def eval_session(
     *,
-    model: str,
     config_path: str = DEFAULT_CONFIG,
     extra_allowed_dirs: list[str] | None = None,
-) -> AsyncIterator[tuple[Any, BufferedChannel]]:
-    """Async context manager: yields ``(agent, channel)`` for one or more
-    ``await agent.run(prompt)`` calls (multi-turn evals reuse the session),
-    then tears the runtime down. Mirrors ``run_oneshot`` construction.
+) -> AsyncIterator[tuple[Any, BufferedChannel, str]]:
+    """Async context manager: yields ``(agent, channel, model)`` for one or
+    more ``await agent.run(prompt)`` calls (multi-turn evals reuse the
+    session), then tears the runtime down. Mirrors ``run_oneshot``.
 
-    The model is **pinned** by overwriting ``Model`` in the resolved config
-    (no ``#Model`` indirection) so evals never drift when the project default
-    model moves. ``extra_allowed_dirs`` opts eval fixture directories into the
-    filesystem MCP allowed-roots policy.
+    The model is whatever the **resolved config** selects — ``load_json_config``
+    has already applied ``Base`` inheritance and ``#``-ref expansion, so
+    ``raw_config["Model"]`` is the config's true model and ``RoutingPolicies``
+    are already expanded consistently. The harness does not overwrite it
+    (doing so post-resolution would not propagate into ``#Model``-derived
+    policy entries — a drift the old approach masked only because the base
+    default happened to equal the test constant). ``extra_allowed_dirs`` opts
+    eval fixture directories into the native filesystem allowed-roots policy.
     """
     raw_config, _ = load_json_config(config_path)
     raw_config = dict(raw_config)
-    raw_config["Model"] = model  # pin — see docstring
+    pinned_model = raw_config.get("Model")
+    if not isinstance(pinned_model, str) or not pinned_model:
+        raise RuntimeError(
+            f"{config_path}: resolved config has no usable top-level 'Model' "
+            f"(got {pinned_model!r}). Check Base inheritance / #Model resolution."
+        )
     _allow_fixture_dir(raw_config, extra_allowed_dirs or [])
 
     app = parse_app_config(raw_config)
@@ -122,7 +141,7 @@ async def eval_session(
     )
     try:
         await runtime.agent.initialize_session()
-        yield runtime.agent, channel
+        yield runtime.agent, channel, pinned_model
     finally:
         await shutdown_runtime(runtime)
 
@@ -130,32 +149,30 @@ async def eval_session(
 async def _run_eval_async(
     prompts: list[str],
     *,
-    model: str,
     config_path: str,
     extra_allowed_dirs: list[str] | None,
 ) -> EvalResult:
     async with eval_session(
-        model=model, config_path=config_path, extra_allowed_dirs=extra_allowed_dirs
-    ) as (agent, channel):
+        config_path=config_path, extra_allowed_dirs=extra_allowed_dirs
+    ) as (agent, channel, model):
         for prompt in prompts:
             await agent.run(prompt)
-    return EvalResult(channel=channel)
+    return EvalResult(channel=channel, model=model)
 
 
 def run_eval(
     prompt: str | list[str],
     *,
-    model: str,
     config_path: str = DEFAULT_CONFIG,
     extra_allowed_dirs: list[str] | None = None,
 ) -> EvalResult:
     """Sync entry point for eval test functions. Pass a list of prompts for
-    a multi-turn eval (same session, sequential turns)."""
+    a multi-turn eval (same session, sequential turns). The model is whatever
+    ``config_path`` resolves to — see module docstring."""
     prompts = [prompt] if isinstance(prompt, str) else list(prompt)
     return asyncio.run(
         _run_eval_async(
             prompts,
-            model=model,
             config_path=config_path,
             extra_allowed_dirs=extra_allowed_dirs,
         )
