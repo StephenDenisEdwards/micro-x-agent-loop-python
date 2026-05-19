@@ -57,27 +57,31 @@ class EvalResult:
 
 
 def _allow_fixture_dir(raw_config: dict[str, Any], extra_allowed_dirs: list[str]) -> None:
-    """Append eval fixture dirs to the filesystem MCP server's
-    ``FILESYSTEM_ALLOWED_DIRS``. The agent cannot read paths outside its
-    allowed roots; eval fixtures live in-repo (outside the prod working dir),
-    so the eval sandbox must opt them in. This is legitimate test-environment
-    setup — we are testing tool *selection*, not the path-guard — and it flows
-    through ``filesystem_roots_from_mcp_config`` to both the MCP subprocess and
-    the agent's path policy, so the two stay consistent.
+    """Append eval fixture dirs to the top-level ``Filesystem.AllowedDirs``
+    block. Post-ADR-025 the filesystem tools are native and read their allowed
+    roots from this block — *not* from an MCP server env var (F6 removed the
+    filesystem MCP server entirely). ``parse_app_config`` lifts ``Filesystem``
+    into ``app.filesystem_config`` and ``filesystem_roots_from_config`` splits
+    ``AllowedDirs`` on ``os.pathsep`` to build the native ``PathPolicy``.
+
+    Eval fixtures live in-repo outside the configured working dir, so the eval
+    sandbox must opt them in. This is legitimate test-environment setup — we
+    test tool *selection*, not the path-guard — and it flows through the same
+    config the production agent uses, so the two stay consistent.
     """
     if not extra_allowed_dirs:
         return
-    servers = raw_config.get("McpServers")
-    if not isinstance(servers, dict) or "filesystem" not in servers:
-        return
-    fs = servers["filesystem"] = dict(servers["filesystem"])
-    env = fs["env"] = dict(fs.get("env", {}))
-    existing = env.get("FILESYSTEM_ALLOWED_DIRS", "")
-    parts = [p for p in existing.split(os.pathsep) if p] if existing else []
+    fs = raw_config["Filesystem"] = dict(raw_config.get("Filesystem", {}))
+    existing = fs.get("AllowedDirs", "")
+    parts = (
+        [p for p in existing.split(os.pathsep) if p]
+        if isinstance(existing, str) and existing
+        else []
+    )
     for d in extra_allowed_dirs:
         if d not in parts:
             parts.append(d)
-    env["FILESYSTEM_ALLOWED_DIRS"] = os.pathsep.join(parts)
+    fs["AllowedDirs"] = os.pathsep.join(parts)
 
 
 @contextlib.asynccontextmanager
