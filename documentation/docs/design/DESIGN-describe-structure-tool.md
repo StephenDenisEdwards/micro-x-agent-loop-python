@@ -125,22 +125,32 @@ A single structured payload, byte-bounded (≤ ~2 KB total by construction):
   "format": "xml.rss-2.0",               // or "xml.atom", "json", "jsonl", "csv", "tsv", "log", "unknown"
   "encoding": "utf-8",                   // detected; defaults documented
   "confidence": "high",                  // "high" | "medium" | "low" | "unknown"
+  "confidence_reason": "root tag <rss> + child <item> dominates 50:1 over next sibling",
+
+  "body_safety": {
+    "max_string_bytes": 512,             // the cap any single string field is held to
+    "total_payload_bytes": 1043,         // measured byte length of this payload
+    "values_redacted": false             // true if leaf values in element_shape/samples were stripped
+  },
 
   // Format-specific shape, ONE of:
   "xml": {
     "root": "rss",
     "namespaces": ["http://www.w3.org/2005/Atom"],
-    "repeating_element": "item",         // dominant repeated child under root/channel
-    "repeating_element_path": "rss/channel/item",
-    "count": 50,
+    "candidate_repeating_units": [       // always a list; one entry in the clear-winner case
+      {"element": "item", "path": "rss/channel/item", "count": 50, "winner": true}
+    ],
+    "repeating_unit_count": 50,          // count of the winner; null if no winner
     "child_tags": ["title", "link", "description", "pubDate", "guid"],
     "sample_element_clipped": "<item><title>...</title>...</item>"   // ≤ max_sample_bytes
   },
   // or:
   "json": {
     "root_type": "array" | "object",
-    "repeating_path": "$.items[*]",      // largest top-level array, or null
-    "count": 50,
+    "candidate_repeating_units": [
+      {"path": "$.items[*]", "count": 50, "winner": true}
+    ],
+    "repeating_unit_count": 50,
     "element_shape": {"id": "string", "title": "string", "date": "string"},  // type skeleton, no values
     "top_level_keys": ["items", "metadata"],
     "sample_element_clipped": "{\"id\":\"...\",...}"
@@ -150,7 +160,7 @@ A single structured payload, byte-bounded (≤ ~2 KB total by construction):
     "delimiter": ",",
     "has_header": true,
     "header": ["title", "url", "date"],
-    "row_count": 50,
+    "repeating_unit_count": 50,          // row count
     "sample_row_clipped": "Senior Backend Engineer,https://...,2026-05-20"
   },
   // or (the unknown-but-useful fallback):
@@ -167,7 +177,7 @@ A single structured payload, byte-bounded (≤ ~2 KB total by construction):
 }
 ```
 
-Hard contract: every output field is either a name, a count, a type, or a *clipped* sample bounded by `max_sample_bytes`. The full body is unreachable.
+Hard contract: every output field is either a name, a count, a type, or a *clipped* sample bounded by `max_sample_bytes`. The full body is unreachable. `body_safety` reports the cap, the measured payload size, and whether leaf values were redacted — making the contract auditable by the agent itself rather than a promise hidden in the implementation.
 
 ### 4.4 Worked example — the load-bearing case
 
@@ -176,9 +186,15 @@ Hard contract: every output field is either a name, a count, a type, or a *clipp
 ```json
 {
   "size_bytes": 291488, "is_single_line": true, "format": "xml.rss-2.0",
+  "confidence": "high",
+  "confidence_reason": "root tag <rss> + child <item> dominates 50:1 over next sibling",
+  "body_safety": {"max_string_bytes": 512, "total_payload_bytes": 1043, "values_redacted": false},
   "xml": {
-    "root": "rss", "repeating_element": "item",
-    "repeating_element_path": "rss/channel/item", "count": 50,
+    "root": "rss",
+    "candidate_repeating_units": [
+      {"element": "item", "path": "rss/channel/item", "count": 50, "winner": true}
+    ],
+    "repeating_unit_count": 50,
     "child_tags": ["title", "link", "pubDate", "guid", "description"],
     "sample_element_clipped": "<item><title>…</title>…</item>"
   },
@@ -186,22 +202,22 @@ Hard contract: every output field is either a name, a count, a type, or a *clipp
 }
 ```
 
-The agent's task collapses to "the answer is `xml.count`." No guessing, no pattern construction, no body in context, deterministic, single call. The Scenario 3 prompt's effect (`PASS, 1 grep, $0.02`) reproduced *without* the human supplying the hint.
+The agent's task collapses to "the answer is `xml.repeating_unit_count`." No guessing, no pattern construction, no body in context, deterministic, single call. The Scenario 3 prompt's effect (`PASS, 1 grep, $0.02`) reproduced *without* the human supplying the hint.
 
 ---
 
 ## 5. "Repeating unit" detection per format
 
-The most subtle piece. Specification per format:
+The most subtle piece. Specification per format. In every case `candidate_repeating_units` is a list: usually one entry with `winner: true`, sometimes several with no winner — never a hidden choice.
 
-- **XML / RSS / Atom.** Stream with `iterparse`. Tally counts of *direct children of the document root or of a single dominant child* (RSS: `<channel>`; Atom: `<feed>` itself). The repeating element is the most-frequent child tag whose count is ≥ 2× the next most frequent — the "dominant" repetition. If no clear winner, return `repeating_element: null` and the full child-tag histogram; do not guess.
-- **JSON.** Stream with `ijson`. The repeating unit is the **longest top-level array** (or, if root is an array, the array itself). `element_shape` is the type-skeleton union of the first ≤ 20 elements. No values.
-- **JSONL / NDJSON.** Each line is one element. `count` is the line count. `element_shape` from the first record.
-- **CSV / TSV.** `csv.Sniffer` for delimiter + header. Repeating unit = data row. `count` = row count (streamed).
-- **Plain log / line-oriented.** `count` = line count. `repeating_element: null` unless a strong prefix pattern (timestamp regex) dominates ≥ 80% of lines.
-- **Unknown.** Return the `unknown` block (line count + first/last bytes + tag-or-keyword histogram of top regex matches like `<\w+>`, `^"\w+":`). The agent at least learns size, shape class, and orienting samples.
+- **XML / RSS / Atom.** Stream with `iterparse`. Tally counts of *direct children of the document root or of a single dominant child* (RSS: `<channel>`; Atom: `<feed>` itself). A candidate is `winner: true` only if its count is ≥ 2× the next most frequent. If no candidate meets that bar, emit the top *N* (≤ 5) candidates with `winner: false` on all of them, `repeating_unit_count: null`, `confidence: "low"`, and a `confidence_reason` naming the competing tags. Do not guess.
+- **JSON.** Stream with `ijson`. Enumerate top-level arrays *and* arrays one level inside an envelope object (e.g. `$.results.items[*]`, `$.data[*]`). Promote the longest as `winner: true` only if it is ≥ 2× the next; otherwise emit the full candidate list with no winner. `element_shape` is the type-skeleton union of the first ≤ 20 elements of the winner (or of the largest candidate when there is no winner). No values.
+- **JSONL / NDJSON.** Each line is one element; single trivial candidate, `winner: true`. `repeating_unit_count` is the line count; `element_shape` from the first record.
+- **CSV / TSV.** `csv.Sniffer` for delimiter + header. Single candidate (the data row), `winner: true`. `repeating_unit_count` = row count (streamed).
+- **Plain log / line-oriented.** Single candidate (the line), `winner: true` *only* if a strong prefix pattern (timestamp regex) dominates ≥ 80% of lines; otherwise no winner, `confidence: "low"`, and the agent gets the line count plus the prefix histogram in `notes`.
+- **Unknown.** Return the `unknown` block (line count + first/last bytes + tag-or-keyword histogram of top regex matches like `<\w+>`, `^"\w+":`). `confidence: "unknown"` is mandatory — the regex histogram is orienting evidence, never a semantic claim. The agent at least learns size, shape class, and bounded samples.
 
-Detection order: BOM / first non-whitespace byte → extension → content sniff. Confidence is reported.
+Detection order: BOM / first non-whitespace byte → extension → content sniff. Confidence and its reason are reported in every payload.
 
 ---
 
@@ -226,7 +242,16 @@ So `describe_structure` ships with a paired **generic** directive in the system 
 
 The directive is generic (teaches *method*, not the RSS answer). It is not "programming the task"; it is teaching the agent the child's procedure: look → identify → count.
 
-`config-0002` = `config-0001` + this directive + the tool available. That is the deliberate test of the hypothesis under controlled conditions.
+**The directive is a first-class artifact, not documentation, and must be tested as one.** Three configs, not two, isolate which lever moves the needle:
+
+| Config | Tool registered | Directive in system prompt | Tests |
+|---|---|---|---|
+| `config-0001` (baseline) | no | no | baseline failure already characterised |
+| `config-0002a` (tool-only) | yes | no | does the agent discover and reach for it unprompted? |
+| `config-0002b` (directive-only) | no | yes | does method-teaching alone change the trajectory, or does it just produce more confident wrong patterns? |
+| `config-0002c` (both) | yes | yes | the hypothesis: bounded perception + the procedure to use it |
+
+The pessimistic prior is that `0002a` will look like baseline (the agent doesn't know to reach for a new tool from its schema alone) and `0002b` will look like baseline too (a procedure with no primitive to enact it is just more prose). The hypothesis lives or dies on `0002c`. If `0002a` already passes, the directive was unnecessary; if `0002b` already passes, the tool was unnecessary. Either of those is an interesting (and cheaper) result.
 
 ---
 
@@ -235,20 +260,30 @@ The directive is generic (teaches *method*, not the RSS answer). It is not "prog
 The same apparatus this session built is how this design is judged. No new instrumentation needed.
 
 1. **Build** `filesystem__describe_structure` per §4–6.
-2. **Add** the §7 directive to `system_prompt.py`.
-3. **Create** `config-anthropic-eval-0002.json` — pure inheritance baseline + (later) any directive flags. Same model pin (Sonnet 4.5).
-4. **Run** `test_count_jobs.py` (the **honest, non-leaking** prompt — no structure given) against `config-0002` ≥ 5 times.
+2. **Add** the §7 directive to `system_prompt.py` (gated by a flag so `0002a` can omit it).
+3. **Create three configs** per §7's table: `config-anthropic-eval-0002a.json` (tool-only), `…-0002b.json` (directive-only), `…-0002c.json` (both). All inherit from `config-0001`; same model pin (Sonnet 4.5).
+4. **Run** `test_count_jobs.py` (the **honest, non-leaking** prompt — no structure given) against each of `0002a`/`b`/`c` ≥ 5 times.
 5. **Read** for each run, in the `[eval record]`:
-   - Was `filesystem__describe_structure` called *first*, unprompted? (the real metric)
+   - Was `filesystem__describe_structure` called *first*, unprompted? (the real metric for `0002a`/`c`)
    - Did `read_file` of the fixture happen at all? (must be **no**)
    - Did `&lt;item&gt;` appear? (must be **no**)
    - Was the answer correct (50) without thrash, without hitting the cap?
-6. **Success criteria:**
+6. **Success criteria (apply per config):**
    - Pass rate on the honest prompt ≥ 4/5 (vs the current ~2/3 baseline).
    - Trajectory: `describe_structure` → `grep` (or equivalent) → answer. Two tool calls, no `read_file`, no whole-file summarization, no `&lt;item&gt;`, no cap-hit.
    - Cost ~$0.02 range (matches Scenario 3 ceiling), not $0.40 (Scenario 2 thrash range).
+7. **Fixture coverage — single fixture tests a single failure mode, so the suite must span the shapes the detector will actually meet.** Add alongside `jobserve-sample.rss`:
+   - **JSON array** at root (the trivial happy path).
+   - **JSON envelope** — `{"results": {"items": [...]}}` — exercises nested-array candidate enumeration.
+   - **JSONL** with 50 records — distinct from JSON array.
+   - **CSV with quoted newlines** — confirms streamed row count is not "count `\n`."
+   - **Malformed XML** truncated mid-element — must return partial-but-honest payload + `error` note, not throw.
+   - **XML with two competing repeated children** (e.g. `<item>` and `<entry>` at near-equal counts) — must return no winner, multiple candidates, `confidence: "low"`.
+   - **Single-line minified JSON** ≥ 200 KB — pairs with the RSS single-line fixture to prove the body-incapable contract on JSON, not just XML.
+   - **Large plain log** (≥ 100 K lines) — verifies the line-oriented path's prefix-histogram fallback and the `< 1 s` performance assertion from §6.
+   Each fixture gets its own count/identify eval with the same trajectory criteria, run against `0002c`.
 
-The verdict is *trajectory + rate*, not a single green. Criterion 2 hardened against summarization (committed `dc95719`) keeps the verdict honest.
+The verdict is *trajectory + rate across fixtures*, not a single green on RSS. Criterion 2 hardened against summarization (committed `dc95719`) keeps the verdict honest.
 
 ---
 
@@ -278,10 +313,11 @@ The verdict is *trajectory + rate*, not a single green. Criterion 2 hardened aga
 **Phase 1 (verify the hypothesis):**
 - Formats: XML/RSS/Atom, JSON, JSONL, CSV/TSV, unknown-fallback.
 - stdlib parsers only.
-- Body-incapable contract enforced.
-- Directive added to `system_prompt.py` (generic, not task-specific).
-- `config-anthropic-eval-0002.json` committed.
-- Honest-prompt eval (`test_count_jobs.py`) run 5× against `-0002`. Decision gate on §8 success criteria.
+- Body-incapable contract enforced, with `body_safety` block in every payload.
+- Directive added to `system_prompt.py` (generic, not task-specific), flag-gated so the three-config split in §7 is mechanical.
+- Three configs committed: `config-anthropic-eval-0002a.json` (tool-only), `0002b.json` (directive-only), `0002c.json` (both).
+- Fixture suite per §8 step 7 committed (RSS, JSON array, JSON envelope, JSONL, CSV with quoted newlines, malformed XML, two-competing-repeats XML, minified JSON, large log).
+- Each fixture's count/identify eval run 5× against the three configs. Decision gate on §8 success criteria *per config and per fixture*.
 
 **Phase 2 (only if Phase 1 confirms the hypothesis):**
 - YAML, TOML, line-oriented logs with regex inference.
