@@ -676,8 +676,34 @@ Both options reuse `_execute_subagent_blocks`'s `asyncio.gather` concurrency. (a
 
 ### Two follow-on open questions (extend §"Open Questions")
 
-- **Does a new tool need to be built at all?** Same discoverability finding as `describe_structure`: a tool that's not invoked is no fix — but equally, an existing primitive that's not invoked is no fix either. The minimal change may be *only* a system-prompt directive: *"when scoring/ranking ≥3 items against the same criteria, emit one `spawn_subagent` call per item with `agent_type='summarize'` (or `'score'` once registered), with the rubric inline; never score inline in the outer conversation."* No new tool. This should be **measured** before any code is written.
+- **Does a new tool need to be built at all?** This is the load-bearing question. Elaborated below in §"Capability gap vs discoverability gap".
 - **Where does the rubric scaffold + JSON schema live?** Option (a): in the `SubAgentTypeConfig.system_prompt` for the `score` type — most constrained, hardest for the outer LLM to corrupt. Option (b): in the tool's inner-prompt template — equivalent constraint, more indirection. "Directive only": in the outer system prompt, scaffold composed at fan-out time — least constrained, most flexible, biggest drift risk. The choice trades constraint-tightness against flexibility along the same axis the rest of the project is calibrating.
+
+### Capability gap vs discoverability gap (the deeper finding)
+
+The `describe_structure` work surfaced a distinction that applies directly here and that this design originally collapsed. The agent's failure on the honest-prompt count-jobs eval happened with **all 130 tools already available**, including `filesystem__grep` with exactly the right counting capability. It still guessed `&lt;item&gt;`, read the whole file, hallucinated `### N.`, and thrashed. Tool presence was necessary but not sufficient. The fix had to pair the new tool with a generic system-prompt directive — without the directive teaching it *when* to probe, the structure tool would sit unused for the same reason `grep` did.
+
+The same pattern applies to Map-Evaluate, but more sharply because the *primitive* is already in place:
+
+| Failure shape | `describe_structure` (count jobs) | Map-Evaluate (score N items) |
+|---|---|---|
+| Capability the agent needed | A body-free structure probe | Parallel isolated scoring |
+| Present in the codebase before any work? | **No** — genuine capability gap | **Yes** — `spawn_subagent` + `_execute_subagent_blocks`, available today |
+| Was it invoked when relevant? | No (capability missing AND undirected) | No (capability present, but undirected) |
+| What actually fixes the behaviour | New tool + directive (both required) | Directive alone may suffice; new tool may add nothing |
+
+The implication, stated bluntly: **even after building `EvaluateItemsTool`, the agent may ignore it for the same reason it currently ignores `spawn_subagent`** — because the underlying problem is not capability, it is the agent not recognising that "score N items against criteria" should map to "fan out parallel calls with rubric." A new tool is one way to make the pattern discoverable (a precisely-named tool with a description matched to the task is more discoverable than a general primitive), but it is not free: every new tool grows the schema, costs cache-creation tokens, adds tool-selection overhead, and you cannot ship a new tool for every behavioural pattern.
+
+The honest trade-off, between the two failure modes both options expose:
+
+| Approach | Cost | Failure mode |
+|---|---|---|
+| **Directive only**, composing existing `spawn_subagent` | Tokens for directive text. No code. | Agent still doesn't apply the pattern reliably; the directive doesn't "land." |
+| **New tool** (`EvaluateItemsTool` or `agent_type="score"`) | Schema bloat, cache-creation cost, new code surface to maintain. | Agent still ignores it (the count-jobs agent ignored structure inspection despite tools being present). |
+
+**General principle the `describe_structure` work surfaced, applied here:** every "we need a tool for X" claim should be tested against "we need a directive teaching existing tools to do X" first. A *capability gap* and a *discoverability gap* look identical from the outside — both manifest as "the agent doesn't do X" — but they have different fixes, and conflating them produces schema bloat plus unused tools. `describe_structure` was a genuine capability gap (no body-free perception primitive existed). Map-Evaluate is **less obviously so** — the primitives exist; the question is whether naming the pattern as a tool is worth the cost over a directive that composes existing primitives.
+
+**Concrete consequence — try the directive first, measure, then escalate.** That is what justifies the phasing inversion below: build no tool until the directive-only path has been measured against an eval scenario the same way the count-jobs scenarios measured `describe_structure`. Read the trajectory: does the agent fan out reliably? If yes, no new tool is needed; the directive is the fix. If no, you then know precisely *which* gap is left — and that informs whether option (a) (constrained `agent_type="score"`) or option (b) (`EvaluateItemsTool` wrapper) is the right shape, rather than picking one a-priori.
 
 ### Consequence for §Implementation Phases
 
