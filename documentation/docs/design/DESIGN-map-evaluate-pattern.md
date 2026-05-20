@@ -651,3 +651,41 @@ The §"Open Questions" should also gain two items from this learning:
 
 - **Discoverability:** how does the outer agent know to invoke `evaluate_items` instead of scoring inline, on what trigger? (Directive? Sub-agent routing? Tool-search ranking?)
 - **Inner trace verification:** what behavioural gates do we put on the inner calls (not just the aggregated output) to detect a hallucinated/degraded score before it merges into the report? E.g. record each inner trajectory, sample-check rubric coverage, fail loudly if `score` is returned without the dimensions populated.
+
+## Existing primitive: `spawn_subagent` + parallel execution
+
+(Acknowledged after this design was drafted — material refinement to what Map-Evaluate *is*.)
+
+The codebase already provides the map / parallel / isolation / aggregate machinery this design proposes:
+
+- `src/micro_x_agent_loop/sub_agent.py` — `SubAgentRunner.run(task, agent_type)` spawns a sub-agent in its own isolated context with its own `TurnEngine`. Three agent types registered today: `explore`, `summarize` (no inner tools, cheap), `general` (full capability).
+- `src/micro_x_agent_loop/turn_engine.py:493–548` — `_execute_subagent_blocks` runs all `spawn_subagent` calls from a single LLM turn **concurrently via `asyncio.gather`**.
+- `spawn_subagent` is already exposed as a pseudo-tool the outer LLM can emit; multiple calls in one turn → parallel execution. Each sub-agent returns a summary; raw inner content never reaches the outer conversation.
+
+Mechanically, today the outer agent could score N items by emitting N `spawn_subagent(task="score this item against this rubric: …", agent_type="summarize")` calls in one turn — and they would fan out in parallel, each isolated, each returning a summary. The outer conversation would receive only the summaries.
+
+**This changes what Map-Evaluate is.** What is *missing* from the existing primitive is not the parallelism, not the isolation, not the aggregation — it is the **constrained inner-call configuration** that makes scoring reliable: deterministic settings (`temperature=0.0`, small `max_tokens`), inner tools forced off (already true for `summarize`), **structured-output-only JSON conforming to a schema**, and rubric injection in a fixed scaffold. That constraint discipline is the genuine contribution; the rest is reuse. Without it, parallel sub-agents are "N agents thrashing in parallel" — the failure mode the *Cross-design lessons* §4 flagged.
+
+### Two implementation options
+
+(a) **New `agent_type="score"` in `sub_agent.py`** *(preferred starting point)*. Register a fourth `SubAgentTypeConfig` in `_TYPE_CONFIGS` whose system prompt bakes in the rubric scaffold + JSON output schema, with tools forced off and deterministic decoding settings. Map-Evaluate then becomes "outer agent emits N `spawn_subagent(agent_type='score')` calls; existing `_execute_subagent_blocks` runs them in parallel; outer aggregates the summaries." Reuses *all* existing machinery and adds the smallest possible new surface.
+
+(b) **Thin `EvaluateItemsTool` wrapper around `SubAgentRunner`**. Compiles the rubric, calls `SubAgentRunner.run` per item with `agent_type="summarize"` plus a forced rubric scaffold, adds source-fetching and rubric-compilation, aggregates. The current §Architecture above implicitly assumed this shape **without acknowledging (a) was possible**, which it is.
+
+Both options reuse `_execute_subagent_blocks`'s `asyncio.gather` concurrency. (a) keeps fan-out under the outer LLM's control (each item = one `spawn_subagent` call it emits), which is more discoverable through the existing sub-agent UX; (b) hides fan-out inside a tool, which is the conventional shape but introduces a *second* parallelism mechanism alongside the existing one. (a) is the smaller, more honest specialization.
+
+### Two follow-on open questions (extend §"Open Questions")
+
+- **Does a new tool need to be built at all?** Same discoverability finding as `describe_structure`: a tool that's not invoked is no fix — but equally, an existing primitive that's not invoked is no fix either. The minimal change may be *only* a system-prompt directive: *"when scoring/ranking ≥3 items against the same criteria, emit one `spawn_subagent` call per item with `agent_type='summarize'` (or `'score'` once registered), with the rubric inline; never score inline in the outer conversation."* No new tool. This should be **measured** before any code is written.
+- **Where does the rubric scaffold + JSON schema live?** Option (a): in the `SubAgentTypeConfig.system_prompt` for the `score` type — most constrained, hardest for the outer LLM to corrupt. Option (b): in the tool's inner-prompt template — equivalent constraint, more indirection. "Directive only": in the outer system prompt, scaffold composed at fan-out time — least constrained, most flexible, biggest drift risk. The choice trades constraint-tightness against flexibility along the same axis the rest of the project is calibrating.
+
+### Consequence for §Implementation Phases
+
+Phase 1 should *not* begin by building `EvaluateItemsTool` from scratch. The cheaper, more honest first step — matching the discipline `describe_structure` is following — is:
+
+1. Add a system-prompt directive that teaches the outer agent to fan out `spawn_subagent(agent_type="summarize")` calls for N-item rubric scoring (today's primitive, no new code).
+2. Build the same eval apparatus as `describe_structure` — an N-item scoring scenario eval (`tests/evals/test_score_n_items.py` or similar), parallel to the count-jobs scenarios. Hold model and config constant; vary only the directive.
+3. Measure on the trajectory: does the agent reliably fan out? Are the per-item summaries usable for the outer report? Where is the inner-call latitude actually hurting?
+4. *Then* decide whether to add `agent_type="score"` (option a) or `EvaluateItemsTool` (option b), based on the observed inner-call failure modes — not on this doc's a-priori opinion.
+
+This inverts the original phasing: **instrument → measure → decide what to constrain → build the constraint.** Avoid prematurely building a heavy tool to solve a problem the existing `spawn_subagent` primitive may already cover with a generic directive.
