@@ -293,7 +293,37 @@ The verdict is *trajectory + rate*, not a single green. Criterion 2 hardened aga
 
 ---
 
-## 12. Related
+## 12. Relationship to the Map-Evaluate pattern
+
+[`DESIGN-map-evaluate-pattern`](DESIGN-map-evaluate-pattern.md) (proposal, draft) addresses an adjacent reliability/cost failure mode: when an outer agent must process **N items against criteria**, raw item content accumulates in the outer conversation and quality degrades. The two designs are **complementary, not overlapping**:
+
+| Axis of "too big" | Design |
+|---|---|
+| **One** input too dense/large for the agent to investigate | `describe_structure` |
+| **N** items would all have to enter outer context to evaluate | `evaluate_items` (Map-Evaluate) |
+
+They share architectural DNA — both move raw-content consumption *inside* a tool and return only compact structured output, keeping the outer LLM context lean — and they compose naturally in real workflows:
+
+```
+Source (file/feed/page)
+   ↓ describe_structure(path)
+{format: rss-2.0, repeating: item, count: 50, …}
+   ↓ agent extracts the N items via a targeted call
+[item_1, item_2, …, item_N]
+   ↓ evaluate_items(rubric, items)
+ranked compact scores
+   ↓ agent writes report
+```
+
+In this composition the outer context never holds a file body *or* any raw item content. Without `describe_structure`, Map-Evaluate still relies on the agent already knowing what the items are and how many — which is exactly the schema-ascertainment gap this design fills. With both: bounded perception → bounded evaluation → bounded outer context.
+
+**Honest non-equivalence.** Neither tool requires the other. Many `describe_structure` uses don't involve N-item scoring (just count, just identify format, just confirm a log's repeating prefix). Many Map-Evaluate uses don't involve unintelligible inputs (the agent already has a structured list). They're complementary *in workflows where both apply*, and each is independently useful otherwise.
+
+**Design philosophy divergence to flag.** Map-Evaluate is firmly on the *flexibility* side (rubric-driven, output_fields configurable, concurrency tunable). `describe_structure` is firmly on the *reliability* side (one call, no knobs, no LLM inside the tool). The project deliberately maintains **both schools** — they are the right answers to different problems, not competing ideologies. This doc explicitly diverges from prior art's "small composable tools" philosophy because the failure mode being addressed is *guess-and-thrash*, which more knobs would worsen. Map-Evaluate's flexibility is right *for its problem*; this design's rigidity is right *for ours*.
+
+---
+
+## 13. Related
 
 - [ADR-025 — Native filesystem tools](../architecture/decisions/ADR-025-native-filesystem-tools.md) — defines where this tool lives and how it's loaded.
 - [ADR-024 — Single-layer tool-result truncation](../architecture/decisions/ADR-024-single-layer-tool-result-truncation.md) — `ToolResultOverrides` is where the body-incapable cap (`MaxChars`) is configured.

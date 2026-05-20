@@ -610,3 +610,44 @@ is the key: it tells the inner LLM how to score that dimension for the item.
 - Disk-based content cache with TTL
 - Progress reporting to stderr
 - Token usage tracking for inner calls
+
+## Relationship to `describe_structure`
+
+[`DESIGN-describe-structure-tool`](DESIGN-describe-structure-tool.md) addresses an adjacent failure mode on a different axis: **one input too dense/large for the agent to investigate** (e.g. a 291KB single-line RSS feed). Map-Evaluate and `describe_structure` are complementary:
+
+| Axis of "too big" | Design |
+|---|---|
+| **N items** would all have to enter outer context to evaluate | `evaluate_items` (this doc) |
+| **One** input too dense/large for the agent to investigate first | `describe_structure` |
+
+They share architectural DNA — both move raw-content consumption inside a tool and return only compact structured output. They compose naturally:
+
+```
+Source (file/feed/page)
+   ↓ describe_structure(path)         (bounded perception)
+{format: rss-2.0, repeating: item, count: 50, …}
+   ↓ agent extracts N items (one targeted call)
+[item_1, …, item_N]
+   ↓ evaluate_items(rubric, items)    (bounded evaluation)
+ranked compact scores
+   ↓ agent writes report
+```
+
+Without `describe_structure`, Map-Evaluate still requires the agent to already know what the items are and how many — which is exactly the schema-ascertainment gap the eval suite proved it cannot reliably do. With both: bounded perception → bounded evaluation → bounded outer context on both axes.
+
+## Cross-design lessons (from `describe_structure` work)
+
+The Behavioural Eval Suite work that produced `describe_structure` surfaced four findings that this design should absorb before implementation, because each applies *identically* to Map-Evaluate. They are listed here so they are not relearned at cost:
+
+1. **A tool that exists but is not invoked is no fix.** The honest-prompt eval (`tests/evals/test_count_jobs.py`) showed the agent did not reach for structure inspection even when every relevant tool was available. Map-Evaluate has the same discoverability risk — the outer agent must *decide* to wrap an N-item job in `evaluate_items` instead of scoring inline. The design must ship with a paired **system-prompt directive** (e.g. *"when scoring/ranking ≥3 items against the same criteria, use `evaluate_items`; never score them inline"*). This is currently absent from the design.
+
+2. **Fake passes via cross-layer masking are real.** During the eval work we found that `ToolResultSummarizationEnabled` silently shrank a 291KB whole-file read to 3.7KB, slipping under the "didn't load the file" check and producing a green light for a behaviourally-bad run. Map-Evaluate's "compact return" creates the same risk on a different axis: an inner scoring call could degrade or hallucinate and the compact summary still *looks* right to the outer agent. Verification must read the **inner-call traces**, not just the final report's prose.
+
+3. **Single-run verdicts are meaningless; pass *rate* on the same input is the unit.** Same prompt / config / model produced 1 FAIL / 2 PASS over three runs of the honest-prompt eval. Map-Evaluate adds N inner LLM calls per outer invocation, *multiplying* opportunities for stochastic variance. Verification cannot be "ran it once, looked plausible" — it must be N runs against a fixed dataset with a recorded pass-rate gate and per-run trajectory inspection. The apparatus to do this already exists (`BufferedChannel.tool_records`, `EvalResult` with cost/cache/cap, `[eval record]` prompt+ANSWER readout, hardened "did it actually do the work" gates — commits `2cc453b`, `09c02a4`, `dc95719`).
+
+4. **Reliability vs flexibility is a live tension; this design sits on the flexibility side. Acknowledge it.** Map-Evaluate is rubric-driven, output_fields configurable, concurrency tunable — explicitly the *flexibility* school. `describe_structure` is the opposite (one call, no knobs, no LLM inside the tool — reliability via removed latitude). The project deliberately maintains both schools because they are the right answers to different problems. This doc should be explicit that flexibility is the intentional choice for *this* problem, and that the inner-call rubric is the load-bearing constraint that has to be tight enough to prevent the scoring LLM from drifting; otherwise the design degrades into "N agents thrashing in parallel."
+
+The §"Open Questions" should also gain two items from this learning:
+
+- **Discoverability:** how does the outer agent know to invoke `evaluate_items` instead of scoring inline, on what trigger? (Directive? Sub-agent routing? Tool-search ranking?)
+- **Inner trace verification:** what behavioural gates do we put on the inner calls (not just the aggregated output) to detect a hallucinated/degraded score before it merges into the report? E.g. record each inner trajectory, sample-check rubric coverage, fail loudly if `score` is returned without the dimensions populated.
