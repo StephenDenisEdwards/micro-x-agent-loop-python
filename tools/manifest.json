@@ -20,5 +20,49 @@
       ],
       "cwd": "tools/jobserve-processor/"
     }
+  },
+  "jobserve_email_processor": {
+    "tool_name": "jobserve_email_processor",
+    "description": "Parses JobServe job-alert emails into individual jobs, fetches each full specification, scores them against a CV with rank reasons, drafts a brief cover letter per job, and writes a dated markdown report per email date.",
+    "created": "2026-05-22",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/jobserve_email_processor/"
+    }
+  },
+  "jobserve_rss_processor": {
+    "tool_name": "jobserve_rss_processor",
+    "description": "Reads job items from a JobServe RSS feed and rebuilds a score-banded markdown report per date — each new job gets an LLM suitability score (0-10), a rank reason, and a brief cover letter judged against a CV. Idempotent: jobs already in the file are never re-scored.",
+    "created": "2026-05-22",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/jobserve_rss_processor/"
+    }
   }
 }

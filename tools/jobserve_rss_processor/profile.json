@@ -1,0 +1,7 @@
+{
+  "rss_source": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\jobserve-sample.rss",
+  "cv_path": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\Stephen Edwards CV-April-2026.md",
+  "output_dir": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\results",
+  "rank_model": "claude-sonnet-4-6",
+  "max_jobs": 0
+}

@@ -1,0 +1,8 @@
+{
+  "sender": "jobsbyemail@apps.jobserve.com",
+  "days_back": 2,
+  "max_jobs": 60,
+  "cv_path": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\Stephen Edwards CV-April-2026.md",
+  "output_dir": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\results",
+  "rank_model": "claude-sonnet-4-6"
+}
