@@ -20,7 +20,7 @@ import TurndownService from "turndown";
 
 import type { Clients } from "./tools.js";
 import { webFetch } from "./tools.js";
-import { writeFile } from "../../_runtime/src/utils.js";
+import { writeFile, resolveOutputPath } from "../../_runtime/src/utils.js";
 import { createMessage } from "../../_runtime/src/llm.js";
 
 // `web` is declared so a live feed URL works with no code change — the current
@@ -361,7 +361,10 @@ export function parseAssessment(text: string): Assessment {
   }
 }
 
-async function assessJob(model: string, cv: string, job: RssJob): Promise<Assessment> {
+// Returns null on transient LLM failure (network, rate limit, etc.) so the
+// caller can skip storing the job and let the next run retry. A permanent
+// "no description" case still returns a real score=0 record.
+async function assessJob(model: string, cv: string, job: RssJob): Promise<Assessment | null> {
   if (!job.description.trim()) {
     return { score: 0, reason: "No job description was available to assess.", coverLetter: "" };
   }
@@ -390,7 +393,8 @@ Respond with ONLY a JSON object, no prose, no code fences:
     });
     return parseAssessment(text);
   } catch (err) {
-    return { score: 0, reason: `Assessment failed: ${String(err)}`, coverLetter: "" };
+    console.error(`[jobserve_rss_processor] Assessment failed for ${job.title}: ${String(err)}`);
+    return null;
   }
 }
 
@@ -518,7 +522,12 @@ export function renderEntry(rank: number, job: StoredJob): string {
 
 /** Build the full score-banded report for one date's jobs. */
 export function buildBandedReport(date: string, jobs: StoredJob[]): string {
-  const sorted = [...jobs].sort((a, b) => b.score - a.score);
+  const sorted = [...jobs].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const aT = new Date(a.pubDate).getTime() || 0;
+    const bT = new Date(b.pubDate).getTime() || 0;
+    return bT - aT;
+  });
   const scores = sorted.map((j) => j.score);
   const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
   const top = scores.length ? Math.max(...scores) : 0;
@@ -595,13 +604,14 @@ export async function handleTool(
   if (!cvPath) return { error: "profile.cv_path is not set." };
 
   // --- CV -------------------------------------------------------------------
+  const cvResolved = resolveOutputPath(cvPath, config);
   let cv: string;
   try {
-    cv = readFileSync(cvPath, "utf-8");
+    cv = readFileSync(cvResolved, "utf-8");
   } catch (err) {
-    return { error: `Cannot read CV at ${cvPath}: ${String(err)}` };
+    return { error: `Cannot read CV at ${cvResolved}: ${String(err)}` };
   }
-  if (!cv.trim()) return { error: `CV file at ${cvPath} is empty.` };
+  if (!cv.trim()) return { error: `CV file at ${cvResolved} is empty.` };
 
   // --- Feed -----------------------------------------------------------------
   let xml: string;
@@ -647,9 +657,13 @@ export async function handleTool(
   let topScore = 0;
   let capped = false;
 
-  for (const [date, dateItems] of byDate) {
-    const mdPath = `${outputDir}/${date}-js-rss-data.md`;
-    const dataPath = `${outputDir}/${date}-js-rss-data.json`;
+  // Process newest dates first so a max_jobs cap deterministically spends its
+  // budget on the most recent jobs rather than whatever order the feed emitted.
+  const datesNewestFirst = [...byDate.entries()].sort(([a], [b]) => b.localeCompare(a));
+
+  for (const [date, dateItems] of datesNewestFirst) {
+    const mdPath = resolveOutputPath(`${outputDir}/${date}-js-rss-data.md`, config);
+    const dataPath = resolveOutputPath(`${outputDir}/${date}-js-rss-data.json`, config);
     const existingDataRaw = readIfExists(dataPath);
     const existingJobs = parseSidecar(existingDataRaw);
     const existingGuids = new Set(existingJobs.map((j) => j.guid));
@@ -680,6 +694,11 @@ export async function handleTool(
       const job = enrich(item);
       console.error(`[jobserve_rss_processor] Scoring: ${job.title}`);
       const a = await assessJob(rankModel, cv, job);
+      // Transient failure — skip storing so the next run retries this guid.
+      if (a === null) {
+        added++;
+        continue;
+      }
       newJobs.push({
         guid,
         title: job.title,
