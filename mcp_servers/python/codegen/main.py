@@ -326,13 +326,23 @@ def _update_manifest(task_name: str, target_dir: Path, files: dict[str, str]) ->
     if desc_match:
         description = desc_match.group(1)
 
-    # Capture the JSON Schema from the generated app. zodToJsonSchema can fail
-    # if the LLM emitted a non-standard Zod type — record the failure but still
-    # write the manifest entry so the task is discoverable.
+    # Capture the JSON Schema(s) from the generated app. zodToJsonSchema can
+    # fail if the LLM emitted a non-standard Zod type — record the failure but
+    # still write the manifest entry so the task is discoverable.
+    #
+    # The --describe payload is the multi-tool shape {server_name, tools: [...]}
+    # with singular tool_name/description/input_schema fields populated for
+    # single-tool apps as a back-compat shim. Mirror that shape in the manifest:
+    # always write the tools[] array; keep singular fields populated when
+    # there's only one tool so older readers continue to work.
     input_schema: dict | None = None
+    tools_list: list[dict] | None = None
     describe_error: str | None = None
     describe_ok, payload = _describe_task_sync(target_dir)
     if describe_ok and isinstance(payload, dict):
+        raw_tools = payload.get("tools")
+        if isinstance(raw_tools, list):
+            tools_list = [t for t in raw_tools if isinstance(t, dict)]
         schema = payload.get("input_schema")
         if isinstance(schema, dict):
             input_schema = schema
@@ -349,6 +359,7 @@ def _update_manifest(task_name: str, target_dir: Path, files: dict[str, str]) ->
         "description": description,
         "created": date.today().isoformat(),
         "input_schema": input_schema,
+        "tools": tools_list,
         "server": {
             "transport": "stdio",
             "command": "npx",
@@ -441,7 +452,14 @@ def build_system_prompt(task_name: str, tools_ts: str, test_base_ts: str) -> str
 ## Runtime contract
 Target directory: tools/{task_name}/src/
 
-The generated app is an MCP server exposing a single tool. task.ts MUST export:
+The generated app is an MCP server. By default it exposes a single tool — use
+the single-tool shape unless the requirements clearly describe multiple related
+tools that should share state (e.g. a processor that exposes both "process" and
+"draft_reply"). Do not pick the multi-tool shape just to add optionality.
+
+### Single-tool shape (default)
+
+task.ts MUST export:
 
 - SERVERS: string[] — upstream MCP server names to connect (e.g. ["google", "linkedin"])
 - TOOL_NAME: string — snake_case tool name (e.g. "{task_name}")
@@ -457,6 +475,37 @@ handleTool receives:
 
 handleTool MUST return a plain object (Record<string, unknown>) with the result data.
 Do NOT write to stdout or use console.log for results — return the data.
+
+### Multi-tool shape (only when the requirements describe multiple related tools)
+
+Replace TOOL_NAME / TOOL_DESCRIPTION / TOOL_INPUT_SCHEMA / handleTool with:
+
+- SERVERS: string[] — same as above (union of upstream servers needed across all tools)
+- SERVER_NAME: string — optional; the MCP server's name (defaults to "{task_name}")
+- TOOLS: ToolDef[] — array of {{name, description, inputSchema, handler}} entries
+
+```
+import {{ defineTools }} from "../../_runtime/src/tool-def.js";
+export const SERVERS: string[] = ["google"];
+export const TOOLS = defineTools([
+  {{
+    name: "process_alerts",
+    description: "Process pending job alerts.",
+    inputSchema: {{ dryRun: z.boolean().default(false).describe("...") }},
+    handler: async (input, clients, profile, config) => {{ ... }},
+  }},
+  {{
+    name: "draft_reply",
+    description: "Draft a reply to a specific job.",
+    inputSchema: {{ jobId: z.string().describe("...") }},
+    handler: async (input, clients, profile, config) => {{ ... }},
+  }},
+]);
+```
+
+Each handler has the same signature as single-tool handleTool. Tool names
+within one app MUST be unique. Avoid generic names ("fetch", "parse") that
+might collide with upstream MCP tools.
 Use console.error for debug logging only.
 
 ## TOOL_INPUT_SCHEMA format
@@ -951,6 +1000,7 @@ async def list_tasks(ctx: Context) -> CallToolResult:
             "tool_name": entry.get("tool_name", task_name),
             "description": entry.get("description", ""),
             "input_schema": entry.get("input_schema"),
+            "tools": entry.get("tools"),
             "created": entry.get("created"),
         })
 
@@ -960,11 +1010,9 @@ async def list_tasks(ctx: Context) -> CallToolResult:
         except Exception as e:
             await ctx.warning(f"Could not write backfilled schemas to manifest: {e}")
 
-    # Build a compact text summary in addition to the structured payload.
-    lines = [f"{len(tasks)} task(s):"]
-    for t in tasks:
-        lines.append(f"  {t['task_name']} — {t['description']}")
-        schema = t.get("input_schema") or {}
+    def _render_schema(schema: dict | None, indent: str) -> list[str]:
+        """Render an input_schema's parameter list, one line per parameter."""
+        out: list[str] = []
         props = (schema.get("properties") or {}) if isinstance(schema, dict) else {}
         required = set((schema.get("required") or []) if isinstance(schema, dict) else [])
         for pname, pschema in props.items():
@@ -974,9 +1022,28 @@ async def list_tasks(ctx: Context) -> CallToolResult:
             req = "required" if pname in required else "optional"
             desc = pschema.get("description", "")
             default = f", default={pschema['default']!r}" if "default" in pschema else ""
-            lines.append(f"    - {pname}: {ptype} ({req}{default}) {desc}".rstrip())
-        if t.get("input_schema") is None:
-            lines.append("    (input schema not yet captured — call codegen__run_task to trigger)")
+            out.append(f"{indent}- {pname}: {ptype} ({req}{default}) {desc}".rstrip())
+        return out
+
+    # Build a compact text summary. Multi-tool tasks list each exposed tool
+    # underneath the task name; single-tool tasks render as before.
+    lines = [f"{len(tasks)} task(s):"]
+    for t in tasks:
+        tools = t.get("tools")
+        if isinstance(tools, list) and len(tools) > 1:
+            lines.append(f"  {t['task_name']} — {t['description']} ({len(tools)} tools)")
+            for tool in tools:
+                if not isinstance(tool, dict):
+                    continue
+                lines.append(
+                    f"    {tool.get('tool_name', '?')} — {tool.get('description', '')}"
+                )
+                lines.extend(_render_schema(tool.get("input_schema"), "      "))
+        else:
+            lines.append(f"  {t['task_name']} — {t['description']}")
+            lines.extend(_render_schema(t.get("input_schema"), "    "))
+            if t.get("input_schema") is None and not isinstance(tools, list):
+                lines.append("    (input schema not yet captured — call codegen__run_task to trigger)")
 
     return CallToolResult(
         content=[TextContent(type="text", text="\n".join(lines))],
@@ -988,6 +1055,7 @@ async def list_tasks(ctx: Context) -> CallToolResult:
 @mcp.tool()
 async def run_task(ctx: Context, task_name: str,
                    params: dict | None = None,
+                   tool: str | None = None,
                    timeout_seconds: int = 600) -> CallToolResult:
     """Run a previously generated TypeScript task app with parameters.
 
@@ -997,11 +1065,14 @@ async def run_task(ctx: Context, task_name: str,
             codegen__list_tasks). Defaults to {} — the task will use defaults
             for any parameter with a default, and Zod will reject the call if
             any required parameter is missing.
+        tool: Name of the specific tool to run within the task. Only needed
+            for multi-tool apps (where codegen__list_tasks shows >1 tool
+            under the task). Single-tool apps default to their only tool.
         timeout_seconds: Maximum time to allow the task to run (default 600 = 10 minutes).
     """
     if params is None:
         params = {}
-    await ctx.info(f"run_task(task_name={task_name!r}, params={params!r})")
+    await ctx.info(f"run_task(task_name={task_name!r}, tool={tool!r}, params={params!r})")
     task_dir = PROJECT_ROOT / "tools" / task_name
     if not task_dir.exists():
         await ctx.error(f"Task directory not found: tools/{task_name}/")
@@ -1038,6 +1109,8 @@ async def run_task(ctx: Context, task_name: str,
     try:
         config_path = str(PROJECT_ROOT / "config.json")
         cmd = ["npx", "tsx", "src/index.ts", "--run", "--config", config_path]
+        if tool:
+            cmd.extend(["--tool", tool])
         if params:
             cmd.extend(["--params", json.dumps(params)])
         proc = subprocess.run(
