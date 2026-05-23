@@ -72,6 +72,7 @@ export interface StoredJob {
   score: number; // 0-10, one decimal
   reason: string;
   coverLetter: string;
+  description: string; // full cleaned job text from the RSS feed
 }
 
 export interface Assessment {
@@ -283,6 +284,7 @@ function coerceStored(o: Record<string, unknown>): StoredJob {
     score: Math.max(0, Math.min(10, num(o.score))),
     reason: str(o.reason),
     coverLetter: str(o.coverLetter),
+    description: str(o.description),
   };
 }
 
@@ -366,6 +368,10 @@ export function renderEntry(rank: number, job: StoredJob): string {
   return [
     `### ${rank}. ${job.title}`,
     meta.join(" · "),
+    "",
+    "**Job description:**",
+    "",
+    job.description ? blockquote(job.description) : "> _Description not available._",
     "",
     `**Score: ${job.score}/10**`,
     "",
@@ -484,6 +490,14 @@ export async function handleTool(
     return { message: "No <item> elements found in the RSS source.", jobs_added: 0 };
   }
 
+  // Full cleaned description per guid — used to score new jobs and to backfill
+  // the description onto jobs scored before this field was stored.
+  const descByGuid = new Map<string, string>();
+  for (const it of items) {
+    const g = it.guid || it.link;
+    if (g) descByGuid.set(g, cleanDescription(it.description));
+  }
+
   // --- Group by pubDate date ------------------------------------------------
   const byDate = new Map<string, RssItem[]>();
   let skippedNoDate = 0;
@@ -513,6 +527,14 @@ export async function handleTool(
     const existingJobs = parseSidecar(existingDataRaw);
     const existingGuids = new Set(existingJobs.map((j) => j.guid));
 
+    // Backfill the description for jobs scored before this field existed.
+    for (const ej of existingJobs) {
+      if (!ej.description) {
+        const d = descByGuid.get(ej.guid);
+        if (d) ej.description = d;
+      }
+    }
+
     const newJobs: StoredJob[] = [];
     for (const item of dateItems) {
       const guid = item.guid || item.link;
@@ -540,6 +562,7 @@ export async function handleTool(
         score: a.score,
         reason: a.reason,
         coverLetter: a.coverLetter,
+        description: job.description,
       });
       added++;
     }

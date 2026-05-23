@@ -29,6 +29,7 @@ function makeStored(overrides: Partial<StoredJob>): StoredJob {
     score: 5,
     reason: "A reason.",
     coverLetter: "Dear team, I apply.",
+    description: "Full job description text.",
     ...overrides,
   };
 }
@@ -118,6 +119,8 @@ describe("renderEntry", () => {
   it("renders rank, title, score, cover letter and link — with no hidden data", () => {
     const entry = renderEntry(3, makeStored({ title: "Senior AI Architect", score: 8.2 }));
     expect(entry).toContain("### 3. Senior AI Architect");
+    expect(entry).toContain("**Job description:**");
+    expect(entry).toContain("Full job description text.");
     expect(entry).toContain("**Score: 8.2/10**");
     expect(entry).toContain("**Cover letter:**");
     expect(entry).toContain("[View on JobServe](http://www.jobserve.com/gb/en/R0.jsap)");
@@ -157,6 +160,7 @@ describe("sidecar round-trip", () => {
     expect(back).toHaveLength(2);
     expect(back[0].guid).toBe("g4");
     expect(back[0].reason).toBe("");
+    expect(back[0].description).toBe("");
     expect(back[1].guid).toBe("g5-link");
     expect(back[1].score).toBe(10);
   });
