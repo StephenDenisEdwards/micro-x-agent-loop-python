@@ -787,7 +787,14 @@ After generating `note_app` (test 9.3):
 python3 -c "import json; m = json.load(open('tools/manifest.json')); print(json.dumps(m['note_app'], indent=2))"
 ```
 
-**Expected:** The entry has a `tools: [...]` array with 2 entries (one per defined tool). The legacy top-level `tool_name` / `description` / `input_schema` fields are also present but may carry the SERVER name and only the first tool's schema (these are the back-compat shim and are not authoritative for multi-tool apps).
+**Expected:** The entry has a `tools: [...]` array with 2 entries (one per defined tool — each with its own `tool_name`, `description`, `input_schema`).
+
+The legacy top-level fields are also present but carry placeholder values for multi-tool apps (the describe payload omits singular fields when `tools.length > 1`, so `_update_manifest` falls back to defaults):
+- `tool_name` = `"note_app"` (task directory name)
+- `description` = `"Generated task: note_app"` (placeholder)
+- `input_schema` = `null`
+
+For multi-tool apps the `tools[]` array is authoritative; the top-level fields are vestigial and exist only so older readers don't crash.
 
 `codegen__list_tasks` should render the task with a nested per-tool listing:
 
@@ -831,9 +838,12 @@ Remove any test task directories:
 rm -rf tools/hello_world tools/scorer_demo tools/format_demo
 rm -rf tools/email_count tools/server_test tools/broken_task
 rm -rf tools/test_dup tools/test_dup_2
-rm -rf tools/note_app tools/dup_test
-rm -f /tmp/test-config.json /tmp/output-format.txt
+rm -rf tools/note_app tools/dup_test tools/_template_test
+rm -f /tmp/test-config.json /tmp/test-config-target.json /tmp/output-format.txt
+rm -rf /tmp/test-copy
 ```
+
+(Sections 1 and 2 also clean up their own artifacts inline; this block is a backstop for partial runs.)
 
 ---
 
@@ -848,7 +858,7 @@ rm -f /tmp/test-config.json /tmp/output-format.txt
 | 1.4 | Self-contained node_modules | |
 | 1.5 | ConfigFile indirection | |
 | 1.6 | Scratch sync teardown | |
-| 2.1 | Copy excludes node_modules | |
+| 2.1 | Template copy: ignore list + sealed files present | |
 | 2.2 | Duplicate name auto-increment | |
 | 3.1 | Parse TypeScript files | |
 | 3.2 | Infrastructure files rejected | |
