@@ -54,17 +54,72 @@ describe("parseRssItems", () => {
 });
 
 describe("cleanDescription", () => {
-  it("decodes the double-encoded HTML to plain text", () => {
+  it("converts the embedded HTML to clean markdown — no tags, no entities", () => {
     const text = cleanDescription(parseRssItems(SAMPLE_RSS)[0].description);
-    expect(text).toContain("Rate: £500pd");
-    expect(text).toContain("Location: London");
+    expect(text).toContain("Tier 1 bank seeks Python & Spark developers");
     expect(text).not.toContain("<br");
+    expect(text).not.toContain("<span");
     expect(text).not.toContain("&lt;");
+    expect(text).not.toContain("&amp;");
+  });
+
+  it("strips the redundant leading Rate/Location header", () => {
+    const text = cleanDescription(parseRssItems(SAMPLE_RSS)[0].description);
+    // the metadata line above the description already shows these fields
+    expect(text.startsWith("**Rate")).toBe(false);
+    expect(text.startsWith("Rate:")).toBe(false);
+    expect(text.startsWith("Location")).toBe(false);
   });
 
   it("resolves doubly-escaped ampersands", () => {
     const text = cleanDescription(parseRssItems(SAMPLE_RSS)[0].description);
     expect(text).toContain("Python & Spark");
+  });
+
+  it("injects bold + line breaks around known section headings (Hays-style)", () => {
+    const raw =
+      `&lt;br/&gt;I am working with a Tier 1 Bank seeking Python devs. ` +
+      `What you'll need to succeed : Hands-on Python ` +
+      `What you'll get in return : 12-month contract ` +
+      `What you need to do now: Apply now.`;
+    const text = cleanDescription(raw);
+    expect(text).toContain("**What you'll need to succeed**");
+    expect(text).toContain("**What you'll get in return**");
+    expect(text).toContain("**What you need to do now**");
+  });
+
+  it("injects bold + line breaks around known section headings (no colon, title-case)", () => {
+    const raw =
+      `&lt;br/&gt;We are seeking a Senior Engineer. ` +
+      `Key Responsibilities Translate requirements into actionable plans. ` +
+      `What You Will Ideally Bring Strong expertise in .NET 8. ` +
+      `Contract Details 6 months.`;
+    const text = cleanDescription(raw);
+    expect(text).toContain("**Key Responsibilities**");
+    expect(text).toContain("**What You Will Ideally Bring**");
+    expect(text).toContain("**Contract Details**");
+  });
+
+  it("trims the JobServe admin footer — drops noise, compacts kept fields onto one line", () => {
+    // Synthetic description with a full admin footer block.
+    const raw =
+      `&lt;br/&gt;Senior Engineer&lt;br/&gt;&lt;br/&gt;Build great things.` +
+      `&lt;br/&gt;&lt;span style="font-weight: bold;"&gt;Type:&lt;/span&gt; Contract` +
+      `&lt;br/&gt;&lt;span style="font-weight: bold;"&gt;Contact:&lt;/span&gt; Sebastian` +
+      `&lt;br/&gt;&lt;span style="font-weight: bold;"&gt;Advertiser:&lt;/span&gt; Hamilton Barnes` +
+      `&lt;br/&gt;&lt;span style="font-weight: bold;"&gt;Email:&lt;/span&gt; foo@bar.com` +
+      `&lt;br/&gt;&lt;span style="font-weight: bold;"&gt;Country:&lt;/span&gt; UK` +
+      `&lt;br/&gt;&lt;span style="font-weight: bold;"&gt;Start Date:&lt;/span&gt; ASAP` +
+      `&lt;br/&gt;&lt;span style="font-weight: bold;"&gt;Reference:&lt;/span&gt; JSSGM`;
+    const text = cleanDescription(raw);
+    expect(text).toContain("Build great things");
+    expect(text).not.toContain("Reference:");
+    expect(text).not.toContain("Email:");
+    expect(text).not.toContain("Advertiser:");
+    expect(text).not.toContain("Country:");
+    expect(text).toContain("Contact: Sebastian");
+    expect(text).toContain("Type: Contract");
+    expect(text).toContain("Start Date: ASAP");
   });
 });
 

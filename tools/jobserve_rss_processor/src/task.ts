@@ -16,6 +16,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 
+import TurndownService from "turndown";
+
 import type { Clients } from "./tools.js";
 import { webFetch } from "./tools.js";
 import { writeFile } from "../../_runtime/src/utils.js";
@@ -134,20 +136,145 @@ function decodeEntities(s: string): string {
     .replace(/&amp;/gi, "&");
 }
 
+const turndown = new TurndownService({
+  headingStyle: "atx",
+  bulletListMarker: "-",
+  emDelimiter: "*",
+  strongDelimiter: "**",
+});
+
 /**
- * The RSS <description> is double-encoded: XML entities wrap an HTML fragment.
- * Decode once to get the HTML, strip it to text, then decode again for any
- * entities that were doubly escaped (e.g. `&amp;nbsp;`).
+ * Make the JobServe description HTML turndown-friendly:
+ *   - drop decorative bullet images
+ *   - flatten the footer table: each <tr> becomes one line (image · label · spacer · value
+ *     cells collapse into "**Label:** Value" inline), so trimAdminFooter can read it
+ *   - rewrite inline `font-weight: bold` spans as <strong> so they render as **bold**
+ */
+function preprocessHtml(html: string): string {
+  return html
+    .replace(/<img\b[^>]*\/?>/gi, "")
+    .replace(/<\/?(?:table|tbody|thead)\b[^>]*>/gi, "")
+    .replace(/<\/tr>/gi, "<br/>")
+    .replace(/<tr\b[^>]*>/gi, "")
+    .replace(/<\/?(?:td|th)\b[^>]*>/gi, " ")
+    .replace(
+      /<span\b[^>]*style\s*=\s*["'][^"']*font-weight\s*:\s*(?:bold|[6-9]\d{2})[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi,
+      "<strong>$1</strong>",
+    );
+}
+
+/** Drop a leading "Rate: X Location: Y" header that just repeats the metadata
+ *  line shown above the description. */
+function stripLeadingRateLocation(md: string): string {
+  const lines = md.split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const t = lines[i].trim();
+    if (t === "") { i++; continue; }
+    if (/^(?:\*\*)?(?:Rate|Location)\b/i.test(t)) { i++; continue; }
+    break;
+  }
+  return lines.slice(i).join("\n").replace(/^\s+/, "");
+}
+
+const ADMIN_DROP_RE =
+  /^(?:\*\*)?(?:Reference|Email|Advertiser|Country|Rate|Location)\s*:(?:\*\*)?.*$/i;
+const ADMIN_KEEP_RE =
+  /^(?:\*\*)?(Contact|Type|Start\s*Date)\s*:(?:\*\*)?\s*(.+)$/i;
+
+/** Trim the JobServe admin block at the bottom of a description: drop pure
+ *  noise (Reference / Email / Advertiser / Country / duplicate Rate / Location)
+ *  and collapse kept fields (Contact / Type / Start Date) onto one line. */
+function trimAdminFooter(md: string): string {
+  const lines = md.split("\n");
+  let i = lines.length - 1;
+  while (i >= 0 && lines[i].trim() === "") i--;
+  const kept: string[] = [];
+  let touched = false;
+  while (i >= 0) {
+    const line = lines[i].trim();
+    if (!line) break;
+    if (ADMIN_DROP_RE.test(line)) {
+      touched = true;
+      i--;
+      continue;
+    }
+    const m = ADMIN_KEEP_RE.exec(line);
+    if (m) {
+      touched = true;
+      kept.unshift(`${m[1]}: ${m[2].replace(/\*+/g, "").trim()}`);
+      i--;
+      continue;
+    }
+    break;
+  }
+  if (!touched) return md;
+  const body = lines.slice(0, i + 1).join("\n").trimEnd();
+  if (kept.length === 0) return body;
+  return `${body}\n\n${kept.join(" · ")}`;
+}
+
+// Known section headings found inside the body of JobServe descriptions.
+// Recruiters write the body as one inline string with these phrases buried
+// mid-paragraph; injecting a bold heading + paragraph break around them
+// turns a wall of text into readable sections.
+//
+// IMPORTANT: only multi-word distinctive phrases — single common words like
+// "Experience", "Requirements", "Skills" would match mid-sentence prose
+// (e.g. "Hands-on experience with Azure") and break the body.
+const SECTION_HEADINGS = [
+  // "Hays-style" — sentence-case, often followed by " :"
+  "What you'll need to succeed",
+  "What you'll get in return",
+  "What you need to do now",
+  // Title-case from various agencies
+  "Key Responsibilities",
+  "What You Will Ideally Bring",
+  "What You Will Bring",
+  "What You'll Bring",
+  "Required Skills",
+  "Required Experience",
+  "Contract Details",
+  "Role Overview",
+  "Day-to-Day",
+  "Day to Day",
+  "About You",
+  "About Us",
+  "About The Role",
+  "About The Company",
+  "Nice to Have",
+  "What We Offer",
+];
+
+/** Inject `\n\n**heading**\n\n` around any known section heading found inline.
+ *  Conservative — only known headings from the list above, longest first so
+ *  "What You'll Need to Succeed" wins over a shorter "What You'll Need". */
+function injectSectionBreaks(md: string): string {
+  const alt = [...SECTION_HEADINGS]
+    .sort((a, b) => b.length - a.length)
+    .map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  const re = new RegExp(`(?<=\\s|^)(${alt})\\s*:?\\s+`, "gi");
+  return md.replace(re, (_, h: string) => `\n\n**${h.trim()}**\n\n`);
+}
+
+/**
+ * Convert the RSS <description> HTML to clean markdown body text.
+ *
+ * The <description> is doubly encoded — XML entities wrap an HTML fragment.
+ * We decode the outer layer, hand the inner HTML to turndown (after promoting
+ * inline-styled bold spans to <strong> and flattening the footer table),
+ * then trim the redundant leading Rate/Location header, JobServe's boilerplate
+ * admin footer, and inject section breaks where known headings appear inline.
  */
 export function cleanDescription(raw: string): string {
-  let s = decodeEntities(raw); // -> HTML
-  s = s
-    .replace(/<\s*br\s*\/?>/gi, "\n")
-    .replace(/<\/\s*(?:p|div|tr|h[1-6])\s*>/gi, "\n")
-    .replace(/<li\b[^>]*>/gi, "\n- ")
-    .replace(/<[^>]+>/g, " ");
-  s = decodeEntities(s); // -> plain text
-  return s
+  const html = decodeEntities(raw);
+  let md = turndown.turndown(preprocessHtml(html));
+  md = md.replace(/\xa0/g, " "); // non-breaking spaces -> regular spaces
+  md = stripLeadingRateLocation(md);
+  md = trimAdminFooter(md);
+  md = injectSectionBreaks(md);
+  return md
     .replace(/[ \t]+/g, " ")
     .replace(/ *\n */g, "\n")
     .replace(/\n{3,}/g, "\n\n")
@@ -527,12 +654,13 @@ export async function handleTool(
     const existingJobs = parseSidecar(existingDataRaw);
     const existingGuids = new Set(existingJobs.map((j) => j.guid));
 
-    // Backfill the description for jobs scored before this field existed.
+    // Refresh each job's description from the current feed where available.
+    // description is mechanically derived from the RSS, so changes to
+    // cleanDescription propagate on the next run with no re-scoring; the
+    // LLM-produced fields (score, reason, coverLetter) are preserved.
     for (const ej of existingJobs) {
-      if (!ej.description) {
-        const d = descByGuid.get(ej.guid);
-        if (d) ej.description = d;
-      }
+      const d = descByGuid.get(ej.guid);
+      if (d) ej.description = d;
     }
 
     const newJobs: StoredJob[] = [];
