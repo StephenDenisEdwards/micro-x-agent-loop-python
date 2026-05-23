@@ -204,9 +204,13 @@ rm -rf tools/test_dup tools/test_dup_2
 from mcp_servers.python.codegen.main import parse_files
 
 response = """=== task.ts ===
+import { z } from "zod";
 export const SERVERS: string[] = ["google"];
-export async function runTask(clients: any, config: any): Promise<void> {
-  console.log("hello");
+export const TOOL_NAME = "demo";
+export const TOOL_DESCRIPTION = "Demo task.";
+export const TOOL_INPUT_SCHEMA = {};
+export async function handleTool(input, clients, profile, config) {
+  return { ok: true };
 }
 
 === collector.ts ===
@@ -234,28 +238,44 @@ print(f"PASS: parsed {len(files)} files, skipped {len(skipped)}")
 
 ### Test 3.2: Infrastructure files are rejected
 
+Covers every sealed file the LLM should never generate — per-task sealed files (`index.ts`, `config.ts`, `tool-loader.ts`, `tools.ts`, `tool-types.ts`) and shared runtime files (`mcp-client.ts`, `llm.ts`, `utils.ts`, `test-base.ts`, `tool-def.ts`). All ten must appear in the skipped list.
+
 ```python
 response = """=== task.ts ===
 export const SERVERS: string[] = [];
 
-=== tools.ts ===
-// trying to overwrite infrastructure
-export function evil() {}
-
 === index.ts ===
-// trying to overwrite entry point
+// entry point — sealed
+=== config.ts ===
+// config loader — sealed (added with multi-tool support)
+=== tool-loader.ts ===
+// adapter — sealed (added with multi-tool support)
+=== tools.ts ===
+// per-task MCP wrappers — sealed
+=== tool-types.ts ===
+// per-task strict types — sealed
+=== mcp-client.ts ===
+// runtime — sealed
+=== llm.ts ===
+// runtime — sealed
+=== utils.ts ===
+// runtime — sealed
+=== test-base.ts ===
+// runtime — sealed
+=== tool-def.ts ===
+// runtime (added with multi-tool support) — sealed
 """
 
 files, skipped = parse_files(response)
+sealed = {"index.ts", "config.ts", "tool-loader.ts", "tools.ts", "tool-types.ts",
+          "mcp-client.ts", "llm.ts", "utils.ts", "test-base.ts", "tool-def.ts"}
 assert "task.ts" in files
-assert "tools.ts" not in files
-assert "index.ts" not in files
-assert "tools.ts" in skipped
-assert "index.ts" in skipped
-print(f"PASS: infrastructure files rejected ({skipped})")
+assert sealed.isdisjoint(files), f"sealed files leaked into files: {sealed & files.keys()}"
+assert sealed.issubset(skipped), f"sealed files not rejected: {sealed - set(skipped)}"
+print(f"PASS: all {len(sealed)} sealed filenames rejected")
 ```
 
-**Expected:** Only `task.ts` is accepted. `tools.ts` and `index.ts` are in the skipped list.
+**Expected:** Only `task.ts` is accepted. All ten sealed filenames are in the skipped list.
 
 ### Test 3.3: Non-TypeScript files are rejected
 
@@ -341,13 +361,28 @@ you> Generate a task app called "hello_world" that prints "Hello from TypeScript
 
 ### Test 4.2: Generated task has correct exports
 
-After test 4.1, verify the generated `task.ts`:
+After test 4.1, verify the generated `task.ts` uses one of the two supported shapes (see `PLAN-codegen-multi-tool.md`):
 
 ```bash
-head -5 tools/hello_world/src/task.ts
+grep -E "^export (const|async function)" tools/hello_world/src/task.ts
 ```
 
-**Expected:** File exports `SERVERS: string[]` and `async function runTask(...)`.
+**Expected:** EITHER the legacy single-tool shape:
+```
+export const SERVERS: string[] = [...];
+export const TOOL_NAME = "hello_world";
+export const TOOL_DESCRIPTION = "...";
+export const TOOL_INPUT_SCHEMA = { ... };
+export async function handleTool(input, clients, profile, config) { ... }
+```
+
+OR the multi-tool shape:
+```
+export const SERVERS: string[] = [...];
+export const TOOLS = defineTools([ ... ]);
+```
+
+The single-tool shape is the default; multi-tool only appears when the prompt explicitly described multiple related tools. There must be no `runTask` export — that was an earlier contract that no longer exists.
 
 ### Test 4.3: Generate with test files
 
@@ -614,7 +649,7 @@ Count the exported async functions in `tools.ts`:
 grep -c "^export async function" codegen-templates/template-ts/src/tools.ts
 ```
 
-**Expected:** 40+ exported functions (matching the Python `tools.py` coverage).
+**Expected:** 50+ exported functions (current count is 58; was 40+ at original migration time). One per upstream MCP tool from gmail / linkedin / web / github / etc. The count grows whenever a new MCP server's wrapper is added.
 
 ### Test 8.4: MCP client handles connection and tool calls
 
