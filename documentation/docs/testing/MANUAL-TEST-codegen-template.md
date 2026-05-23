@@ -155,20 +155,30 @@ From a Python REPL or script:
 import shutil
 from pathlib import Path
 
+# Import the canonical ignore list so this test stays aligned with production.
+# (Falls back to a hardcoded copy if mcp isn't available in the REPL.)
+try:
+    from mcp_servers.python.codegen.main import TEMPLATE_IGNORE as ignore
+except Exception:
+    ignore = shutil.ignore_patterns("node_modules", "dist", "*.tsbuildinfo", "scripts")
+
 src = Path("codegen-templates/template-ts")
 dst = Path("/tmp/test-copy")
 if dst.exists():
     shutil.rmtree(dst)
-ignore = shutil.ignore_patterns("node_modules", "dist", "*.tsbuildinfo")
 shutil.copytree(src, dst, ignore=ignore)
 
 assert (dst / "package.json").exists()
 assert (dst / "src" / "tools.ts").exists()
+assert (dst / "src" / "index.ts").exists()
+assert (dst / "src" / "config.ts").exists()
+assert (dst / "src" / "tool-loader.ts").exists()
 assert not (dst / "node_modules").exists()
-print("PASS: template copied without node_modules")
+assert not (dst / "scripts").exists()
+print("PASS: template copied without node_modules or scripts")
 ```
 
-**Expected:** Copy succeeds. `node_modules/` is excluded. All `src/` infrastructure files are present.
+**Expected:** Copy succeeds. `node_modules/` AND `scripts/` are excluded (the latter contains the `regen-tool-types.mjs` codegen plumbing, not anything a generated app needs). All `src/` sealed files including the multi-tool additions (`config.ts`, `tool-loader.ts`) are present.
 
 ### Test 2.2: Duplicate task name gets suffix
 
@@ -582,10 +592,10 @@ grep "capture_output" mcp_servers/python/codegen/main.py
 Verify the TypeScript template has no equivalent of the Python hack:
 
 ```bash
-grep -r "unraisablehook" codegen-templates/template-ts/
+grep -r --exclude-dir=node_modules "unraisablehook" codegen-templates/template-ts/
 ```
 
-**Expected:** No matches. The Node.js runtime doesn't need this workaround.
+**Expected:** No matches. The Node.js runtime doesn't need this workaround. The `--exclude-dir=node_modules` is defensive — without it any future dep that mentions the word would produce a false positive.
 
 ### Test 7.4: Task execution doesn't hang (live test)
 
