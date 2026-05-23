@@ -6,7 +6,7 @@ Step-by-step walkthrough of the TypeScript codegen template migration. These tes
 
 The codegen system generates task apps — small, self-contained TypeScript projects that connect to MCP servers, process data, and produce output files. The system has two parts:
 
-1. **The TypeScript template** (`tools/template-ts/`) — sealed infrastructure files that every generated task app inherits. These handle MCP server connections, config loading, tool wrappers, file utilities, and LLM access. Generated code imports from these files but never modifies them.
+1. **The TypeScript template** (`codegen-templates/template-ts/`) — sealed infrastructure files that every generated task app inherits. These handle MCP server connections, config loading, tool wrappers, file utilities, and LLM access. Generated code imports from these files but never modifies them.
 
 2. **The codegen MCP server** (`mcp_servers/python/codegen/main.py`) — a Python MCP server that exposes two tools: `generate_code` (copies the template, calls the LLM to generate TypeScript, validates via vitest) and `run_task` (executes the generated app via `npx tsx`).
 
@@ -14,7 +14,7 @@ The codegen system generates task apps — small, self-contained TypeScript proj
 
 | Aspect | Before (Python) | After (TypeScript) |
 |--------|-----------------|-------------------|
-| Template location | `tools/template-py/` | `tools/template-ts/` |
+| Template location | `tools/template-py/` | `codegen-templates/template-ts/` |
 | Generated code language | Python (`.py`) | TypeScript (`.ts`) |
 | Dependency management | Implicit venv (`VENV_PYTHON` path) | `package.json` + `npm install` |
 | Test framework | `unittest` | `vitest` |
@@ -24,7 +24,7 @@ The codegen system generates task apps — small, self-contained TypeScript proj
 
 ### How it works
 
-1. **`generate_code(task_name, prompt)`** — copies `tools/template-ts/` to `tools/<task_name>/` (excluding `node_modules/`), reads `src/tools.ts` for the system prompt, runs a mini agentic loop where the LLM generates TypeScript files, writes them to `src/`, runs `npm install`, then validates with `npx vitest run` (fixing failures up to 3 times).
+1. **`generate_code(task_name, prompt)`** — copies `codegen-templates/template-ts/` to `tools/<task_name>/` (excluding `node_modules/`), reads `src/tools.ts` for the system prompt, runs a mini agentic loop where the LLM generates TypeScript files, writes them to `src/`, runs `npm install`, then validates with `npx vitest run` (fixing failures up to 3 times).
 
 2. **`run_task(task_name)`** — checks that `src/task.ts` exists, runs `npm install` if `node_modules/` is missing, then executes `npx tsx src/index.ts` in the task directory with a configurable timeout.
 
@@ -44,64 +44,102 @@ The codegen system generates task apps — small, self-contained TypeScript proj
 
 These tests verify the TypeScript template itself, independent of the codegen server.
 
+The template's sealed files import the shared runtime via the relative path `../../_runtime/src/...`. That path is calibrated for a **synced task app** (at `tools/<name>/src/`, where it resolves to `tools/_runtime/`), not for the template directory itself (`codegen-templates/template-ts/`). So most tests below run inside a **scratch sync** — the template copied into a real `tools/` location, where its imports actually resolve. This also mirrors how the template is used in production.
+
+### Test 1.0: Set up a scratch sync
+
+```bash
+TEST_DIR=tools/_template_test
+rm -rf $TEST_DIR
+mkdir -p $TEST_DIR
+cp -r codegen-templates/template-ts/. $TEST_DIR/
+cd $TEST_DIR
+npm install --silent
+```
+
+**Expected:** Copy completes, `npm install` succeeds with no errors. The scratch sync is now ready; subsequent tests 1.1–1.5 run inside `tools/_template_test/` unless stated otherwise.
+
 ### Test 1.1: Template type-checks cleanly
 
 ```bash
-cd tools/template-ts
 npx tsc --noEmit
 ```
 
 **Expected:** No errors. All infrastructure files compile under strict TypeScript.
 
-### Test 1.2: Template runs with placeholder task
+### Test 1.2: Template prints its own tool schema (`--describe`)
 
 ```bash
-cd tools/template-ts
-npx tsx src/index.ts
+npx tsx src/index.ts --describe | python3 -m json.tool
 ```
 
-**Expected:**
-```
-Config: config.json (defaults)
+**Expected:** Valid JSON printed to stdout, exit code 0. The payload has:
+- `server_name`: `"example_tool"` (the placeholder's `TOOL_NAME`)
+- `tools`: a 1-element array describing the placeholder tool
+- top-level `tool_name`, `description`, `input_schema` (the single-tool back-compat shim)
 
-No MCP servers found for:
-No task implemented. Edit src/task.ts.
-```
+This confirms the template boots, loads its task module, and the multi-tool adapter handles the placeholder's legacy single-tool exports correctly.
 
-No errors, no crashes. The template boots, finds no servers needed, runs the placeholder task, and exits cleanly.
+> The default mode (no flags) starts a stdio MCP server and waits for client commands. `--describe` exits cleanly and is the right "did it boot?" smoke test.
 
-### Test 1.3: Vitest runs (no test files)
+### Test 1.3: Vitest runs the adapter unit tests
 
 ```bash
-cd tools/template-ts
 npx vitest run
 ```
 
-**Expected:** Exit code 1 with message "No test files found, exiting with code 1". This confirms vitest is installed and configured correctly — it just has no tests to run yet.
+**Expected:** All tests pass. At least 7 tests across one file (`src/index.test.ts`):
+- 1 test for `loadJsonConfig` (ConfigFile + Base inheritance + env vars)
+- 6 tests for `normalizeTools` (multi-tool adapter — see also test 9.1)
 
 ### Test 1.4: npm install creates self-contained node_modules
 
 ```bash
-cd tools/template-ts
-rm -rf node_modules
-npm install
 ls node_modules/@modelcontextprotocol/sdk
-ls node_modules/@anthropic-ai/sdk
+ls node_modules/zod
+ls node_modules/zod-to-json-schema
+ls node_modules/dotenv
 ```
 
-**Expected:** Both SDK directories exist. Dependencies are self-contained in `node_modules/` — no venv or external path needed.
+**Expected:** All four directories exist. Dependencies are self-contained in `node_modules/`; no venv or external path needed. The Anthropic SDK is **not** a direct dependency of generated apps — it lives in `tools/_runtime/` (the shared runtime, which task apps reach via `../../_runtime/src/llm.ts`).
 
 ### Test 1.5: Config loading with ConfigFile indirection
 
-Create a test config at the project root:
+Create a test config that uses `ConfigFile` to point at another file:
 
 ```bash
-echo '{"ConfigFile": "config-standard-no-summarization.json"}' > /tmp/test-config.json
-cd tools/template-ts
-npx tsx src/index.ts --config /tmp/test-config.json
+cat > /tmp/test-config.json <<'EOF'
+{ "ConfigFile": "/tmp/test-config-target.json" }
+EOF
+cat > /tmp/test-config-target.json <<'EOF'
+{ "McpServers": { "demo": { "command": "echo", "args": ["hi"] } } }
+EOF
 ```
 
-**Expected:** Config loads via indirection — the output shows the resolved config filename, not `test-config.json`. The template correctly follows `ConfigFile` pointers.
+Then verify the template follows the indirection (use `--run` rather than `--describe`, because `--describe` only reads the static task module exports and never touches the config):
+
+```bash
+npx tsx src/index.ts --run --params '{}' --config /tmp/test-config.json 2>&1 | head -5
+```
+
+**Expected:**
+```
+Config: /tmp/test-config-target.json
+{
+  "message": "No task implemented. Edit src/task.ts."
+}
+```
+
+The first line shows the resolved target path, NOT `/tmp/test-config.json`. The template correctly followed the `ConfigFile` pointer. The JSON below is the placeholder task's response — proves the run path executed end to end.
+
+### Test 1.6: Tear down the scratch sync
+
+```bash
+cd ../..
+rm -rf tools/_template_test /tmp/test-config.json /tmp/test-config-target.json
+```
+
+**Expected:** Cleanup completes silently. Subsequent sections start with a clean `tools/` tree.
 
 ---
 
@@ -117,7 +155,7 @@ From a Python REPL or script:
 import shutil
 from pathlib import Path
 
-src = Path("tools/template-ts")
+src = Path("codegen-templates/template-ts")
 dst = Path("/tmp/test-copy")
 if dst.exists():
     shutil.rmtree(dst)
@@ -509,7 +547,7 @@ grep "capture_output" mcp_servers/python/codegen/main.py
 Verify the TypeScript template has no equivalent of the Python hack:
 
 ```bash
-grep -r "unraisablehook" tools/template-ts/
+grep -r "unraisablehook" codegen-templates/template-ts/
 ```
 
 **Expected:** No matches. The Node.js runtime doesn't need this workaround.
@@ -559,19 +597,21 @@ done
 ### Test 8.2: Package.json has correct dependencies
 
 ```bash
-node -e "const p = require('./tools/template-ts/package.json'); console.log(Object.keys(p.dependencies).sort().join(', ')); console.log(Object.keys(p.devDependencies).sort().join(', '))"
+node -e "const p = require('./codegen-templates/template-ts/package.json'); console.log(Object.keys(p.dependencies).sort().join(', ')); console.log(Object.keys(p.devDependencies).sort().join(', '))"
 ```
 
 **Expected:**
-- Dependencies: `@anthropic-ai/sdk, @modelcontextprotocol/sdk, dotenv`
+- Dependencies: `@modelcontextprotocol/sdk, dotenv, zod, zod-to-json-schema`
 - Dev dependencies: `@types/node, tsx, typescript, vitest`
+
+Note: `@anthropic-ai/sdk` is **not** here — it lives in `tools/_runtime/package.json` (the shared runtime that task apps reach via `../../_runtime/src/llm.ts`). Each generated app's own `package.json` only needs the MCP SDK and Zod, not the LLM SDK.
 
 ### Test 8.3: Tools.ts covers all MCP wrappers
 
 Count the exported async functions in `tools.ts`:
 
 ```bash
-grep -c "^export async function" tools/template-ts/src/tools.ts
+grep -c "^export async function" codegen-templates/template-ts/src/tools.ts
 ```
 
 **Expected:** 40+ exported functions (matching the Python `tools.py` coverage).
@@ -754,11 +794,13 @@ rm -f /tmp/test-config.json /tmp/output-format.txt
 
 | # | Feature | Status |
 |---|---------|--------|
+| 1.0 | Scratch sync setup | |
 | 1.1 | Template type-checks | |
-| 1.2 | Template runs placeholder | |
-| 1.3 | Vitest installed correctly | |
+| 1.2 | Template `--describe` smoke test | |
+| 1.3 | Vitest runs adapter tests | |
 | 1.4 | Self-contained node_modules | |
 | 1.5 | ConfigFile indirection | |
+| 1.6 | Scratch sync teardown | |
 | 2.1 | Copy excludes node_modules | |
 | 2.2 | Duplicate name auto-increment | |
 | 3.1 | Parse TypeScript files | |
