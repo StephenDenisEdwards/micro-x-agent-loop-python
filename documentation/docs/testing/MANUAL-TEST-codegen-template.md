@@ -18,7 +18,7 @@ The codegen system generates task apps — small, self-contained TypeScript proj
 | Generated code language | Python (`.py`) | TypeScript (`.ts`) |
 | Dependency management | Implicit venv (`VENV_PYTHON` path) | `package.json` + `npm install` |
 | Test framework | `unittest` | `vitest` |
-| Task execution | `python -m tools.<task_name>` | `npx tsx src/index.ts` |
+| Task execution | `python -m tools.<task_name>` | `npx tsx src/index.ts --run --params '{...}'` (bare `npx tsx src/index.ts` now starts an MCP stdio server and waits) |
 | Pipe hang workaround | Temp files for stdout/stderr | `capture_output=True` (no workaround needed) |
 | `sys.unraisablehook` hack | Required | Eliminated |
 
