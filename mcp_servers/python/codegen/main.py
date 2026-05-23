@@ -36,9 +36,15 @@ MAX_TOKENS = 16384
 MAX_TURNS = 10
 MAX_TEST_ROUNDS = 3
 # Per-task sealed files (live in tools/<task>/src/, must exist after template copy)
-PER_TASK_SEALED_FILES = {"index.ts", "tools.ts", "tool-types.ts"}
+PER_TASK_SEALED_FILES = {
+    "index.ts",
+    "config.ts",
+    "tool-loader.ts",
+    "tools.ts",
+    "tool-types.ts",
+}
 # Runtime files (live in tools/_runtime/src/, never copied into a task)
-RUNTIME_FILES = {"llm.ts", "mcp-client.ts", "utils.ts", "test-base.ts"}
+RUNTIME_FILES = {"llm.ts", "mcp-client.ts", "utils.ts", "test-base.ts", "tool-def.ts"}
 # All filenames the LLM must not generate or read — defense-in-depth for parse_files / read_file
 BLOCKED_FILES = PER_TASK_SEALED_FILES | RUNTIME_FILES
 # Directories/files to exclude when copying the template
@@ -445,8 +451,8 @@ def build_system_prompt(task_name: str, tools_ts: str, test_base_ts: str) -> str
 
 ## Non-negotiables
 - Do not call any tool unless the user prompt explicitly references a file not already in this prompt.
-- Per-task sealed files (in tools/{task_name}/src/): index.ts, tools.ts, tool-types.ts. Do not inspect or modify.
-- Shared runtime files (in tools/_runtime/src/): llm.ts, utils.ts, mcp-client.ts, test-base.ts. Do not inspect, modify, or generate. Imported via "../../_runtime/src/<name>.js" relative paths.
+- Per-task sealed files (in tools/{task_name}/src/): index.ts, config.ts, tool-loader.ts, tools.ts, tool-types.ts. Do not inspect or modify.
+- Shared runtime files (in tools/_runtime/src/): llm.ts, utils.ts, mcp-client.ts, test-base.ts, tool-def.ts. Do not inspect, modify, or generate. Imported via "../../_runtime/src/<name>.js" relative paths.
 - Do not output prose, explanations, or commentary — only the file manifest.
 
 ## Runtime contract
