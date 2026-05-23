@@ -546,12 +546,15 @@ ps aux | grep node
 ### Test 8.1: All infrastructure files present
 
 ```bash
-for f in index.ts mcp-client.ts llm.ts tools.ts utils.ts test-base.ts task.ts; do
-  test -f tools/template-ts/src/$f && echo "OK: $f" || echo "MISSING: $f"
+for f in index.ts config.ts tool-loader.ts tools.ts tool-types.ts task.ts; do
+  test -f codegen-templates/template-ts/src/$f && echo "OK: $f" || echo "MISSING: $f"
+done
+for f in mcp-client.ts llm.ts utils.ts test-base.ts tool-def.ts; do
+  test -f tools/_runtime/src/$f && echo "OK: $f" || echo "MISSING: $f"
 done
 ```
 
-**Expected:** All 7 files present.
+**Expected:** All files present. Per-task sealed files live in `codegen-templates/template-ts/src/`; the shared runtime (including the new `tool-def.ts` for multi-tool support) lives in `tools/_runtime/src/`.
 
 ### Test 8.2: Package.json has correct dependencies
 
@@ -579,6 +582,160 @@ This is implicitly tested by test 6.2 (running a task with MCP servers). The MCP
 
 ---
 
+## 9. Multi-Tool Support
+
+These tests verify the multi-tool extension — a task app can expose multiple related MCP tools from one server via a `TOOLS: ToolDef[]` export. The legacy single-tool shape (`TOOL_NAME` / `TOOL_DESCRIPTION` / `TOOL_INPUT_SCHEMA` / `handleTool`) continues to work unchanged. See `PLAN-codegen-multi-tool.md`.
+
+### Test 9.1: Template adapter unit tests pass
+
+```bash
+cd codegen-templates/template-ts
+npm test
+```
+
+**Expected:** All tests pass — at minimum:
+- 1 test for `loadJsonConfig` (ConfigFile + Base inheritance + env vars)
+- 6 tests for `normalizeTools` (TOOLS as-is, legacy synthesis, dir-basename fallback, duplicate-name throw, missing-both throw, missing-name throw)
+
+### Test 9.2: Single-tool `--describe` keeps the back-compat shim
+
+Pick an existing single-tool app (e.g. `tools/jobserve_rss_processor/`):
+
+```bash
+cd tools/jobserve_rss_processor
+npx tsx src/index.ts --describe | python3 -m json.tool
+```
+
+**Expected:** Output has BOTH shapes — the new `tools: [...]` array AND the legacy top-level `tool_name` / `description` / `input_schema`:
+
+```json
+{
+  "server_name": "jobserve_rss_processor",
+  "tools": [
+    { "tool_name": "...", "description": "...", "input_schema": {...} }
+  ],
+  "tool_name": "...",
+  "description": "...",
+  "input_schema": {...}
+}
+```
+
+The duplicated singular fields appear ONLY when `tools.length === 1`. Older readers (anything still reading the top-level fields) continue to work for single-tool apps.
+
+### Test 9.3: Generate a multi-tool task
+
+```
+you> Generate a task app called "note_app" that exposes two related MCP tools:
+  - "add_note" that takes a title and body string and appends a markdown entry to notes.md
+  - "list_notes" that reads notes.md and returns the titles
+Both tools should share the same notes.md file. Use the multi-tool TOOLS shape.
+```
+
+**Expected:**
+- The LLM produces a `task.ts` that imports `defineTools` from `../../_runtime/src/tool-def.js`
+- Exports `TOOLS = defineTools([...])` with two entries
+- May export `SERVER_NAME = "note_app"` (or omit it — dir basename is fine)
+- Validation passes (any test files run via vitest)
+
+### Test 9.4: Multi-tool `--describe` lists each tool
+
+```bash
+cd tools/note_app
+npx tsx src/index.ts --describe | python3 -m json.tool
+```
+
+**Expected:**
+- `server_name` is set
+- `tools` array has 2 entries, one per defined tool
+- Each entry has its own `tool_name`, `description`, `input_schema`
+- NO top-level singular `tool_name` / `description` / `input_schema` (because `tools.length > 1`)
+
+### Test 9.5: `--run --tool <name>` selects the right tool
+
+```bash
+cd tools/note_app
+npx tsx src/index.ts --run --tool add_note --params '{"title":"test","body":"hello"}'
+npx tsx src/index.ts --run --tool list_notes --params '{}'
+```
+
+**Expected:**
+- First command appends a note; output JSON shows success.
+- Second command returns the list including the new title.
+- Running `--run` WITHOUT `--tool` on a multi-tool app prints an error: *"This app exposes 2 tools; pick one with --tool <name>. Available: add_note, list_notes"* and exits non-zero.
+- Single-tool apps (e.g. `jobserve_rss_processor`) continue to accept `--run` without `--tool` (it defaults to the only tool).
+
+### Test 9.6: Duplicate tool names throw at startup
+
+Create a broken multi-tool `task.ts` in a scratch task:
+
+```bash
+mkdir -p tools/dup_test/src && cp codegen-templates/template-ts/src/{index,config,tool-loader,tools,tool-types}.ts tools/dup_test/src/ && cp codegen-templates/template-ts/package.json tools/dup_test/
+cat > tools/dup_test/src/task.ts <<'EOF'
+import { z } from "zod";
+import { defineTools } from "../../_runtime/src/tool-def.js";
+export const SERVERS: string[] = [];
+export const TOOLS = defineTools([
+  { name: "dup", description: "a", inputSchema: { x: z.string() },
+    handler: async () => ({ ok: true }) },
+  { name: "dup", description: "b", inputSchema: { y: z.string() },
+    handler: async () => ({ ok: true }) },
+]);
+EOF
+cd tools/dup_test && npm install --silent
+npx tsx src/index.ts --describe
+```
+
+**Expected:** Process exits non-zero with stderr containing `TOOLS contains duplicate tool name: dup`. The collision is caught at startup, not at first tool call.
+
+**Cleanup:**
+```bash
+rm -rf tools/dup_test
+```
+
+### Test 9.7: Manifest gets `tools[]` array for multi-tool apps
+
+After generating `note_app` (test 9.3):
+
+```bash
+python3 -c "import json; m = json.load(open('tools/manifest.json')); print(json.dumps(m['note_app'], indent=2))"
+```
+
+**Expected:** The entry has a `tools: [...]` array with 2 entries (one per defined tool). The legacy top-level `tool_name` / `description` / `input_schema` fields are also present but may carry the SERVER name and only the first tool's schema (these are the back-compat shim and are not authoritative for multi-tool apps).
+
+`codegen__list_tasks` should render the task with a nested per-tool listing:
+
+```
+1 task(s):
+  note_app — ... (2 tools)
+    add_note — ...
+      - title: string (required) ...
+      - body: string (required) ...
+    list_notes — ...
+```
+
+### Test 9.8: Single-tool legacy apps still work end-to-end
+
+Pick an existing legacy single-tool app and verify zero-edit back-compat:
+
+```bash
+cd tools/jobserve_email_processor
+git diff src/task.ts  # confirm no edits since the multi-tool refactor
+npm test
+npx tsx src/index.ts --describe | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d['tools'])==1; assert 'tool_name' in d; print('PASS: legacy app unchanged, describe still has singular fields')"
+```
+
+**Expected:**
+- `git diff` shows no changes to `task.ts` since the multi-tool feature shipped (only the sealed `index.ts`, `config.ts`, `tool-loader.ts` were re-synced from the template).
+- Tests pass.
+- Describe output has exactly 1 tool plus the legacy singular fields.
+
+**Cleanup:**
+```bash
+rm -rf tools/note_app
+```
+
+---
+
 ## Cleanup
 
 Remove any test task directories:
@@ -587,6 +744,7 @@ Remove any test task directories:
 rm -rf tools/hello_world tools/scorer_demo tools/format_demo
 rm -rf tools/email_count tools/server_test tools/broken_task
 rm -rf tools/test_dup tools/test_dup_2
+rm -rf tools/note_app tools/dup_test
 rm -f /tmp/test-config.json /tmp/output-format.txt
 ```
 
@@ -629,3 +787,11 @@ rm -f /tmp/test-config.json /tmp/output-format.txt
 | 8.2 | Correct dependencies | |
 | 8.3 | Full tool wrapper coverage | |
 | 8.4 | MCP client works end-to-end | |
+| 9.1 | Template adapter unit tests pass | |
+| 9.2 | Single-tool describe keeps back-compat shim | |
+| 9.3 | Generate multi-tool task | |
+| 9.4 | Multi-tool describe lists each tool | |
+| 9.5 | --tool flag selects the right tool | |
+| 9.6 | Duplicate tool names throw at startup | |
+| 9.7 | Manifest gets tools[] for multi-tool | |
+| 9.8 | Single-tool legacy apps still work | |
