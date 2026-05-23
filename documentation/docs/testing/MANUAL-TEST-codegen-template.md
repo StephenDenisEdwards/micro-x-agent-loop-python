@@ -8,7 +8,7 @@ The codegen system generates task apps — small, self-contained TypeScript proj
 
 1. **The TypeScript template** (`codegen-templates/template-ts/`) — sealed infrastructure files that every generated task app inherits. These handle MCP server connections, config loading, tool wrappers, file utilities, and LLM access. Generated code imports from these files but never modifies them.
 
-2. **The codegen MCP server** (`mcp_servers/python/codegen/main.py`) — a Python MCP server that exposes two tools: `generate_code` (copies the template, calls the LLM to generate TypeScript, validates via vitest) and `run_task` (executes the generated app via `npx tsx`).
+2. **The codegen MCP server** (`mcp_servers/python/codegen/main.py`) — a Python MCP server that exposes three tools: `generate_code` (copies the template, calls the LLM to generate TypeScript, validates via vitest, registers in `tools/manifest.json`), `list_tasks` (reads the manifest and returns each task's tool(s) with input schemas), and `run_task` (executes the generated app via `npx tsx`).
 
 ### What changed from the Python template
 
@@ -24,9 +24,11 @@ The codegen system generates task apps — small, self-contained TypeScript proj
 
 ### How it works
 
-1. **`generate_code(task_name, prompt)`** — copies `codegen-templates/template-ts/` to `tools/<task_name>/` (excluding `node_modules/`), reads `src/tools.ts` for the system prompt, runs a mini agentic loop where the LLM generates TypeScript files, writes them to `src/`, runs `npm install`, then validates with `npx vitest run` (fixing failures up to 3 times).
+1. **`generate_code(task_name, prompt)`** — copies `codegen-templates/template-ts/` to `tools/<task_name>/` (excluding `node_modules/`, `dist/`, `*.tsbuildinfo`, and the codegen-internal `scripts/` directory). Builds the LLM system prompt by reading the synced task's `src/tools.ts` (typed MCP wrappers) and `src/tool-types.ts` (auto-generated input/output types) plus the shared runtime's `test-base.ts` (test fixtures). Runs a mini agentic loop where the LLM generates the remaining TypeScript files (typically `task.ts` plus user-named helpers), writes them flat into `src/`, runs `npm install`, validates with `npx vitest run` (fixing failures up to `MAX_TEST_ROUNDS = 3` times by continuing the same LLM conversation), then captures the task's `--describe` output and registers the task in `tools/manifest.json`.
 
-2. **`run_task(task_name)`** — checks that `src/task.ts` exists, runs `npm install` if `node_modules/` is missing, then executes `npx tsx src/index.ts` in the task directory with a configurable timeout.
+2. **`run_task(task_name, params=..., tool=..., timeout_seconds=600)`** — checks that `src/task.ts` exists, runs `npm install` if `node_modules/` is missing, then executes `npx tsx src/index.ts --run --config <project-root>/config.json` in the task directory. `tool` is appended as `--tool <name>` for multi-tool task apps (single-tool apps don't need it); `params` is appended as `--params <json>`. Captures stdout/stderr/exit-code and returns them as the tool result. A `__USAGE__:` sentinel line emitted by the runtime's LLM client is stripped from stderr and surfaced separately as cost telemetry.
+
+3. **`list_tasks()`** — reads `tools/manifest.json` and returns each registered task with its tool(s), description(s), and input schema(s). Multi-tool apps list each tool nested under the task name; single-tool apps render as a flat row.
 
 > **Prerequisites**
 > - Node.js 18+ and npm installed (already required for MCP servers)
