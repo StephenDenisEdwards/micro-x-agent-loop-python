@@ -1,4 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, it, expect } from "vitest";
 
 import {
   parseRssItems,
@@ -10,6 +14,8 @@ import {
   parseSidecar,
   serializeSidecar,
   buildBandedReport,
+  filterAndRankJobs,
+  TOOLS,
   type StoredJob,
 } from "./task.js";
 
@@ -224,6 +230,122 @@ describe("sidecar round-trip", () => {
     expect(parseSidecar("not json")).toEqual([]);
     expect(parseSidecar('{"not":"an array"}')).toEqual([]);
     expect(parseSidecar("")).toEqual([]);
+  });
+});
+
+describe("filterAndRankJobs", () => {
+  const jobs: StoredJob[] = [
+    makeStored({ guid: "a", title: "Mid", score: 5, pubDate: "Fri, 15 May 2026 13:00:00 GMT" }),
+    makeStored({ guid: "b", title: "Top", score: 9.2, pubDate: "Fri, 15 May 2026 11:00:00 GMT" }),
+    makeStored({ guid: "c", title: "Low", score: 1, pubDate: "Fri, 15 May 2026 09:00:00 GMT" }),
+    makeStored({ guid: "d", title: "TieEarlier", score: 5, pubDate: "Fri, 15 May 2026 08:00:00 GMT" }),
+  ];
+
+  it("sorts by score descending with no filtering by default", () => {
+    const ranked = filterAndRankJobs(jobs, {});
+    expect(ranked.map((j) => j.title)).toEqual(["Top", "Mid", "TieEarlier", "Low"]);
+  });
+
+  it("breaks score ties by newest pubDate first", () => {
+    const ranked = filterAndRankJobs(jobs, {});
+    const midIdx = ranked.findIndex((j) => j.title === "Mid");
+    const tieIdx = ranked.findIndex((j) => j.title === "TieEarlier");
+    expect(midIdx).toBeLessThan(tieIdx);
+  });
+
+  it("filters by minScore inclusive", () => {
+    const ranked = filterAndRankJobs(jobs, { minScore: 5 });
+    expect(ranked.map((j) => j.title)).toEqual(["Top", "Mid", "TieEarlier"]);
+  });
+
+  it("caps to maxItems after sorting", () => {
+    const ranked = filterAndRankJobs(jobs, { maxItems: 2 });
+    expect(ranked.map((j) => j.title)).toEqual(["Top", "Mid"]);
+  });
+
+  it("returns [] when nothing clears the minScore", () => {
+    expect(filterAndRankJobs(jobs, { minScore: 10 })).toEqual([]);
+  });
+});
+
+describe("search tool", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  const searchTool = TOOLS.find((t) => t.name === "search")!;
+
+  function setupSidecar(date: string, jobs: StoredJob[]): { dir: string; profile: Record<string, unknown> } {
+    const dir = mkdtempSync(join(tmpdir(), "jobserve-rss-search-"));
+    tempDirs.push(dir);
+    writeFileSync(join(dir, `${date}-js-rss-data.json`), serializeSidecar(jobs), "utf-8");
+    return { dir, profile: { output_dir: dir } };
+  }
+
+  it("reads the sidecar for the given date and returns ranked jobs", async () => {
+    const date = "2026-05-15";
+    const jobs = [
+      makeStored({ guid: "a", title: "Mid", score: 5 }),
+      makeStored({ guid: "b", title: "Top", score: 9 }),
+      makeStored({ guid: "c", title: "Low", score: 1 }),
+    ];
+    const { profile } = setupSidecar(date, jobs);
+
+    const result = await searchTool.handler({ date }, {}, profile, {});
+
+    expect(result.date).toBe(date);
+    expect(result.total_in_file).toBe(3);
+    expect(result.returned).toBe(3);
+    const returned = result.jobs as StoredJob[];
+    expect(returned.map((j) => j.title)).toEqual(["Top", "Mid", "Low"]);
+  });
+
+  it("applies minScore and maxItems", async () => {
+    const date = "2026-05-15";
+    const jobs = [
+      makeStored({ guid: "a", title: "Mid", score: 5 }),
+      makeStored({ guid: "b", title: "Top", score: 9 }),
+      makeStored({ guid: "c", title: "Low", score: 1 }),
+      makeStored({ guid: "d", title: "AlsoTop", score: 8 }),
+    ];
+    const { profile } = setupSidecar(date, jobs);
+
+    const result = await searchTool.handler(
+      { date, minScore: 5, maxItems: 2 },
+      {},
+      profile,
+      {},
+    );
+
+    expect(result.returned).toBe(2);
+    expect(result.total_in_file).toBe(4);
+    expect((result.jobs as StoredJob[]).map((j) => j.title)).toEqual(["Top", "AlsoTop"]);
+  });
+
+  it("returns an empty result with a message when the sidecar is missing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jobserve-rss-search-empty-"));
+    tempDirs.push(dir);
+
+    const result = await searchTool.handler(
+      { date: "2026-05-15" },
+      {},
+      { output_dir: dir },
+      {},
+    );
+
+    expect(result.total_in_file).toBe(0);
+    expect(result.returned).toBe(0);
+    expect(result.jobs).toEqual([]);
+    expect(String(result.message)).toContain("No sidecar at");
+  });
+
+  it("rejects a non-ISO date", async () => {
+    const result = await searchTool.handler({ date: "yesterday" }, {}, {}, {});
+    expect(String(result.error)).toContain("YYYY-MM-DD");
   });
 });
 

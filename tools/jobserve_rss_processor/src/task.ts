@@ -17,6 +17,7 @@
 import { existsSync, readFileSync } from "node:fs";
 
 import TurndownService from "turndown";
+import { z } from "zod";
 
 import type { Clients } from "./tools.js";
 import { webFetch } from "./tools.js";
@@ -758,19 +759,72 @@ async function processFeed(
 }
 
 // ---------------------------------------------------------------------------
-// Tool: search (stub — not yet implemented)
+// Tool: search — query a date's sidecar by score
 // ---------------------------------------------------------------------------
 
+const DEFAULT_SEARCH_MAX_ITEMS = 50;
+
+/** Filter to jobs scoring at or above `minScore`, sort by score descending
+ *  (newest pubDate breaks ties), and cap to `maxItems`. Pure for testability. */
+export function filterAndRankJobs(
+  jobs: StoredJob[],
+  options: { minScore?: number; maxItems?: number },
+): StoredJob[] {
+  const min = options.minScore ?? 0;
+  const cap = options.maxItems ?? DEFAULT_SEARCH_MAX_ITEMS;
+  return jobs
+    .filter((j) => j.score >= min)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const aT = new Date(a.pubDate).getTime() || 0;
+      const bT = new Date(b.pubDate).getTime() || 0;
+      return bT - aT;
+    })
+    .slice(0, cap);
+}
+
 async function search(
-  _input: Record<string, unknown>,
+  input: Record<string, unknown>,
   _clients: Clients,
-  _profile: Record<string, unknown>,
-  _config: Record<string, unknown>,
+  profile: Record<string, unknown>,
+  config: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
+  const p = profile as Profile;
+  const outputDir = (p.output_dir ?? ".").replace(/[\\/]+$/, "");
+  const date = typeof input.date === "string" ? input.date : "";
+  const minScore = typeof input.minScore === "number" ? input.minScore : 0;
+  const maxItems =
+    typeof input.maxItems === "number" && input.maxItems > 0
+      ? Math.floor(input.maxItems)
+      : DEFAULT_SEARCH_MAX_ITEMS;
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return { error: `date must be a YYYY-MM-DD string; got ${JSON.stringify(input.date)}.` };
+  }
+
+  const dataPath = resolveOutputPath(`${outputDir}/${date}-js-rss-data.json`, config);
+  const raw = readIfExists(dataPath);
+  if (!raw) {
+    return {
+      date,
+      data_path: dataPath,
+      total_in_file: 0,
+      returned: 0,
+      jobs: [],
+      message: `No sidecar at ${dataPath}.`,
+    };
+  }
+
+  const all = parseSidecar(raw);
+  const jobs = filterAndRankJobs(all, { minScore, maxItems });
   return {
-    message:
-      "search is not yet implemented. Intent: search the saved JobServe job " +
-      "records (the .json sidecars under jobsearch/results/) by keyword.",
+    date,
+    data_path: dataPath,
+    total_in_file: all.length,
+    returned: jobs.length,
+    min_score: minScore,
+    max_items: maxItems,
+    jobs,
   };
 }
 
@@ -792,8 +846,31 @@ export const TOOLS = defineTools([
   {
     name: "search",
     description:
-      "Search saved JobServe job records by keyword (stub — not yet implemented).",
-    inputSchema: {},
+      "Search saved JobServe job records for a given date. Reads the " +
+      "YYYY-MM-DD-js-rss-data.json sidecar in the configured output_dir, " +
+      "filters to jobs scoring at or above minScore, sorts by score descending, " +
+      "and returns up to maxItems entries with full job data (title, link, " +
+      "location, rate, score, reason, cover letter, description).",
+    inputSchema: {
+      date: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "date must be in YYYY-MM-DD format")
+        .describe("Date of the sidecar file to read, in YYYY-MM-DD format."),
+      minScore: z
+        .number()
+        .min(0)
+        .max(10)
+        .optional()
+        .describe("Minimum job score (0-10) to include. Defaults to 0 (no floor)."),
+      maxItems: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          `Maximum number of jobs to return, ordered by score desc. Defaults to ${DEFAULT_SEARCH_MAX_ITEMS}.`,
+        ),
+    },
     handler: search,
   },
 ]);
