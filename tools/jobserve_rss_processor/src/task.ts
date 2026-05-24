@@ -22,16 +22,15 @@ import type { Clients } from "./tools.js";
 import { webFetch } from "./tools.js";
 import { writeFile, resolveOutputPath } from "../../_runtime/src/utils.js";
 import { createMessage } from "../../_runtime/src/llm.js";
+import { defineTools } from "../../_runtime/src/tool-def.js";
 
 // `web` is declared so a live feed URL works with no code change — the current
 // sample-file path needs no server, but connecting an unused one is harmless.
 export const SERVERS: string[] = ["web"];
-export const TOOL_NAME = "jobserve_rss_processor";
-export const TOOL_DESCRIPTION =
-  "Reads job items from a JobServe RSS feed and rebuilds a score-banded markdown report per " +
-  "date — each new job gets an LLM suitability score (0-10), a rank reason, and a brief cover " +
-  "letter judged against a CV. Idempotent: jobs already recorded are never re-scored.";
-export const TOOL_INPUT_SCHEMA = {};
+export const SERVER_NAME = "jobserve_rss_processor";
+
+// The exposed MCP tools are declared at the bottom of this file as `TOOLS`.
+// Per-tool name / description / inputSchema live there alongside their handler.
 
 // ---------------------------------------------------------------------------
 // Types
@@ -591,8 +590,8 @@ async function readRssSource(clients: Clients, src: string): Promise<string> {
 // Entry point
 // ---------------------------------------------------------------------------
 
-export async function handleTool(
-  _input: Record<string, never>,
+async function processFeed(
+  _input: Record<string, unknown>,
   clients: Clients,
   profile: Record<string, unknown>,
   config: Record<string, unknown>,
@@ -757,3 +756,44 @@ export async function handleTool(
     capped_at_max_jobs: capped,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Tool: search (stub — not yet implemented)
+// ---------------------------------------------------------------------------
+
+async function search(
+  _input: Record<string, unknown>,
+  _clients: Clients,
+  _profile: Record<string, unknown>,
+  _config: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return {
+    message:
+      "search is not yet implemented. Intent: search the saved JobServe job " +
+      "records (the .json sidecars under jobsearch/results/) by keyword.",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Exposed tools
+// ---------------------------------------------------------------------------
+
+export const TOOLS = defineTools([
+  {
+    name: "process_feed",
+    description:
+      "Reads job items from a JobServe RSS feed and rebuilds a score-banded " +
+      "markdown report per date — each new job gets an LLM suitability score " +
+      "(0-10), a rank reason, and a brief cover letter judged against a CV. " +
+      "Idempotent: jobs already recorded are never re-scored.",
+    inputSchema: {},
+    handler: processFeed,
+  },
+  {
+    name: "search",
+    description:
+      "Search saved JobServe job records by keyword (stub — not yet implemented).",
+    inputSchema: {},
+    handler: search,
+  },
+]);
