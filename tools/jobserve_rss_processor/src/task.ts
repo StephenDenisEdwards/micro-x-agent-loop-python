@@ -572,9 +572,13 @@ export function buildBandedReport(date: string, jobs: StoredJob[]): string {
 // RSS source
 // ---------------------------------------------------------------------------
 
+// JobServe RSS feeds are 200-300 KB; pass a generous cap so web_fetch's
+// default (50 000 chars) does not silently truncate the feed mid-item.
+const FEED_MAX_CHARS = 1_000_000;
+
 async function readRssSource(clients: Clients, src: string): Promise<string> {
   if (/^https?:\/\//i.test(src)) {
-    const res = await webFetch(clients, src);
+    const res = await webFetch(clients, src, FEED_MAX_CHARS);
     if (!res || res.status_code >= 400) {
       throw new Error(`feed fetch failed (HTTP ${res?.status_code ?? "no response"})`);
     }
