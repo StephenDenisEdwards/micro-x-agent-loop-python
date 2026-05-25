@@ -101,6 +101,22 @@ python -m micro_x_agent_loop --server http://host:port    # Connect CLI to remot
 - **Per-session agents** — `AgentManager` creates, caches, and evicts Agent instances per session
 - **Broker integration** — optional broker routes for jobs, runs, HITL, and webhooks via `APIRouter`
 
+### Web Frontend (React 19 + TypeScript)
+
+A browser frontend in `web/` that mirrors the Textual TUI — chat log, tool panel, session sidebar, status bar, log panel, command palette, and ask-user modal — and talks to the API server over REST and WebSocket. Built with React 19, TypeScript, and Vite.
+
+```bash
+# 1. Start the agent API server (from the repo root)
+python -m micro_x_agent_loop --server start --broker
+
+# 2. In another shell, run the dev server (proxies /api → 127.0.0.1:8321)
+cd web
+npm install
+npm run dev          # http://127.0.0.1:5173
+```
+
+Unit tests run via Vitest; end-to-end tests run via Playwright against a JavaScript-level mock WebSocket harness, so no Python backend is required for the e2e suite. See [web/README.md](web/README.md).
+
 ### Sub-Agents
 
 The agent can spawn sub-agents for parallel research and exploration via the `spawn_subagent` pseudo-tool. Sub-agents run as independent agent instances with their own context window, configured for specific tasks:
@@ -167,27 +183,38 @@ Every tool is an MCP server. Add capabilities by pointing the config at any MCP-
 
 ## Tool Ecosystem
 
+### Native In-Process Tools (Python)
+
+Hot, frequently-called core primitives run as native Python `Tool`-protocol objects — no MCP transport overhead, testable with plain pytest. See [ADR-025](documentation/docs/architecture/decisions/ADR-025-native-core-tools-mcp-for-subsystems.md) (which amends ADR-015).
+
+| Tool group | Capabilities |
+|------------|-------------|
+| **system-info** | OS/CPU/memory info, disk usage, network interfaces |
+| **filesystem** | `read`, `write`, `edit`, `append`, `grep`, `glob`, `bash`, `save_memory` |
+
 ### First-Party MCP Servers (TypeScript)
 
 | Server | Capabilities |
 |--------|-------------|
-| **filesystem** | Shell commands, file read/write/append, persistent memory |
 | **web** | URL fetching, Brave web search |
 | **linkedin** | Job search and job detail retrieval |
 | **github** | PRs, issues, code search, file access, repo listing |
 | **google** | Gmail (search/read/send), Calendar (list/create/get), Contacts (full CRUD) |
 | **anthropic-admin** | API usage and cost reporting |
 | **interview-assist** | 14 tools for transcription analysis, STT sessions, and evaluation workflows |
+| **devto** | Dev.to article drafting, publishing, and management |
+| **reddit** | Reddit post drafting, publishing, and community management |
+| **x-twitter** | X (Twitter) tweet/thread drafting, publishing, and analytics |
+| **echo** | Simple connectivity test for MCP clients |
 | **codegen** _(experimental)_ | Python code generation from templates via a mini agentic loop |
 
 ### Third-Party MCP Servers
 
 | Server | Capabilities |
 |--------|-------------|
-| **[system-info](https://github.com/StephenDenisEdwards/mcp-servers)** (.NET) | OS/CPU/memory info, disk usage, network interfaces |
 | **[whatsapp](https://github.com/lharries/whatsapp-mcp)** (Go + Python) | Contact search, chat history, message sending, media transfer |
 
-Tool names are prefixed as `{server}__{tool}` (e.g., `filesystem__bash`). See [ADR-015](documentation/docs/architecture/decisions/ADR-015-all-tools-as-typescript-mcp-servers.md).
+MCP tool names are prefixed as `{server}__{tool}` (e.g., `web__web_fetch`); native tools use their bare name. See [ADR-015](documentation/docs/architecture/decisions/ADR-015-all-tools-as-typescript-mcp-servers.md) and [ADR-025](documentation/docs/architecture/decisions/ADR-025-native-core-tools-mcp-for-subsystems.md).
 
 ## Experimental Features
 
@@ -286,14 +313,16 @@ graph TD
 
     subgraph McpServers["MCP Servers"]
         direction TB
-        FS["filesystem<br/>bash, read_file, write_file,<br/>append_file, save_memory"]
         Web["web<br/>web_fetch, web_search"]
         LI["linkedin<br/>linkedin_jobs, linkedin_job_detail"]
         GH["github<br/>8 tools"]
         Google["google<br/>12 tools"]
         Admin["anthropic-admin<br/>anthropic_usage"]
         IA["interview-assist<br/>14 tools"]
-        Codegen["codegen (Python)<br/>generate_code"]
+        DevTo["devto<br/>article drafting/publishing"]
+        Reddit["reddit<br/>post drafting/publishing"]
+        XTw["x-twitter<br/>tweet/thread drafting"]
+        Codegen["codegen<br/>generate_code"]
     end
 
     McpMgr --> McpServers
@@ -398,6 +427,7 @@ sequenceDiagram
 src/micro_x_agent_loop/
   __main__.py              -- Entry point: loads config, displays logo, starts REPL
   agent.py                 -- Agent orchestrator: conversation state, commands, turn delegation
+  agent_builder.py         -- AgentBuilder: composes Agent + dependencies from config
   agent_channel.py         -- AgentChannel protocol + implementations (Terminal, Buffered, Broker)
   agent_config.py          -- Configuration dataclass (~55 fields)
   app_config.py            -- Config file parsing (config.json → AppConfig)
@@ -411,6 +441,7 @@ src/micro_x_agent_loop/
   tool.py                  -- Tool Protocol + ToolResult dataclass
   tool_result_formatter.py -- Structured → text formatting (json, table, text, key_value)
   system_prompt.py         -- System prompt text with conditional directives
+  system_prompt_builder.py -- Composes the system prompt from config + directives
   compaction.py            -- Conversation compaction strategies (none, summarize)
   llm_client.py            -- Shared utilities (Spinner, retry callback)
   provider.py              -- LLMProvider Protocol definition (includes family property)
@@ -418,8 +449,11 @@ src/micro_x_agent_loop/
   semantic_classifier.py   -- Three-stage classifier: rules → keywords → LLM
   task_taxonomy.py         -- TaskType enum (9 types), cost tier classification
   routing_feedback.py      -- SQLite-backed routing outcome recording, adaptive thresholds
+  routing_strategy.py      -- Routing policies and per-policy overrides
   embedding.py             -- Ollama embedding client, vector index, cosine similarity
   sub_agent.py             -- SubAgentRunner: agent types (explore/summarize/general)
+  terminal_prompter.py     -- REPL prompt rendering (you> prompt, multi-line input)
+  terminal_renderer.py     -- Streaming text rendering to the terminal
   tasks/
     models.py              -- Task, TaskStatus, ClaimResult, AgentStatus dataclasses
     store.py               -- TaskStore: SQLite CRUD, deps, HWM, claiming (.micro_x/tasks.db)
@@ -434,6 +468,13 @@ src/micro_x_agent_loop/
   logging_config.py        -- LogConsumer Protocol + console/file implementations
   voice_runtime.py         -- Voice mode: continuous STT via MCP sessions
   voice_ingress.py         -- VoiceIngress Protocol + PollingVoiceIngress
+  native_tools/            -- Native in-process Python tools (ADR-025)
+    system_info.py         -- system_info: OS/CPU/memory/disk/network
+    filesystem/            -- read/write/edit/append, grep, glob, bash, save_memory
+  cli/
+    repl.py                -- Interactive REPL loop
+    dispatch.py            -- One-shot --run dispatch
+    esc_watcher.py         -- Escape-key interrupt handler
   providers/
     anthropic_provider.py  -- Anthropic SDK (family: "anthropic")
     openai_provider.py     -- OpenAI SDK (family: "openai")
@@ -497,16 +538,20 @@ src/micro_x_agent_loop/
 mcp_servers/ts/            -- TypeScript MCP servers (npm workspaces monorepo)
   packages/
     shared/                -- @micro-x-ai/mcp-shared (validation, logging, errors, retry)
-    filesystem/            -- bash, read_file, write_file, append_file, save_memory
+    filesystem/            -- (legacy) bash, read_file, write_file, append_file, save_memory
     web/                   -- web_fetch, web_search
     linkedin/              -- linkedin_jobs, linkedin_job_detail
     github/                -- 8 GitHub tools (via Octokit)
     google/                -- 12 Google tools (Gmail, Calendar, Contacts via googleapis)
     anthropic-admin/       -- anthropic_usage
     interview-assist/      -- 14 tools (ia_* + stt_*)
+    devto/                 -- Dev.to article drafting and publishing
+    reddit/                -- Reddit post drafting and community tools
+    x-twitter/             -- X (Twitter) tweet/thread drafting and analytics
+    echo/                  -- Connectivity test server
 ```
 
-All tools are TypeScript MCP servers — the Python agent loop is a pure MCP orchestrator. The system-info MCP server lives in the separate [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) repository.
+Core primitives (system-info, filesystem) run as native in-process Python tools per [ADR-025](documentation/docs/architecture/decisions/ADR-025-native-core-tools-mcp-for-subsystems.md); external integrations and isolatable subsystems (codegen) remain MCP servers.
 
 ## Dependencies
 
@@ -560,7 +605,7 @@ Full documentation is available in [documentation/docs/](documentation/docs/inde
 - [Configuration Reference](documentation/docs/operations/config.md) — all settings with types and defaults
 - [Task Decomposition Design](documentation/docs/design/DESIGN-task-decomposition.md) — task tools, storage, hooks, multi-agent coordination, TUI
 - [Semantic Routing Design](documentation/docs/design/DESIGN-semantic-model-routing.md) — classifier pipeline, routing policies, feedback loop
-- [Architecture Decision Records](documentation/docs/architecture/decisions/README.md) — index of all 22 ADRs
+- [Architecture Decision Records](documentation/docs/architecture/decisions/README.md) — index of all 25 ADRs
 
 ## See Also
 
