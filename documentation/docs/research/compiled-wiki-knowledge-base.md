@@ -1,5 +1,10 @@
 # Compiled-Wiki Knowledge Base Pattern
 
+## Links
+https://x.com/karpathy/status/2039805659525644595?s=46&t=so-d50SiR5Zy2uoiwnsjnw
+
+https://youtu.be/ib74sLgjIBM?si=O6IPy4u_1UTBx2Du 
+
 Research notes on the Karpathy-style "compiled wiki" / context-engineering pattern and how it maps onto the micro-x-agent-loop architecture.
 
 ## Background
@@ -211,13 +216,103 @@ The router `INDEX.md` is the choke point once subjects grow past ~10. Keep it bo
 5. **Contradiction handling is socially hard.** The compiler will produce false-positive contradictions; plan for HITL review via the broker's existing question/answer flow.
 6. **Pattern A subdirectories scale further than expected** — the filesystem provides the isolation people think they need, and `CLAUDE.md` discipline is usually sufficient.
 
+## External reference implementation — Claude CoWork Knowledge Base Kit
+
+A drop-in starter kit published by Systems Made Better (`bettercreating.com`) implements the same Karpathy pattern as a Claude CoWork extension. It is opinionated where this research is deliberately open. Several of its choices fill gaps in the architecture above and are worth adopting wholesale rather than reinventing.
+
+The kit ships:
+
+- `KNOWLEDGE/CLAUDE.md` — top-level librarian operating manual.
+- `KNOWLEDGE/_KB_CLAUDE_TEMPLATE.md` — per-KB CLAUDE.md template.
+- `KNOWLEDGE/_SCHEDULED_TASK_TEMPLATE.md` — monthly health-check setup one-pager.
+- `knowledge-base-health-check-skill.skill` — the consolidation/audit skill itself.
+
+### Three-folder split on disk
+
+CoWork puts RAW on the filesystem alongside Wiki, not in the agent's memory DB:
+
+```
+KNOWLEDGE/[topic]_kb/
+├── CLAUDE.md          — per-KB librarian rules
+├── CHANGELOG.md       — running log; top entry = current state
+├── RAW/
+│   └── _INGESTED.md   — registry of every source
+├── Wiki/
+│   ├── INDEX.md
+│   ├── QUESTIONS.md   — open threads, gaps, held tensions
+│   └── *.md           — articles
+└── Outputs/           — dated question reports with citations
+```
+
+This makes provenance verifiable by humans, not only the agent. RAW is verbatim and never edited after ingest — the rule that makes everything else trustworthy.
+
+### A new layer: Outputs
+
+CoWork adds a layer the five-layer architecture lacks. Every question becomes a dated report (`YYYY-MM-DD_query-slug.md`) under `Outputs/`, with citations back to the Wiki articles and RAW sources it drew on. Strong reports get promoted back into the Wiki. This closes the loop that *Key insight 4* (wiki rot) gestures at — synthesis is replayed and re-fed, not just compiled and abandoned.
+
+### Concrete conventions worth importing
+
+| Concern | CoWork's answer |
+|---------|-----------------|
+| KB folder name | `[topic]_kb` (snake_case, suffix-anchored) |
+| Article filename | kebab-case, lowercase (`deep-work.md`) |
+| Backlinks | `[[topic-name]]` matching the filename |
+| RAW frontmatter | `title, author, source_url, date_added, date_published, type, tags` |
+| Wiki frontmatter | `Status, Last updated, Sources, Summary, Body, Related, Open Questions` |
+| Article trust level | `established` / `emerging` / `speculative` |
+| Promotion rule | `emerging → established` requires ≥2 independent supporting sources |
+| Claim provenance | Every Wiki claim traces to ≥1 RAW source, or the article is marked `speculative` |
+| Cut-off for next compile | `_INGESTED.md` — registry timestamp per RAW file |
+| Writing rules | Loaded from workspace-level `ABOUT ME/writing-rules.md`; navigation files exempt |
+
+### Contradictions are embraced, not reconciled
+
+This research lists contradiction handling as an open question requiring HITL. CoWork resolves it: when two articles disagree, add `**Counterpoint:** [[other-article]] argues...` to each, and log the tension under a "Held tensions" heading in `QUESTIONS.md`. Two well-sourced articles disagreeing is a feature, not a defect. No reconciliation attempt — the corpus is allowed to hold opposing positions.
+
+### Inverted defaults for question vs. drafting
+
+- **Question answering**: Wiki first, RAW second, web search *offered* but never run automatically. Conserves the corpus.
+- **Article drafting**: web search freely; primary sources land in `RAW/` first (with full frontmatter, registered in `_INGESTED.md`) before the Wiki article cites them. Expands the corpus.
+
+Same agent, opposite default, depending on whether the operation is read or write.
+
+### The consolidation skill
+
+The health-check skill is a concrete instance of Option 1 / Option 2 in this research's "Implementation options" section. Its operational details transfer directly:
+
+- **Skip-if-no-changes precondition** — if the top `CHANGELOG.md` entry is itself a health check with no compile or new output since, the run writes a skip line and stops. Free in the common case.
+- **Delta vs. full audit cadence** — delta most months; full audit on the 1st of Jan/Apr/Jul/Oct.
+- **Auto-fix categories**: writing-rules violations, broken backlinks, em-dash bullet patterns, orphan RAW registration, `emerging → established` promotions, contradiction cross-references, gap mirroring into `QUESTIONS.md`.
+- **Flag-only categories** (no auto-action): out-of-scope RAW, output promotion candidates, stale articles needing voice rewrites, ambiguous banned-word swaps.
+- **Hard cap of 3 auto-drafted articles per run** with explicit "Article candidate held — insufficient evidence" logging in lieu of fabrication.
+- **One sub-agent per KB at run time** — keeps token use linear in KB count rather than quadratic in corpus size.
+
+The last point maps directly onto `SubAgentRunner`: a `consolidator` sub-agent type per KB, spawned in parallel, each scoped to one subject.
+
+### Multi-KB convention
+
+CoWork resolves the Pattern A / Pattern B tension by hybridising them. One `KNOWLEDGE/` root contains many `[topic]_kb/` subdirectories (Pattern A), but each has its own `CLAUDE.md` (a Pattern B trait). Cross-KB queries aren't a built-in feature — they're a user move, asking the librarian to consult multiple KBs explicitly. This pushes the boundary discipline into per-KB `CLAUDE.md` files rather than the filesystem.
+
+### What CoWork doesn't address that we still need
+
+- **Pre-turn auto-injection** (Option 3). CoWork is fully agent-driven — the user (or scheduled task) triggers reads and writes. There is no context engine that pulls Wiki pages before each turn.
+- **Embedding-backed retrieval** over Wiki pages. CoWork relies on filename and `INDEX.md` lookup — fine at small scale, gets brittle past dozens of articles.
+- **Cache-stability strategy** for prepending Wiki content to system prompts.
+
+These remain open for our implementation.
+
 ## Open questions
 
 - **Cache interaction:** Pre-turn auto-injection (Option 3) changes the system-prompt prefix per turn. Does it break the prompt-caching prefix? Would the pages need to live in a cached-suffix slot instead?
-- **What does the consolidator read?** `memory.db` events directly? A pre-filtered "recent activity" digest? A high-water mark per page?
-- **Schema enforcement:** strict frontmatter is fragile (LLM occasionally mangles). Soft conventions + a periodic "wiki-lint" job?
-- **Cross-wiki linking:** under Pattern A, can entities in `work/` legitimately link to entities in `research/`? How is the boundary policed?
+- **Cross-wiki linking:** under Pattern A, can entities in `work/` legitimately link to entities in `research/`? How is the boundary policed? CoWork sidesteps this by treating each KB as standalone — does that scale to our use cases?
 - **Migration path:** if a user starts with Pattern A and one subject grows into Pattern B, how is the existing subject directory promoted to its own project root cleanly?
+- **Embedding layer over Wiki:** at what corpus size does `INDEX.md` + filename lookup stop being enough? When do we need `embedding.py` over Wiki pages?
+
+### Resolved by external reference implementations
+
+- ~~**What does the consolidator read?**~~ → `_INGESTED.md` provides a per-RAW-file cut-off; `CHANGELOG.md` top entry provides a per-KB cut-off.
+- ~~**Schema enforcement** for fragile frontmatter?~~ → A periodic "wiki-lint" pass (the CoWork health check) auto-fixes routine drift and flags the rest. Confirmed viable.
+- ~~**Contradiction handling**~~ → Don't reconcile; cross-reference and log under "Held tensions". Avoids the HITL bottleneck entirely.
 
 ## References (external)
 
@@ -225,6 +320,7 @@ The router `INDEX.md` is the choke point once subjects grow past ~10. Keep it bo
 - VentureBeat breakdown of the compiled-wiki architecture (2026).
 - DAIR.AI summary of context engineering.
 - Emerging academic discussion around "companion knowledge systems".
+- **Claude CoWork Knowledge Base Kit v1** (Systems Made Better / bettercreating.com) — drop-in starter kit implementing the pattern as a CoWork extension. Local copy at `C:\Users\steph\source\repos\Claude-CoWork-Knowledge-Base-Kit_v1\`. Includes `Get-Started-Guide.pdf`, `KNOWLEDGE/CLAUDE.md`, `_KB_CLAUDE_TEMPLATE.md`, `_SCHEDULED_TASK_TEMPLATE.md`, and the `knowledge-base-health-check-skill.skill` bundle.
 
 ## Related project documents
 
