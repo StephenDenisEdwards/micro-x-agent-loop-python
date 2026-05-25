@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-05-15 (Added Behavioural Eval Suite plan — implements ISSUE-007 Option A, DIY pytest first / Inspect AI deferred to optional Phase 4; gates the deferred web_fetch/routing fix behind a failing eval)
+Last updated: 2026-05-25 (Added Compiled-Wiki KB plan as a Research-status placeholder — Karpathy-style context-engineering / compiled-wiki pattern; zero-code MVP recommended before any implementation work)
 
 ## Priority Queue
 
@@ -77,6 +77,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | Draft | 1 |
 | Dropped | 1 |
 | Planned | 6 |
+| Research | 1 |
 
 ## All Plans
 
@@ -127,3 +128,4 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | In Progress | Phase 1 code-complete (shared + echo). 6 phases: canary, worked example (`google`), fan out, automate. |
 | [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | Completed | Resolved [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). All 4 phases delivered: SSE/HTTP transport in `mcp_manager.py`, env-var-driven client in `_runtime/mcp-client.ts`, `MICRO_X_<NAME>_MCP_URL` injection in codegen `run_task`, config flip + Windows process-tree termination fix. |
 | [JobServe MCP Server](PLAN-jobserve-mcp.md) | Planned | Hand-written first-party MCP server for the JobServe apply flow. Replaces the failed codegen-driven `tools/jobserve_apply/` experiment with the same pattern used by gmail/linkedin/web/github MCPs. |
+| [Compiled-Wiki Knowledge Base](PLAN-compiled-wiki-kb.md) | Research | Placeholder reminder — Karpathy-style "compiled wiki" / context-engineering pattern. See [compiled-wiki-knowledge-base.md](../research/compiled-wiki-knowledge-base.md). Zero-code MVP (manual habit + `wiki/` dir + `CLAUDE.md` directive) recommended before any implementation. |

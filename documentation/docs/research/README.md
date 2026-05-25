@@ -28,6 +28,7 @@ Research notes exploring agent loop frameworks and patterns, gathered as referen
 | [local-model-hardware-options.md](local-model-hardware-options.md) | *(infrastructure)* | Local model inference: hardware options, cloud GPU pricing, qwen2.5:7b findings, cost comparison |
 | [1-bit-llm-research.md](1-bit-llm-research.md) | *(quantization / inference)* | 1-bit and ultra-low-bit LLMs: BitNet, Bonsai, training techniques, hardware, energy, speculative decoding, and implications for cost-aware agent routing |
 | [trajectory-to-code-mcp-transcription.md](trajectory-to-code-mcp-transcription.md) | *(codegen / agent patterns)* | Evaluating the codegen pattern — agent runs against MCPs, then transcribes the trajectory into code against the same MCP surface. Behavioural-cloning critique, benefit accounting, drift-canary contract, relation to the evals harness, and the imitation-learning / PBD literature |
+| [compiled-wiki-knowledge-base.md](compiled-wiki-knowledge-base.md) | *(memory / context engineering)* | Karpathy-style "compiled wiki" pattern. Five-layer reference architecture, fit with micro-x-agent-loop, four ambition levels (manual habit → cron consolidation → wiki_store + retrieval → pre-turn auto-injection), multi-subject management. Notes that zero-code MVP captures most of the value. Tracked by [PLAN-compiled-wiki-kb.md](../planning/PLAN-compiled-wiki-kb.md) |
 
 ## Related
 
