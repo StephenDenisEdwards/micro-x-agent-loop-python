@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-05-26 (Gemma Model Support plan revised to centre on `gemma3:4b` for 4GB-VRAM local use; added concrete wire-format and `<tool_call>` failure-mode mitigations for Ollama)
+Last updated: 2026-05-26 (Gemma Model Support plan revised against codebase audit: drops `ToolSearchMaxTools` in favour of existing `ToolSearchMaxLoad`; reframes `SystemPromptCompact` as exposing the existing compact prompt as explicit config rather than building it from scratch; drops the unknown-tool-name rejection deliverable since it already exists at `turn_engine.py:397`; corrects `MODEL_CONTEXT_WINDOW` reference to `TOOL_SEARCH_CONTEXT_WINDOWS`)
 
 ## Priority Queue
 
@@ -125,7 +125,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | [Semantic Model Routing](PLAN-semantic-model-routing.md) | Completed | Cross-provider semantic routing with 3-stage classifier, provider pool, cache-aware dispatch, feedback loop. Completed 2026-03-21 |
 | [Routing Simplification](PLAN-routing-simplification.md) | In Progress | Bug fixes applied 2026-03-22; architectural simplification pending |
 | [Local Model Ecosystems](PLAN-local-model-ecosystems.md) | Planned | Generic openai-compatible provider for vLLM, LM Studio, LocalAI, llama.cpp, Jan, TGI, MLX |
-| [Gemma Model Support](PLAN-gemma-model-support.md) | Draft | Gemma 2/3 across Ollama / OpenAI-compatible / Google AI paths. **Headline local target `gemma3:4b`** (4GB VRAM). Tool calling is the central gap (no native function-call grammar); Phase 2 mitigations cap exposed tools ≤12 and parse `<tool_call>` XML failure modes. Phase 1 reuses GeminiProvider for hosted Gemma 3; Phase 4 native GemmaProvider deferred |
+| [Gemma Model Support](PLAN-gemma-model-support.md) | Draft | Gemma 2/3 across Ollama / OpenAI-compatible / Google AI paths. **Headline local target `gemma3:4b`** (4GB VRAM). Tool calling is the central gap (no native function-call grammar); Phase 2 mitigations cap exposed tools via existing `ToolSearchMaxLoad: 12` and parse `<tool_call>` XML failure modes. Phase 1 reuses GeminiProvider for hosted Gemma 3; Phase 4 native GemmaProvider deferred. Revised against codebase audit — most of Phase 2 work is config-surface plumbing, not new behaviour |
 | [Textual TUI](PLAN-textual-tui.md) | Completed | Opt-in Textual-based TUI (`--tui`), all 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md). Completed 2026-04-02 |
 | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | In Progress | Phase 1 code-complete (shared + echo). 6 phases: canary, worked example (`google`), fan out, automate. |
 | [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | Completed | Resolved [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). All 4 phases delivered: SSE/HTTP transport in `mcp_manager.py`, env-var-driven client in `_runtime/mcp-client.ts`, `MICRO_X_<NAME>_MCP_URL` injection in codegen `run_task`, config flip + Windows process-tree termination fix. |
