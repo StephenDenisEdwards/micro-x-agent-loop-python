@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-05-25 (Added Compiled-Wiki KB plan as a Research-status placeholder — Karpathy-style context-engineering / compiled-wiki pattern; zero-code MVP recommended before any implementation work)
+Last updated: 2026-05-26 (Added Gemma Model Support plan as Draft — covers Gemma 3 across Ollama / OpenAI-compatible / Google AI runtime paths, with tool-calling gaps as the central concern)
 
 ## Priority Queue
 
@@ -39,6 +39,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | **26** | [JobServe MCP Server](PLAN-jobserve-mcp.md) | Planned | — | — | Replaces the failed `tools/jobserve_apply/` codegen experiment with a hand-written first-party MCP server that wraps the JobServe apply flow. Same architectural pattern as gmail/linkedin/web/github MCPs. ~1.5–2 days. |
 | **27** | [Behavioural Eval Suite](PLAN-behavioural-eval-suite.md) | Planned | — | — | Implements [ISSUE-007](../issues/ISSUE-007-prose-contract-drift-across-policy-layers.md) Option A as DIY pytest + `BufferedChannel` (Inspect AI deferred to optional Phase 4 — reversal rationale recorded in plan/issue). Phases 0–1 (harness + first regression eval) close the open ISSUE-007 web_fetch/routing tail behind a failing test. Highest-leverage mitigation for prose-contract drift; gates future directive/MCP/routing changes green-red. |
 | **28** | [Codegen Multi-Tool](PLAN-codegen-multi-tool.md) | **Completed** | — | — | TypeScript codegen template now supports `TOOLS: ToolDef[]` for multi-tool task apps. Legacy single-tool shape unchanged. Adapter in sealed `index.ts`; `--describe` output keeps singular fields for single-tool back-compat. |
+| **29** | [Gemma Model Support](PLAN-gemma-model-support.md) | Draft | — | — | Make Gemma 2/3 first-class across three runtime paths (Ollama / OpenAI-compatible / Google AI). Tool calling is the central gap — Gemma has no trained-in function-call grammar. Phase 1 reuses the existing GeminiProvider for hosted Gemma 3 (smallest useful change); Phase 4 native GemmaProvider deferred until measured. |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
 <details>
@@ -74,7 +75,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | Review | 1 |
 | Blocked | 1 |
 | Superseded | 1 |
-| Draft | 1 |
+| Draft | 2 |
 | Dropped | 1 |
 | Planned | 6 |
 | Research | 1 |
@@ -124,6 +125,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | [Semantic Model Routing](PLAN-semantic-model-routing.md) | Completed | Cross-provider semantic routing with 3-stage classifier, provider pool, cache-aware dispatch, feedback loop. Completed 2026-03-21 |
 | [Routing Simplification](PLAN-routing-simplification.md) | In Progress | Bug fixes applied 2026-03-22; architectural simplification pending |
 | [Local Model Ecosystems](PLAN-local-model-ecosystems.md) | Planned | Generic openai-compatible provider for vLLM, LM Studio, LocalAI, llama.cpp, Jan, TGI, MLX |
+| [Gemma Model Support](PLAN-gemma-model-support.md) | Draft | Gemma 2/3 across Ollama / OpenAI-compatible / Google AI paths. Tool calling is the central gap (no native function-call grammar). Phase 1 reuses existing GeminiProvider for hosted Gemma 3; Phase 4 native GemmaProvider deferred |
 | [Textual TUI](PLAN-textual-tui.md) | Completed | Opt-in Textual-based TUI (`--tui`), all 5 phases. [ADR-022](../architecture/decisions/ADR-022-textual-tui-for-cli.md). Completed 2026-04-02 |
 | [Publish MCP Servers to npm](PLAN-publish-mcp-servers-to-npm.md) | In Progress | Phase 1 code-complete (shared + echo). 6 phases: canary, worked example (`google`), fan out, automate. |
 | [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | Completed | Resolved [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). All 4 phases delivered: SSE/HTTP transport in `mcp_manager.py`, env-var-driven client in `_runtime/mcp-client.ts`, `MICRO_X_<NAME>_MCP_URL` injection in codegen `run_task`, config flip + Windows process-tree termination fix. |
