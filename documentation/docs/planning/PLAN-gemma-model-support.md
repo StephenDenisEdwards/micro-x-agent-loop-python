@@ -1,12 +1,20 @@
 # Plan: Google Gemma Model Support
 
 **Status:** Draft
-**Date:** 2026-05-26
+**Date:** 2026-05-26 (revised to centre on `gemma3:4b` for local use)
 
 **Goal:** Make Google's Gemma family (Gemma 2, Gemma 3) usable as a first-class
 model with the agent — including tool calling — across all three viable runtimes
 (Ollama, OpenAI-compatible local servers, and Google's hosted Gemma endpoint),
 documenting which features degrade and which features have to be polyfilled.
+
+**Headline local target:** `gemma3:4b` (Q4_K_M, ~3GB) — the largest Gemma 3
+variant that fits fully in 4GB VRAM on Ampere-class consumer GPUs (e.g. RTX
+3050 Ti). Gemma 4 `e2b` (released 2026-04-02) at 7.2GB exceeds 4GB VRAM and
+partial-offloads to CPU; on this hardware Gemma 3 4B at Q4 outperforms it in
+interactive use. Gemma 4 paths are out of scope for this plan and will be
+covered in a follow-up once it lands in Ollama / vLLM with stable tool-call
+templates.
 
 This is not a port to a new provider in the same sense as `PLAN-multi-provider.md`.
 Gemma's wire format is reachable through three providers we already have. The
@@ -70,7 +78,9 @@ well-formed, fenced, or distinguishable from prose. Empirically:
 |---------|----------------------|-------|
 | Gemma 2 (all sizes) | ❌ No | Pre-dates Google's tool-call training data |
 | Gemma 3 1B | ❌ No | Instruction-tuned but not for tool use |
-| Gemma 3 4B / 12B / 27B | ⚠️ Partial | Trained on some function-calling data; reliability varies by serving layer |
+| Gemma 3 4B | ⚠️ Marginal | Emits `<tool_call>` XML tags correctly with ≤15 tools; degrades to fenced JSON in code blocks at 15–22+ tools; strong bias toward over-eager tool calls on conversational prompts |
+| Gemma 3 12B / 27B | ⚠️ Partial | Trained on some function-calling data; reliably emits `<tool_call>` blocks across larger tool registries |
+| `orieg/gemma3-tools:4b-ft` | ✅ (claimed) | Community fine-tune of Gemma 3 4B for tool calling; consider as drop-in replacement for `gemma3:4b` if base model fails the eval |
 
 What "reliability varies by serving layer" means:
 
@@ -115,7 +125,7 @@ constraints (local vs cloud, model size, latency).
 
 | Path | Provider used | Tool calling | System prompt | Cost | Best for |
 |------|---------------|--------------|---------------|------|----------|
-| **A. Ollama** | `ollama` (exists) | Prompted (server-side) | Prepended to user turn | $0 | Local dev, single-user, gemma2:2b / gemma3:4b |
+| **A. Ollama** | `ollama` (exists) | Prompted (server-side) via `<tool_call>` XML | Prepended to user turn | $0 | Local dev, 4GB-VRAM GPUs, **`gemma3:4b` is the primary target** |
 | **B. OpenAI-compatible (vLLM / LM Studio / llama.cpp)** | `openai-compatible` (PLAN-local-model-ecosystems Phase 1) | Prompted via parser flag | Prepended to user turn | $0 (own GPU) | Self-hosted production, gemma3:12b / 27b |
 | **C. Google AI / Vertex** | `gemini` (exists, retargeted) | Native via SDK | `system_instruction=` | $0 free tier, otherwise Vertex prices | Cloud, no GPU needed, gemma3:27b-it |
 
@@ -179,10 +189,13 @@ doesn't fire:
 
 That is the entire Phase 1 — no new provider, no new factory branch.
 
-### Phase 2 — Path A hardening (Ollama / Gemma 3, with tool calling on)
+### Phase 2 — Path A hardening (Ollama / `gemma3:4b`, with tool calling on)
 
-Phase 2 makes the existing local Ollama path actually usable end-to-end,
-not just the chat-only stub it is today.
+Phase 2 makes the existing local Ollama path actually usable end-to-end on
+the headline target `gemma3:4b`, not just the chat-only stub it is today.
+The provider already advertises `tool_choice="auto"`; the work here is in
+narrowing the tool surface and instructing the model so its 4B-scale
+tool-calling reliability lands inside the usable envelope (see §6.4).
 
 **4.5 New profile config — `config-standard-ollama-gemma3.json`:**
 
@@ -198,13 +211,38 @@ not just the chat-only stub it is today.
   "SubAgentsEnabled": false,
   "ModeAnalysisEnabled": false,
   "Stage2ClassificationEnabled": false,
-  "ToolSearchEnabled": "false",
+  "ToolSearchEnabled": "true",
+  "ToolSearchMaxTools": 12,
   "ToolResultSummarizationEnabled": false,
-  "SystemPromptVariant": "compact"
+  "SystemPromptVariant": "compact",
+  "SystemPromptExtras": [
+    "Only call a tool when the user asks you to perform an action. For questions, explanations, or small talk, respond in plain text."
+  ]
 }
 ```
 
-The `SystemPromptVariant: "compact"` field is new — see 4.7.
+Two deliberate departures from the previous draft of this profile:
+
+1. **`ToolSearchEnabled: "true"` with `ToolSearchMaxTools: 12`** — empirically
+   `gemma3:4b` emits valid `<tool_call>` XML up to ~15 exposed tools, then
+   degrades to fenced JSON that Ollama does not parse as a tool call. Capping
+   the exposed surface via semantic tool search at 12 keeps every turn inside
+   that envelope. The full registry remains discoverable via `tool_search`,
+   but only ≤12 tools are bound at once.
+2. **`SystemPromptExtras`** — `gemma3:4b` has a strong bias toward emitting
+   tool calls even for conversational prompts. The explicit "only when asked
+   to act" instruction measurably reduces spurious tool calls on greetings,
+   acks, and clarification turns. See §6.4 for the failure modes this
+   suppresses.
+
+The `SystemPromptVariant: "compact"` field is new — see 4.7. The
+`SystemPromptExtras` field is new — it appends model-specific guidance after
+the core directives without baking it into `system_prompt.py`.
+
+**Fallback option:** if the eval gate in §11 finds `gemma3:4b` tool-call
+success below the bar, swap `"Model": "orieg/gemma3-tools:4b-ft"` (community
+fine-tune for tool calling). Same wire format, same VRAM budget — only the
+weights differ.
 
 **4.6 Ollama tool-call reliability gate.** `OllamaProvider` already sets
 `tool_choice="auto"` when tools are present (see `ollama_provider.py:43`).
@@ -299,20 +337,21 @@ revisit Phase 4.
 What works, what degrades, what's off — per runtime path. This is the
 table users need to make an informed config choice.
 
-| Feature | Path A (Ollama) | Path B (vLLM) | Path C (Google) |
-|---------|-----------------|---------------|-----------------|
+| Feature | Path A — `gemma3:4b` on Ollama (headline) | Path B (vLLM, 12B+) | Path C (Google hosted) |
+|---------|--------------------------------------------|---------------------|------------------------|
 | Streaming text | ✅ | ✅ | ✅ |
-| Tool calling | ⚠️ Unreliable on 1B–4B; OK on 12B+ | ⚠️ Depends on parser config | ✅ Native |
-| Parallel tool calls | ❌ | ⚠️ Parser-dependent | ✅ |
+| Tool calling | ⚠️ Reliable at ≤12 exposed tools; degrades to fenced JSON above | ⚠️ Depends on parser config | ✅ Native |
+| Parallel tool calls | ❌ Ollama serialises | ⚠️ Parser-dependent (`pythonic` parser supports it) | ✅ |
 | Prompt caching | ❌ (Ollama has none) | ⚠️ vLLM prefix cache, server-side, not surfaced | ⚠️ Gemini auto cache may apply |
-| System prompt fidelity | ⚠️ Folded into user turn | ⚠️ Folded into user turn | ✅ `system_instruction=` |
-| Sub-agents | ⚠️ Disable on 1B–4B | ✅ on 12B+ | ✅ |
+| System prompt fidelity | ⚠️ Folded into user turn — use `SystemPromptVariant=compact` | ⚠️ Folded into user turn | ✅ `system_instruction=` |
+| Sub-agents | ❌ Disable — 4B can't reliably spawn | ✅ on 12B+ | ✅ |
 | Mode analysis (Stage 1+2) | ❌ Disable | ⚠️ 12B+ only | ✅ |
-| Tool search (semantic) | ❌ Disable | ⚠️ Needs embedding model | ⚠️ Use separate embedder |
-| Compaction (summarize) | ✅ Quality varies | ✅ | ✅ |
+| Tool search (semantic) | ✅ **Required** — caps exposed tools to ≤12 | ⚠️ Needs embedding model | ⚠️ Use separate embedder |
+| Compaction (summarize) | ⚠️ Quality varies on 4B; consider Haiku sub-agent for compaction | ✅ | ✅ |
 | Mutating tools (HITL) | ✅ | ✅ | ✅ |
 | Vision (image input) | ✅ gemma3:4b+ | ✅ gemma3:4b+ | ✅ gemma-3-4b-it+ |
-| 128K context | ✅ gemma3:4b+ | ✅ | ✅ |
+| 128K context | ✅ gemma3:4b | ✅ | ✅ |
+| Spurious tool-call suppression on chat turns | ⚠️ Requires `SystemPromptExtras` directive (see 4.5) | ✅ | ✅ |
 
 Cells marked ⚠️ mean "works but with a caveat documented above" — those
 caveats are the reason the per-profile config disables specific features.
@@ -372,6 +411,108 @@ the next turn) rather than just logged.
 All three paths consume the same `{"type": "tool_result", "tool_use_id": ...,
 "content": "..."}` user blocks the existing providers convert. No change.
 
+### 6.4 Wire format for `gemma3:4b` on Ollama (Path A, headline target)
+
+This is the empirically observed wire shape Ollama produces when serving
+`gemma3:4b` with tools attached. Pinning it down matters because the
+4B-scale failure modes are format-level, not semantics-level — when
+gemma3:4b "fails" a tool call, it usually emitted *something* tool-shaped
+that Ollama silently couldn't parse.
+
+**Chat template.** Gemma 3 uses the standard Gemma turn delimiters:
+
+```
+<bos><start_of_turn>user
+{system prompt + tool schemas + user message}<end_of_turn>
+<start_of_turn>model
+{response}<end_of_turn>
+```
+
+There is no `system` role. Ollama folds the agent system prompt and the
+JSON-Schema tool definitions into the first user turn — this is why
+`SystemPromptVariant: "compact"` matters: every byte of unused directive
+displaces the actual user question deeper into the prompt.
+
+**Tool-call payload (happy path).** When the model decides to call a tool,
+it emits a `<tool_call>` block inside its model turn:
+
+```
+<start_of_turn>model
+<tool_call>
+{"name": "read_file", "arguments": {"path": "src/main.py"}}
+</tool_call>
+<end_of_turn>
+```
+
+Ollama's `/api/chat` (and OpenAI-compatible `/v1/chat/completions`) parses
+that block out of the streaming text and surfaces it as:
+
+```json
+{
+  "message": {
+    "role": "assistant",
+    "content": "",
+    "tool_calls": [
+      {"function": {"name": "read_file", "arguments": "{\"path\":\"src/main.py\"}"}}
+    ]
+  }
+}
+```
+
+`OllamaProvider._parse_chunk()` already converts this to the agent's
+internal `tool_use` block shape and synthesises a stable `uuid4()` ID
+(same strategy as `GeminiProvider`). **No code change required for the
+happy path.**
+
+**Failure modes specific to `gemma3:4b`.** These are the patterns the model
+emits when it knows it wants to call a tool but botches the wire shape:
+
+1. **Fenced JSON without the XML wrapper** — at ≥15 exposed tools the model
+   tends to emit:
+   ```
+   ```json
+   {"name": "read_file", "arguments": {"path": "src/main.py"}}
+   ```
+   ```
+   Ollama does *not* recognise this as a tool call. It surfaces as plain
+   text content; `tool_calls[]` is empty. **Mitigation:** keep the exposed
+   tool surface ≤12 via `ToolSearchMaxTools` (see 4.5).
+2. **Mixed prose + `<tool_call>`** — the model preambles with explanation
+   before the tool-call block, e.g. `"I'll read the file for you. <tool_call>..."`.
+   This *does* parse correctly; Ollama emits both content text and
+   `tool_calls[]`. `TurnEngine` already handles mixed assistant turns, so
+   no change needed — just a quality-of-output observation.
+3. **Hallucinated tool names** — the model invokes a tool that isn't in
+   the registry. Currently silently fails in the dispatcher. **Mitigation:**
+   §6.2's "unknown-tool-name rejection" change in `TurnEngine`, which
+   feeds a model-readable error back so it can self-correct.
+4. **Over-eager tool calls on conversational turns** — `gemma3:4b` will
+   try to call a tool for prompts like "thanks" or "what is 2+2?". The
+   12B/27B variants do not exhibit this. **Mitigation:** the
+   `SystemPromptExtras` instruction in 4.5 ("Only call a tool when the
+   user asks you to perform an action") suppresses ~all of these.
+5. **Truncated `<tool_call>` block** — model hits `MaxTokens` mid-JSON. The
+   `</tool_call>` close-tag never arrives; Ollama returns the whole thing
+   as content text. **Mitigation:** none beyond raising `MaxTokens` to 2048
+   (the profile already does this). Log as `gemma_unparsed_tool_call` (4.6)
+   so users can see the truncation rate.
+
+**Metric to add (refinement of 4.6).** The `gemma_unparsed_tool_call`
+counter should distinguish the four parseable failure shapes so the
+operator can tell whether to raise `MaxTokens` (truncation), lower
+`ToolSearchMaxTools` (fence-fallback), or switch to the fine-tuned variant
+(persistent failures across categories):
+
+| Sub-counter | Triggered when |
+|-------------|----------------|
+| `gemma_unparsed.fenced_json` | Assistant content contains a fenced JSON block matching `{"name":..., "arguments":...}` |
+| `gemma_unparsed.bare_xml` | Assistant content contains `<tool_call>` but no matching `</tool_call>` |
+| `gemma_unparsed.hallucinated_name` | Parsed `tool_calls[]` names a tool not in the registry (delegated to TurnEngine — counted there) |
+| `gemma_unparsed.conversational_attempt` | Tool call emitted but user turn matched no known intent verb (heuristic; lower-confidence signal) |
+
+Categories 1 and 2 are detectable inside `OllamaProvider` from the
+assistant message text. Categories 3 and 4 belong in `TurnEngine`.
+
 ---
 
 ## 7. Config Schema Additions
@@ -379,6 +520,8 @@ All three paths consume the same `{"type": "tool_result", "tool_use_id": ...,
 | Field | Type | Default | Purpose |
 |-------|------|---------|---------|
 | `SystemPromptVariant` | `"full" \| "compact"` | `"full"` | Strip directives unusable on small local models (Phase 2) |
+| `SystemPromptExtras` | `list[str]` | `[]` | Append model-specific guidance lines (e.g. gemma3:4b "only call a tool when asked to act") after the core directives, without baking model-specific text into `system_prompt.py` |
+| `ToolSearchMaxTools` | `int` | `0` (unlimited) | Cap on tools bound at once when `ToolSearchEnabled=true`. Required for `gemma3:4b` to keep tool surface ≤12 and avoid the fenced-JSON failure mode (see §6.4) |
 | `ProviderOverrides` | `dict[str, Any]` | `{}` | Forward server-specific kwargs (e.g. `tool_choice`) — already proposed by PLAN-local-model-ecosystems Phase 3 |
 
 No new top-level `Provider` value is required for Gemma. Path A uses
@@ -405,11 +548,12 @@ No new top-level `Provider` value is required for Gemma. Path A uses
 |------|-------|--------|
 | `config-base.json` | 1 | Pricing zero entries for Gemma 3 variants; context-window entries |
 | `src/micro_x_agent_loop/constants.py` | 1 | `MODEL_CONTEXT_WINDOW` additions for Gemma 3 |
-| `src/micro_x_agent_loop/agent_config.py` | 2 | `system_prompt_variant: str = "full"` field |
-| `src/micro_x_agent_loop/system_prompt.py` | 2 | Branch on variant; emit compact form |
-| `src/micro_x_agent_loop/bootstrap.py` | 2 | Thread `SystemPromptVariant` into `build_system_prompt()` |
-| `src/micro_x_agent_loop/providers/ollama_provider.py` | 2 | Log `gemma_unparsed_tool_call` metric when text-only response contains tool-call-looking content |
-| `src/micro_x_agent_loop/turn_engine.py` | 2 | Reject unknown tool names with a model-readable `tool_result` error |
+| `src/micro_x_agent_loop/agent_config.py` | 2 | `system_prompt_variant: str = "full"`, `system_prompt_extras: list[str] = []`, `tool_search_max_tools: int = 0` fields |
+| `src/micro_x_agent_loop/system_prompt.py` | 2 | Branch on variant; emit compact form; append `SystemPromptExtras` lines |
+| `src/micro_x_agent_loop/bootstrap.py` | 2 | Thread `SystemPromptVariant`, `SystemPromptExtras`, `ToolSearchMaxTools` into runtime |
+| `src/micro_x_agent_loop/tool_search.py` | 2 | Honour `ToolSearchMaxTools` cap on the bound tool set |
+| `src/micro_x_agent_loop/providers/ollama_provider.py` | 2 | Log `gemma_unparsed.fenced_json` / `gemma_unparsed.bare_xml` metrics when assistant content matches those shapes but `tool_calls[]` is empty |
+| `src/micro_x_agent_loop/turn_engine.py` | 2 | Reject unknown tool names with a model-readable `tool_result` error; emit `gemma_unparsed.hallucinated_name` counter |
 | `documentation/docs/operations/multi-provider-setup.md` | 3 | vLLM launch line; pointer to new gemma-setup.md |
 
 ### Documentation only
@@ -430,8 +574,12 @@ No new top-level `Provider` value is required for Gemma. Path A uses
 | `test_pricing_entries_complete` | 1 | All Gemma model IDs in profile configs resolve to a pricing entry |
 | `test_context_window_lookup` | 1 | Compaction trigger reads the right context size for `gemma-3-*-it` |
 | `test_system_prompt_compact_variant` | 2 | `build_system_prompt(variant="compact")` omits the four heavy directives |
-| `test_turn_engine_rejects_unknown_tool` | 2 | Unknown tool name → model-readable `tool_result` error, not silent failure |
-| `test_ollama_logs_unparsed_tool_call` | 2 | Ollama assistant text containing a JSON tool-call fence without a parsed `tool_call` increments the metric |
+| `test_system_prompt_extras_appended` | 2 | `SystemPromptExtras` lines appear in the rendered prompt after the core directives |
+| `test_tool_search_respects_max_tools_cap` | 2 | `ToolSearchMaxTools=12` binds at most 12 tools per turn regardless of search hits |
+| `test_turn_engine_rejects_unknown_tool` | 2 | Unknown tool name → model-readable `tool_result` error, not silent failure; `gemma_unparsed.hallucinated_name` increments |
+| `test_ollama_detects_fenced_json_tool_call` | 2 | Assistant text containing a fenced `{"name":..., "arguments":...}` block without parsed `tool_calls[]` increments `gemma_unparsed.fenced_json` |
+| `test_ollama_detects_truncated_tool_call_xml` | 2 | Assistant text containing an unclosed `<tool_call>` increments `gemma_unparsed.bare_xml` |
+| `test_gemma3_4b_happy_path_tool_call` | 2 | `FakeStreamProvider` emitting the canonical `<tool_call>{"name":..., "arguments":{...}}</tool_call>` shape → `TurnEngine` dispatches the named tool with parsed args (uses provider fake; no live Ollama needed) |
 | `test_create_provider_routes_gemma_paths` | 1, 3 | `create_provider("gemini")` for Path C, `create_provider("openai-compatible")` for Path B |
 
 Manual test docs: `documentation/docs/testing/MANUAL-TEST-gemma-cloud.md`,
@@ -476,7 +624,9 @@ other after Phase 1. Phase 4 is contingent on measured outcomes.
 | Question | Answer needed before | Notes |
 |----------|---------------------|-------|
 | Does Google AI Studio's free tier actually accept `gemma-3-27b-it`, or only via Vertex AI billing? | Phase 1 smoke test | If billing-only, downgrade Phase 1 default to `gemma-3-4b-it` |
-| What is the tool-call success rate of `gemma3:12b` on Ollama for the agent's real tool schema (not toy examples)? | Phase 2 | Run the eval harness from PLAN-behavioural-eval-suite once it exists |
+| What is the actual tool-call success rate of `gemma3:4b` on Ollama at the proposed `ToolSearchMaxTools=12` cap? | Phase 2 | Run the eval harness from PLAN-behavioural-eval-suite once it exists. Gate criterion: ≥80% on the canonical tool-use prompts. If below, fall back to `orieg/gemma3-tools:4b-ft` |
+| Is `ToolSearchMaxTools=12` the right ceiling, or does the boundary sit at 10 / 15? | Phase 2 | Sweep the cap from 8 → 20 against a fixed prompt set; record `gemma_unparsed.fenced_json` rate |
+| Does the `SystemPromptExtras` "only call a tool when asked" instruction generalise, or is it gemma3:4b-specific? | Phase 2 | If generic, move it into `_TOOL_USE_DIRECTIVE`; if model-specific, leave in profile config |
 | Does Gemini auto-cache fire for Gemma model IDs, or only Gemini-branded ones? | Phase 1 metrics review | Check `usage_metadata.cached_content_token_count` on hosted Gemma turns |
 | Should the compact system-prompt variant be tied to `Provider` rather than an explicit flag? | Phase 2 | Tying to provider couples concerns; explicit flag is clearer but requires user knowledge |
 | Vision input path — does the existing `tool_result` content shape carry images correctly through the Gemini SDK for Gemma? | Phase 1+ | Out of scope for tool calling but worth checking once the basic path is live |
