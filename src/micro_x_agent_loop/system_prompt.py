@@ -511,6 +511,7 @@ def get_system_prompt(
     autonomous: bool = False,
     hitl_enabled: bool = False,
     compact: bool = False,
+    extras: list[str] | None = None,
 ) -> str:
     """Build the system prompt.
 
@@ -518,6 +519,11 @@ def get_system_prompt(
     enough for a small model (e.g. Mistral 7B via Ollama) to understand
     tool calling.  Verbose directives (codegen, sub-agent examples, user-
     memory guidance) are omitted to stay within tight context windows.
+
+    *extras* is an optional list of model-specific guidance lines appended
+    after all core directives — used by profiles such as gemma3:4b to
+    suppress over-eager tool calls on conversational turns.  Defaults to
+    no extras; existing callers see identical output.
     """
     is_windows = sys.platform == "win32"
     if is_windows:
@@ -584,6 +590,8 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
         prompt += _HITL_DIRECTIVE
     elif autonomous:
         prompt += _AUTONOMOUS_DIRECTIVE
+    if extras:
+        prompt += "\n\n" + "\n\n".join(line for line in extras if line)
     return prompt
 
 

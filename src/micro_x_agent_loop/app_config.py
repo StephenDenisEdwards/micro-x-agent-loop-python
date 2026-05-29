@@ -138,6 +138,9 @@ class AppConfig:
     tui_log_panel_visible: bool
     tui_tool_panel_visible: bool
     tui_task_panel_visible: bool
+    # System prompt customisation (Phase 2 of PLAN-gemma-model-support)
+    system_prompt_compact: bool | None
+    system_prompt_extras: list[str]
 
 
 def _expand_config(data: dict, config_dir: Path) -> dict:
@@ -300,6 +303,31 @@ def _to_bool(value: object, default: bool = False) -> bool:
     return bool(value)  # int, etc. — keep Python truthiness for non-strings
 
 
+def _to_optional_bool(value: object) -> bool | None:
+    """Tri-state boolean: None preserves caller's fallback, True/False forces."""
+    if value is None:
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    return _to_bool(value)
+
+
+def _parse_string_list(value: object, key: str) -> list[str]:
+    """Coerce a config value to a list of strings, warning on malformed input."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        logger.warning("%s must be a list of strings; got %s — ignoring", key, type(value).__name__)
+        return []
+    result: list[str] = []
+    for i, item in enumerate(value):
+        if not isinstance(item, str):
+            logger.warning("%s[%d] must be a string; got %s — skipping", key, i, type(item).__name__)
+            continue
+        result.append(item)
+    return result
+
+
 _KNOWN_OVERRIDE_KEYS = {"Summarize", "Threshold", "MaxChars"}
 
 
@@ -457,6 +485,8 @@ def parse_app_config(config: dict) -> AppConfig:
         tui_log_panel_visible=_to_bool(config.get("TuiLogPanelVisible", True), default=True),
         tui_tool_panel_visible=_to_bool(config.get("TuiToolPanelVisible", True), default=True),
         tui_task_panel_visible=_to_bool(config.get("TuiTaskPanelVisible", True), default=True),
+        system_prompt_compact=_to_optional_bool(config.get("SystemPromptCompact")),
+        system_prompt_extras=_parse_string_list(config.get("SystemPromptExtras"), "SystemPromptExtras"),
     )
 
 

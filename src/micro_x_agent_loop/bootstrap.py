@@ -205,7 +205,12 @@ async def bootstrap_runtime(
                 readonly_dirs=fs_readonly,
                 autonomous=autonomous,
                 hitl_enabled=hitl_enabled,
-                compact=app.provider_name == "ollama",
+                compact=(
+                    app.system_prompt_compact
+                    if app.system_prompt_compact is not None
+                    else (app.provider_name == "ollama")
+                ),
+                extras=app.system_prompt_extras,
             ),
             autonomous=autonomous,
             max_tool_result_chars=app.max_tool_result_chars,
@@ -255,6 +260,8 @@ async def bootstrap_runtime(
             task_decomposition_enabled=app.task_decomposition_enabled,
             session_budget_usd=app.session_budget_usd,
             channel=channel,
+            system_prompt_compact=app.system_prompt_compact,
+            system_prompt_extras=app.system_prompt_extras,
         )
     )
 

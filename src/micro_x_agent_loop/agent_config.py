@@ -182,6 +182,13 @@ class AgentConfig:
     markdown_rendering_enabled: bool = True
     # AgentChannel for bidirectional client communication
     channel: Any = None  # AgentChannel | None (Any to avoid circular import)
+    # System prompt customisation (Phase 2 of PLAN-gemma-model-support)
+    # `system_prompt_compact` is tri-state: None preserves the legacy fallback
+    # (compact when provider == "ollama"); True/False forces it explicitly.
+    # `system_prompt_extras` is appended after the core directives — used by
+    # gemma3:4b to suppress over-eager tool calls on conversational turns.
+    system_prompt_compact: bool | None = None
+    system_prompt_extras: list[str] = field(default_factory=list)
 
     # -- Sub-config factory methods ------------------------------------------
 

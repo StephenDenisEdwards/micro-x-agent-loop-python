@@ -1,0 +1,21 @@
+{
+  "Base": "config-base.json",
+  "Provider": "ollama",
+  "Model": "orieg/gemma3-tools:4b-ft",
+  "ApiKey": "unused",
+  "MaxTokens": 2048,
+  "PromptCachingEnabled": false,
+  "CompactionStrategy": "summarize",
+  "CompactionProvider": "ollama",
+  "CompactionModel": "orieg/gemma3-tools:4b-ft",
+  "SubAgentsEnabled": false,
+  "ModeAnalysisEnabled": false,
+  "Stage2ClassificationEnabled": false,
+  "ToolSearchEnabled": "true",
+  "ToolSearchMaxLoad": 12,
+  "ToolResultSummarizationEnabled": false,
+  "SystemPromptCompact": true,
+  "SystemPromptExtras": [
+    "Only call a tool when the user asks you to perform an action. For questions, explanations, or small talk, respond in plain text."
+  ]
+}

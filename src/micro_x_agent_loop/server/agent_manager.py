@@ -151,7 +151,12 @@ class AgentManager:
             concise_output_enabled=app.concise_output_enabled,
             task_decomposition_enabled=app.task_decomposition_enabled,
             working_directory=app.working_directory,
-            compact=app.provider_name == "ollama",
+            compact=(
+                app.system_prompt_compact
+                if app.system_prompt_compact is not None
+                else (app.provider_name == "ollama")
+            ),
+            extras=app.system_prompt_extras,
         )
 
         summarization_model = ""
@@ -187,6 +192,8 @@ class AgentManager:
                 tool_formatting=app.tool_formatting,
                 default_format=app.default_format,
                 channel=channel or BufferedChannel(),
+                system_prompt_compact=app.system_prompt_compact,
+                system_prompt_extras=app.system_prompt_extras,
             )
         )
 

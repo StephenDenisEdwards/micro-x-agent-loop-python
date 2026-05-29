@@ -139,6 +139,16 @@ class OpenAIProvider:
     def convert_tools(self, tools: list[Tool]) -> list[dict]:
         return canonicalise_tools(tools)
 
+    def _inspect_assistant_message(self, text: str, tool_calls_count: int) -> None:
+        """Hook for subclasses to inspect the assembled assistant message.
+
+        No-op by default. Called after streaming completes, before the
+        internal-format message is constructed. Used by ``OllamaProvider`` to
+        detect Gemma's unparsed tool-call shapes (fenced JSON, truncated
+        ``<tool_call>`` blocks) for the ``gemma_unparsed.*`` metrics.
+        """
+        return
+
     def _build_stream_kwargs(
         self,
         model: str,
@@ -272,6 +282,10 @@ class OpenAIProvider:
             raise
 
         t_end = time.monotonic()
+
+        # Subclass hook for inspecting the assembled assistant message
+        # (e.g. detecting Gemma's unparsed tool-call shapes).
+        self._inspect_assistant_message(text_content, len(tool_calls_acc))
 
         # Map stop reason
         stop_reason = _STOP_REASON_MAP.get(finish_reason or "stop", "end_turn")

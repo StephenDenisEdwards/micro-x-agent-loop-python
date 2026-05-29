@@ -394,7 +394,20 @@ class TurnEngine:
                 self._channel.emit_tool_started(tool_use_id, tool_name, tool_input=tool_input)
 
             if tool is None:
-                content = f'Error: unknown tool "{tool_name}"'
+                available = sorted(self._tool_map.keys())
+                content = (
+                    f'Error: unknown tool "{tool_name}". '
+                    f'Available tools: {", ".join(available)}'
+                )
+                # `gemma_unparsed.hallucinated_name` counter — small models
+                # (e.g. gemma3:4b) invoke tool names that aren't in the
+                # registry. Surfaced as a structured warning so operators can
+                # see the rate without needing a full metrics sink.
+                logger.warning(
+                    "gemma_unparsed.hallucinated_name tool={tool!r} available_count={n}",
+                    tool=tool_name,
+                    n=len(available),
+                )
                 self._events.on_record_tool_call(
                     tool_call_id=tool_use_id,
                     tool_name=tool_name,

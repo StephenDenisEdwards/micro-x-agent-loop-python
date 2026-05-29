@@ -61,6 +61,12 @@ TOOL_SEARCH_CONTEXT_WINDOWS: dict[str, int] = {
     "llama3.2": 128_000,
     "phi3": 128_000,
     "gemma2": 8_000,
+    "gemma3": 128_000,
+    "orieg/gemma3-tools": 128_000,
+    "gemma-3-1b-it": 32_000,
+    "gemma-3-4b-it": 128_000,
+    "gemma-3-12b-it": 128_000,
+    "gemma-3-27b-it": 128_000,
 }
 TOOL_SEARCH_DEFAULT_CONTEXT_WINDOW = 200_000
 

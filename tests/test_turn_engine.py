@@ -254,6 +254,41 @@ class TurnEngineBasicTests(unittest.TestCase):
         self.assertIn("unknown tool", error_record["result_text"])
         self.assertEqual(("t1", "nonexistent", True), events.tool_completed[0])
 
+    def test_unknown_tool_lists_available(self) -> None:
+        """Phase 2 of PLAN-gemma-model-support — error message includes the
+        sorted list of available tool names so small models (e.g. gemma3:4b)
+        can self-correct without guessing again.
+        """
+        tool_a = FakeTool(name="read_file", execute_result="x")
+        tool_b = FakeTool(name="write_file", execute_result="x")
+        provider = FakeStreamProvider()
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Trying."}]},
+                [{"name": "hallucinated_tool", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
+        provider.queue(text="Oh well.", stop_reason="end_turn")
+
+        events = RecordingEvents()
+        engine = _make_engine(provider, events, tools=[tool_a, tool_b])
+
+        asyncio.run(engine.run(messages=[], user_message="go"))
+
+        result_text = events.tool_call_records[0]["result_text"]
+        self.assertIn('unknown tool "hallucinated_tool"', result_text)
+        self.assertIn("Available tools:", result_text)
+        # Both real tools listed, sorted.
+        self.assertIn("read_file", result_text)
+        self.assertIn("write_file", result_text)
+        self.assertLess(
+            result_text.index("read_file"),
+            result_text.index("write_file"),
+            "Available tool names should be sorted",
+        )
+
     def test_tool_result_truncation(self) -> None:
         """Long result truncated to max_tool_result_chars."""
         long_result = "x" * 200

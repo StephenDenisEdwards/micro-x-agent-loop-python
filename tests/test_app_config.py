@@ -9,10 +9,13 @@ from micro_x_agent_loop.app_config import (
     ToolResultOverride,
     _expand_config_refs,
     _expand_env_vars,
+    _parse_string_list,
     _parse_tool_result_overrides,
     _resolve_config_with_base,
     _to_bool,
+    _to_optional_bool,
     load_json_config,
+    parse_app_config,
     resolve_runtime_env,
 )
 
@@ -415,6 +418,67 @@ class ResolveRuntimeEnvTests(unittest.TestCase):
             env = resolve_runtime_env("openai")
             self.assertEqual("openai-key", env.provider_api_key)
             self.assertEqual("OPENAI_API_KEY", env.provider_env_var)
+
+
+class ToOptionalBoolTests(unittest.TestCase):
+    def test_none_stays_none(self) -> None:
+        self.assertIsNone(_to_optional_bool(None))
+
+    def test_empty_string_stays_none(self) -> None:
+        self.assertIsNone(_to_optional_bool(""))
+        self.assertIsNone(_to_optional_bool("   "))
+
+    def test_true_strings(self) -> None:
+        self.assertIs(_to_optional_bool("true"), True)
+        self.assertIs(_to_optional_bool("yes"), True)
+
+    def test_false_strings(self) -> None:
+        self.assertIs(_to_optional_bool("false"), False)
+        self.assertIs(_to_optional_bool("no"), False)
+
+    def test_bool_passthrough(self) -> None:
+        self.assertIs(_to_optional_bool(True), True)
+        self.assertIs(_to_optional_bool(False), False)
+
+
+class ParseStringListTests(unittest.TestCase):
+    def test_none_returns_empty(self) -> None:
+        self.assertEqual([], _parse_string_list(None, "X"))
+
+    def test_non_list_returns_empty(self) -> None:
+        self.assertEqual([], _parse_string_list("not a list", "X"))
+        self.assertEqual([], _parse_string_list({"a": 1}, "X"))
+
+    def test_list_of_strings(self) -> None:
+        self.assertEqual(["a", "b"], _parse_string_list(["a", "b"], "X"))
+
+    def test_non_string_items_skipped(self) -> None:
+        self.assertEqual(["a", "c"], _parse_string_list(["a", 42, "c"], "X"))
+
+
+class ParseAppConfigSystemPromptFieldsTests(unittest.TestCase):
+    """Phase 2 of PLAN-gemma-model-support — config surface for system prompt customisation."""
+
+    def test_absent_fields_default_to_legacy(self) -> None:
+        cfg = parse_app_config({})
+        self.assertIsNone(cfg.system_prompt_compact)
+        self.assertEqual([], cfg.system_prompt_extras)
+
+    def test_compact_true(self) -> None:
+        cfg = parse_app_config({"SystemPromptCompact": True})
+        self.assertIs(cfg.system_prompt_compact, True)
+
+    def test_compact_false(self) -> None:
+        cfg = parse_app_config({"SystemPromptCompact": False})
+        self.assertIs(cfg.system_prompt_compact, False)
+
+    def test_compact_string(self) -> None:
+        cfg = parse_app_config({"SystemPromptCompact": "true"})
+        self.assertIs(cfg.system_prompt_compact, True)
+
+    def test_extras_parsed(self) -> None:
+        cfg = parse_app_config({"SystemPromptExtras": ["line one", "line two"]})
+        self.assertEqual(["line one", "line two"], cfg.system_prompt_extras)
 
 
 if __name__ == "__main__":

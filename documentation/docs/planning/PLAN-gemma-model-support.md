@@ -1,12 +1,28 @@
 # Plan: Google Gemma Model Support
 
-**Status:** Draft
-**Date:** 2026-05-26 (revised to centre on `gemma3:4b` for local use; further revised to remove already-implemented work and reuse existing config fields)
+**Status:** Phase 1 + Phase 2 Complete (Path A). Phase 3 (vLLM) and Phase 4 (native GemmaProvider) deferred.
+**Date:** 2026-05-26 (revised to centre on `gemma3:4b` for local use; further revised to remove already-implemented work and reuse existing config fields). 2026-05-29: Phase 1 + Phase 2 landed; headline model swapped from `gemma3:4b` to `orieg/gemma3-tools:4b-ft` after live validation.
 
 **Goal:** Make Google's Gemma family (Gemma 2, Gemma 3) usable as a first-class
 model with the agent — including tool calling — across all three viable runtimes
 (Ollama, OpenAI-compatible local servers, and Google's hosted Gemma endpoint),
 documenting which features degrade and which features have to be polyfilled.
+
+## Implementation log
+
+**2026-05-29 — Phase 1 + Phase 2 (Path A) shipped.**
+
+Findings from live validation against the running Ollama 0.24 container:
+
+- **Ollama 0.24 hard-rejects `tools=` for stock `gemma3:4b`** with `400 - registry.ollama.ai/library/gemma3:4b does not support tools`. The OpenAI-compatible endpoint checks the Modelfile for a tool-calling template and refuses the request before the model runs. This contradicts the plan's original §6.4 assumption that Ollama would prompted-wrap tool calls for any model. The plan's pre-declared §4.5 fallback (`orieg/gemma3-tools:4b-ft`) is therefore not a fallback — it is the **primary headline model** for Path A on current Ollama versions. The `config-standard-ollama-gemma3.json` profile now uses it directly. Stock `gemma3:4b` remains useful for chat-only profiles (no `tools=`).
+- **End-to-end tool-calling validated** against `orieg/gemma3-tools:4b-ft`: model emitted a well-formed `<tool_call>` block for `tool_search`, `OllamaProvider` parsed it cleanly into an internal `tool_use` block, dispatcher executed the pseudo-tool, second turn returned the expected text with the new tool surface (6→18 schemas bound). No `gemma_unparsed.*` warnings fired. Per-turn cost: $0.
+- **`SystemPromptExtras` "only call a tool when asked" directive works**: a plain "what model are you?" prompt produced 137 output tokens of text with `stop_reason: end_turn`, zero tool calls — no spurious tool invocation on a conversational turn.
+- **`ToolSearchMaxLoad: 12` is respected** — the model saw a 6-tool surface at turn 0 (always-on pseudo-tools), then 18 after `tool_search` loaded 12 more. Compatible with the empirically observed ~15-tool limit before fenced-JSON degradation.
+- **Throughput**: ~30 tok/s sustained on RTX 3050 Ti (4 GB) for the 4B fine-tune. First-token latency dominated by model load (~7s cold).
+
+Code landed: `SystemPromptCompact: bool | None` tri-state config field, `SystemPromptExtras: list[str]` plumbing through `agent_config.py` / `app_config.py` / `system_prompt.py` / `bootstrap.py` / `server/agent_manager.py`; unknown-tool error at `turn_engine.py:397` now lists available tool names and emits `gemma_unparsed.hallucinated_name`; `OllamaProvider._inspect_assistant_message()` detects fenced-JSON and bare-XML failure shapes (`gemma_unparsed.fenced_json`, `gemma_unparsed.bare_xml`). Pricing entries + `TOOL_SEARCH_CONTEXT_WINDOWS` entries added for `ollama/gemma3:*`, `ollama/orieg/gemma3-tools:4b-ft`, and `gemini/gemma-3-*-it` (Phase 1 §4.3 + §4.4). 44 new unit tests; full suite green (1719 passed).
+
+Phase 3 (vLLM / OpenAI-compatible) still depends on `PLAN-local-model-ecosystems` Phase 1. Phase 4 (native GemmaProvider) not triggered — Path A tool-calling success rate on the eval suite is the gate, not yet measured.
 
 **Headline local target:** `gemma3:4b` (Q4_K_M, ~3GB) — the largest Gemma 3
 variant that fits fully in 4GB VRAM on Ampere-class consumer GPUs (e.g. RTX
