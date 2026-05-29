@@ -1,6 +1,6 @@
 # Plan: Google Gemma Model Support
 
-**Status:** Phase 1 + Phase 2 Complete (Path A). Phase 3 (vLLM) and Phase 4 (native GemmaProvider) deferred.
+**Status:** Phase 1 + Phase 2 Complete (Path A). Phase 3 (vLLM) **postponed — not viable on current hardware**. Phase 4 (native GemmaProvider) deferred.
 **Date:** 2026-05-26 (revised to centre on `gemma3:4b` for local use; further revised to remove already-implemented work and reuse existing config fields). 2026-05-29: Phase 1 + Phase 2 landed; headline model swapped from `gemma3:4b` to `orieg/gemma3-tools:4b-ft` after live validation.
 
 **Goal:** Make Google's Gemma family (Gemma 2, Gemma 3) usable as a first-class
@@ -23,6 +23,30 @@ Findings from live validation against the running Ollama 0.24 container:
 Code landed: `SystemPromptCompact: bool | None` tri-state config field, `SystemPromptExtras: list[str]` plumbing through `agent_config.py` / `app_config.py` / `system_prompt.py` / `bootstrap.py` / `server/agent_manager.py`; unknown-tool error at `turn_engine.py:397` now lists available tool names and emits `gemma_unparsed.hallucinated_name`; `OllamaProvider._inspect_assistant_message()` detects fenced-JSON and bare-XML failure shapes (`gemma_unparsed.fenced_json`, `gemma_unparsed.bare_xml`). Pricing entries + `TOOL_SEARCH_CONTEXT_WINDOWS` entries added for `ollama/gemma3:*`, `ollama/orieg/gemma3-tools:4b-ft`, and `gemini/gemma-3-*-it` (Phase 1 §4.3 + §4.4). 44 new unit tests; full suite green (1719 passed).
 
 Phase 3 (vLLM / OpenAI-compatible) still depends on `PLAN-local-model-ecosystems` Phase 1. Phase 4 (native GemmaProvider) not triggered — Path A tool-calling success rate on the eval suite is the gate, not yet measured.
+
+**2026-05-29 — Phase 3 postponed.** vLLM is not viable on the current
+development hardware (RTX 3050 Ti Laptop, 4 GB VRAM, Windows 11). Three
+blockers, in order of severity:
+
+1. **Windows.** vLLM is Linux-only. Running it on this machine requires
+   WSL2 with GPU passthrough — feasible but adds a non-trivial setup tax
+   for a path that doesn't help today.
+2. **4 GB VRAM is below vLLM's design point.** vLLM reserves ~90% of GPU
+   memory for its paged-attention KV cache by default; on a 4 GB card
+   that leaves room only for sub-2B models at heavy quantisation. The
+   Gemma sizes that Phase 3 targets (12B / 27B) need 8–24 GB VRAM and
+   simply will not load.
+3. **Wrong tool for the hardware.** On 4 GB, Ollama with GGUF
+   quantisation and partial CPU offload outperforms vLLM. vLLM's wins
+   (throughput, parallel requests, prefix cache) only materialise when
+   the model fits comfortably.
+
+Phase 3 stays in the plan as a future deliverable for users on
+≥16 GB workstation cards (RTX 4080 / 4090, A10G, L4, etc.) but is **not
+on the active roadmap**. Re-evaluate when (a) `PLAN-local-model-ecosystems`
+Phase 1 ships the generic `openai-compatible` provider, **and** (b)
+development hardware is upgraded **or** a remote vLLM endpoint becomes
+available to point at.
 
 **Headline local target:** `gemma3:4b` (Q4_K_M, ~3GB) — the largest Gemma 3
 variant that fits fully in 4GB VRAM on Ampere-class consumer GPUs (e.g. RTX
@@ -347,10 +371,17 @@ the rendered system prompt after the core directives, plumbed through
 add per-model guidance (e.g. the gemma3:4b "only call a tool when asked"
 line) without baking model-specific text into `system_prompt.py`.
 
-### Phase 3 — Path B (OpenAI-compatible servers)
+### Phase 3 — Path B (OpenAI-compatible servers) — **Postponed (2026-05-29)**
+
+**Not on the active roadmap.** Postponed pending dev-hardware upgrade or
+a remote vLLM endpoint to point at — vLLM does not run usefully on the
+current 4 GB RTX 3050 Ti (Windows). See the implementation log entry
+dated 2026-05-29 for the three blockers (Windows-only, VRAM well below
+vLLM's design point, Gemma 12B/27B don't load on 4 GB).
 
 Depends on [PLAN-local-model-ecosystems.md](PLAN-local-model-ecosystems.md)
-Phase 1 (the generic `openai-compatible` provider). Once that exists:
+Phase 1 (the generic `openai-compatible` provider). Once that exists *and*
+hardware permits:
 
 **4.8 New profile config — `config-standard-gemma-vllm.json`:**
 
