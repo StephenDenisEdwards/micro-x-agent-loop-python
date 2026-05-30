@@ -6,6 +6,7 @@
   "description": "Shared runtime helpers (llm, utils, mcp-client, test-base) consumed by generated task apps via relative imports.",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "@modelcontextprotocol/sdk": "^1.12.1"
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "openai": "^4.77.0"
   }
 }

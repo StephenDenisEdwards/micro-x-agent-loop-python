@@ -338,10 +338,13 @@ class SessionAccumulator:
             for name, count in sorted(self.tool_call_counts.items(), key=lambda x: -x[1]):
                 lines.append(f"  {name}: {count}")
             lines.append(
-                "Note: LLM costs from tool subprocesses (e.g. codegen tasks) are NOT included above."
+                "Note: LLM costs from tool subprocesses (e.g. codegen tasks) ARE included above"
             )
             lines.append(
-                "      Per-call usage is in each tool's structured result under `_usage`."
+                "      when the tool reports usage (shown as `nested:<tool>` calls). Tasks run"
+            )
+            lines.append(
+                "      standalone (broker / direct --run) report usage only in their own output."
             )
         if self.api_call_log:
             lines.append("Per-call breakdown:")

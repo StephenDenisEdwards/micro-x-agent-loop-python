@@ -218,6 +218,130 @@ class NestedLLMUsageTests(unittest.TestCase):
         self.assertEqual(1, len(nested))
         self.assertEqual(500, nested[0][0].input_tokens)
 
+    def test_nested_usage_under_usage_key_tracked(self) -> None:
+        """Usage nested under a `_usage` key (as codegen run_task surfaces it) is tracked."""
+        tool = FakeTool(name="codegen__run_task", execute_result="ran")
+
+        async def patched_execute(tool_input: dict) -> ToolResult:
+            tool.execute_calls += 1
+            return ToolResult(
+                text="ran",
+                structured={
+                    "task_name": "jobserve_rss_processor",
+                    "exit_code": 0,
+                    "_usage": {
+                        "input_tokens": 700,
+                        "output_tokens": 120,
+                        "provider": "openai",
+                        "model": "gpt-4.1-mini",
+                        "cache_read_input_tokens": 30,
+                    },
+                },
+            )
+
+        tool.execute = patched_execute  # type: ignore[assignment]
+
+        provider = FakeStreamProvider()
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Running task."}]},
+                [{"name": "codegen__run_task", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
+        provider.queue(text="Done.", stop_reason="end_turn")
+
+        events = RecordingEvents()
+        engine = _make_engine(provider, events, tools=[tool])
+
+        asyncio.run(engine.run(messages=[], user_message="go"))
+
+        nested = [m for m in events.api_call_metrics if "nested" in m[1]]
+        self.assertEqual(1, len(nested))
+        usage = nested[0][0]
+        self.assertEqual(700, usage.input_tokens)
+        self.assertEqual(120, usage.output_tokens)
+        self.assertEqual("openai", usage.provider)
+        self.assertEqual("gpt-4.1-mini", usage.model)
+        self.assertEqual(30, usage.cache_read_input_tokens)
+        self.assertEqual("nested:codegen__run_task", nested[0][1])
+
+    def test_nested_usage_takes_precedence_over_top_level(self) -> None:
+        """When both top-level and `_usage` fields exist, `_usage` wins."""
+        tool = FakeTool(name="smart_tool", execute_result="done")
+
+        async def patched_execute(tool_input: dict) -> ToolResult:
+            tool.execute_calls += 1
+            return ToolResult(
+                text="done",
+                structured={
+                    "input_tokens": 1,
+                    "output_tokens": 1,
+                    "model": "top-level",
+                    "_usage": {
+                        "input_tokens": 999,
+                        "output_tokens": 111,
+                        "model": "nested-model",
+                    },
+                },
+            )
+
+        tool.execute = patched_execute  # type: ignore[assignment]
+
+        provider = FakeStreamProvider()
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Using tool."}]},
+                [{"name": "smart_tool", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
+        provider.queue(text="Done.", stop_reason="end_turn")
+
+        events = RecordingEvents()
+        engine = _make_engine(provider, events, tools=[tool])
+
+        asyncio.run(engine.run(messages=[], user_message="go"))
+
+        nested = [m for m in events.api_call_metrics if "nested" in m[1]]
+        self.assertEqual(1, len(nested))
+        self.assertEqual(999, nested[0][0].input_tokens)
+        self.assertEqual("nested-model", nested[0][0].model)
+
+    def test_usage_only_report_without_token_fields_not_tracked(self) -> None:
+        """A `_usage` block lacking the required token/model fields is ignored."""
+        tool = FakeTool(name="codegen__run_task", execute_result="ran")
+
+        async def patched_execute(tool_input: dict) -> ToolResult:
+            tool.execute_calls += 1
+            return ToolResult(
+                text="ran",
+                structured={"exit_code": 0, "_usage": {"cost_usd": 0.01, "calls": 1}},
+            )
+
+        tool.execute = patched_execute  # type: ignore[assignment]
+
+        provider = FakeStreamProvider()
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Running."}]},
+                [{"name": "codegen__run_task", "id": "t1", "input": {}}],
+                "tool_use",
+                UsageResult(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
+        provider.queue(text="Done.", stop_reason="end_turn")
+
+        events = RecordingEvents()
+        engine = _make_engine(provider, events, tools=[tool])
+
+        asyncio.run(engine.run(messages=[], user_message="go"))
+
+        nested = [m for m in events.api_call_metrics if "nested" in m[1]]
+        self.assertEqual(0, len(nested))
+
 
 # ---------------------------------------------------------------------------
 # Routing target resolution

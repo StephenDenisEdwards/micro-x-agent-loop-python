@@ -625,14 +625,23 @@ class TurnEngine:
             return result, False
 
     def _track_nested_llm_usage(self, tool_name: str, structured: Any) -> None:
-        """Track LLM usage reported by an MCP tool in its structured result."""
+        """Track LLM usage reported by an MCP tool in its structured result.
+
+        Usage may be reported either at the top level of the structured result
+        or nested under a ``_usage`` key (codegen ``run_task`` surfaces the task
+        subprocess's ``__USAGE__`` report this way). A nested ``_usage`` dict
+        takes precedence when present.
+        """
         if not isinstance(structured, dict):
             return
-        input_tokens = structured.get("input_tokens")
-        output_tokens = structured.get("output_tokens")
-        model = structured.get("model")
+        nested = structured.get("_usage")
+        usage_src = nested if isinstance(nested, dict) else structured
+        input_tokens = usage_src.get("input_tokens")
+        output_tokens = usage_src.get("output_tokens")
+        model = usage_src.get("model")
         if input_tokens is None or output_tokens is None or model is None:
             return
+        structured = usage_src
         usage = UsageResult(
             input_tokens=input_tokens,
             output_tokens=output_tokens,

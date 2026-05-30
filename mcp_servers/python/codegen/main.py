@@ -545,16 +545,24 @@ Available imports:
   - For cumulative/log-style files that grow across runs, always use appendFile only.
   - For single-shot reports written in stages within ONE run, writeFile first, appendFile after.
 - import {{ createMessage, streamMessage, estimateCost, type Usage }} from "../../_runtime/src/llm.js"; (shared runtime; only if LLM calls needed)
-  - createMessage(model, maxTokens, messages, options?) → Promise<[text: string, usage: Usage]>
-  - streamMessage(model, maxTokens, messages, options?) → Promise<[text: string, usage: Usage]>
-  - messages is Anthropic.MessageParam[] (e.g. [{{ role: "user", content: prompt }}]); options is {{ system?, temperature? }}
+  - createMessage(spec, maxTokens, messages, options?) → Promise<[text: string, usage: Usage]>
+  - streamMessage(spec, maxTokens, messages, options?) → Promise<[text: string, usage: Usage]>
+  - `spec` selects the provider + model. Use "provider/model" to choose a provider explicitly,
+    or a bare model id (which defaults to Anthropic). Supported:
+    - anthropic/claude-haiku-4-5-20251001 (cheap, fast — preferred for scoring/classification)
+    - anthropic/claude-sonnet-4-6 (balanced — for harder reasoning or longer outputs)
+    - anthropic/claude-opus-4-7 (most capable — only when explicitly required)
+    - openai/gpt-4.1-mini, openai/gpt-4o-mini, gemini/gemini-2.5-flash, deepseek/deepseek-chat
+    - ollama/<model> (local, no API key; e.g. ollama/llama3.2:3b)
+    A bare "claude-sonnet-4-6" is equivalent to "anthropic/claude-sonnet-4-6".
+    Do NOT use claude-3-*, claude-3-5-*, or any 2024-dated Claude id — they are retired.
+  - Prefer reading the model from the task's profile when one is provided (e.g. profile.rank_model),
+    so the user controls provider + model without code changes.
+  - The API key is read from .env by provider (ANTHROPIC_API_KEY / OPENAI_API_KEY /
+    GEMINI_API_KEY / DEEPSEEK_API_KEY; Ollama needs none).
+  - messages is {{ role: "user" | "assistant"; content: string }}[] (e.g. [{{ role: "user", content: prompt }}]); options is {{ system?, temperature? }}
   - Both return a tuple; destructure the text: const [text, usage] = await createMessage(...)
   - Do NOT access .content on the return value — it is a string, not a Message object.
-  - Use a current model id. Valid options:
-    - claude-haiku-4-5-20251001 (cheap, fast — preferred for scoring/classification)
-    - claude-sonnet-4-6 (balanced — for harder reasoning or longer outputs)
-    - claude-opus-4-7 (most capable — only when explicitly required)
-  - Do NOT use claude-3-*, claude-3-5-*, or any 2024-dated model id — they are retired.
 - import {{ makeJobserveJob, makeLinkedinJob, makeEmail }} from "../../_runtime/src/test-base.js"; (test fixtures only — shared runtime)
 - Optional modules you create yourself in the task src/: collector.ts, scorer.ts, processor.ts — import with ./module.js extension
 
