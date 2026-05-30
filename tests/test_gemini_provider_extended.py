@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -42,11 +41,14 @@ def _load_gemini_provider():
         "google.genai": MagicMock(),
         "google.genai.types": _mock_types,
     }
+    # Import the module *before* entering patch.dict so it's part of the
+    # snapshot, then reload it in place. Do NOT pop + re-import inside the
+    # patch: that creates a new module object and rebinds the parent package's
+    # attribute, while patch.dict restores the *old* object into sys.modules on
+    # exit — leaving sys.modules and the package attribute pointing at different
+    # objects, which makes a later reload() in another test raise ImportError.
+    gemini_provider = importlib.import_module("micro_x_agent_loop.providers.gemini_provider")
     with patch.dict("sys.modules", mocks):
-        # Ensure a fresh import by removing the cached module
-        sys.modules.pop("micro_x_agent_loop.providers.gemini_provider", None)
-        from micro_x_agent_loop.providers import gemini_provider
-
         importlib.reload(gemini_provider)
         return gemini_provider
 

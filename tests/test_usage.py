@@ -220,8 +220,17 @@ class EstimateCostAllModelsTests(unittest.TestCase):
         "deepseek/deepseek-reasoner": ("deepseek", "deepseek-reasoner", 0.023450),
         "gemini/gemini-2.0-flash": ("gemini", "gemini-2.0-flash", 0.004250),
         "gemini/gemini-2.0-flash-thinking-exp": ("gemini", "gemini-2.0-flash-thinking-exp", 0.004250),
+        "gemini/gemini-2.5-flash": ("gemini", "gemini-2.5-flash", 0.019250),
         "gemini/gemini-2.5-pro-preview-03-25": ("gemini", "gemini-2.5-pro-preview-03-25", 0.078000),
+        "gemini/gemma-3-1b-it": ("gemini", "gemma-3-1b-it", 0.0),
+        "gemini/gemma-3-4b-it": ("gemini", "gemma-3-4b-it", 0.0),
+        "gemini/gemma-3-12b-it": ("gemini", "gemma-3-12b-it", 0.0),
+        "gemini/gemma-3-27b-it": ("gemini", "gemma-3-27b-it", 0.0),
         "ollama/gemma2:2b": ("ollama", "gemma2:2b", 0.0),
+        "ollama/gemma3:4b": ("ollama", "gemma3:4b", 0.0),
+        "ollama/gemma3:12b": ("ollama", "gemma3:12b", 0.0),
+        "ollama/gemma3:27b": ("ollama", "gemma3:27b", 0.0),
+        "ollama/orieg/gemma3-tools:4b-ft": ("ollama", "orieg/gemma3-tools:4b-ft", 0.0),
         "ollama/llama3.2:3b": ("ollama", "llama3.2:3b", 0.0),
         "ollama/mistral:7b": ("ollama", "mistral:7b", 0.0),
         "ollama/phi3:mini": ("ollama", "phi3:mini", 0.0),
@@ -314,11 +323,38 @@ class EstimateCostAllModelsTests(unittest.TestCase):
     def test_gemini_2_0_flash_thinking_exp(self) -> None:
         self._assert_model_cost("gemini/gemini-2.0-flash-thinking-exp")
 
+    def test_gemini_2_5_flash(self) -> None:
+        self._assert_model_cost("gemini/gemini-2.5-flash")
+
     def test_gemini_2_5_pro_preview(self) -> None:
         self._assert_model_cost("gemini/gemini-2.5-pro-preview-03-25")
 
+    def test_gemini_gemma_3_1b_it(self) -> None:
+        self._assert_model_cost("gemini/gemma-3-1b-it")
+
+    def test_gemini_gemma_3_4b_it(self) -> None:
+        self._assert_model_cost("gemini/gemma-3-4b-it")
+
+    def test_gemini_gemma_3_12b_it(self) -> None:
+        self._assert_model_cost("gemini/gemma-3-12b-it")
+
+    def test_gemini_gemma_3_27b_it(self) -> None:
+        self._assert_model_cost("gemini/gemma-3-27b-it")
+
     def test_ollama_gemma2_2b(self) -> None:
         self._assert_model_cost("ollama/gemma2:2b")
+
+    def test_ollama_gemma3_4b(self) -> None:
+        self._assert_model_cost("ollama/gemma3:4b")
+
+    def test_ollama_gemma3_12b(self) -> None:
+        self._assert_model_cost("ollama/gemma3:12b")
+
+    def test_ollama_gemma3_27b(self) -> None:
+        self._assert_model_cost("ollama/gemma3:27b")
+
+    def test_ollama_orieg_gemma3_tools_4b_ft(self) -> None:
+        self._assert_model_cost("ollama/orieg/gemma3-tools:4b-ft")
 
     def test_ollama_llama3_2_3b(self) -> None:
         self._assert_model_cost("ollama/llama3.2:3b")

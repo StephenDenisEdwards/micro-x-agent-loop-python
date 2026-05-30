@@ -105,6 +105,97 @@ def _to_gemini_contents(messages: list[dict]) -> list[Any]:
     return contents
 
 
+# Schema keys Gemini's FunctionDeclaration (OpenAPI subset) understands on a
+# node. Anything else (``$schema``, ``$ref``, ``$defs``, ``additionalProperties``,
+# ``title``, ``default``, ``examples``, …) is dropped — Gemini rejects unknown
+# constructs with 400 INVALID_ARGUMENT, whereas Anthropic accepts raw JSON
+# Schema. Translation lives here only; ``canonicalise_tools`` stays neutral.
+_COMBINATOR_KEYS = ("anyOf", "oneOf", "allOf")
+
+# ``format`` values Gemini accepts; others are stripped to avoid 400s.
+_GEMINI_ALLOWED_FORMATS = {"date-time", "enum", "int32", "int64", "float", "double"}
+
+
+def _collapse_combinators(schema: dict) -> dict:
+    """Collapse ``anyOf``/``oneOf``/``allOf`` into a single concrete subschema.
+
+    Picks the first non-null branch and merges the parent's sibling keys onto
+    it. A ``{"type": "null"}`` branch (the common JSON-Schema nullable idiom)
+    is lifted to ``nullable: true`` rather than kept as a branch.
+    """
+    for key in _COMBINATOR_KEYS:
+        branches = schema.get(key)
+        if not isinstance(branches, list) or not branches:
+            continue
+        concrete = [b for b in branches if isinstance(b, dict) and b.get("type") != "null"]
+        has_null = any(isinstance(b, dict) and b.get("type") == "null" for b in branches)
+        chosen = concrete[0] if concrete else {}
+        siblings = {k: v for k, v in schema.items() if k not in _COMBINATOR_KEYS}
+        merged: dict = {**siblings, **chosen}
+        if has_null:
+            merged["nullable"] = True
+        return merged
+    return schema
+
+
+def _to_gemini_schema(schema: Any) -> dict:
+    """Translate a JSON-Schema tool parameter object into Gemini's OpenAPI subset.
+
+    MCP tool schemas are full JSON Schema; Gemini's ``FunctionDeclaration``
+    accepts only a narrow subset and 400s on unknown constructs. This walks the
+    tree (``properties``/``items``), keeps the supported keys, collapses
+    combinators, and normalises ``["string", "null"]`` type arrays into a
+    concrete type plus ``nullable``. Pure and recursive — unknown keys are
+    dropped by virtue of the allowlist build, not explicit removal.
+    """
+    if not isinstance(schema, dict):
+        return {}
+    if "$ref" in schema:
+        logger.warning("gemini_schema.unresolved_ref ref={ref}", ref=schema.get("$ref"))
+
+    node = _collapse_combinators(schema)
+    out: dict[str, Any] = {}
+    nullable = bool(node.get("nullable", False))
+
+    raw_type = node.get("type")
+    if isinstance(raw_type, list):
+        if "null" in raw_type:
+            nullable = True
+        non_null = [t for t in raw_type if t != "null"]
+        raw_type = non_null[0] if non_null else None
+    if isinstance(raw_type, str):
+        out["type"] = raw_type
+
+    description = node.get("description")
+    if isinstance(description, str):
+        out["description"] = description
+
+    enum = node.get("enum")
+    if isinstance(enum, list):
+        out["enum"] = enum
+
+    fmt = node.get("format")
+    if isinstance(fmt, str) and fmt in _GEMINI_ALLOWED_FORMATS:
+        out["format"] = fmt
+
+    properties = node.get("properties")
+    if isinstance(properties, dict):
+        out["properties"] = {k: _to_gemini_schema(v) for k, v in properties.items()}
+
+    required = node.get("required")
+    if isinstance(required, list):
+        out["required"] = [r for r in required if isinstance(r, str)]
+
+    items = node.get("items")
+    if isinstance(items, dict):
+        out["items"] = _to_gemini_schema(items)
+
+    if nullable:
+        out["nullable"] = True
+
+    return out
+
+
 def _to_gemini_tools(tools: list[dict]) -> list[Any] | None:
     """Convert canonical tool dicts to a Gemini Tool object."""
     if not tools:
@@ -115,7 +206,7 @@ def _to_gemini_tools(tools: list[dict]) -> list[Any] | None:
         types.FunctionDeclaration(
             name=t["name"],
             description=t.get("description", ""),
-            parameters=t.get("input_schema", {}),
+            parameters=_to_gemini_schema(t.get("input_schema", {})),  # type: ignore[arg-type]  # SDK accepts dict at runtime
         )
         for t in tools
     ]
