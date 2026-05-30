@@ -1,6 +1,6 @@
 # Plan: Google Gemma Model Support
 
-**Status:** Phase 1 + Phase 2 Complete (Path A). Phase 3 (vLLM) **postponed — not viable on current hardware**. Phase 4 (native GemmaProvider) deferred.
+**Status:** Phase 1 (Path C, Google-hosted Gemma) and Phase 2 (Path A, Ollama local) Complete. Phase 3 (Path B, vLLM) **postponed — not viable on current hardware**. Phase 4 (native GemmaProvider) deferred.
 **Date:** 2026-05-26 (revised to centre on `gemma3:4b` for local use; further revised to remove already-implemented work and reuse existing config fields). 2026-05-29: Phase 1 + Phase 2 landed; headline model swapped from `gemma3:4b` to `orieg/gemma3-tools:4b-ft` after live validation.
 
 **Goal:** Make Google's Gemma family (Gemma 2, Gemma 3) usable as a first-class
@@ -9,6 +9,12 @@ model with the agent — including tool calling — across all three viable runt
 documenting which features degrade and which features have to be polyfilled.
 
 ## Implementation log
+
+**2026-05-30 — Phase 1 (Path C) profile + offline tests shipped.**
+
+- New profile `config-standard-gemma-cloud.json` targets `gemma-3-12b-it` as the main model and `gemma-3-4b-it` for sub-agents and compaction. The plan's original §4.2 default was `gemma-3-27b-it`, but the user flagged a cost concern: AI Studio's free tier definitely covers 12B but 27B is the plan's open question §11 (possibly Vertex-billing-only). Defaulting to 12B keeps the profile inside the free tier; users can flip the field manually for higher quality.
+- New offline test file `tests/providers/test_gemma_via_gemini.py` adds 4 unit tests: `TOOL_SEARCH_CONTEXT_WINDOWS` prefix matches for `gemma3:*`, `orieg/gemma3-tools:*`, and `gemma-3-*-it`; pricing-entry completeness across all Gemma profiles (gated on `SubAgentsEnabled` / `CompactionStrategy` so disabled features aren't checked); pricing-entry shape (every Gemma key has `input`/`output`/`cache_read`/`cache_create`).
+- Live smoke tests `test_streams_text_for_chat_prompt` and `test_returns_function_call_for_tool_prompt` are gated on `GEMINI_API_KEY`. They confirm the no-code-change claim of §4.1 — `GeminiProvider.stream_chat(model="gemma-3-*-it")` passes through to `client.aio.models.generate_content_stream(model=...)` and returns the same internal `{type, id, name, input}` tool_use shape the rest of the codebase expects. Both skip cleanly when `GEMINI_API_KEY` is unset, so the suite stays offline-runnable.
 
 **2026-05-29 — Phase 1 + Phase 2 (Path A) shipped.**
 

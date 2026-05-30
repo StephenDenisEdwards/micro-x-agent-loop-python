@@ -1,0 +1,13 @@
+{
+  "Base": "config-base.json",
+  "Provider": "gemini",
+  "Model": "gemma-3-12b-it",
+  "MaxTokens": 4096,
+  "PromptCachingEnabled": false,
+  "SubAgentsEnabled": true,
+  "SubAgentProvider": "gemini",
+  "SubAgentModel": "gemma-3-4b-it",
+  "CompactionStrategy": "summarize",
+  "CompactionProvider": "gemini",
+  "CompactionModel": "gemma-3-4b-it"
+}
