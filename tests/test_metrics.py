@@ -3,10 +3,12 @@ import unittest
 from micro_x_agent_loop.metrics import (
     SessionAccumulator,
     _short_model_name,
+    build_api_call_error_metric,
     build_api_call_metric,
     build_compaction_metric,
     build_session_summary_metric,
     build_tool_execution_metric,
+    extract_error_details,
 )
 from micro_x_agent_loop.usage import UsageResult
 
@@ -277,6 +279,54 @@ class ShortModelNameTests(unittest.TestCase):
 
     def test_anthropic_prefix_no_date(self) -> None:
         self.assertEqual("sonnet-4", _short_model_name("claude-sonnet-4"))
+
+
+class ApiCallErrorMetricTests(unittest.TestCase):
+    def test_extract_status_from_status_code_attr(self) -> None:
+        err = type("E", (Exception,), {})()
+        err.status_code = 429  # type: ignore[attr-defined]
+        d = extract_error_details(err)
+        self.assertEqual(429, d["status_code"])
+        self.assertEqual("E", d["error_type"])
+
+    def test_extract_status_from_code_attr(self) -> None:
+        # google-genai style: status on .code, not .status_code
+        err = type("ClientError", (Exception,), {})()
+        err.code = 429  # type: ignore[attr-defined]
+        d = extract_error_details(err)
+        self.assertEqual(429, d["status_code"])
+
+    def test_extract_retry_delay_from_message(self) -> None:
+        err = Exception("429 RESOURCE_EXHAUSTED. retryDelay: 37s please retry")
+        d = extract_error_details(err)
+        self.assertEqual(37.0, d["retry_delay_seconds"])
+
+    def test_extract_handles_no_status_or_delay(self) -> None:
+        d = extract_error_details(ValueError("boom"))
+        self.assertIsNone(d["status_code"])
+        self.assertIsNone(d["retry_delay_seconds"])
+        self.assertEqual("ValueError", d["error_type"])
+        self.assertIn("boom", d["message"])
+
+    def test_build_api_call_error_metric_shape(self) -> None:
+        err = type("ClientError", (Exception,), {})("quota exceeded retry_delay=12s")
+        err.code = 429  # type: ignore[attr-defined]
+        m = build_api_call_error_metric(
+            model="gemini-2.5-flash",
+            provider="gemini",
+            session_id="sess-1",
+            turn_number=3,
+            call_type="main",
+            error=err,
+        )
+        self.assertEqual("api_call_error", m["type"])
+        self.assertEqual("gemini", m["provider"])
+        self.assertEqual("gemini-2.5-flash", m["model"])
+        self.assertEqual("main", m["call_type"])
+        self.assertEqual(429, m["status_code"])
+        self.assertEqual(12.0, m["retry_delay_seconds"])
+        self.assertEqual("ClientError", m["error_type"])
+        self.assertIn("timestamp", m)
 
 
 if __name__ == "__main__":

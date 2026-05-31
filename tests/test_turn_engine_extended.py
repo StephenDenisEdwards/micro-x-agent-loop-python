@@ -523,7 +523,7 @@ class ApiCallFailureTests(unittest.TestCase):
         self.assertEqual(1, len(events.api_call_failures))
         model, provider_name, call_type, error = events.api_call_failures[0]
         self.assertEqual("m", model)
-        self.assertEqual("anthropic", provider_name)  # FakeStreamProvider.family
+        self.assertEqual("openai", provider_name)  # FakeStreamProvider.family
         self.assertEqual("main", call_type)
         self.assertIsInstance(error, RuntimeError)
         # No success metric should have been emitted for the failed call.

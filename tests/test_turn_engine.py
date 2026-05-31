@@ -30,6 +30,7 @@ class RecordingEvents(BaseTurnEvents):
         self.tool_started: list[tuple[str, str]] = []
         self.tool_completed: list[tuple[str, str, bool]] = []
         self.api_call_metrics: list[tuple[UsageResult, str]] = []
+        self.api_call_failures: list[tuple[str, str, str, BaseException]] = []
         self.tool_exec_metrics: list[tuple[str, int, float, bool]] = []
 
     def on_append_message(self, role: str, content: str | list[dict]) -> str | None:
@@ -68,6 +69,9 @@ class RecordingEvents(BaseTurnEvents):
 
     def on_api_call_completed(self, usage: UsageResult, call_type: str) -> None:
         self.api_call_metrics.append((usage, call_type))
+
+    def on_api_call_failed(self, *, model, provider, call_type, error) -> None:
+        self.api_call_failures.append((model, provider, call_type, error))
 
     def on_tool_executed(
         self,
