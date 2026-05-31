@@ -504,6 +504,32 @@ class MaxTokensWithChannelTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+class ApiCallFailureTests(unittest.TestCase):
+    def test_failed_stream_chat_records_failure_and_reraises(self) -> None:
+        provider = FakeStreamProvider()
+
+        async def boom(*a, **k):
+            raise RuntimeError("429 RESOURCE_EXHAUSTED retryDelay: 30s")
+
+        provider.stream_chat = boom  # type: ignore[assignment]
+
+        events = RecordingEvents()
+        engine = _make_engine(provider, events)
+
+        with self.assertRaises(RuntimeError):
+            asyncio.run(engine.run(messages=[], user_message="go"))
+
+        # The failure was recorded exactly once and propagated.
+        self.assertEqual(1, len(events.api_call_failures))
+        model, provider_name, call_type, error = events.api_call_failures[0]
+        self.assertEqual("m", model)
+        self.assertEqual("anthropic", provider_name)  # FakeStreamProvider.family
+        self.assertEqual("main", call_type)
+        self.assertIsInstance(error, RuntimeError)
+        # No success metric should have been emitted for the failed call.
+        self.assertEqual(0, len(events.api_call_metrics))
+
+
 class ToolResultIsErrorTests(unittest.TestCase):
     def test_tool_result_is_error_raises(self) -> None:
         """When tool.execute returns ToolResult(is_error=True), it's treated as an error."""

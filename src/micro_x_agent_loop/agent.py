@@ -14,6 +14,7 @@ from micro_x_agent_loop.constants import MAX_TOKENS_RETRIES, SESSION_BUDGET_WARN
 from micro_x_agent_loop.memory.facade import ActiveMemoryFacade, NullMemoryFacade
 from micro_x_agent_loop.metrics import (
     SessionAccumulator,
+    build_api_call_error_metric,
     build_api_call_metric,
     build_compaction_metric,
     build_session_summary_metric,
@@ -705,6 +706,33 @@ class Agent:
         )
         emit_metric(metric)
         self._memory.emit_event("metric.api_call", metric)
+
+    def on_api_call_failed(
+        self, *, model: str, provider: str, call_type: str, error: BaseException
+    ) -> None:
+        # A terminal LLM call failure (provider retry already exhausted). The
+        # success metric never fires on error, so record it here — otherwise a
+        # 429 / timeout leaves no structured trace. Always log a warning for
+        # visibility in agent.log; emit the structured metric when enabled.
+        logger.warning(
+            "API call failed: provider={provider} model={model} call_type={call_type} error={err}",
+            provider=provider or "?",
+            model=model or "?",
+            call_type=call_type,
+            err=f"{type(error).__name__}: {error}"[:300],
+        )
+        if not self._metrics_enabled:
+            return
+        metric = build_api_call_error_metric(
+            model=model,
+            provider=provider,
+            session_id=self._memory.active_session_id or "",
+            turn_number=self._turn_number,
+            call_type=call_type,
+            error=error,
+        )
+        emit_metric(metric)
+        self._memory.emit_event("metric.api_call_error", metric)
 
     def on_turn_cap_reached(self, iterations: int) -> None:
         # Behavioural signal (set regardless of metrics_enabled): the turn

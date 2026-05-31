@@ -194,31 +194,47 @@ class TurnEngine:
                 if decision.system_prompt_override is not None:
                     system_prompt = decision.system_prompt_override
 
-            # Dispatch to provider
-            if effective_provider is not None and isinstance(effective_provider, ProviderPool):
-                dispatch_target = routing_target or RoutingTarget(
-                    provider=self._routing_fallback_provider,
+            # Dispatch to provider. The provider's own tenacity retry is
+            # exhausted by the time an exception reaches us, so a raise here is
+            # terminal for the call — record it as a metric before re-raising.
+            # The success path below never runs on error, which previously left
+            # 429s / timeouts with no structured trace (success-only ledger).
+            dispatch_provider = ""
+            try:
+                if effective_provider is not None and isinstance(effective_provider, ProviderPool):
+                    dispatch_target = routing_target or RoutingTarget(
+                        provider=self._routing_fallback_provider,
+                        model=effective_model,
+                    )
+                    dispatch_provider = dispatch_target.provider
+                    message, tool_use_blocks, stop_reason, usage = await effective_provider.stream_chat(
+                        dispatch_target,
+                        self._max_tokens,
+                        self._temperature,
+                        system_prompt,
+                        messages,
+                        api_tools,
+                        channel=self._channel,
+                    )
+                else:
+                    dispatch_provider = getattr(self._provider, "family", "")
+                    message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
+                        effective_model,
+                        self._max_tokens,
+                        self._temperature,
+                        system_prompt,
+                        messages,
+                        api_tools,
+                        channel=self._channel,
+                    )
+            except Exception as exc:
+                self._events.on_api_call_failed(
                     model=effective_model,
+                    provider=dispatch_provider,
+                    call_type=call_type,
+                    error=exc,
                 )
-                message, tool_use_blocks, stop_reason, usage = await effective_provider.stream_chat(
-                    dispatch_target,
-                    self._max_tokens,
-                    self._temperature,
-                    system_prompt,
-                    messages,
-                    api_tools,
-                    channel=self._channel,
-                )
-            else:
-                message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
-                    effective_model,
-                    self._max_tokens,
-                    self._temperature,
-                    system_prompt,
-                    messages,
-                    api_tools,
-                    channel=self._channel,
-                )
+                raise
 
             self._events.on_api_call_completed(usage, call_type)
 

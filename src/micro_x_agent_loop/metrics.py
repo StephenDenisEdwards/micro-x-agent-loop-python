@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -48,6 +49,62 @@ def build_api_call_metric(
     if routing_rule:
         metric["routing_rule"] = routing_rule
         metric["routing_reason"] = routing_reason
+    return metric
+
+
+_RETRY_DELAY_RE = re.compile(r"retry[_-]?delay['\"]?\s*[:=]\s*['\"]?(\d+(?:\.\d+)?)s?", re.IGNORECASE)
+
+
+def extract_error_details(error: BaseException) -> dict:
+    """Best-effort extraction of HTTP status + retry hint from a provider error.
+
+    SDKs differ: Anthropic/OpenAI expose ``status_code``; google-genai exposes
+    ``code``. A retry hint (e.g. Gemini's ``RetryInfo.retryDelay``) appears in
+    the error body/string. All fields are optional — absent data is ``None``.
+    """
+    status = getattr(error, "status_code", None)
+    if status is None:
+        status = getattr(error, "code", None)
+    message = str(error)
+    retry_delay_seconds: float | None = None
+    m = _RETRY_DELAY_RE.search(message)
+    if m:
+        try:
+            retry_delay_seconds = float(m.group(1))
+        except ValueError:
+            retry_delay_seconds = None
+    return {
+        "error_type": type(error).__name__,
+        "status_code": status if isinstance(status, int) else None,
+        "message": message[:500],
+        "retry_delay_seconds": retry_delay_seconds,
+    }
+
+
+def build_api_call_error_metric(
+    *,
+    model: str,
+    provider: str,
+    session_id: str,
+    turn_number: int,
+    call_type: str,
+    error: BaseException,
+) -> dict:
+    """Build a metric for a terminal (post-retry) LLM API call failure.
+
+    The success path (``build_api_call_metric``) never runs when ``stream_chat``
+    raises, so without this a 429/timeout/etc. leaves no structured trace.
+    """
+    metric: dict = {
+        "type": "api_call_error",
+        "timestamp": time.time(),
+        "session_id": session_id,
+        "turn_number": turn_number,
+        "call_type": call_type,
+        "provider": provider,
+        "model": model,
+    }
+    metric.update(extract_error_details(error))
     return metric
 
 
