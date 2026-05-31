@@ -276,6 +276,28 @@ This research lists contradiction handling as an open question requiring HITL. C
 
 Same agent, opposite default, depending on whether the operation is read or write.
 
+### State tracking — what's been read and what's been updated
+
+CoWork's tracking is entirely markdown-native, no database. Three files do the work, each at a different granularity:
+
+- **`RAW/_INGESTED.md` — per-source registry.** Append-only log. One entry per RAW file with filename, date added, source URL, one-line summary. If a file is in `RAW/` but not in `_INGESTED.md`, it hasn't been ingested yet. This is the cut-off the consolidator reads to find "new since last compile."
+- **Wiki article frontmatter — per-article state.** Every Wiki article declares `Last updated: YYYY-MM-DD` and `Sources: [[raw-file-1]], [[raw-file-2]]`. Combined with the registry, both directions are derivable: "what does this article cite?" and "which articles cite this RAW file?"
+- **`CHANGELOG.md` — per-KB state.** Running log at the KB root, most recent entry at top, explicitly defined as both history *and* current-state memory. Each compile pass writes an entry: N files processed, articles created, articles updated, pending items moved to `QUESTIONS.md`. The health-check skill reads the top entry to decide whether to skip (no compile or new output since last check → write a skip line and stop).
+
+**Self-healing via the health check.** Because LLMs sometimes mangle these files, the monthly audit has an "orphan RAW registration" auto-fix category — if a RAW file has valid frontmatter and fits the KB's focus areas but isn't in `_INGESTED.md`, the health check registers it. Same for broken backlinks. The system tolerates drift between compile passes; the lint pass converges it.
+
+The deliberate design choice: **markdown is the canonical store, no SQLite for tracking state.** Every state file is inspectable, git-versionable, and human-editable. The tradeoff is no transactional guarantees — a crashed compile can leave a half-updated Wiki and a stale `_INGESTED.md` — but the health check is the recovery mechanism, not a database transaction.
+
+**How this maps to micro-x-agent-loop.** Two existing capabilities cover the same ground without a new database:
+
+| CoWork mechanism | Project equivalent |
+|------------------|--------------------|
+| `_INGESTED.md` cut-off | `memory.db` events can derive last-compile timestamp; or the markdown file can live alongside the Wiki, owned by the consolidator sub-agent |
+| `CHANGELOG.md` top-entry | Same markdown file works; or a row in `memory.db` per consolidation run |
+| Health-check orphan-fix | Broker cron job invoking a `consolidator` sub-agent — exactly the Option 1 / Option 2 shape from above |
+
+The pragmatic call: **keep the markdown files as the canonical store** (inspectable, git-friendly, matches CoWork's working pattern) and let `memory.db` remain the raw event log it already is. The consolidator reads `memory.db` for "what happened since last run" and writes `_INGESTED.md` / `CHANGELOG.md` as the durable, human-readable state.
+
 ### The consolidation skill
 
 The health-check skill is a concrete instance of Option 1 / Option 2 in this research's "Implementation options" section. Its operational details transfer directly:
