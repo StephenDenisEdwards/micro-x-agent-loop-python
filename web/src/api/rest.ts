@@ -69,13 +69,13 @@ export class RestClient {
   }
 
   async getMessages(sessionId: string): Promise<ChatMessage[]> {
-    const body = await this.request<{ messages: { role: string; content: string }[] }>(
+    const body = await this.request<{ messages: { role: string; content: unknown }[] }>(
       `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
     );
     return (body.messages ?? []).map((m, idx) => ({
       id: `${sessionId}-history-${idx}`,
       role: normalizeRole(m.role),
-      text: m.content,
+      text: flattenContent(m.content),
     }));
   }
 
@@ -89,4 +89,25 @@ export class RestClient {
 function normalizeRole(role: string): ChatMessage['role'] {
   if (role === 'user' || role === 'assistant' || role === 'system') return role;
   return 'system';
+}
+
+// Server history stores ``content`` as either a plain string or an Anthropic-style
+// content-block list (e.g. ``[{type: "text", text: "..."}, {type: "tool_use", ...}]``).
+// Flatten to a single string for the chat view; non-text blocks become a short marker.
+function flattenContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.map(blockToText).join('');
+  if (content && typeof content === 'object') return blockToText(content);
+  return content == null ? '' : String(content);
+}
+
+function blockToText(block: unknown): string {
+  if (typeof block === 'string') return block;
+  if (!block || typeof block !== 'object') return '';
+  const b = block as { type?: string; text?: unknown; name?: unknown; content?: unknown };
+  if (b.type === 'text' && typeof b.text === 'string') return b.text;
+  if (b.type === 'tool_use' && typeof b.name === 'string') return `\n[tool_use: ${b.name}]\n`;
+  if (b.type === 'tool_result') return `\n[tool_result]\n${flattenContent(b.content)}\n`;
+  if (typeof b.text === 'string') return b.text;
+  return '';
 }
