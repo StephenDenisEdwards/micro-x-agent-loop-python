@@ -27,6 +27,36 @@ The Anthropic API has per-minute token limits. The agent retries automatically w
 - Check your API tier at https://console.anthropic.com/
 - Consider upgrading your API plan for higher rate limits
 
+### Gemini 429 RESOURCE_EXHAUSTED on the all-Gemini profile
+
+```
+Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message':
+'You exceeded your current quota, please check your plan and billing details...'}}
+```
+
+On `config-standard-gemini-flash.json` (everything routed to
+`gemini-2.5-flash`), the binding free-tier limit is usually **tokens-per-minute
+(250,000)**, not requests-per-day. Each call ships ~23k input tokens — mostly
+130 tool schemas re-sent every call because prompt caching is a no-op for
+Gemini — and one agentic turn fires several calls within a minute, so a single
+turn can approach the cap; retries (which re-send the full payload) push it
+over. Full analysis: [ISSUE-008](../issues/ISSUE-008-gemini-free-tier-tpm-saturation.md).
+
+**Diagnose:**
+- Check your actual per-project limits and live usage at https://aistudio.google.com/rate-limit
+- Look for a `type: "api_call_error"` row in `metrics.jsonl` (captures
+  `status_code` and `retry_delay_seconds`); the full 429 body's `QuotaFailure`
+  metric name distinguishes per-minute (TPM) from per-day (RPD).
+
+**Fix (most effective first):**
+- Reduce tools per call (enable tool search for the Gemini profile so ~5
+  schemas are sent instead of 130)
+- Route sub-agents/compaction to a different provider (e.g. Anthropic Haiku)
+  so they don't consume the Gemini token budget
+- Enable billing (Tier 1) for orders-of-magnitude higher limits
+- Retry alone won't help an exhausted **daily** quota — wait for the
+  midnight-Pacific reset
+
 ### Gmail tools not appearing
 
 ```
