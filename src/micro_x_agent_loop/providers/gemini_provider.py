@@ -4,13 +4,37 @@ import time
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from google.genai.errors import APIError, ClientError, ServerError
 from loguru import logger
+from tenacity import retry
 
+from micro_x_agent_loop.providers.common import predicate_retry_kwargs
 from micro_x_agent_loop.tool import Tool, canonicalise_tools, normalize_tool_content
 from micro_x_agent_loop.usage import UsageResult
 
 if TYPE_CHECKING:
     from micro_x_agent_loop.agent_channel import AgentChannel
+
+
+_RATE_LIMIT_STATUS = 429
+
+
+def _is_retryable_gemini_error(exc: BaseException) -> bool:
+    """Retry transient Gemini failures only.
+
+    Gemini collapses 429 (rate limit / quota), 400 (bad request) and 404 (model
+    not found) into ``ClientError``, so type alone can't gate retries — only
+    ``code == 429`` should retry. ``ServerError`` (5xx) is always transient.
+    Permanent client errors (400/403/404) fail fast.
+
+    Note: a daily-quota 429 will retry then exhaust the attempt budget and
+    re-raise — retry heals per-minute RPM bursts, not exhausted daily quotas.
+    """
+    if isinstance(exc, ServerError):
+        return True
+    if isinstance(exc, (ClientError, APIError)):
+        return getattr(exc, "code", None) == _RATE_LIMIT_STATUS
+    return False
 
 # Map Gemini finish reasons to internal (Anthropic-style) stop reasons.
 _STOP_REASON_MAP = {
@@ -228,6 +252,7 @@ class GeminiProvider:
     def convert_tools(self, tools: list[Tool]) -> list[dict]:
         return canonicalise_tools(tools)
 
+    @retry(**predicate_retry_kwargs(_is_retryable_gemini_error))
     async def stream_chat(
         self,
         model: str,
@@ -350,6 +375,7 @@ class GeminiProvider:
 
         return message, tool_use_blocks, stop_reason, usage_result
 
+    @retry(**predicate_retry_kwargs(_is_retryable_gemini_error))
     async def create_message(
         self,
         model: str,
