@@ -201,6 +201,7 @@
     "openai/o4-mini": { "input": 0.55, "output": 2.20, "cache_read": 0.275, "cache_create": 0.0 },
     "deepseek/deepseek-chat": { "input": 0.27, "output": 1.10, "cache_read": 0.07, "cache_create": 0.0 },
     "deepseek/deepseek-reasoner": { "input": 0.55, "output": 2.19, "cache_read": 0.14, "cache_create": 0.0 },
+    "groq/llama-3.3-70b-versatile": { "input": 0.0, "output": 0.0, "cache_read": 0.0, "cache_create": 0.0 },
     "gemini/gemini-2.0-flash": { "input": 0.10, "output": 0.40, "cache_read": 0.025, "cache_create": 0.0 },
     "gemini/gemini-2.5-flash": { "input": 0.30, "output": 2.50, "cache_read": 0.075, "cache_create": 0.0 },
     "gemini/gemini-2.0-flash-thinking-exp": { "input": 0.10, "output": 0.40, "cache_read": 0.025, "cache_create": 0.0 },

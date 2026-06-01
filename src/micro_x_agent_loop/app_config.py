@@ -497,6 +497,9 @@ def resolve_runtime_env(provider_name: str) -> RuntimeEnv:
     elif provider_name == "deepseek":
         provider_api_key = os.environ.get("DEEPSEEK_API_KEY", "")
         provider_env_var = "DEEPSEEK_API_KEY"
+    elif provider_name == "groq":
+        provider_api_key = os.environ.get("GROQ_API_KEY", "")
+        provider_env_var = "GROQ_API_KEY"
     elif provider_name == "gemini":
         provider_api_key = os.environ.get("GEMINI_API_KEY", "")
         provider_env_var = "GEMINI_API_KEY"

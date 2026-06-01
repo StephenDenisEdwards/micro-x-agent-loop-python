@@ -126,6 +126,10 @@ def create_provider(
         from micro_x_agent_loop.providers.deepseek_provider import DeepSeekProvider
 
         return DeepSeekProvider(api_key)
+    if name == "groq":
+        from micro_x_agent_loop.providers.groq_provider import GroqProvider
+
+        return GroqProvider(api_key)
     if name == "gemini":
         from micro_x_agent_loop.providers.gemini_provider import GeminiProvider
 
@@ -135,5 +139,5 @@ def create_provider(
 
         return OllamaProvider(api_key, base_url=ollama_base_url)
     raise ValueError(
-        f"Unknown provider: {provider_name!r}. Supported: 'anthropic', 'openai', 'deepseek', 'gemini', 'ollama'",
+        f"Unknown provider: {provider_name!r}. Supported: 'anthropic', 'openai', 'deepseek', 'groq', 'gemini', 'ollama'",
     )

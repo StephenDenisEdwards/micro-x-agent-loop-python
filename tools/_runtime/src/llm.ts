@@ -28,7 +28,7 @@ import OpenAI from "openai";
 // Provider resolution
 // ---------------------------------------------------------------------------
 
-export type ProviderName = "anthropic" | "openai" | "deepseek" | "gemini" | "ollama";
+export type ProviderName = "anthropic" | "openai" | "deepseek" | "groq" | "gemini" | "ollama";
 
 export interface ModelSpec {
   provider: ProviderName;
@@ -45,6 +45,7 @@ const KNOWN_PROVIDERS: ReadonlySet<string> = new Set<string>([
   "anthropic",
   "openai",
   "deepseek",
+  "groq",
   "gemini",
   "ollama",
 ]);
@@ -99,6 +100,8 @@ function openAICompatConfig(provider: ProviderName): OpenAICompatConfig {
       return { baseURL: "https://api.openai.com/v1", apiKeyEnv: ["OPENAI_API_KEY"], keyless: false };
     case "deepseek":
       return { baseURL: "https://api.deepseek.com", apiKeyEnv: ["DEEPSEEK_API_KEY"], keyless: false };
+    case "groq":
+      return { baseURL: "https://api.groq.com/openai/v1", apiKeyEnv: ["GROQ_API_KEY"], keyless: false };
     case "gemini":
       return {
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
