@@ -1,0 +1,13 @@
+{
+  "Base": "config-base.json",
+  "Provider": "groq",
+  "Model": "meta-llama/llama-4-scout-17b-16e-instruct",
+  "SubAgentProvider": "groq",
+  "SubAgentModel": "meta-llama/llama-4-scout-17b-16e-instruct",
+  "CompactionProvider": "groq",
+  "CompactionModel": "meta-llama/llama-4-scout-17b-16e-instruct",
+  "Stage2Provider": "groq",
+  "Stage2Model": "meta-llama/llama-4-scout-17b-16e-instruct",
+  "PromptCachingEnabled": false,
+  "ToolSearchEnabled": "true"
+}

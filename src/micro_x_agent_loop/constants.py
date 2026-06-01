@@ -55,6 +55,10 @@ TOOL_SEARCH_CONTEXT_WINDOWS: dict[str, int] = {
     "gemini-3": 1_000_000,
     "deepseek-chat": 128_000,
     "deepseek-reasoner": 128_000,
+    # Groq-hosted open models
+    "llama-3.3-70b": 128_000,
+    "meta-llama/llama-4-scout": 131_072,
+    "meta-llama/llama-4-maverick": 131_072,
     # Ollama local models
     "mistral": 32_000,
     "llama3": 128_000,
