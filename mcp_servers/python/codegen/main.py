@@ -1148,14 +1148,26 @@ async def run_task(ctx: Context, task_name: str,
         await ctx.error(f"Failed to run task: {e}")
         return _error_result(f"Failed to run task: {e}", task_name)
 
-    # Extract __USAGE__ sentinel emitted by _runtime/src/llm.ts on subprocess exit.
-    # Strip it from the visible stderr so the user doesn't see the raw line.
+    # Extract sentinels emitted by _runtime/src/llm.ts. Strip them from the
+    # visible stderr so the user doesn't see the raw lines.
+    #   __USAGE__:     once on exit — aggregate token/cost report.
+    #   __LLM_ERROR__: one per terminal LLM-call failure (e.g. a 429 mid-batch),
+    #                  capturing status_code / retry_delay_seconds / quota_metric.
+    #                  The task subprocess can't reach the agent's logger, so this
+    #                  sentinel is how task-internal failures become visible.
     usage: dict | None = None
+    llm_errors: list[dict] = []
     cleaned_stderr_lines: list[str] = []
     for line in stderr.splitlines():
         if line.startswith("__USAGE__:"):
             try:
                 usage = json.loads(line[len("__USAGE__:"):])
+            except Exception:
+                pass
+            continue
+        if line.startswith("__LLM_ERROR__:"):
+            try:
+                llm_errors.append(json.loads(line[len("__LLM_ERROR__:"):]))
             except Exception:
                 pass
             continue
@@ -1174,6 +1186,33 @@ async def run_task(ctx: Context, task_name: str,
     # sentinel, prepend it as a prominent banner so the agent's summary
     # mentions it (LLMs tend to drop trailing detail when summarising).
     output_parts: list[str] = []
+    if llm_errors:
+        structured["_llm_errors"] = llm_errors
+        by_status: dict[str, int] = {}
+        for err in llm_errors:
+            key = str(err.get("status_code") or err.get("error_type") or "unknown")
+            by_status[key] = by_status.get(key, 0) + 1
+        first = llm_errors[0]
+        retry_hint = first.get("retry_delay_seconds")
+        quota_hint = first.get("quota_metric")
+        lines = [
+            "=== TOOL LLM ERRORS (in-task call failures) ===",
+            f"  count:    {len(llm_errors)}",
+            f"  by_status: {by_status}",
+            f"  provider/model: {first.get('provider', '?')}/{first.get('model', '?')}",
+        ]
+        if retry_hint is not None:
+            lines.append(f"  retry_delay_seconds: {retry_hint}")
+        if quota_hint:
+            lines.append(f"  quota_metric: {quota_hint}")
+        lines.append(f"  first_message: {str(first.get('message', ''))[:300]}")
+        lines.append("===============================================")
+        lines.append("Surface this error block to the user verbatim in your reply.")
+        output_parts.append("\n".join(lines))
+        await ctx.warning(
+            f"Task {task_name}: {len(llm_errors)} in-task LLM call failure(s); "
+            f"by_status={by_status}"
+        )
     if usage is not None:
         structured["_usage"] = usage
         cost = usage.get("cost_usd", 0.0)

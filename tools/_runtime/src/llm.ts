@@ -323,12 +323,17 @@ export async function createMessage(
   options?: { system?: string; temperature?: number },
 ): Promise<[string, Usage]> {
   const { provider, model } = resolveSpec(spec);
-  const result =
-    provider === "anthropic"
-      ? await anthropicCreate(model, maxTokens, messages, options)
-      : await openAICreate(provider, model, maxTokens, messages, options);
-  recordUsage(result[1]);
-  return result;
+  try {
+    const result =
+      provider === "anthropic"
+        ? await anthropicCreate(model, maxTokens, messages, options)
+        : await openAICreate(provider, model, maxTokens, messages, options);
+    recordUsage(result[1]);
+    return result;
+  } catch (error) {
+    recordError(spec, error);
+    throw error;
+  }
 }
 
 async function anthropicStream(
@@ -406,12 +411,17 @@ export async function streamMessage(
   options?: { system?: string; temperature?: number },
 ): Promise<[string, Usage]> {
   const { provider, model } = resolveSpec(spec);
-  const result =
-    provider === "anthropic"
-      ? await anthropicStream(model, maxTokens, messages, options)
-      : await openAIStream(provider, model, maxTokens, messages, options);
-  recordUsage(result[1]);
-  return result;
+  try {
+    const result =
+      provider === "anthropic"
+        ? await anthropicStream(model, maxTokens, messages, options)
+        : await openAIStream(provider, model, maxTokens, messages, options);
+    recordUsage(result[1]);
+    return result;
+  } catch (error) {
+    recordError(spec, error);
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -464,3 +474,68 @@ process.on("beforeExit", () => {
   process.stderr.write("__USAGE__:" + JSON.stringify(report) + "\n");
   _exitHandlerWritten = true;
 });
+
+// ---------------------------------------------------------------------------
+// Error reporting. The task subprocess can't reach the Python agent's logger,
+// so each terminal LLM call failure is emitted immediately to stderr as a
+// `__LLM_ERROR__:` sentinel line (mirroring `__USAGE__:`). codegen run_task
+// parses these, strips them from the visible stderr, and surfaces them in its
+// CallToolResult so failures (e.g. a 429 mid-batch) are no longer invisible.
+//
+// SDKs differ on where the HTTP status lives: the OpenAI and Anthropic SDKs put
+// it on `.status`; google-genai (OpenAI-compatible path here) and others may
+// use `.code`/`.statusCode`. The quota-violation metric name and retry hint are
+// only in the message/body, so they are regex-extracted.
+// ---------------------------------------------------------------------------
+
+const _RETRY_DELAY_RE = /retry[_-]?delay['"]?\s*[:=]\s*['"]?(\d+(?:\.\d+)?)s?/i;
+// e.g. "quotaId": "GenerateContentInputTokensPerModelPerMinute" or
+// "quota_metric: generativelanguage.googleapis.com/generate_content_..._per_minute"
+const _QUOTA_METRIC_RE = /(?:quota[_-]?(?:id|metric)|violations?)['"]?\s*[:=]\s*['"]?([A-Za-z0-9_./-]+)/i;
+
+interface LlmErrorReport {
+  provider: string;
+  model: string;
+  error_type: string;
+  status_code: number | null;
+  retry_delay_seconds: number | null;
+  quota_metric: string | null;
+  message: string;
+}
+
+function statusFromError(error: unknown): number | null {
+  for (const key of ["status", "status_code", "statusCode", "code"]) {
+    const v = (error as Record<string, unknown>)?.[key];
+    if (typeof v === "number") return v;
+  }
+  return null;
+}
+
+export function buildLlmErrorReport(spec: string | ModelSpec, error: unknown): LlmErrorReport {
+  const { provider, model } = resolveSpec(spec);
+  const message = error instanceof Error ? error.message : String(error);
+  const retryMatch = _RETRY_DELAY_RE.exec(message);
+  const quotaMatch = _QUOTA_METRIC_RE.exec(message);
+  return {
+    provider,
+    model,
+    error_type: error instanceof Error ? error.constructor.name : typeof error,
+    status_code: statusFromError(error),
+    retry_delay_seconds: retryMatch ? Number(retryMatch[1]) : null,
+    quota_metric: quotaMatch ? quotaMatch[1] : null,
+    message: message.slice(0, 1500),
+  };
+}
+
+let _errorCount = 0;
+
+/** Emit a terminal LLM-call failure to stderr and count it. Never throws. */
+function recordError(spec: string | ModelSpec, error: unknown): void {
+  _errorCount++;
+  try {
+    const report = buildLlmErrorReport(spec, error);
+    process.stderr.write("__LLM_ERROR__:" + JSON.stringify(report) + "\n");
+  } catch {
+    // Reporting must never mask the original error.
+  }
+}
