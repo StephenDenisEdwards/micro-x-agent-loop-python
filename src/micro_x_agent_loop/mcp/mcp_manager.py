@@ -367,10 +367,29 @@ class McpManager:
         self._resolved_config = resolved_config
         self._connections: list[_ServerConnection] = []
 
+    @staticmethod
+    def _is_disabled(config: Any) -> bool:
+        """A server is disabled when a profile overrides its entry with a falsy
+        value (``null``/``false``) or ``{"enabled": false}``.
+
+        Lets a Base-inheriting profile switch off heavy servers it doesn't need —
+        e.g. to stay under a provider's tool-count cap (Groq allows max 128).
+        Deep-merge can override a key but not delete it, so disabling is how a
+        profile removes a server present in ``config-base.json``.
+        """
+        if config is None or config is False:
+            return True
+        if isinstance(config, dict) and config.get("enabled") is False:
+            return True
+        return False
+
     async def connect_all(self) -> list[Tool]:
         """Connect to all configured MCP servers in parallel and return discovered tools."""
         connections: list[_ServerConnection] = []
         for server_name, config in self._server_configs.items():
+            if self._is_disabled(config):
+                logger.info(f"MCP server '{server_name}': disabled by config, skipping")
+                continue
             conn = _ServerConnection(server_name)
             connections.append(conn)
             self._connections.append(conn)

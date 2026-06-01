@@ -339,6 +339,36 @@ class ServerConnectionTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+class IsDisabledTests(unittest.TestCase):
+    """A profile disables a Base server via false/null/{enabled:false}."""
+
+    def test_false_is_disabled(self) -> None:
+        self.assertTrue(McpManager._is_disabled(False))
+
+    def test_none_is_disabled(self) -> None:
+        self.assertTrue(McpManager._is_disabled(None))
+
+    def test_enabled_false_dict_is_disabled(self) -> None:
+        self.assertTrue(McpManager._is_disabled({"enabled": False, "command": "x"}))
+
+    def test_normal_config_is_enabled(self) -> None:
+        self.assertFalse(McpManager._is_disabled({"command": "node", "args": []}))
+
+    def test_enabled_true_dict_is_enabled(self) -> None:
+        self.assertFalse(McpManager._is_disabled({"enabled": True, "command": "x"}))
+
+    def test_connect_all_skips_disabled_servers(self) -> None:
+        async def go() -> None:
+            # Two disabled entries + one empty-but-enabled; none should connect,
+            # and no exception should be raised for the disabled ones.
+            mgr = McpManager({"discord": False, "playwright": {"enabled": False}})
+            tools = await mgr.connect_all()
+            self.assertEqual([], tools)
+            await mgr.close()
+
+        asyncio.run(go())
+
+
 class McpManagerTests(unittest.TestCase):
     def test_connect_all_empty(self) -> None:
         async def go() -> None:

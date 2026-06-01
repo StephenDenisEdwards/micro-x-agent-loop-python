@@ -51,6 +51,7 @@ Pointers to files, ADRs, other issues.
 | [ISSUE-006](ISSUE-006-playwright-profile-contention.md) | Playwright profile contention between agent and codegen tasks | 2026-05-08 | Resolved (2026-05-08) |
 | [ISSUE-007](ISSUE-007-prose-contract-drift-across-policy-layers.md) | Prose-contract drift across policy layers | 2026-05-14 | Open |
 | [ISSUE-008](ISSUE-008-gemini-free-tier-tpm-saturation.md) | Gemini 2.5 Flash free-tier request cap (20/day; was mis-titled TPM) | 2026-05-31 | Open |
+| [ISSUE-009](ISSUE-009-tool-count-cap-vs-general-purpose-agent.md) | Tool-count caps vs a general-purpose agent (Groq 128-tool limit) | 2026-06-01 | Open |
 
 ## Conventions
 
