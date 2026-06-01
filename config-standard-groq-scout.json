@@ -10,5 +10,5 @@
   "Stage2Provider": "groq",
   "Stage2Model": "meta-llama/llama-4-scout-17b-16e-instruct",
   "PromptCachingEnabled": false,
-  "ToolSearchEnabled": "true"
+  "ToolSearchEnabled": "false"
 }
