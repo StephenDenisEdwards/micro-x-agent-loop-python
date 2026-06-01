@@ -1,115 +1,114 @@
-# ISSUE-008: Gemini 2.5 Flash free-tier TPM saturation (HTTP 429)
+# ISSUE-008: Gemini 2.5 Flash free-tier request cap (HTTP 429)
+
+> **Filename note:** the slug says "tpm-saturation" — that was the *initial
+> (wrong) hypothesis*. The confirmed root cause is the **daily request cap
+> (RPD)**, not tokens-per-minute. The filename is kept to preserve the index
+> link and history; see §Correction.
 
 ## Date
 
-2026-05-31
+2026-05-31 (root cause confirmed 2026-06-01)
 
 ## Status
 
-**Open.** Root cause identified from logs; mitigations proposed but not yet applied. The provider-side retry and failure-logging that this investigation produced **are** shipped (see §Related changes).
+**Open.** Root cause **confirmed from a captured 429 body**; mitigations
+proposed, not yet applied. The retry and failure-logging this investigation
+produced **are** shipped (see §Related changes).
 
 ## Severity
 
-Medium — affects only the all-Gemini profile (`config-standard-gemini-flash.json`) on Google's free tier. Anthropic profiles are unaffected (prompt caching keeps per-call billed input tiny).
+Medium — affects the all-Gemini profile (`config-standard-gemini-flash.json`)
+and the codegen RSS task (`rank_model: gemini/gemini-2.5-flash`) on Google's
+free tier. Anthropic profiles are unaffected.
 
 ## Summary
 
-Running the agent on `config-standard-gemini-flash.json` (which routes the main
-loop, Stage-2 classification, sub-agents and compaction all to
-`gemini-2.5-flash`) intermittently fails with:
+Running on `config-standard-gemini-flash.json`, or running the
+`jobserve_rss_processor` `process_feed` task (which scores each job with one
+Gemini call), fails with HTTP 429 `RESOURCE_EXHAUSTED`. The captured error body
+(2026-06-01) names the exact quota:
 
 ```
-Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message':
-'You exceeded your current quota, please check your plan and billing details...'}}
+Quota exceeded for metric:
+  generativelanguage.googleapis.com/generate_content_free_tier_requests
+quotaId:    GenerateRequestsPerDayPerProjectPerModel-FreeTier
+quotaValue: 20
+model:      gemini-2.5-flash
 ```
 
-The binding constraint is **tokens-per-minute (TPM)**, not requests-per-minute
-(RPM) or requests-per-day (RPD). The free tier for `gemini-2.5-flash` is
-approximately **RPM 10 / TPM 250,000 / RPD 250** (authoritative figures are
-per-project at <https://aistudio.google.com/rate-limit>; the public docs page no
-longer prints a per-model table).
+**The binding limit is 20 `generateContent` requests per day** (per project, per
+model) on the free tier for `gemini-2.5-flash`. It is **not** tokens-per-minute,
+not requests-per-minute, and not the 250/day figure older docs cite — Google has
+tiered the free allowance down to **20/day**. (Authoritative per-project values:
+<https://aistudio.google.com/rate-limit>.)
 
-## Evidence (from metrics.jsonl, 28 `gemini-2.5-flash` calls, 2026-05-30/31)
+## Why it trips so fast
 
-| Metric | Free limit | Observed | Verdict |
-|--------|-----------|----------|---------|
-| Requests / day | 250 | 21 (busiest day) | far under |
-| Peak requests / 60s | 10 | 5 | under |
-| Peak tokens / 60s (logged) | 250,000 | 125,171 | under, but only ~2× headroom |
-| Avg **input tokens per call** | — | **~23,600** | the problem |
-| Tool schemas sent **every call** | — | **130** | the problem |
-| Prompt caching on this profile | — | **OFF** | the problem |
-| Cache-read coverage | — | 22% (Gemini implicit only) | negligible |
-| Tightest call spacing | — | 2–5 s | clustered |
+- **The RSS `process_feed` task scores one job per LLM call, in a sequential
+  loop.** A ~50-job feed = ~50 requests in one run against a **20/day** ceiling,
+  so ~30 jobs 429 and the run can fail outright. Because failed jobs are not
+  stored, a fully-over-budget run writes **no sidecar and no report at all**.
+- **The agent's own Gemini calls share the same per-project/day bucket** — main
+  loop, Stage-2, etc. — so the 20 is often partly spent before the task even
+  runs.
+- One call = one request regardless of size; token volume is irrelevant to
+  *this* quota.
 
-The successful calls all sat under every limit. The 429 itself is not in the
-metrics logs (it pre-dated [the failure-logging fix](#related-changes); failed
-calls emitted no metric). So TPM saturation is **inferred**, not directly
-captured — see §Confirming it.
+## Correction (the earlier TPM hypothesis was wrong)
 
-## Mechanism (why TPM saturates)
+The first version of this issue concluded **TPM saturation** (≈250k tokens/min).
+That was **inference from a success-only dataset** — the metrics pipeline logged
+only successful calls, so every 429 was invisible and the analysis reasoned from
+call sizes (~23k input tokens, 130 uncached tool schemas) and clustering to a
+plausible-but-wrong mechanism. Three successive guesses (RPD 250 → TPM → RPM 10)
+were all overturned once the **actual 429 body was captured** and named
+`GenerateRequestsPerDayPerProjectPerModel-FreeTier, quotaValue 20`.
 
-1. **Every Gemini call ships ~23k input tokens.** The bulk is **130 MCP tool
-   schemas re-sent in full on every call**, plus growing conversation history.
-2. **Nothing is amortised.** `PromptCachingEnabled` is `false` on this profile,
-   *and* `GeminiProvider` implements no explicit context caching — it only
-   *reads* Gemini's automatic implicit-cache counters (`cached_content_token_count`),
-   which covered just 22% of input and was 0 on most calls. So the static
-   130-schema block is re-billed on essentially every request.
-3. **One agentic turn fires many of these back-to-back** (2–5 s apart). Six
-   calls × 23k ≈ **140k tokens in one minute** — already past half the 250k cap
-   from a single turn.
-4. **Retries amplify.** Each retry re-sends the full ~23k payload, and failed
-   attempts still count against TPM. Modelled at 3× retry, peak throughput rises
-   to ~**375k tokens/60s — over the 250k limit.** This is the death-spiral: a
-   near-limit burst trips one 429, retries push throughput further over, tripping
-   more.
+Lesson: a success-only log cannot diagnose failures. The fix was to capture the
+failures (see §Related changes); the answer appeared immediately once we did.
 
-The agent is fundamentally an Anthropic-shaped workload (large static tool
-prompt amortised by prompt caching) pointed at a provider/tier where that
-amortisation does not exist.
-
-## Confirming it (the logs can now capture this)
-
-Thanks to the failure-logging change, the next occurrence will be recorded as a
-`type: "api_call_error"` row in `metrics.jsonl` carrying `status_code`,
-`error_type`, and a parsed `retry_delay_seconds`. To confirm TPM vs RPD
-definitively, also inspect the full 429 body's `QuotaFailure` metric name (e.g.
-`GenerateContentInputTokensPerModelPerMinute` ⇒ TPM, vs
-`GenerateRequestsPerModelPerDay` ⇒ RPD) and check
-<https://aistudio.google.com/rate-limit>.
+The per-call token detail from that earlier analysis is still accurate and still
+*relevant* (large prompts make a Tier-1 upgrade or batching more attractive),
+but it is **not** what causes the 429.
 
 ## Mitigations (in order of impact, not yet applied)
 
-1. **Cut tool schemas per call.** 130 schemas × every call is the bulk of the
-   23k. Activating `tool_search` for the Gemini profile would send ~5 schemas
-   instead of 130, roughly halving per-call input tokens. Tool search is
-   currently gated off for non-Anthropic / cache-preserving reasons
-   (`tool_search.should_activate_tool_search`); the gate would need to allow
-   Gemini.
-2. **Real prompt caching for Gemini.** Implement explicit `CachedContent` for
-   the static system-prompt + tool-schema block in `GeminiProvider`, so it is
-   billed once and referenced thereafter. Today caching is a no-op for Gemini.
-3. **Stop routing the whole agent to Gemini free tier.** Point sub-agents and
-   compaction at a separate-quota provider (e.g. Anthropic Haiku) to cut the
-   per-turn Gemini request/token count; or upgrade to Tier 1 (billing enabled),
-   which raises `gemini-2.5-flash` limits by orders of magnitude.
+1. **Batch the scoring loop.** Score N jobs per LLM call instead of one. At ~10
+   jobs/call, a 50-job feed = ~5 requests, comfortably under 20/day. This is the
+   structural fix that makes the task viable on free tier. Lives in
+   `tools/jobserve_rss_processor/src/task.ts` (`assessJob` loop).
+2. **Fail fast on daily-quota 429s; only retry per-minute limits.** The current
+   Gemini retry predicate retries *any* 429, including this daily one — wasting
+   the 5-attempt budget over minutes on an error that won't clear until midnight
+   Pacific. Gate on the `quotaId`: retry `...PerMinute`, fail fast on `...PerDay`.
+3. **Use a higher-quota provider for ranking.** The ranking call needs **no tool
+   calling** (prompt→JSON), so it can use any capable text model:
+   - `ollama/gemma3:4b` — local, $0, no cap (runs on the 4GB RTX 3050 Ti).
+   - Groq / Cerebras free tier (Llama 3.3 70B) — ~1,000 req/day, far higher
+     quality. See [model-tool-calling-and-free-apis](../research/model-tool-calling-and-free-apis.md).
+4. **Enable billing (Tier 1).** Raises `gemini-2.5-flash` RPD by orders of
+   magnitude; the cap effectively disappears.
 
 ## Related changes
 
-This investigation produced two shipped fixes (neither resolves the TPM
-saturation itself; they make it survivable and observable):
+This investigation produced two shipped fixes (neither resolves the quota cap;
+they made it survivable and — crucially — observable):
 
-- **Gemini retry** — `GeminiProvider.stream_chat`/`create_message` now retry on
-  429 / 5xx via tenacity (fail fast on 400/403/404). Heals transient per-minute
+- **Gemini retry** — `GeminiProvider.stream_chat`/`create_message` retry on
+  429 / 5xx via tenacity, fail fast on 400/403/404. Heals transient per-minute
   bursts; does **not** help an exhausted daily quota. (commit `0f5f335`)
-- **Failed-call logging** — terminal LLM failures now emit a
-  `type: "api_call_error"` metric + an `agent.log` warning, where previously the
-  success-only metrics pipeline left 429s with no trace. (commits `889e98c`,
-  `3074004`)
+  *Refinement still needed — mitigation 2 above.*
+- **Failed-call logging, two layers:**
+  - Agent side: terminal LLM failures emit a `type: "api_call_error"` metric +
+    `agent.log` warning. (commits `889e98c`, `3074004`)
+  - Task-subprocess side: `_runtime/src/llm.ts` emits a `__LLM_ERROR__:` stderr
+    sentinel per failed call (status, `retry_delay_seconds`, **`quota_metric`**);
+    codegen `run_task` parses it into `structuredContent._llm_errors` + a banner.
+    **This is what captured the definitive quota name.** (commit `77f74e0`)
 
 ## Why retry alone is insufficient
 
-Retry re-sends the same ~23k payload, so on a TPM-bound failure it can *worsen*
-throughput before the minute window clears. The durable fix is reducing
-per-call token volume (mitigations 1–2), not retrying harder.
+This is a **daily** quota. Retry with second-scale backoff cannot clear it —
+the window resets at midnight Pacific. Retrying just burns the attempt budget
+and still fails. The durable fixes are batching (mitigation 1) and/or a
+different provider/tier (3–4).

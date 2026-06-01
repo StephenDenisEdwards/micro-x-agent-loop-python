@@ -35,27 +35,32 @@ Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message':
 ```
 
 On `config-standard-gemini-flash.json` (everything routed to
-`gemini-2.5-flash`), the binding free-tier limit is usually **tokens-per-minute
-(250,000)**, not requests-per-day. Each call ships ~23k input tokens — mostly
-130 tool schemas re-sent every call because prompt caching is a no-op for
-Gemini — and one agentic turn fires several calls within a minute, so a single
-turn can approach the cap; retries (which re-send the full payload) push it
-over. Full analysis: [ISSUE-008](../issues/ISSUE-008-gemini-free-tier-tpm-saturation.md).
+`gemini-2.5-flash`), or when the codegen RSS task ranks with
+`gemini/gemini-2.5-flash`, the binding free-tier limit is the **daily request
+cap: 20 `generateContent` requests per day** (per project, per model —
+`quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier`). It is *not*
+tokens-per-minute and *not* the 250/day older docs cite; Google tiered the free
+allowance down to 20/day. One call = one request regardless of size. The RSS
+`process_feed` task scores one job per call, so a ~50-job feed needs ~50
+requests and blows the cap in a single run (and writes no report, since failed
+jobs aren't stored). Full analysis:
+[ISSUE-008](../issues/ISSUE-008-gemini-free-tier-tpm-saturation.md).
 
 **Diagnose:**
 - Check your actual per-project limits and live usage at https://aistudio.google.com/rate-limit
-- Look for a `type: "api_call_error"` row in `metrics.jsonl` (captures
-  `status_code` and `retry_delay_seconds`); the full 429 body's `QuotaFailure`
-  metric name distinguishes per-minute (TPM) from per-day (RPD).
+- Agent calls: look for a `type: "api_call_error"` row in `metrics.jsonl`.
+- In-task calls (codegen): the `run_task` result carries an `_llm_errors`
+  block with `status_code`, `retry_delay_seconds`, and the **`quota_metric`**
+  name — the `...PerDay...` vs `...PerMinute...` suffix tells you which limit hit.
 
 **Fix (most effective first):**
-- Reduce tools per call (enable tool search for the Gemini profile so ~5
-  schemas are sent instead of 130)
-- Route sub-agents/compaction to a different provider (e.g. Anthropic Haiku)
-  so they don't consume the Gemini token budget
+- Rank/route with a higher-quota provider — the RSS ranking call needs no tool
+  calling, so `ollama/gemma3:4b` (local, free, no cap) or a Groq/Cerebras free
+  model (≈1,000 req/day) both work. See
+  [model-tool-calling-and-free-apis](../research/model-tool-calling-and-free-apis.md).
+- Batch the scoring loop so the whole feed is a handful of calls, not ~50
 - Enable billing (Tier 1) for orders-of-magnitude higher limits
-- Retry alone won't help an exhausted **daily** quota — wait for the
-  midnight-Pacific reset
+- Retry will **not** help — this is a daily quota; it resets at midnight Pacific
 
 ### Gmail tools not appearing
 
