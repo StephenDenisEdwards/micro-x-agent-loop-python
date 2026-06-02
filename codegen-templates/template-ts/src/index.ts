@@ -23,7 +23,8 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-import { McpClient } from "../../_runtime/src/mcp-client.js";
+import { McpClient, type IMcpClient } from "../../_runtime/src/mcp-client.js";
+import { createNativeClient, isNativeServer } from "../../_runtime/src/native/client.js";
 import type { ToolDef } from "../../_runtime/src/tool-def.js";
 import { loadJsonConfig } from "./config.js";
 import * as task from "./task.js";
@@ -87,16 +88,32 @@ function parseToolArg(): string | undefined {
 
 async function connectUpstream(
   config: Record<string, unknown>,
-): Promise<Record<string, McpClient>> {
+): Promise<Record<string, IMcpClient>> {
+  const connected: Record<string, IMcpClient> = {};
+
+  // Native servers (filesystem, system-info) are served in-process — no
+  // subprocess. They mirror the agent's native tools (ADR-025); a task gets
+  // its own in-process implementation via NativeClient.
+  for (const name of SERVERS) {
+    if (!isNativeServer(name)) continue;
+    const client = createNativeClient(name, config);
+    if (client) {
+      connected[name] = client;
+      log(`  ${name}: native (in-process)`);
+    }
+  }
+
   const mcpConfigs = (config["McpServers"] ?? {}) as Record<string, McpServerConfig>;
   const needed: Record<string, McpServerConfig> = {};
   for (const name of SERVERS) {
+    if (isNativeServer(name)) continue;
     if (mcpConfigs[name]) needed[name] = mcpConfigs[name];
   }
 
   if (Object.keys(needed).length === 0) {
-    if (SERVERS.length > 0) log(`No MCP servers found for: ${SERVERS.join(", ")}`);
-    return {};
+    const unresolved = SERVERS.filter((s) => !isNativeServer(s) && !mcpConfigs[s]);
+    if (unresolved.length > 0) log(`No MCP servers found for: ${unresolved.join(", ")}`);
+    return connected;
   }
 
   log("Connecting MCP servers...");
@@ -110,7 +127,6 @@ async function connectUpstream(
     }),
   );
 
-  const connected: Record<string, McpClient> = {};
   for (const result of results) {
     if (result.status === "fulfilled") {
       const [name, client] = result.value;
@@ -119,11 +135,11 @@ async function connectUpstream(
       log(`  server FAILED: ${result.reason}`);
     }
   }
-  log(`${Object.keys(connected).length}/${Object.keys(needed).length} servers connected`);
+  log(`${Object.keys(needed).length} MCP server(s) requested; ${Object.keys(connected).length} client(s) ready`);
   return connected;
 }
 
-async function shutdownClients(clients: Record<string, McpClient>): Promise<void> {
+async function shutdownClients(clients: Record<string, IMcpClient>): Promise<void> {
   if (Object.keys(clients).length === 0) return;
   log("Shutting down MCP servers...");
   await Promise.all(Object.values(clients).map((c) => c.close().catch(() => {})));
@@ -141,8 +157,8 @@ async function runServer(): Promise<void> {
   const profile = loadProfile();
 
   // Lazy upstream connection - connect on first tool call, not at startup
-  let clients: Record<string, McpClient> | null = null;
-  async function getClients(): Promise<Record<string, McpClient>> {
+  let clients: Record<string, IMcpClient> | null = null;
+  async function getClients(): Promise<Record<string, IMcpClient>> {
     if (clients) return clients;
     clients = await connectUpstream(config);
     return clients;

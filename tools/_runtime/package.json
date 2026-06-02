@@ -7,6 +7,9 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "@vscode/ripgrep": "^1.15.9",
+    "fast-glob": "^3.3.2",
+    "mammoth": "^1.8.0",
     "openai": "^4.77.0"
   }
 }

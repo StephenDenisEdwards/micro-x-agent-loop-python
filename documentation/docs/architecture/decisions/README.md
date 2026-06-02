@@ -42,10 +42,12 @@ What becomes easier or more difficult to do because of this change?
 | [ADR-016](ADR-016-retry-resilience-for-mcp-servers-and-transport.md) | Retry/resilience for MCP servers and transport | Accepted |
 | [ADR-017](ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md) | Ask user pseudo-tool for human-in-the-loop questioning | Accepted |
 | [ADR-018](ADR-018-trigger-broker-subprocess-dispatch.md) | Trigger broker with subprocess dispatch | Accepted |
-| [ADR-019](ADR-019-typescript-codegen-template.md) | TypeScript codegen template | Proposed |
+| [ADR-019](ADR-019-typescript-codegen-template.md) | TypeScript codegen template | Accepted (extended by ADR-027) |
 | [ADR-020](ADR-020-semantic-model-routing.md) | Semantic model routing across providers | Accepted |
 | [ADR-021](ADR-021-same-family-provider-fallback.md) | Same-family provider fallback | Accepted |
 | [ADR-022](ADR-022-textual-tui-for-cli.md) | Textual TUI for CLI | Accepted |
 | [ADR-023](ADR-023-file-handling-truncation-signaling.md) | Truncation signaling for file-handling MCP tools | Accepted |
 | [ADR-024](ADR-024-single-layer-tool-result-truncation.md) | Single-layer tool-result truncation policy | Accepted |
 | [ADR-025](ADR-025-native-core-tools-mcp-for-subsystems.md) | Native in-process tools for core primitives; MCP for external + isolatable subsystems | Accepted |
+| [ADR-026](ADR-026-single-event-log-projections-not-parallel-writers.md) | Single event log as source of truth; other sinks are projections | Proposed |
+| [ADR-027](ADR-027-native-tools-in-codegen-tasks.md) | Native tools in codegen tasks (in-process, not MCP subprocess) | Accepted |

@@ -6,7 +6,7 @@
  * types so it can't drift from the upstream MCP schema. See documentation/docs/guides/codegen-tool-types.md.
  */
 
-import type { McpClient } from "../../_runtime/src/mcp-client.js";
+import type { IMcpClient } from "../../_runtime/src/mcp-client.js";
 import type {
   // google
   GmailSearchArgs, GmailReadArgs, GmailSendArgs,
@@ -46,9 +46,9 @@ import type {
   BrowserPressKeyArgs, BrowserEvaluateArgs, BrowserWaitForArgs,
 } from "./tool-types.js";
 
-export type Clients = Record<string, McpClient>;
+export type Clients = Record<string, IMcpClient>;
 
-function get(clients: Clients, server: string): McpClient {
+function get(clients: Clients, server: string): IMcpClient {
   const client = clients[server];
   if (!client) throw new Error(`MCP server '${server}' not connected`);
   return client;
@@ -415,6 +415,78 @@ export async function fsGlob(
     return { paths: result.split("\n").filter(Boolean), total: 0, truncated: false };
   }
   return result as GlobResult;
+}
+
+/** Append content to the end of an existing file. */
+export async function fsAppend(
+  clients: Clients, path: string, content: string,
+): Promise<boolean> {
+  const result = await get(clients, "filesystem").callTool("append_file", { path, content });
+  if (result && typeof result === "object") {
+    return ((result as Record<string, unknown>)["success"] as boolean) ?? false;
+  }
+  return false;
+}
+
+/** Delete a single file (refuses directories — use fsBash with rm -r for those). */
+export async function fsDelete(
+  clients: Clients, path: string,
+): Promise<boolean> {
+  const result = await get(clients, "filesystem").callTool("delete_file", { path });
+  if (result && typeof result === "object") {
+    return ((result as Record<string, unknown>)["deleted"] as boolean) ?? false;
+  }
+  return false;
+}
+
+/** Surgical exact-string edit. Returns the number of replacements made. */
+export async function fsEdit(
+  clients: Clients,
+  path: string,
+  oldString: string,
+  newString: string,
+  replaceAll = false,
+): Promise<number> {
+  const result = await get(clients, "filesystem").callTool("edit_file", {
+    path, old_string: oldString, new_string: newString, replace_all: replaceAll,
+  });
+  if (result && typeof result === "object") {
+    return ((result as Record<string, unknown>)["replacements"] as number) ?? 0;
+  }
+  return 0;
+}
+
+/** Save a persistent memory markdown file to the configured memory dir. */
+export async function fsSaveMemory(
+  clients: Clients, file: string, content: string,
+): Promise<boolean> {
+  const result = await get(clients, "filesystem").callTool("save_memory", { file, content });
+  if (result && typeof result === "object") {
+    return ((result as Record<string, unknown>)["success"] as boolean) ?? false;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// System info (server: "system-info")
+// ---------------------------------------------------------------------------
+
+/** OS / CPU / memory / runtime summary for this machine (human-readable text). */
+export async function systemInfo(clients: Clients): Promise<string> {
+  const result = await get(clients, "system-info").callTool("system_info", {});
+  return typeof result === "string" ? result : JSON.stringify(result);
+}
+
+/** Disk usage for fixed drives (human-readable text). */
+export async function diskInfo(clients: Clients): Promise<string> {
+  const result = await get(clients, "system-info").callTool("disk_info", {});
+  return typeof result === "string" ? result : JSON.stringify(result);
+}
+
+/** Network interface / IP-address summary (human-readable text). */
+export async function networkInfo(clients: Clients): Promise<string> {
+  const result = await get(clients, "system-info").callTool("network_info", {});
+  return typeof result === "string" ? result : JSON.stringify(result);
 }
 
 // ---------------------------------------------------------------------------

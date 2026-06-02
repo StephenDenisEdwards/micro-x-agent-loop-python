@@ -30,6 +30,19 @@ export function mcpUrlEnvVar(serverName: string): string {
   return `MICRO_X_${serverName.toUpperCase().replace(/-/g, "_")}_MCP_URL`;
 }
 
+/**
+ * The surface a task's typed wrappers (tools.ts) depend on. Implemented by
+ * both {@link McpClient} (out-of-process MCP server over stdio/SSE) and the
+ * in-process NativeClient (native/client.ts), so the `Clients` map can hold
+ * either transparently. See native/client.ts and connectUpstream in index.ts.
+ */
+export interface IMcpClient {
+  readonly name: string;
+  listTools(): Promise<Array<{ name: string; description: string }>>;
+  callTool(name: string, args?: Record<string, unknown>): Promise<unknown>;
+  close(): Promise<void>;
+}
+
 const SHUTDOWN_TIMEOUT_MS = 5000;
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1000;
@@ -47,7 +60,7 @@ function isTransientError(err: unknown): boolean {
   return false;
 }
 
-export class McpClient {
+export class McpClient implements IMcpClient {
   readonly name: string;
   private client: Client | null = null;
   private transport: ClientTransport | null = null;

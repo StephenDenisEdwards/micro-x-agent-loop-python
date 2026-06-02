@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-05-18. **Amends [ADR-015](./ADR-015-all-tools-as-typescript-mcp-servers.md)** (whose blanket "all tools are TypeScript MCP servers" rule no longer holds — see Decision).
+Accepted — 2026-05-18. **Amends [ADR-015](./ADR-015-all-tools-as-typescript-mcp-servers.md)** (whose blanket "all tools are TypeScript MCP servers" rule no longer holds — see Decision). Extended to codegen tasks by [ADR-027](./ADR-027-native-tools-in-codegen-tasks.md) (which carries the in-process native primitives into generated task apps, and inherits the multi-copy drift risk noted below).
 
 ## Context
 

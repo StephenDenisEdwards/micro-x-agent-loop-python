@@ -5,9 +5,9 @@
  * related MCP tools from one server. See PLAN-codegen-multi-tool.md.
  */
 
-import type { McpClient } from "./mcp-client.js";
+import type { IMcpClient } from "./mcp-client.js";
 
-export type Clients = Record<string, McpClient>;
+export type Clients = Record<string, IMcpClient>;
 
 // inputSchema is intentionally typed as unknown: the field always holds a
 // Zod raw shape ({ [key]: zodType }), but zod 3.25's preview $ZodType types

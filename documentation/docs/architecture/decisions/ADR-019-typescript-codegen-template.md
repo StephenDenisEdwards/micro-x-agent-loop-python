@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (implemented 2026-03-11)
+Accepted (implemented 2026-03-11). **Extended by [ADR-027](./ADR-027-native-tools-in-codegen-tasks.md)** — the template now ships in-process native-tool wrappers (filesystem/system-info) alongside the MCP wrappers described here, so generated tasks can reach the core primitives that [ADR-025](./ADR-025-native-core-tools-mcp-for-subsystems.md) moved out of MCP.
 
 ## Context
 
