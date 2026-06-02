@@ -10,6 +10,21 @@
 profile trimmed under the cap). The durable architectural fix (cap-aware tool
 management + recover-on-miss tool search) is not yet built.
 
+**Update 2026-06-02 — the tool *count* cap was not the last wall.** After
+trimming the Groq Scout profile under 128 tools (~60), the agent then hit Groq's
+**tokens-per-minute** limit instead: a single ~60-tool request totalled
+**30,253 tokens** and was rejected with `413 ... TPM: Limit 30000` — i.e. one
+tool-heavy request exceeds the *entire* per-minute free budget. Separately, the
+RSS task's ~50 sequential ranking calls produced **23 consecutive 429s** against
+the same 30k/min budget. So on Groq *free*, fixing the count cap just exposes a
+token-rate cap underneath. This reinforces the recommendation order below
+(cap-aware trimming alone is insufficient on a small-TPM tier) and overlaps
+[ISSUE-008](ISSUE-008-gemini-free-tier-tpm-saturation.md)'s theme: free tiers
+are bounded by whichever limit (requests/day, tools/request, tokens/minute)
+binds first, and a tool-heavy general-purpose agent tends to hit all of them.
+Measured numbers and provider comparison:
+[model-tool-calling-and-free-apis](../research/model-tool-calling-and-free-apis.md).
+
 ## Summary
 
 A general-purpose agent wants **many** tools available (this project ships

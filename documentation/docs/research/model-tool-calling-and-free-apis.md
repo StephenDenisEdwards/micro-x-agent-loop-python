@@ -73,15 +73,24 @@ them with a base-URL + key. **Verify current limits at signup; free tiers move.*
 
 | Provider | Free limits (approx, 2026) | Tool calling | Best model | Watch out for |
 |----------|----------------------------|--------------|------------|---------------|
-| **Groq** | ~1,000 req/day, 30 RPM, 6k TPM | ✅ | Llama 3.3 70B | 429s on **TPM**, inflated by large tool schemas |
+| **Groq** | **30,000 TPM (measured)**, ~30 RPM, ~1,000 req/day | ✅ | Llama 3.3 70B | 413/429 on **TPM** — a tool-heavy request can exceed 30k *by itself* |
 | **Cerebras** | ~1M tokens/day, 30 RPM | ✅ | Llama 3.3 70B | very fast; token-budget rather than request-budget |
 | **OpenRouter** | ~200 req/day per model, 20 RPM | ✅ (model-dependent) | many free | aggregator; spread load across models |
 
 Versus `gemini-2.5-flash`'s **20 req/day**, Groq's ~1,000/day is ~50× the budget,
-on a *more* reliable tool-caller (Llama 3.3 70B at ~97% vs Flash). The relevant
-gotcha for *this* agent: Groq's free 429 is a **tokens-per-minute** limit, and
-our 130-tool system prompt is large — so pair a hosted free tier with tool
-search to keep schemas small.
+on a *more* reliable tool-caller (Llama 3.3 70B at ~97% vs Flash). **But the
+binding free-tier limit is tokens-per-minute, and it is small.**
+
+> **Measured (2026-06-01), not estimated.** On Groq's free tier, an agent call
+> with ~60 tool schemas + system prompt + context totalled **30,253 tokens** and
+> was rejected with `413 ... tokens per minute (TPM): Limit 30000`. So a single
+> tool-heavy agent request can exceed the entire per-minute free budget — even
+> after trimming under the 128-tool cap. And the RSS task's ~50 sequential
+> ranking calls (≈5k tokens each) blew the same 30k/min budget, producing 23
+> consecutive 429s in one run. **Conclusion: Groq *free* is viable only for
+> small prompts — not a 60-tool agent loop, and not a 50-item batch.** Both need
+> Groq Dev Tier (paid), Cerebras (larger budget), or a local model for the
+> batch. See [ISSUE-009](../issues/ISSUE-009-tool-count-cap-vs-general-purpose-agent.md).
 
 > **Data caveat:** one provider roundup listed Gemini free as "1,500 req/day".
 > Our captured 429 said `quotaValue: 20`. Trust the live error / the AI Studio
