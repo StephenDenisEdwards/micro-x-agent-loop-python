@@ -3,6 +3,6 @@
   "cv_path": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\Stephen Edwards CV-April-2026.md",
   "output_dir": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\results",
 
-  "rank_model": "groq/llama-3.3-70b-versatile",
+  "rank_model": "ollama/gemma3:4b",
   "max_jobs": 0
 }
