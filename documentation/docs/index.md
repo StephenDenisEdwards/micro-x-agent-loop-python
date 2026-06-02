@@ -42,6 +42,11 @@ Central navigation hub for all project documentation.
 - [Coding Standards](guides/coding-standards.md) - Python best practices, SOLID, KISS, DRY principles and project conformity
 - [Documentation Guide](guides/documentation-guide.md) - Where docs go, naming conventions, templates, indexes
 
+## Best Practice
+
+- [MCP Servers](best-practice/mcp-servers.md) - Production-grade MCP server design, security, transport, and versioning
+- [Observability for AI Agents](best-practice/observability-for-ai-agents.md) - Traces, metrics, evals, cost tracking, and alerting for agents
+
 ## Examples
 
 - [Example Prompts](examples/README.md) - Prompt packs and workflow examples
