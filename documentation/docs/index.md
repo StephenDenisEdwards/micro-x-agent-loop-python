@@ -64,6 +64,7 @@ Central navigation hub for all project documentation.
 - [Planning Index](planning/INDEX.md) - Prioritised work queue and plan status
 - [Continuous Voice Agent Plan](planning/PLAN-continuous-voice-agent.md) - Session-based STT MCP and `/voice` orchestration plan
 - [Ask User Plan](planning/PLAN-ask-user.md) - `ask_user` pseudo-tool for LLM-initiated user questioning (completed)
+- [Observability Plan](planning/PLAN-observability.md) - Production-grade observability + session step-through, 7-phase delivery from a code-grounded audit
 
 ## Document Map
 
