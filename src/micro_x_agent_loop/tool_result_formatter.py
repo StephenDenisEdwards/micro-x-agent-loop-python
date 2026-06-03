@@ -82,16 +82,27 @@ class ToolResultFormatter:
         # Find the array to tabulate. Look for a top-level list value,
         # or treat the whole structured result as a single-item list.
         rows: list[dict[str, Any]] = []
+        scalar_fields: dict[str, Any] = {}
         if isinstance(structured, list):
             rows = structured
         else:
-            for v in structured.values():
+            array_key: str | None = None
+            for k, v in structured.items():
                 if isinstance(v, list) and v and isinstance(v[0], dict):
                     rows = v
+                    array_key = k
                     break
             if not rows:
                 # No array found — fall back to key_value
                 return ToolResultFormatter._format_key_value(structured)
+            # Preserve sibling scalar fields (e.g. total_found, query_url) as a
+            # header — the table itself only renders the row array, so without
+            # this they would be silently dropped.
+            scalar_fields = {
+                k: v
+                for k, v in structured.items()
+                if k != array_key and not isinstance(v, (list, dict))
+            }
 
         if not rows:
             return "(empty)"
@@ -129,6 +140,9 @@ class ToolResultFormatter:
         )
         if total > max_rows:
             result += f"\n\n[Showing {max_rows} of {total} rows]"
+        if scalar_fields:
+            header = "\n".join(f"{k}: {v}" for k, v in scalar_fields.items())
+            result = f"{header}\n\n{result}"
         return result
 
     @staticmethod

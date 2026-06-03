@@ -161,6 +161,23 @@ class FormatTableTests(unittest.TestCase):
         result = fmt.format("t", "", rows)  # type: ignore[arg-type]
         self.assertNotIn("Showing", result)
 
+    def test_scalar_siblings_rendered_as_header(self) -> None:
+        fmt = ToolResultFormatter(
+            tool_formatting={"t": {"format": "table"}},
+        )
+        structured = {
+            "jobs": [{"title": "Engineer"}],
+            "total_found": 1,
+            "query_url": "https://example.com/search?q=x",
+        }
+        result = fmt.format("t", "", structured)
+        # Scalar siblings appear above the table, not dropped
+        self.assertIn("total_found: 1", result)
+        self.assertIn("query_url: https://example.com/search?q=x", result)
+        self.assertIn("| title", result)
+        # Header precedes the table
+        self.assertLess(result.index("query_url"), result.index("| title"))
+
     def test_column_order_consistent(self) -> None:
         fmt = ToolResultFormatter(
             tool_formatting={"t": {"format": "table"}},

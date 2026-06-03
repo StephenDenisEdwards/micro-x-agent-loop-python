@@ -62,6 +62,7 @@ export function registerLinkedInJobs(server: McpServer, logger: Logger): void {
           }),
         ),
         total_found: z.number().int(),
+        query_url: z.string(),
       },
       annotations: {
         readOnlyHint: true,
@@ -152,9 +153,10 @@ export function registerLinkedInJobs(server: McpServer, logger: Logger): void {
             )
             .join("\n\n");
         }
+        textOutput = `Search URL: ${url}\n\n${textOutput}`;
 
         return {
-          structuredContent: { jobs: jobs.map((j) => ({ ...j })), total_found: jobs.length },
+          structuredContent: { jobs: jobs.map((j) => ({ ...j })), total_found: jobs.length, query_url: url },
           content: [{ type: "text" as const, text: textOutput }],
         };
       } catch (err: unknown) {
