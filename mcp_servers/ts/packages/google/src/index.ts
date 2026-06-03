@@ -3,6 +3,7 @@
 import { createLogger, createServer, startStdioServer } from "@micro-x-ai/mcp-shared";
 import { registerGmailSearch } from "./tools/gmail-search.js";
 import { registerGmailRead } from "./tools/gmail-read.js";
+import { registerGmailSaveAttachment } from "./tools/gmail-save-attachment.js";
 import { registerGmailSend } from "./tools/gmail-send.js";
 import { registerCalendarList } from "./tools/calendar-list.js";
 import { registerCalendarCreate } from "./tools/calendar-create.js";
@@ -30,11 +31,15 @@ Optional environment variables:
   GOOGLE_TOKEN_BASE_DIR   Directory for cached OAuth tokens
                           Default (POSIX):   \${XDG_DATA_HOME:-~/.local/share}/mcp-google
                           Default (Windows): %APPDATA%/mcp-google
+  GOOGLE_ATTACHMENT_DIR   Directory gmail_save_attachment writes files to.
+                          Should be inside the agent's filesystem roots so saved
+                          files can be read back. Default: <cwd>/attachments
 
 Tools:
-  gmail_search         Search Gmail messages
-  gmail_read           Read a Gmail message by ID
-  gmail_send           Send an email via Gmail
+  gmail_search           Search Gmail messages
+  gmail_read             Read a Gmail message by ID (lists attachments)
+  gmail_save_attachment  Download an attachment to a local file (metadata only)
+  gmail_send             Send an email via Gmail
   calendar_list        List upcoming calendar events
   calendar_create      Create a calendar event
   calendar_get         Get a calendar event by ID
@@ -72,6 +77,7 @@ const server = createServer({
 // Register Gmail tools
 registerGmailSearch(server, logger, clientId, clientSecret);
 registerGmailRead(server, logger, clientId, clientSecret);
+registerGmailSaveAttachment(server, logger, clientId, clientSecret);
 registerGmailSend(server, logger, clientId, clientSecret);
 
 // Register Calendar tools

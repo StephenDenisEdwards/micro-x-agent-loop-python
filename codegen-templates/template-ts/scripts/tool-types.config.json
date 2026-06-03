@@ -14,6 +14,7 @@
         "gmail_search",
         "gmail_read",
         "gmail_send",
+        "gmail_save_attachment",
         "calendar_list_events",
         "calendar_create_event",
         "calendar_get_event",

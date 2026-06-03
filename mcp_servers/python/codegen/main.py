@@ -565,9 +565,36 @@ Available imports:
   - Do NOT access .content on the return value — it is a string, not a Message object.
 - import {{ makeJobserveJob, makeLinkedinJob, makeEmail }} from "../../_runtime/src/test-base.js"; (test fixtures only — shared runtime)
 - Optional modules you create yourself in the task src/: collector.ts, scorer.ts, processor.ts — import with ./module.js extension
+- Node built-in modules are always available — import them with the `node:` prefix (e.g. import {{ readFileSync }} from "node:fs"; import {{ execSync }} from "node:child_process"; import path from "node:path";).
+
+THIRD-PARTY npm PACKAGES: only the packages listed above are installed. If you
+`import` any other npm package, it will NOT be installed and the task will FAIL
+TO COMPILE ("Cannot find module"). If you genuinely need one, you MUST declare it
+by emitting an extra block:
+
+=== package.deps.json ===
+{{"pdf-parse": "^2.4.5"}}
+
+The generator merges that into the task's package.json and `npm install`s it.
+
+CRITICAL — THIS IS A TypeScript / Node.js APP. `npm install` ONLY. You may
+declare a package ONLY if it is a real JavaScript package published on the npm
+registry (npmjs.com). NEVER declare a Python / PyPI package — they do not exist
+on npm and `npm install` will fail, aborting generation. Common traps:
+  - PDF text/tables  → use `pdf-parse` (NOT pdfplumber, PyPDF2, pypdf, fitz)
+  - CSV              → use `csv-parse`  (NOT pandas, csv)
+  - Excel/xlsx       → use `xlsx`       (NOT openpyxl)
+  - HTTP requests    → use the built-in global `fetch` (NOT requests, httpx)
+  - dates            → use built-in `Intl.DateTimeFormat` (NOT datetime, arrow)
+If you are unsure a package exists on npm, do NOT use it — use a Node built-in
+(node:fs, node:path, …) or an already-listed import instead. Prefer a built-in
+or an already-listed import; only declare a dependency when there is no
+built-in alternative.
 
 IMPORTANT: All relative imports MUST use the .js extension (e.g. "./collector.js"), even for .ts files.
 This is required by Node16 module resolution with ESM.
+Do NOT reference any symbol you have not imported — generated code is gated by
+`tsc --noEmit` and will be rejected if it does not type-check.
 
 tools.ts signatures (and tool-types.ts — the strict types they reference):
 {tools_ts}
@@ -690,6 +717,83 @@ def _run_tests_sync(target_dir: Path) -> tuple[bool, str]:
         return False, f"Failed to run tests: {e}"
 
 
+def _typecheck_sync(target_dir: Path) -> tuple[bool, str]:
+    """Run `npx tsc --noEmit` in the target directory. Returns (passed, output).
+
+    Catches the bug class vitest misses: a symbol used but never imported, and
+    imports of undeclared/uninstalled npm packages (tsc emits 'Cannot find
+    module X'). Runs even when the task generated no test files.
+    Synchronous — call via asyncio.to_thread().
+    """
+    try:
+        proc = subprocess.run(
+            ["npx", "tsc", "--noEmit"],
+            cwd=str(target_dir),
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            shell=_SHELL,
+            timeout=120,
+        )
+        output = proc.stdout.decode("utf-8", errors="replace")
+        stderr = proc.stderr.decode("utf-8", errors="replace")
+        if stderr:
+            output += "\n" + stderr
+        return proc.returncode == 0, output
+    except subprocess.TimeoutExpired:
+        return False, "Typecheck (tsc --noEmit) timed out after 120 seconds."
+    except Exception as e:
+        return False, f"Failed to run typecheck: {e}"
+
+
+def _merge_extra_deps_sync(target_dir: Path, deps_json: str) -> tuple[bool, str]:
+    """Merge a generated package.deps.json ({name: version, ...}) into the task's
+    root package.json `dependencies` (no install). Returns (ok, message).
+
+    Lets a generated task declare third-party npm packages it needs (e.g.
+    pdf-parse) without rewriting — and without being able to clobber — the
+    sealed template package.json. The caller runs npm install afterwards.
+    """
+    try:
+        extra = json.loads(deps_json)
+    except Exception as e:
+        return False, f"package.deps.json is not valid JSON: {e}"
+    if not isinstance(extra, dict) or not extra:
+        return False, "package.deps.json must be a non-empty JSON object {name: version}"
+    pkg_path = target_dir / "package.json"
+    try:
+        pkg = json.loads(pkg_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return False, f"could not read package.json: {e}"
+    deps = pkg.setdefault("dependencies", {})
+    added: list[str] = []
+    for name, ver in extra.items():
+        if isinstance(name, str) and isinstance(ver, str):
+            deps[name] = ver
+            added.append(f"{name}@{ver}")
+    pkg_path.write_text(json.dumps(pkg, indent=2) + "\n", encoding="utf-8")
+    return True, f"merged deps: {', '.join(added) if added else '(none)'}"
+
+
+async def _apply_generated_files(
+    ctx: Context, target_dir: Path, parsed: dict[str, str], files: dict[str, str]
+) -> None:
+    """Apply LLM-returned files during a fix round: write .ts to src/, merge a
+    package.deps.json into the root package.json (and reinstall), and keep the
+    running `files` dict in sync. Used by both the typecheck and test loops."""
+    for filename, content in parsed.items():
+        if filename == "package.deps.json":
+            ok, msg = await asyncio.to_thread(_merge_extra_deps_sync, target_dir, content)
+            if ok:
+                await ctx.info(f"  deps: {msg} — reinstalling")
+                await asyncio.to_thread(_npm_install_sync, target_dir)
+            else:
+                await ctx.warning(f"  package.deps.json ignored: {msg}")
+            continue
+        files[filename] = content
+        (target_dir / "src" / filename).write_text(content, encoding="utf-8")
+        await ctx.info(f"  Updated: {filename}")
+
+
 async def _validate_code(ctx: Context, client: AsyncAnthropic, model: str,
                          task_name: str, target_dir: Path,
                          files: dict[str, str],
@@ -702,17 +806,67 @@ async def _validate_code(ctx: Context, client: AsyncAnthropic, model: str,
     using the same _llm_loop helper (supports tool_use and max_tokens).
     Mutates `files` in-place if source fixes are applied.
     """
-    test_files = {k: v for k, v in files.items() if k.endswith(".test.ts")}
-    if not test_files:
-        await ctx.info("No test files generated — skipping validation")
-        return {"skipped": True, "reason": "no test files"}
-
-    await ctx.info(f"Running {len(test_files)} test file(s)...")
-
     total_input = 0
     total_output = 0
     total_cache_creation = 0
     total_cache_read = 0
+
+    # Phase 2a: typecheck gate (always runs, even with no test files). Catches
+    # unimported symbols and undeclared-dependency imports that vitest misses.
+    typecheck_passed = False
+    typecheck_rounds = 0
+    last_tc_output = ""
+    for round_num in range(1, MAX_TEST_ROUNDS + 1):
+        typecheck_rounds = round_num
+        passed, tc_output = await asyncio.to_thread(_typecheck_sync, target_dir)
+        last_tc_output = tc_output
+        if passed:
+            await ctx.info("  Typecheck passed (tsc --noEmit)")
+            typecheck_passed = True
+            break
+        await ctx.info(
+            f"  Typecheck failed — asking LLM to fix (round {round_num}/{MAX_TEST_ROUNDS})..."
+        )
+        messages.append({"role": "user", "content":
+            "`tsc --noEmit` failed. Fix every type error. If the error is "
+            "\"Cannot find module 'X'\", either drop the import and use an allowed "
+            "import or a Node built-in (node:fs, node:path, …), or declare the "
+            "package in a `=== package.deps.json ===` block, e.g. {\"X\": \"^1.2.3\"}. "
+            "Do NOT reference a symbol you have not imported. Here is the output:\n\n"
+            f"```\n{tc_output}\n```\n\n"
+            "Return ALL files that need changes using the same === filename === format."
+        })
+        response_text, in_tok, out_tok, cache_create, cache_read, _ = await _llm_loop(
+            client, model, messages, cached_system, cached_tools, ctx, max_turns=3
+        )
+        total_input += in_tok
+        total_output += out_tok
+        total_cache_creation += cache_create
+        total_cache_read += cache_read
+        parsed, _ = parse_files(response_text)
+        await _apply_generated_files(ctx, target_dir, parsed, files)
+
+    if not typecheck_passed:
+        await ctx.warning(f"  Typecheck still failing after {typecheck_rounds} round(s)")
+
+    # Phase 2b: unit tests (skipped if the task generated none).
+    test_files = {k: v for k, v in files.items() if k.endswith(".test.ts")}
+    if not test_files:
+        await ctx.info("No test files generated — skipping test phase")
+        return {
+            "skipped": True,
+            "reason": "no test files",
+            "typecheck_passed": typecheck_passed,
+            "typecheck_rounds": typecheck_rounds,
+            "typecheck_output": last_tc_output[-2000:] if not typecheck_passed else "",
+            "validation_input_tokens": total_input,
+            "validation_output_tokens": total_output,
+            "validation_cache_creation_tokens": total_cache_creation,
+            "validation_cache_read_tokens": total_cache_read,
+        }
+
+    await ctx.info(f"Running {len(test_files)} test file(s)...")
+
     rounds = 0
     all_passed = False
     last_output = ""
@@ -746,15 +900,15 @@ async def _validate_code(ctx: Context, client: AsyncAnthropic, model: str,
         total_cache_read += cache_read
 
         parsed, _ = parse_files(response_text)
-        for filename, content in parsed.items():
-            files[filename] = content
-            (target_dir / "src" / filename).write_text(content, encoding="utf-8")
-            await ctx.info(f"  Updated: {filename}")
+        await _apply_generated_files(ctx, target_dir, parsed, files)
 
     if not all_passed:
         await ctx.warning(f"  Validation incomplete after {MAX_TEST_ROUNDS} rounds")
 
     return {
+        "typecheck_passed": typecheck_passed,
+        "typecheck_rounds": typecheck_rounds,
+        "typecheck_output": last_tc_output[-2000:] if not typecheck_passed else "",
         "test_rounds": rounds,
         "tests_passed": all_passed,
         "test_files_generated": sorted(test_files.keys()),
@@ -873,7 +1027,9 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
             task_name,
         )
 
-    # Step 6: Write generated files to src/ (and profile.json to task root)
+    # Step 6: Write generated files to src/ (profile.json → task root;
+    # package.deps.json → merged into the root package.json, not written as a file)
+    extra_deps_json = files.pop("package.deps.json", None)
     await ctx.info(f"Writing {len(files)} file(s): {', '.join(sorted(files))}")
     src_dir = target_dir / "src"
     for filename, content in files.items():
@@ -882,6 +1038,12 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
         else:
             filepath = src_dir / filename
             filepath.write_text(content, encoding="utf-8")
+    if extra_deps_json is not None:
+        ok, msg = _merge_extra_deps_sync(target_dir, extra_deps_json)
+        if ok:
+            await ctx.info(f"  {msg}")
+        else:
+            await ctx.warning(f"  package.deps.json ignored: {msg}")
 
     # Step 7: Install dependencies
     await ctx.info("Installing dependencies (npm install)...")
@@ -938,6 +1100,18 @@ async def generate_code(ctx: Context, task_name: str, prompt: str,
     ]
     if skipped:
         summary_lines.append(f"Skipped: {', '.join(skipped)}")
+
+    # Typecheck summary (the tsc --noEmit gate — independent of unit tests)
+    if "typecheck_passed" in validation:
+        if validation.get("typecheck_passed"):
+            summary_lines.append(
+                f"Typecheck: PASSED ({validation.get('typecheck_rounds', 0)} round(s))"
+            )
+        else:
+            summary_lines.append(
+                f"Typecheck: FAILED after {validation.get('typecheck_rounds', 0)} round(s) — "
+                "generated code does not compile"
+            )
 
     # Validation summary
     if validation.get("skipped"):
@@ -1157,6 +1331,7 @@ async def run_task(ctx: Context, task_name: str,
     #                  sentinel is how task-internal failures become visible.
     usage: dict | None = None
     llm_errors: list[dict] = []
+    task_result: dict | None = None
     cleaned_stderr_lines: list[str] = []
     for line in stderr.splitlines():
         if line.startswith("__USAGE__:"):
@@ -1168,6 +1343,14 @@ async def run_task(ctx: Context, task_name: str,
         if line.startswith("__LLM_ERROR__:"):
             try:
                 llm_errors.append(json.loads(line[len("__LLM_ERROR__:"):]))
+            except Exception:
+                pass
+            continue
+        if line.startswith("__RESULT__:"):
+            try:
+                parsed_result = json.loads(line[len("__RESULT__:"):])
+                if isinstance(parsed_result, dict):
+                    task_result = parsed_result
             except Exception:
                 pass
             continue
@@ -1252,6 +1435,20 @@ async def run_task(ctx: Context, task_name: str,
             structuredContent=structured,
             isError=True,
         )
+
+    # The process exited 0, but the task may report its own failure in the
+    # payload (e.g. {"success": false, "error": "..."}). Honour that convention
+    # so a self-reported failure is not announced as "completed successfully".
+    if task_result is not None:
+        structured["task_result"] = task_result
+        if task_result.get("success") is False:
+            err = task_result.get("error") or "task reported success=false"
+            await ctx.error(f"Task reported failure: {err}")
+            return CallToolResult(
+                content=[TextContent(type="text", text=f"Task reported failure: {err}\n\n{output}")],
+                structuredContent=structured,
+                isError=True,
+            )
 
     await ctx.info("Task completed successfully")
     return CallToolResult(

@@ -507,7 +507,7 @@ export async function handleTool(
     if (total >= maxJobs) break;
     const id = meta["id"] ?? meta["messageId"];
     if (!id) continue;
-    let data: Record<string, string> | null;
+    let data: Awaited<ReturnType<typeof gmailRead>>;
     try {
       data = await gmailRead(clients, id);
     } catch (err) {

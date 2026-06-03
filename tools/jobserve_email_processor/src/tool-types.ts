@@ -21,7 +21,42 @@ export type GmailReadArgs = {
   messageId: string; /** The Gmail message ID (from gmail_search results) */
 };
 
-export type GmailReadResult = Record<string, unknown>;
+/** One attachment on a Gmail message (metadata only — bytes are fetched via gmail_save_attachment). */
+export type GmailAttachment = {
+  filename: string;
+  attachmentId: string;
+  mimeType: string;
+  sizeBytes: number; /** (integer) */
+};
+
+export type GmailReadResult = {
+  messageId: string;
+  from: string;
+  to: string;
+  date: string;
+  subject: string;
+  body: string;
+  attachments: Array<GmailAttachment>;
+};
+
+/** Download one attachment (by messageId + attachmentId from gmail_read's attachments list) to a file. Returns the saved path and metadata. */
+export type GmailSaveAttachmentArgs = {
+  messageId: string; /** The Gmail message ID (from gmail_search/gmail_read) */
+  attachmentId: string; /** The attachment ID (from gmail_read's attachments list) */
+  filename?: string; /** Filename to save as. Defaults to attachment-<id>.bin */
+  mimeType?: string; /** Attachment MIME type (from gmail_read); improves the textReadable hint. */
+};
+
+export type GmailSaveAttachmentResult = {
+  path: string;
+  filename: string;
+  messageId: string;
+  attachmentId: string;
+  mimeType: string;
+  sizeBytes: number; /** (integer) */
+  sha256: string;
+  textReadable: boolean;
+};
 
 /** Send an email from your Gmail account. */
 export type GmailSendArgs = {
