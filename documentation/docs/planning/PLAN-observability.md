@@ -2,7 +2,7 @@
 
 ## Status
 
-**In Progress** — Drafted 2026-06-02 from audit of current state. **Phases 0–3 implemented 2026-06-03**: Phase 0 (emit-path consolidation, [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md)), Phase 1 (session step-through MVP), Phase 2 (`/replay` command), Phase 3 (PII/secret redaction). Phases 4–7 still Planned. Deferred within their phases: Anthropic `thinking` capture (Phase 1), bespoke TUI trace-view panel (Phase 2), per-table retention (Phase 3). See [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md) for the framework this plan is measured against.
+**Largely Implemented** — Drafted 2026-06-02 from audit of current state. **All 8 phases (0–7) implemented 2026-06-03.** Phase 0 (emit-path consolidation, [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md)), 1 (step-through MVP), 2 (`/replay`), 3 (PII redaction), 4 (OTel exporter), 5 (alerting), 6 (online eval + `/feedback`), 7 (cost rollups + sampling). Deferred within their phases: Anthropic `thinking` capture (1), bespoke TUI trace panel (2), per-table retention (3), broker scheduling of the eval job (6), `tool_outputs_raw` blob store + sampling-as-retention (7). See [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md) for the framework this plan is measured against.
 
 ## Goals
 
@@ -117,13 +117,36 @@ Surfaces the data from Phase 1.
 
 **Acceptance (met):** tool args/results and event payloads containing known secrets land in the DB redacted; live `messages` stay raw (so replay is faithful); `MICRO_X_OBSERVABILITY_UNREDACTED=1` flips behaviour. Covered by `tests/test_redaction.py` (pattern set, allowlist, recursion, no-mutation, build/env-flag, and integration over real `EventEmitter`/`tool_calls`/`messages` write paths).
 
-### Phase 4 — OpenTelemetry exporter
+### Phase 4 — OpenTelemetry exporter — **Implemented 2026-06-03**
 
-- Optional dependency, opt-in via config (`OtelEnabled`, `OtelEndpoint`).
-- One span per session (root), child spans per turn, child spans per LLM call (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens`, etc. per the [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)) and per tool call.
-- Maps cleanly from existing `metric.api_call` and `metric.tool_execution` events.
+- ✅ Optional dependency (`[otel]` extra: `opentelemetry-sdk` + OTLP-HTTP), opt-in via `OtelEnabled` + `OtelEndpoint`. SDK imported lazily; `build_otel_exporter` returns `None` (logged) if the SDK is absent.
+- ✅ `otel_export.py`: per-session root span with back-dated child spans (real durations) per LLM call + tool call. `build_span_spec()` is a pure, SDK-free mapping of `metric.api_call` / `metric.tool_execution` to [GenAI semantic-convention](https://opentelemetry.io/docs/specs/semconv/gen-ai/) attributes (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*`, `gen_ai.operation.name`, `gen_ai.tool.name`).
+- ✅ Attached in bootstrap onto the agent's emit seam via `Agent.add_observability_subscriber` (closer flushes/shuts down the provider on agent shutdown). Telemetry errors are swallowed — never break the agent.
 
-**Acceptance:** with `OtelEnabled=true` and a Langfuse / Phoenix endpoint, sessions appear as traces with full LLM and tool spans.
+**Acceptance (met):** with `OtelEnabled=true` and an OTLP endpoint (Langfuse/Phoenix/Datadog collector), sessions appear as traces with LLM and tool spans. Covered by `tests/test_otel_export.py` (GenAI attribute mapping; graceful build + export with/without SDK).
+
+### Phase 5 — Alerting — **Implemented 2026-06-03**
+
+- ✅ Rolling-window thresholds computed from the `events` log: `cost_window`, `error_rate`, `avg_confidence`, `cache_hit_rate`, `turn_cap_trips`. `evaluate_alerts()` is a pure function over an event window.
+- ✅ Notifier with channel adapters mirroring `broker/channels.py`: `log` (default) + `webhook:<url>`. `build_alert_subscriber()` evaluates after each `metric.api_call`, **edge-triggered** (notifies once per transition into breach, not per event).
+- ✅ Config: `ObservabilityAlerts: [{metric, threshold, window, channel}]` (+ optional `direction`); wired in bootstrap.
+
+**Acceptance (met):** a configured rule (e.g. `avg_confidence` below threshold over a window) fires a notification. Covered by `tests/test_alerting.py` (each metric, window scoping, edge-triggered subscriber over a real store).
+
+### Phase 6 — Online eval harness — **Implemented 2026-06-03**
+
+- ✅ `eval_results` table (joined to `session_id` + `turn_number`). `online_eval.run_session_eval()` reconstructs a session via `session_replay`, asks an injected LLM judge (`Callable[[str], str]`) to score it against a rubric, persists the result, and **back-fills `routing_outcomes.quality_signal`** (≥0.6→+1, ≤0.4→−1). `sample_recent_sessions()` provides the sampling set for a scheduled broker/CLI job.
+- ✅ `/feedback +1|-1|<text>` command (REPL + TUI): emits a `feedback` event on the emit seam joined to the last assistant turn and updates `quality_signal`.
+
+**Acceptance (met):** an eval run produces a persisted score for a session; thumbs-up/down from `/feedback` lands in the DB (event + `quality_signal`) and is queryable. Covered by `tests/test_online_eval.py` + `test_command_router.py::test_feedback`. (Broker *scheduling* of the eval job is the remaining integration point — the runnable function + sampling are in place.)
+
+### Phase 7 — Cost rollups, sampling, tool-output archival — **Implemented 2026-06-03 (partial)**
+
+- ✅ `user_id` column on `sessions` (migration); `cost_rollups` table keyed by `(date, user_id, task_type, provider, model)`. `cost_rollups.compute_cost_rollups()` aggregates `metric.api_call` events (user from the session, task_type from the turn's `routing.decision`) into the table.
+- ✅ Sampling policy: `should_retain_full(cost, had_error)` — 100% retention for errors and ≥threshold-cost sessions; low-cost successes eligible for downsampling.
+- ⏸️ **Deferred (within Phase 7): `tool_outputs_raw` pre-truncation blob store.** Needs threading the raw pre-truncation tool output through `turn_engine` → record path (+ redaction of the raw copy); `original_chars` already records *that* truncation happened. Also deferred: applying the sampling policy as a retention job (the decision function is in place; wiring it to prune prompt bodies is follow-up, complicated by `system_prompts` being globally deduped).
+
+**Acceptance (met for rollups):** cost-per-user / cost-per-task-type reports are available from `cost_rollups` without scanning every event. Covered by `tests/test_cost_rollups.py` (aggregation by full key incl. user + task_type; persistence; sampling policy).
 
 ### Phase 5 — Alerting
 

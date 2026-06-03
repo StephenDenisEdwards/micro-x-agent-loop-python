@@ -86,6 +86,19 @@ class MemoryStore:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS cost_rollups (
+                date TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                task_type TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                calls INTEGER NOT NULL,
+                input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL,
+                cost_usd REAL NOT NULL,
+                PRIMARY KEY (date, user_id, task_type, provider, model)
+            );
+
             CREATE TABLE IF NOT EXISTS eval_results (
                 id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
@@ -159,6 +172,9 @@ class MemoryStore:
             "tool_calls": {
                 "was_truncated": "INTEGER NOT NULL DEFAULT 0",
                 "original_chars": "INTEGER NULL",
+            },
+            "sessions": {
+                "user_id": "TEXT NOT NULL DEFAULT ''",
             },
         }
         for table, columns in migrations.items():
