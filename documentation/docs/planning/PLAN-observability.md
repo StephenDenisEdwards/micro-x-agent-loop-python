@@ -2,7 +2,7 @@
 
 ## Status
 
-**Planned** — Drafted 2026-06-02 from audit of current state. See [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md) for the framework this plan is measured against.
+**In Progress** — Drafted 2026-06-02 from audit of current state. **Phase 0 (emit-path consolidation) implemented 2026-06-03** ([ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md), Accepted); Phases 1–7 still Planned. See [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md) for the framework this plan is measured against.
 
 ## Goals
 
@@ -22,6 +22,8 @@ Data lands today in five places and was not designed for replay:
 | `metrics.jsonl` | structured `metric.*` events (api_call, tool_execution, compaction, session_summary) |
 | `api_payloads.jsonl` | full prompts + completions — only when the DEBUG `api_payload` consumer is wired in |
 | in-memory `ApiPayloadStore` | last 50 prompts + completions; lost on process restart |
+
+**The deeper issue is not five locations — it is three parallel emit abstractions recording the same facts independently.** From a single `Agent.on_api_call_completed()` (agent.py:690-708) plus the routing-feedback callback (agent.py:298-310), one logical "an LLM call happened" fact is written three ways: `emit_metric(...)` → `metrics.jsonl`, `_memory.emit_event("metric.api_call", ...)` → the `events` table (the *same dict, verbatim*, agent.py:707-708), and `RoutingFeedbackStore.record(...)` → `routing_feedback.db`. `session_id`, `model`, `provider`, `cost_usd`, and `latency_ms` land in all three with no shared source of truth. The good news: the `events` table is already a generic `(type, payload_json)` log, `SessionAccumulator` already reconstructs state by replaying `metric.*` events (metrics.py:276-346), and instrumentation is ~80% cleanly injected through the `TurnEvents` protocol — so consolidating the write path is a bounded refactor, not a rewrite. See [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md), delivered as **Phase 0** below.
 
 Per turn the code already captures: token counts (in/out/cache_read/cache_create), cost, latency (`duration_ms`, `time_to_first_token_ms`), model + provider, `call_type` discriminator (`main`/`semantic:<task>`/`pinned:<…>`/`subagent:<type>`/`stage2_classification`/`tool_summarization`/`nested:<tool>`), tool input verbatim, tool output (post-truncation), checkpoint scope, sub-agent completion summary, compaction stats, session lifecycle events. See [DESIGN-cost-metrics.md](../design/DESIGN-cost-metrics.md) for the existing metrics design.
 
@@ -63,11 +65,26 @@ No `/replay` or trace-view command exists. `/cost`, `/session`, and `/checkpoint
 
 ## Phased delivery
 
-Phases sequence smallest-surface-area first. Each phase is independently shippable.
+Phases sequence smallest-surface-area first. Each phase is independently shippable. Phase 0 is a prerequisite consolidation; Phases 1-7 build on the seam it establishes.
+
+### Phase 0 — Unify the emit path (prerequisite) — **Implemented 2026-06-03**
+
+Per [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md). Without this, every phase below pours new event types into a write path that already records the same facts three ways — and replay (Phase 2), alerting (Phase 5), and routing analytics would each sit on a different substrate. Done once here, the rest of the plan gets strictly cheaper.
+
+- ✅ Introduced one `ObservabilityEmitter` seam (`src/micro_x_agent_loop/observability.py`). Every observability fact is emitted exactly once through it; it persists to the event log then fans out to projection subscribers. Held by `Agent` and constructed independently of memory, so projections (e.g. `metrics.jsonl`) keep working when memory is disabled.
+- ✅ Made the `memory.db` `events` table the single source of truth. Removed the verbatim double-write in `agent.py` (was `emit_metric(...)` **and** `emit_event("metric.*", ...)` for the same dict) — each metric is now emitted once.
+- ✅ Turned `metrics.jsonl` into a projection: `metrics.metrics_jsonl_subscriber` writes `metric.*` events to the existing loguru sink, replacing the direct `emit_metric` call sites in `agent.py` (api_call, api_call_error, tool_execution, compaction, session_summary). `tool_execution` now also lands in the event log (it previously bypassed it), which activates the dormant `SessionAccumulator.restore_from_events` tool branch.
+- ✅ Turned `routing_feedback.db` into a projection of `routing.decision` events: the routing callback emits onto the seam, and `routing_feedback.make_routing_outcome_subscriber` persists `routing_outcomes` — preserving the table shape so the offline eval harness and `quality_signal` updates keep working.
+- ✅ Stamp every emitted event with a `_meta` `{turn, iter, seq}` correlation tuple (`seq` process-monotonic), so replay can group/order the events of one iteration deterministically rather than relying on second-resolution `created_at`. (Folds in the turn-correlation gap from the Phase 1 review.) **Note:** `iter` is `0` in Phase 0 — the real per-iteration index is threaded through in Phase 1's `llm.call` work; the field exists now so the schema is stable.
+- ✅ Added `idx_events_session_type` on `events(session_id, type)` (alongside the existing `idx_events_session_created`), so replay and projection queries — e.g. `cost_reconciliation`'s `WHERE type = 'metric.api_call'` — don't table-scan. (Folds in the events-index gap from the Phase 1 review.)
+
+**Scope boundary (as built):** `metric.*` and `routing.decision` — the facts that were triple-written — now flow through the seam. The remaining single-write lifecycle events (`tool.started`/`tool.completed`/`subagent.completed`/`checkpoint.*`) still go straight to the facade and do not yet carry `_meta`; migrating them to the seam is a fast-follow and was kept out of Phase 0 to keep the change focused on eliminating the triple-write.
+
+**Acceptance (met):** a single `emit` results in all derived sinks (event log + subscribed projections); no business-logic method writes the same fact to two stores; `metrics.jsonl` and `routing_outcomes` rows are reproducible from the `events` table. Existing consumers (CLI `/cost` via `SessionAccumulator`, `cost_reconciliation`, offline eval harness) are unchanged. Covered by `tests/test_observability.py` (persist-once + fan-out, `_meta`/seq monotonicity, memory-off fan-out, subscriber-exception isolation, routing projection); full suite green (1780 passed; 3 pre-existing unrelated failures).
 
 ### Phase 1 — Session step-through MVP
 
-Unblocks goal 2 with minimal new schema.
+Unblocks goal 2 with minimal new schema. Targets the Phase 0 emit seam — every event below is emitted once and flows to the event log (and any subscribed projection) through it.
 
 - Emit `llm.call` event before each provider dispatch. Fields: `turn_iteration`, `call_type`, `effective_provider`, `effective_model`, `temperature`, `max_tokens`, `message_count`, `tool_names: list[str]`, `system_prompt_sha256`, `system_prompt_chars`, `routing_rule`, `routing_reason`. Hook just before the provider call in `turn_engine.py`.
 - Persist system prompts in a deduped `system_prompts` table keyed by sha256 (kept separate from event payloads to keep them small).
@@ -132,12 +149,14 @@ Surfaces the data from Phase 1.
 
 ## Out of scope
 
-- Replacing existing storage tiers — Phase 1–7 extend the current schema, not replace it.
+- Replacing existing storage tiers — Phase 0 consolidates the *write path* (one authoritative event log; other sinks become projections per [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md)) and Phases 1–7 extend the current schema. No storage tier or table is replaced.
+- A ground-up re-architecture or adopting OpenTelemetry as the *internal* event bus — rejected in [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md). The seams already exist; OTel stays an export projection (Phase 4), not the source of truth.
 - Building a hosted observability backend — we're an OTel emitter; backend stays external (Langfuse / Phoenix / Datadog).
 - Live tail UI — `/replay` is historical; live-tail is a possible follow-up.
 
 ## Related
 
+- [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md) — single event log as source of truth; Phase 0 consolidation
 - [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md) — framework and rationale
 - [DESIGN-cost-metrics.md](../design/DESIGN-cost-metrics.md) — existing metrics design (Phase 1 builds on this)
 - [DESIGN-memory-system.md](../design/DESIGN-memory-system.md) — existing persistence

@@ -19,7 +19,7 @@ from micro_x_agent_loop.metrics import (
     build_compaction_metric,
     build_session_summary_metric,
     build_tool_execution_metric,
-    emit_metric,
+    metrics_jsonl_subscriber,
 )
 from micro_x_agent_loop.mode_selector import (
     ModeAnalysis,
@@ -30,6 +30,8 @@ from micro_x_agent_loop.mode_selector import (
     format_analysis,
     parse_stage2_response,
 )
+from micro_x_agent_loop.observability import ObservabilityEmitter
+from micro_x_agent_loop.routing_feedback import make_routing_outcome_subscriber
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
 from micro_x_agent_loop.tool import Tool
@@ -284,29 +286,41 @@ class Agent:
         self._routing_feedback_store = c.routing_feedback_store
         self._task_embedding_index = c.task_embedding_index
 
-        # Wire routing feedback callback (captures self)
+        # --- Observability seam (ADR-026) ---
+        # Single emit path: facts are persisted once to the event log (source of
+        # truth) and fanned out to projection sinks. metrics.jsonl and
+        # routing_outcomes are projections here, not independent writers.
+        self._obs = ObservabilityEmitter(self._memory)
+        self._obs.subscribe(metrics_jsonl_subscriber)
+        if self._routing_feedback_store is not None:
+            self._obs.subscribe(make_routing_outcome_subscriber(self._routing_feedback_store))
+
+        # Wire routing feedback callback (captures self). It no longer writes the
+        # routing DB directly — it emits a routing.decision event onto the seam,
+        # and the routing-outcomes projection persists it.
         routing_feedback_callback = c.routing_feedback_callback
         if c.routing_feedback_store is not None and c.semantic_routing_enabled:
-            from micro_x_agent_loop.routing_feedback import RoutingOutcome
 
             def _on_routing_feedback(*, task_classification: object, usage: UsageResult, call_type: str) -> None:
                 from micro_x_agent_loop.semantic_classifier import TaskClassification as TC
 
                 if not isinstance(task_classification, TC):
                     return
-                assert self._routing_feedback_store is not None
-                self._routing_feedback_store.record(
-                    RoutingOutcome(
-                        session_id=self._memory.active_session_id or "",
-                        turn_number=self._turn_number,
-                        task_type=task_classification.task_type.value,
-                        provider=usage.provider,
-                        model=usage.model,
-                        cost_usd=estimate_cost(usage),
-                        latency_ms=usage.duration_ms,
-                        stage=task_classification.stage,
-                        confidence=task_classification.confidence,
-                    )
+                self._obs.emit(
+                    "routing.decision",
+                    {
+                        "session_id": self._memory.active_session_id or "",
+                        "turn_number": self._turn_number,
+                        "task_type": task_classification.task_type.value,
+                        "provider": usage.provider,
+                        "model": usage.model,
+                        "cost_usd": estimate_cost(usage),
+                        "latency_ms": usage.duration_ms,
+                        "stage": task_classification.stage,
+                        "confidence": task_classification.confidence,
+                        "call_type": call_type,
+                    },
+                    turn_number=self._turn_number,
                 )
 
             routing_feedback_callback = _on_routing_feedback
@@ -704,8 +718,7 @@ class Agent:
             turn_number=self._turn_number,
             call_type=call_type,
         )
-        emit_metric(metric)
-        self._memory.emit_event("metric.api_call", metric)
+        self._obs.emit("metric.api_call", metric, turn_number=self._turn_number)
 
     def on_api_call_failed(
         self, *, model: str, provider: str, call_type: str, error: BaseException
@@ -731,8 +744,7 @@ class Agent:
             call_type=call_type,
             error=error,
         )
-        emit_metric(metric)
-        self._memory.emit_event("metric.api_call_error", metric)
+        self._obs.emit("metric.api_call_error", metric, turn_number=self._turn_number)
 
     def on_turn_cap_reached(self, iterations: int) -> None:
         # Behavioural signal (set regardless of metrics_enabled): the turn
@@ -765,7 +777,7 @@ class Agent:
             turn_number=self._turn_number,
             was_summarized=was_summarized,
         )
-        emit_metric(metric)
+        self._obs.emit("metric.tool_execution", metric, turn_number=self._turn_number)
 
     def _on_compaction_completed(
         self, usage: UsageResult, tokens_before: int, tokens_after: int, messages_compacted: int
@@ -779,8 +791,7 @@ class Agent:
             session_id=self._memory.active_session_id or "",
             turn_number=self._turn_number,
         )
-        emit_metric(metric)
-        self._memory.emit_event("metric.compaction", metric)
+        self._obs.emit("metric.compaction", metric, turn_number=self._turn_number)
 
     # -- TurnEvents protocol: core callbacks --
 
@@ -958,8 +969,7 @@ class Agent:
     async def shutdown(self) -> None:
         if self._metrics_enabled:
             summary = build_session_summary_metric(self._session_accumulator)
-            emit_metric(summary)
-            self._memory.emit_event("metric.session_summary", summary)
+            self._obs.emit("metric.session_summary", summary, turn_number=self._turn_number)
         if self._routing_feedback_store is not None:
             self._routing_feedback_store.close()
         if self._voice_runtime:

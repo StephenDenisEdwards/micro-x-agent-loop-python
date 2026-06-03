@@ -49,5 +49,5 @@ What becomes easier or more difficult to do because of this change?
 | [ADR-023](ADR-023-file-handling-truncation-signaling.md) | Truncation signaling for file-handling MCP tools | Accepted |
 | [ADR-024](ADR-024-single-layer-tool-result-truncation.md) | Single-layer tool-result truncation policy | Accepted |
 | [ADR-025](ADR-025-native-core-tools-mcp-for-subsystems.md) | Native in-process tools for core primitives; MCP for external + isolatable subsystems | Accepted |
-| [ADR-026](ADR-026-single-event-log-projections-not-parallel-writers.md) | Single event log as source of truth; other sinks are projections | Proposed |
+| [ADR-026](ADR-026-single-event-log-projections-not-parallel-writers.md) | Single event log as source of truth; other sinks are projections | Accepted |
 | [ADR-027](ADR-027-native-tools-in-codegen-tasks.md) | Native tools in codegen tasks (in-process, not MCP subprocess) | Accepted |

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -212,3 +213,32 @@ class RoutingFeedbackStore:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+
+
+def make_routing_outcome_subscriber(store: RoutingFeedbackStore) -> Callable[[str, dict], None]:
+    """Build an ObservabilityEmitter projection that writes ``routing.decision`` events.
+
+    Per ADR-026, ``routing_outcomes`` is a projection of the ``routing.decision``
+    events on the unified emit path — not an independent writer. The closure
+    ignores every other event type; it pulls the fields ``RoutingOutcome`` needs
+    from the event payload (the ``_meta`` correlation block is ignored here).
+    """
+
+    def _subscriber(event_type: str, payload: dict) -> None:
+        if event_type != "routing.decision":
+            return
+        store.record(
+            RoutingOutcome(
+                session_id=str(payload.get("session_id", "")),
+                turn_number=int(payload.get("turn_number", 0)),
+                task_type=str(payload.get("task_type", "")),
+                provider=str(payload.get("provider", "")),
+                model=str(payload.get("model", "")),
+                cost_usd=float(payload.get("cost_usd", 0.0)),
+                latency_ms=float(payload.get("latency_ms", 0.0)),
+                stage=str(payload.get("stage", "")),
+                confidence=float(payload.get("confidence", 0.0)),
+            )
+        )
+
+    return _subscriber

@@ -18,6 +18,18 @@ def emit_metric(record: dict) -> None:
     _metrics_logger.info(json.dumps(record, default=str))
 
 
+def metrics_jsonl_subscriber(event_type: str, payload: dict) -> None:
+    """ObservabilityEmitter projection: write ``metric.*`` events to ``metrics.jsonl``.
+
+    This is the projection that replaces the old direct ``emit_metric`` call
+    sites in ``agent.py`` (ADR-026). Non-metric events are ignored. The payload
+    is written verbatim — preserving the historical ``metrics.jsonl`` line shape
+    plus the additive ``_meta`` correlation block.
+    """
+    if event_type.startswith("metric."):
+        emit_metric(payload)
+
+
 def build_api_call_metric(
     usage: UsageResult,
     session_id: str,

@@ -1,6 +1,6 @@
 # Planning Index
 
-Last updated: 2026-06-02 (Observability plan added — 7-phase delivery for production-grade observability + session step-through, drafted from a code-grounded audit of current state; framework in [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md))
+Last updated: 2026-06-02 (Observability plan — now 8 phases: **Phase 0 (emit-path consolidation, [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md)) added** after a write-path audit found three parallel emit abstractions recording the same facts; Phases 1–7 production-grade observability + session step-through, framework in [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md))
 
 ## Priority Queue
 
@@ -39,7 +39,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | **26** | [JobServe MCP Server](PLAN-jobserve-mcp.md) | Planned | — | — | Replaces the failed `tools/jobserve_apply/` codegen experiment with a hand-written first-party MCP server that wraps the JobServe apply flow. Same architectural pattern as gmail/linkedin/web/github MCPs. ~1.5–2 days. |
 | **27** | [Behavioural Eval Suite](PLAN-behavioural-eval-suite.md) | Planned | — | — | Implements [ISSUE-007](../issues/ISSUE-007-prose-contract-drift-across-policy-layers.md) Option A as DIY pytest + `BufferedChannel` (Inspect AI deferred to optional Phase 4 — reversal rationale recorded in plan/issue). Phases 0–1 (harness + first regression eval) close the open ISSUE-007 web_fetch/routing tail behind a failing test. Highest-leverage mitigation for prose-contract drift; gates future directive/MCP/routing changes green-red. |
 | **28** | [Codegen Multi-Tool](PLAN-codegen-multi-tool.md) | **Completed** | — | — | TypeScript codegen template now supports `TOOLS: ToolDef[]` for multi-tool task apps. Legacy single-tool shape unchanged. Adapter in sealed `index.ts`; `--describe` output keeps singular fields for single-tool back-compat. |
-| **29** | [Observability](PLAN-observability.md) | Planned | — | — | Production-grade observability + session step-through. 7 phases: step-through MVP (emit `llm.call`/`routing.decision`/`mode.analyzed`/`session.config` events, persist exact prompts/tools/params per call), `/replay` command, PII redaction, OTel exporter, alerting, online eval harness, cost rollups + sampling. |
+| **29** | [Observability](PLAN-observability.md) | **In Progress** | — | — | Production-grade observability + session step-through. 8 phases. **Phase 0 — unify the emit path — Implemented 2026-06-03** (one authoritative `events` log; `metrics.jsonl` + `routing_feedback.db` now projections, not parallel writers; triple-write removed; [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md) Accepted). Remaining (Planned): step-through MVP (emit `llm.call`/`routing.decision`/`mode.analyzed`/`session.config`), `/replay` command, PII redaction, OTel exporter, alerting, online eval harness, cost rollups + sampling. |
 | **30** | [Gemma Model Support](PLAN-gemma-model-support.md) | **In Progress** | — | — | **Phase 1 (Path C, Google-hosted) Completed 2026-05-30** — new `config-standard-gemma-cloud.json` profile (defaults to `gemma-3-12b-it` for free-tier safety), `tests/providers/test_gemma_via_gemini.py` offline + live-smoke tests. **Phase 2 (Path A, Ollama local) Completed 2026-05-29** — `SystemPromptCompact`/`SystemPromptExtras` config surface, `gemma_unparsed.*` metrics, `config-standard-ollama-gemma3.json` profile. Live-validated end-to-end on RTX 3050 Ti / Ollama 0.24. **Headline local model swapped from `gemma3:4b` to `orieg/gemma3-tools:4b-ft`** after discovering Ollama hard-rejects `tools=` for stock gemma3. **Phase 3 (vLLM) postponed** — not viable on 4 GB Windows hardware. Phase 4 (native GemmaProvider) not triggered. |
 | — | ~~[OpenClaw-Like Gateway](PLAN-openclaw-like-gateway-architecture.md)~~ | **Superseded** | — | — | Replaced by Trigger Broker |
 
@@ -74,12 +74,12 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 |--------|-------|
 | Completed | 39 |
 | Review | 1 |
-| In Progress | 3 |
+| In Progress | 4 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
 | Dropped | 1 |
-| Planned | 7 |
+| Planned | 6 |
 | Research | 1 |
 
 ## All Plans
@@ -133,4 +133,4 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | [Shared MCP via HTTP transport](PLAN-shared-mcp-http-transport.md) | Completed | Resolved [ISSUE-006](../issues/ISSUE-006-playwright-profile-contention.md). All 4 phases delivered: SSE/HTTP transport in `mcp_manager.py`, env-var-driven client in `_runtime/mcp-client.ts`, `MICRO_X_<NAME>_MCP_URL` injection in codegen `run_task`, config flip + Windows process-tree termination fix. |
 | [JobServe MCP Server](PLAN-jobserve-mcp.md) | Planned | Hand-written first-party MCP server for the JobServe apply flow. Replaces the failed codegen-driven `tools/jobserve_apply/` experiment with the same pattern used by gmail/linkedin/web/github MCPs. |
 | [Compiled-Wiki Knowledge Base](PLAN-compiled-wiki-kb.md) | Research | Placeholder reminder — Karpathy-style "compiled wiki" / context-engineering pattern. See [compiled-wiki-knowledge-base.md](../research/compiled-wiki-knowledge-base.md). Zero-code MVP (manual habit + `wiki/` dir + `CLAUDE.md` directive) recommended before any implementation. |
-| [Observability](PLAN-observability.md) | Planned | Production-grade observability + session step-through. Findings audit + 7-phase delivery: step-through MVP, `/replay` command, PII redaction, OTel, alerting, online evals, cost rollups + sampling. Measured against [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md). |
+| [Observability](PLAN-observability.md) | In Progress | Production-grade observability + session step-through. Findings audit + 8-phase delivery. Phase 0 emit-path consolidation **implemented 2026-06-03** ([ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md) Accepted); remaining Planned: step-through MVP, `/replay` command, PII redaction, OTel, alerting, online evals, cost rollups + sampling. Measured against [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md). |

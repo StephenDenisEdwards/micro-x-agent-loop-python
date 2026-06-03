@@ -117,6 +117,8 @@ class MemoryStore:
                 ON checkpoints(session_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_events_session_created
                 ON events(session_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_events_session_type
+                ON events(session_id, type);
             CREATE INDEX IF NOT EXISTS idx_sessions_title_nocase
                 ON sessions((json_extract(metadata_json, '$.title') COLLATE NOCASE));
             """
