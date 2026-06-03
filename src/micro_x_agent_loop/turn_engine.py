@@ -11,7 +11,7 @@ from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
 from micro_x_agent_loop.constants import DEFAULT_MAX_AGENTIC_ITERATIONS
 from micro_x_agent_loop.provider_pool import ProviderPool, RoutingTarget
-from micro_x_agent_loop.routing_strategy import RoutingStrategy
+from micro_x_agent_loop.routing_strategy import RoutingDecision, RoutingStrategy
 from micro_x_agent_loop.sub_agent import SPAWN_SUBAGENT_SCHEMA, SubAgentRunner, SubAgentType
 from micro_x_agent_loop.tasks.manager import TaskManager
 from micro_x_agent_loop.tasks.schemas import ALL_TASK_SCHEMAS, is_task_tool
@@ -172,6 +172,7 @@ class TurnEngine:
             task_classification = None
             call_type = "main"
             routing_target: RoutingTarget | None = None
+            decision: RoutingDecision | None = None
 
             if self._routing is not None:
                 decision = await self._routing.decide(
@@ -194,19 +195,41 @@ class TurnEngine:
                 if decision.system_prompt_override is not None:
                     system_prompt = decision.system_prompt_override
 
+            # Resolve the effective provider name once, up front, so it can be
+            # reported on the llm.call event and reused as the dispatch target.
+            if effective_provider is not None and isinstance(effective_provider, ProviderPool):
+                dispatch_provider = (
+                    routing_target.provider if routing_target is not None else self._routing_fallback_provider
+                )
+            else:
+                dispatch_provider = getattr(self._provider, "family", "")
+
+            # Step-through trace: exactly what is about to go to the model.
+            self._events.on_llm_call(
+                turn_iteration=turn_iteration,
+                call_type=call_type,
+                effective_provider=dispatch_provider,
+                effective_model=effective_model,
+                temperature=self._temperature,
+                max_tokens=self._max_tokens,
+                message_count=len(messages),
+                tool_names=[str(t.get("name", "")) for t in api_tools],
+                system_prompt=system_prompt,
+                routing_rule=call_type,
+                routing_reason=decision.reason if decision is not None else "",
+            )
+
             # Dispatch to provider. The provider's own tenacity retry is
             # exhausted by the time an exception reaches us, so a raise here is
             # terminal for the call — record it as a metric before re-raising.
             # The success path below never runs on error, which previously left
             # 429s / timeouts with no structured trace (success-only ledger).
-            dispatch_provider = ""
             try:
                 if effective_provider is not None and isinstance(effective_provider, ProviderPool):
                     dispatch_target = routing_target or RoutingTarget(
                         provider=self._routing_fallback_provider,
                         model=effective_model,
                     )
-                    dispatch_provider = dispatch_target.provider
                     message, tool_use_blocks, stop_reason, usage = await effective_provider.stream_chat(
                         dispatch_target,
                         self._max_tokens,
@@ -217,7 +240,6 @@ class TurnEngine:
                         channel=self._channel,
                     )
                 else:
-                    dispatch_provider = getattr(self._provider, "family", "")
                     message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
                         effective_model,
                         self._max_tokens,
@@ -244,6 +266,7 @@ class TurnEngine:
                     task_classification=task_classification,
                     usage=usage,
                     call_type=call_type,
+                    decision=decision,
                 )
 
             if self._api_payload_store is not None:
@@ -468,6 +491,8 @@ class TurnEngine:
                     result_text=result_text,
                     is_error=False,
                     message_id=last_assistant_message_id,
+                    was_truncated=was_truncated,
+                    original_chars=len(formatted),
                 )
                 self._events.on_tool_completed(tool_use_id, tool_name, False)
                 self._events.on_tool_executed(

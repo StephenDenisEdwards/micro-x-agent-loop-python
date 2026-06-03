@@ -63,6 +63,8 @@ class MemoryFacade(Protocol):
         result_text: str,
         is_error: bool,
         message_id: str | None,
+        was_truncated: bool = False,
+        original_chars: int | None = None,
     ) -> None: ...
 
     def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None: ...
@@ -70,6 +72,8 @@ class MemoryFacade(Protocol):
     def emit_tool_completed(self, tool_use_id: str, tool_name: str, is_error: bool) -> None: ...
 
     def emit_event(self, event_type: str, payload: dict) -> None: ...
+
+    def persist_system_prompt(self, text: str) -> str | None: ...
 
     def load_messages(self, session_id: str) -> list[dict]: ...
 
@@ -125,6 +129,8 @@ class NullMemoryFacade:
         result_text: str,
         is_error: bool,
         message_id: str | None,
+        was_truncated: bool = False,
+        original_chars: int | None = None,
     ) -> None:
         return
 
@@ -136,6 +142,9 @@ class NullMemoryFacade:
 
     def emit_event(self, event_type: str, payload: dict) -> None:
         return
+
+    def persist_system_prompt(self, text: str) -> str | None:
+        return None
 
     def load_messages(self, session_id: str) -> list[dict]:
         return []
@@ -251,6 +260,8 @@ class ActiveMemoryFacade:
         result_text: str,
         is_error: bool,
         message_id: str | None,
+        was_truncated: bool = False,
+        original_chars: int | None = None,
     ) -> None:
         if self._session_manager is None or self._active_session_id is None:
             return
@@ -262,7 +273,15 @@ class ActiveMemoryFacade:
             result_text=result_text,
             is_error=is_error,
             tool_call_id=tool_call_id,
+            was_truncated=was_truncated,
+            original_chars=original_chars,
         )
+
+    def persist_system_prompt(self, text: str) -> str | None:
+        if self._session_manager is None:
+            return None
+        result: str = self._session_manager.persist_system_prompt(text)
+        return result
 
     def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:
         if self._event_emitter is not None and self._active_session_id is not None:

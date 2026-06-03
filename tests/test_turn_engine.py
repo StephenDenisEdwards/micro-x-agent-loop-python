@@ -49,7 +49,18 @@ class RecordingEvents(BaseTurnEvents):
     def on_maybe_track_mutation(self, tool_name: str, tool: Tool, tool_input: dict) -> None:
         self.mutation_calls.append((tool_name, tool, tool_input))
 
-    def on_record_tool_call(self, *, tool_call_id, tool_name, tool_input, result_text, is_error, message_id) -> None:
+    def on_record_tool_call(
+        self,
+        *,
+        tool_call_id,
+        tool_name,
+        tool_input,
+        result_text,
+        is_error,
+        message_id,
+        was_truncated=False,
+        original_chars=None,
+    ) -> None:
         self.tool_call_records.append(
             {
                 "tool_call_id": tool_call_id,
@@ -58,6 +69,8 @@ class RecordingEvents(BaseTurnEvents):
                 "result_text": result_text,
                 "is_error": is_error,
                 "message_id": message_id,
+                "was_truncated": was_truncated,
+                "original_chars": original_chars,
             }
         )
 

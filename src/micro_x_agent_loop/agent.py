@@ -30,8 +30,9 @@ from micro_x_agent_loop.mode_selector import (
     format_analysis,
     parse_stage2_response,
 )
-from micro_x_agent_loop.observability import ObservabilityEmitter
+from micro_x_agent_loop.observability import ObservabilityEmitter, config_hash, resolve_code_sha
 from micro_x_agent_loop.routing_feedback import make_routing_outcome_subscriber
+from micro_x_agent_loop.routing_strategy import RoutingDecision
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
 from micro_x_agent_loop.tool import Tool
@@ -248,6 +249,7 @@ class Agent:
         # --- Metrics ---
         self._metrics_enabled = c.metrics_enabled
         self._turn_number = 0
+        self._session_config_emitted = False
         self._session_accumulator = c.session_accumulator
         self._session_budget_usd = c.session_budget_usd
         self._budget_warning_emitted = False
@@ -301,27 +303,37 @@ class Agent:
         routing_feedback_callback = c.routing_feedback_callback
         if c.routing_feedback_store is not None and c.semantic_routing_enabled:
 
-            def _on_routing_feedback(*, task_classification: object, usage: UsageResult, call_type: str) -> None:
+            def _on_routing_feedback(
+                *, task_classification: object, usage: UsageResult, call_type: str, decision: object = None
+            ) -> None:
                 from micro_x_agent_loop.semantic_classifier import TaskClassification as TC
 
                 if not isinstance(task_classification, TC):
                     return
-                self._obs.emit(
-                    "routing.decision",
-                    {
-                        "session_id": self._memory.active_session_id or "",
-                        "turn_number": self._turn_number,
-                        "task_type": task_classification.task_type.value,
-                        "provider": usage.provider,
-                        "model": usage.model,
-                        "cost_usd": estimate_cost(usage),
-                        "latency_ms": usage.duration_ms,
-                        "stage": task_classification.stage,
-                        "confidence": task_classification.confidence,
-                        "call_type": call_type,
-                    },
-                    turn_number=self._turn_number,
-                )
+                payload: dict = {
+                    "session_id": self._memory.active_session_id or "",
+                    "turn_number": self._turn_number,
+                    "task_type": task_classification.task_type.value,
+                    "provider": usage.provider,
+                    "model": usage.model,
+                    "cost_usd": estimate_cost(usage),
+                    "latency_ms": usage.duration_ms,
+                    "stage": task_classification.stage,
+                    "confidence": task_classification.confidence,
+                    "reason": task_classification.reason,
+                    "call_type": call_type,
+                }
+                if isinstance(decision, RoutingDecision):
+                    payload.update(
+                        {
+                            "policy_name": decision.policy_name,
+                            "tool_search_only": decision.tool_search_only,
+                            "system_prompt_compact": decision.system_prompt_compact,
+                            "pin_continuation_latched": decision.pin_continuation_latched,
+                            "confidence_gate_triggered": decision.confidence_gate_triggered,
+                        }
+                    )
+                self._obs.emit("routing.decision", payload, turn_number=self._turn_number)
 
             routing_feedback_callback = _on_routing_feedback
 
@@ -538,6 +550,7 @@ class Agent:
         if isinstance(command_result, str):
             user_message = command_result
 
+        mode_event: dict | None = None
         if self._mode_analysis_enabled and not self._autonomous:
             analysis = analyze_prompt(user_message)
             stage2: Stage2Result | None = None
@@ -548,11 +561,25 @@ class Agent:
                 except Exception as ex:
                     logger.warning(f"Stage 2 classification failed: {ex}")
 
+            user_choice: str | None = None
             if analysis.signals:
                 chosen_mode = await self._prompt_mode_choice(analysis, stage2)
+                user_choice = chosen_mode.value
                 self._system_print(f"[Mode] Proceeding in {chosen_mode.value} mode")
             else:
                 self._system_print(format_analysis(analysis))
+
+            mode_event = {
+                "session_id": self._memory.active_session_id or "",
+                "signals": [
+                    {"name": s.name, "strength": s.strength.value, "matched_text": s.matched_text}
+                    for s in analysis.signals
+                ],
+                "stage1_recommendation": analysis.recommended_mode.value,
+                "stage2_recommendation": stage2.recommended_mode.value if stage2 is not None else None,
+                "stage2_reasoning": stage2.reasoning if stage2 is not None else "",
+                "user_choice": user_choice,
+            }
 
         # Budget check — refuse to start a new turn if budget is exhausted
         if self._is_budget_exceeded():
@@ -567,6 +594,10 @@ class Agent:
 
         self._turn_number += 1
         self._session_accumulator.total_turns = self._turn_number
+
+        self._emit_session_config_once()
+        if mode_event is not None:
+            self._obs.emit("mode.analyzed", mode_event, turn_number=self._turn_number)
 
         self._current_checkpoint_id = None
         self._last_assistant_message_id = None
@@ -911,6 +942,8 @@ class Agent:
         result_text: str,
         is_error: bool,
         message_id: str | None,
+        was_truncated: bool = False,
+        original_chars: int | None = None,
     ) -> None:
         self._memory.record_tool_call(
             tool_call_id=tool_call_id,
@@ -919,6 +952,83 @@ class Agent:
             result_text=result_text,
             is_error=is_error,
             message_id=message_id,
+            was_truncated=was_truncated,
+            original_chars=original_chars,
+        )
+
+    def on_llm_call(
+        self,
+        *,
+        turn_iteration: int,
+        call_type: str,
+        effective_provider: str,
+        effective_model: str,
+        temperature: float,
+        max_tokens: int,
+        message_count: int,
+        tool_names: list[str],
+        system_prompt: str,
+        routing_rule: str = "",
+        routing_reason: str = "",
+    ) -> None:
+        # Step-through trace of the exact LLM input. The full prompt is deduped
+        # into the system_prompts table; the event carries only its hash + size.
+        sha = self._memory.persist_system_prompt(system_prompt)
+        self._obs.emit(
+            "llm.call",
+            {
+                "session_id": self._memory.active_session_id or "",
+                "turn_number": self._turn_number,
+                "call_type": call_type,
+                "effective_provider": effective_provider,
+                "effective_model": effective_model,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "message_count": message_count,
+                "tool_names": tool_names,
+                "system_prompt_sha256": sha,
+                "system_prompt_chars": len(system_prompt),
+                "routing_rule": routing_rule,
+                "routing_reason": routing_reason,
+            },
+            turn_number=self._turn_number,
+            iteration=turn_iteration,
+        )
+
+    def _emit_session_config_once(self) -> None:
+        """Emit a ``session.config`` event once per session.
+
+        Snapshots the resolved scalar config that drives agent decisions, plus a
+        ``code_sha`` and a ``config_hash`` so a historical trace can be
+        interpreted against the exact code + config that produced it (ADR
+        review gap: historical traces vs today's code).
+        """
+        if self._session_config_emitted:
+            return
+        self._session_config_emitted = True
+        snapshot = {
+            "model": self._model,
+            "provider": getattr(self._provider, "family", ""),
+            "max_tokens": self._max_tokens,
+            "temperature": self._temperature,
+            "max_agentic_iterations": self._max_agentic_iterations,
+            "semantic_routing_enabled": self._semantic_routing_enabled,
+            "mode_analysis_enabled": self._mode_analysis_enabled,
+            "stage2_classification_enabled": self._stage2_classification_enabled,
+            "memory_enabled": self._memory_enabled,
+            "metrics_enabled": self._metrics_enabled,
+            "session_budget_usd": self._session_budget_usd,
+            "system_prompt_chars": len(self._system_prompt),
+        }
+        self._obs.emit(
+            "session.config",
+            {
+                "session_id": self._memory.active_session_id or "",
+                "code_sha": resolve_code_sha(),
+                "config_hash": config_hash(snapshot),
+                "config": snapshot,
+            },
+            turn_number=self._turn_number,
         )
 
     def _system_print(self, text: str) -> None:
@@ -935,6 +1045,7 @@ class Agent:
         self._messages = new_messages
         self._session_accumulator.reset(session_id=session_id)
         self._turn_number = 0
+        self._session_config_emitted = False
         self._budget_warning_emitted = False
         if self._task_manager is not None:
             self._task_manager._list_id = session_id

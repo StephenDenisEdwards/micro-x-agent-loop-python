@@ -358,13 +358,13 @@ class RoutingTargetResolutionTests(unittest.TestCase):
 
     def test_no_classification_returns_none(self) -> None:
         strategy = self._make_strategy(routing_policies={"trivial": {"provider": "ollama", "model": "sm"}})
-        result = strategy._resolve_routing_target(None)
+        result, gate = strategy._resolve_routing_target(None)
         self.assertIsNone(result)
 
     def test_no_policies_returns_none(self) -> None:
         strategy = self._make_strategy()
         classification = TaskClassification(task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test")
-        result = strategy._resolve_routing_target(classification)
+        result, gate = strategy._resolve_routing_target(classification)
         self.assertIsNone(result)
 
     def test_matching_policy_returns_target(self) -> None:
@@ -374,7 +374,7 @@ class RoutingTargetResolutionTests(unittest.TestCase):
             routing_fallback_model="m",
         )
         classification = TaskClassification(task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test")
-        result = strategy._resolve_routing_target(classification)
+        result, gate = strategy._resolve_routing_target(classification)
         self.assertIsNotNone(result)
         self.assertEqual("ollama", result.provider)
         self.assertEqual("sm", result.model)
@@ -389,9 +389,10 @@ class RoutingTargetResolutionTests(unittest.TestCase):
         classification = TaskClassification(
             task_type=TaskType.TRIVIAL, stage="rules", confidence=0.5, reason="uncertain"
         )
-        result = strategy._resolve_routing_target(classification)
+        result, gate = strategy._resolve_routing_target(classification)
         self.assertIsNotNone(result)
         self.assertEqual("m", result.model)
+        self.assertTrue(gate)  # confidence gate refused the downgrade
 
     def test_unknown_task_type_falls_back(self) -> None:
         strategy = self._make_strategy(
@@ -402,7 +403,7 @@ class RoutingTargetResolutionTests(unittest.TestCase):
         classification = TaskClassification(
             task_type=TaskType.CODE_GENERATION, stage="rules", confidence=0.9, reason="test"
         )
-        result = strategy._resolve_routing_target(classification)
+        result, gate = strategy._resolve_routing_target(classification)
         self.assertIsNotNone(result)
         self.assertEqual("m", result.model)
 
@@ -421,7 +422,7 @@ class RoutingTargetResolutionTests(unittest.TestCase):
             routing_fallback_model="m",
         )
         classification = TaskClassification(task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test")
-        result = strategy._resolve_routing_target(classification)
+        result, gate = strategy._resolve_routing_target(classification)
         self.assertTrue(result.tool_search_only)
         self.assertEqual("compact", result.system_prompt)
         self.assertTrue(result.pin_continuation)
@@ -431,7 +432,7 @@ class RoutingTargetResolutionTests(unittest.TestCase):
             routing_policies={"trivial": {"provider": "", "model": ""}},
         )
         classification = TaskClassification(task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test")
-        result = strategy._resolve_routing_target(classification)
+        result, gate = strategy._resolve_routing_target(classification)
         self.assertIsNone(result)
 
 

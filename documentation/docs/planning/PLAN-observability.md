@@ -2,7 +2,7 @@
 
 ## Status
 
-**In Progress** — Drafted 2026-06-02 from audit of current state. **Phase 0 (emit-path consolidation) implemented 2026-06-03** ([ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md), Accepted); Phases 1–7 still Planned. See [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md) for the framework this plan is measured against.
+**In Progress** — Drafted 2026-06-02 from audit of current state. **Phase 0 (emit-path consolidation, [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md)) and Phase 1 (session step-through MVP) implemented 2026-06-03**; Phases 2–7 still Planned (Phase 1's Anthropic `thinking` capture deferred within the phase — extended thinking not yet enabled). See [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md) for the framework this plan is measured against.
 
 ## Goals
 
@@ -82,19 +82,19 @@ Per [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not
 
 **Acceptance (met):** a single `emit` results in all derived sinks (event log + subscribed projections); no business-logic method writes the same fact to two stores; `metrics.jsonl` and `routing_outcomes` rows are reproducible from the `events` table. Existing consumers (CLI `/cost` via `SessionAccumulator`, `cost_reconciliation`, offline eval harness) are unchanged. Covered by `tests/test_observability.py` (persist-once + fan-out, `_meta`/seq monotonicity, memory-off fan-out, subscriber-exception isolation, routing projection); full suite green (1780 passed; 3 pre-existing unrelated failures).
 
-### Phase 1 — Session step-through MVP
+### Phase 1 — Session step-through MVP — **Implemented 2026-06-03**
 
 Unblocks goal 2 with minimal new schema. Targets the Phase 0 emit seam — every event below is emitted once and flows to the event log (and any subscribed projection) through it.
 
-- Emit `llm.call` event before each provider dispatch. Fields: `turn_iteration`, `call_type`, `effective_provider`, `effective_model`, `temperature`, `max_tokens`, `message_count`, `tool_names: list[str]`, `system_prompt_sha256`, `system_prompt_chars`, `routing_rule`, `routing_reason`. Hook just before the provider call in `turn_engine.py`.
-- Persist system prompts in a deduped `system_prompts` table keyed by sha256 (kept separate from event payloads to keep them small).
-- Emit `routing.decision` event when `RoutingStrategy.decide()` returns. Fields: `task_type`, `confidence`, `stage`, `reason`, `policy_name`, `provider`, `model`, `tool_search_only`, `system_prompt_compact`, `pin_continuation_latched`, `confidence_gate_triggered`.
-- Emit `mode.analyzed` event in `agent.py`. Fields: `signals`, `stage1_recommendation`, `stage2_recommendation`, `stage2_reasoning`, `user_choice`.
-- Emit `session.config` event at session start — resolved config snapshot + `code_sha` (from `git rev-parse HEAD` at process start) + `config_hash`.
-- Surface `was_truncated` and `original_chars` on `tool_calls` rows.
-- Capture Anthropic `thinking` blocks in `assistant_content`.
+- ✅ Emit `llm.call` event before each provider dispatch via a new `TurnEvents.on_llm_call` hook (turn_engine emits; `Agent` persists + emits through `self._obs`). Fields: `turn_iteration` (the real per-iteration index, carried in `_meta.iter`), `call_type`, `effective_provider`, `effective_model`, `temperature`, `max_tokens`, `message_count`, `tool_names: list[str]`, `system_prompt_sha256`, `system_prompt_chars`, `routing_rule`, `routing_reason`.
+- ✅ Persist system prompts in a deduped `system_prompts(sha256 PK, text, chars, created_at)` table (`SessionManager.persist_system_prompt`, `INSERT OR IGNORE`). The `llm.call` event carries only the hash + char count, keeping event payloads small.
+- ✅ Enriched the existing `routing.decision` event (Phase 0) with the rationale fields: `reason`, `policy_name`, `tool_search_only`, `system_prompt_compact`, `pin_continuation_latched`, `confidence_gate_triggered` — surfaced from `RoutingDecision` (and `_resolve_routing_target` now reports the confidence-gate trigger). Cost/latency stay on the event so the `routing_outcomes` projection is unchanged.
+- ✅ Emit `mode.analyzed` event in `agent.py` per turn. Fields: `signals` (name/strength/matched_text), `stage1_recommendation`, `stage2_recommendation`, `stage2_reasoning`, `user_choice`.
+- ✅ Emit `session.config` event once per session — curated scalar config snapshot + `code_sha` (env override → `git rev-parse HEAD` with a `-dirty` suffix when the tree is dirty → `unknown`) + `config_hash` (`observability.resolve_code_sha` / `config_hash`).
+- ✅ Surface `was_truncated` and `original_chars` on `tool_calls` rows (schema columns + idempotent `ALTER TABLE` migration for legacy DBs; threaded from `turn_engine`'s truncation site through `on_record_tool_call`).
+- ⏸️ **Deferred (within Phase 1): capture Anthropic `thinking` blocks.** Extended thinking is not enabled on the provider requests today, so there are no `thinking` blocks to capture — the change would touch the streaming hot path for zero current payload. Revisit when extended thinking is turned on.
 
-**Acceptance:** given any `session_id`, a script can query `memory.db` and reconstruct turn-by-turn (a) what prompt + tools + sampling params went to the model, (b) what came back, (c) what tools ran and with what args/results, (d) which mode/routing decisions were made and why. No reliance on `api_payloads.jsonl` or the in-memory ring.
+**Acceptance (met, except deferred thinking):** given any `session_id`, a script can query `memory.db` and reconstruct turn-by-turn (a) prompt (`system_prompts` via `llm.call.system_prompt_sha256`) + tools (`tool_names`) + sampling params, (b) the response (`messages`), (c) tools run with args/results (`tool_calls`, now incl. truncation), (d) mode/routing decisions and why (`mode.analyzed`, enriched `routing.decision`), and the config that drove them (`session.config`). Events correlate via `_meta {turn, iter, seq}`. Covered by `tests/test_observability_phase1.py` (schema + legacy migration, prompt dedup, truncation round-trip, code_sha/config_hash, routing rationale incl. confidence gate). No reliance on `api_payloads.jsonl` or the in-memory ring.
 
 ### Phase 2 — `/replay` command
 

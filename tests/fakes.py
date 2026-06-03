@@ -245,6 +245,11 @@ class SessionManagerFake:
     def load_messages(self, session_id: str) -> list[dict]:
         return list(self._messages.get(session_id, []))
 
+    def persist_system_prompt(self, text: str) -> str:
+        import hashlib
+
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
     def get_session(self, session_id: str) -> dict | None:
         return self._sessions.get(session_id)
 

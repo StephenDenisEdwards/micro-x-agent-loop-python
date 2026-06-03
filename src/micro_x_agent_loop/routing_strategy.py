@@ -28,6 +28,13 @@ class RoutingDecision:
     system_prompt_override: str | None = None
     narrowed_tools: list[dict] | None = None
     new_pinned_target: RoutingTarget | None = None
+    # --- Observability rationale (Phase 1: routing.decision event) ---
+    policy_name: str = ""
+    reason: str = ""
+    tool_search_only: bool = False
+    system_prompt_compact: bool = False
+    pin_continuation_latched: bool = False
+    confidence_gate_triggered: bool = False
 
 
 class RoutingStrategy:
@@ -93,6 +100,8 @@ class RoutingStrategy:
         call_type = "main"
         routing_target: RoutingTarget | None = None
         new_pinned_target: RoutingTarget | None = None
+        confidence_gate_triggered = False
+        pin_continuation_latched = False
 
         # --- Pin continuation: reuse iteration-0 target on iteration 1+ ---
         if pinned_target is not None and turn_iteration > 0:
@@ -100,6 +109,7 @@ class RoutingStrategy:
             effective_provider = self._provider_pool
             effective_model = routing_target.model
             call_type = f"pinned:{pinned_target.provider}/{pinned_target.model}"
+            pin_continuation_latched = True
             logger.info(
                 "Pinned continuation: reusing iteration-0 target "
                 "provider={provider} model={model} (iteration {iteration})",
@@ -123,7 +133,7 @@ class RoutingStrategy:
                 turn_number=turn_number,
                 query_embedding=query_embedding,
             )
-            routing_target = self._resolve_routing_target(task_classification)
+            routing_target, confidence_gate_triggered = self._resolve_routing_target(task_classification)
             if routing_target is not None:
                 effective_provider = self._provider_pool
                 effective_model = routing_target.model
@@ -180,20 +190,31 @@ class RoutingStrategy:
             system_prompt_override=system_prompt_override,
             narrowed_tools=narrowed_tools,
             new_pinned_target=new_pinned_target,
+            policy_name=task_classification.task_type.value if task_classification is not None else "",
+            reason=task_classification.reason if task_classification is not None else "",
+            tool_search_only=narrowed_tools is not None,
+            system_prompt_compact=system_prompt_override is not None,
+            pin_continuation_latched=pin_continuation_latched,
+            confidence_gate_triggered=confidence_gate_triggered,
         )
 
     def _resolve_routing_target(
         self,
         classification: TaskClassification | None,
-    ) -> RoutingTarget | None:
+    ) -> tuple[RoutingTarget | None, bool]:
         """Map a task classification to a provider/model routing target.
+
+        Returns ``(target, confidence_gate_triggered)``. The flag is ``True``
+        when confidence gating refused a downgrade — surfaced on the
+        ``routing.decision`` event so observability can see *why* a cheaper
+        model was declined.
 
         Applies confidence gating: if confidence is below the threshold and
         the policy would route to a different (cheaper) model, fall back to
         the main model to avoid degrading quality on uncertain classifications.
         """
         if classification is None or not self._routing_policies:
-            return None
+            return None, False
 
         task_type = classification.task_type.value
         policy = self._routing_policies.get(task_type)
@@ -202,8 +223,8 @@ class RoutingStrategy:
                 return RoutingTarget(
                     provider=self._routing_fallback_provider,
                     model=self._routing_fallback_model,
-                )
-            return None
+                ), False
+            return None, False
 
         provider = policy.get("provider", self._routing_fallback_provider)
         model = policy.get("model", self._routing_fallback_model)
@@ -211,7 +232,7 @@ class RoutingStrategy:
         system_prompt_policy = str(policy.get("system_prompt", ""))
         pin_continuation = bool(policy.get("pin_continuation", False))
         if not provider or not model:
-            return None
+            return None, False
 
         main_model = self._routing_fallback_model or self._default_model
         if classification.confidence < self._routing_confidence_threshold and model != main_model:
@@ -225,7 +246,7 @@ class RoutingStrategy:
             return RoutingTarget(
                 provider=self._routing_fallback_provider or provider,
                 model=main_model,
-            )
+            ), True
 
         if self._provider_pool is not None:
             if not self._provider_pool.should_switch_provider(
@@ -236,7 +257,7 @@ class RoutingStrategy:
                 return RoutingTarget(
                     provider=self._provider_pool.active_cache_provider,
                     model=self._routing_fallback_model or self._default_model,
-                )
+                ), False
 
         return RoutingTarget(
             provider=provider,
@@ -244,4 +265,4 @@ class RoutingStrategy:
             tool_search_only=tool_search_only,
             system_prompt=system_prompt_policy,
             pin_continuation=pin_continuation,
-        )
+        ), False

@@ -74,6 +74,15 @@ class MemoryStore:
                 input_json TEXT NOT NULL,
                 result_text TEXT NOT NULL,
                 is_error INTEGER NOT NULL CHECK (is_error IN (0, 1)),
+                created_at TEXT NOT NULL,
+                was_truncated INTEGER NOT NULL DEFAULT 0 CHECK (was_truncated IN (0, 1)),
+                original_chars INTEGER NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS system_prompts (
+                sha256 TEXT PRIMARY KEY,
+                text TEXT NOT NULL,
+                chars INTEGER NOT NULL,
                 created_at TEXT NOT NULL
             );
 
@@ -123,4 +132,24 @@ class MemoryStore:
                 ON sessions((json_extract(metadata_json, '$.title') COLLATE NOCASE));
             """
         )
+        self._migrate_columns()
         self._conn.commit()
+
+    def _migrate_columns(self) -> None:
+        """Add columns introduced after a table's first release.
+
+        ``CREATE TABLE IF NOT EXISTS`` never alters an existing table, so DBs
+        created before a column existed need an explicit ``ALTER TABLE``. Each
+        entry is idempotent — skipped when the column is already present.
+        """
+        migrations = {
+            "tool_calls": {
+                "was_truncated": "INTEGER NOT NULL DEFAULT 0",
+                "original_chars": "INTEGER NULL",
+            },
+        }
+        for table, columns in migrations.items():
+            existing = {row["name"] for row in self._conn.execute(f"PRAGMA table_info({table})")}
+            for name, decl in columns.items():
+                if name not in existing:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")

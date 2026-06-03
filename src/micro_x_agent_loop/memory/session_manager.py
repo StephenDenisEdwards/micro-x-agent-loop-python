@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from uuid import uuid4
 
@@ -175,6 +176,8 @@ class SessionManager:
         result_text: str,
         is_error: bool,
         tool_call_id: str | None = None,
+        was_truncated: bool = False,
+        original_chars: int | None = None,
     ) -> str:
         call_id = tool_call_id or str(uuid4())
         now = utc_now()
@@ -182,8 +185,9 @@ class SessionManager:
             self._store.execute(
                 """
                 INSERT INTO tool_calls
-                (id, session_id, message_id, tool_name, input_json, result_text, is_error, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (id, session_id, message_id, tool_name, input_json, result_text, is_error,
+                 created_at, was_truncated, original_chars)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     call_id,
@@ -194,6 +198,8 @@ class SessionManager:
                     result_text,
                     1 if is_error else 0,
                     now,
+                    1 if was_truncated else 0,
+                    original_chars,
                 ),
             )
             self._store.execute(
@@ -201,6 +207,22 @@ class SessionManager:
                 (now, session_id),
             )
         return call_id
+
+    def persist_system_prompt(self, text: str) -> str:
+        """Store *text* in the deduped ``system_prompts`` table; return its sha256.
+
+        Prompts are large and highly repetitive across calls, so they live in
+        their own table keyed by content hash — ``llm.call`` events reference the
+        hash instead of carrying the full prompt. Idempotent: re-storing the same
+        text is a no-op insert.
+        """
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        self._store.execute(
+            "INSERT OR IGNORE INTO system_prompts (sha256, text, chars, created_at) VALUES (?, ?, ?, ?)",
+            (digest, text, len(text), utc_now()),
+        )
+        self._store.commit()
+        return digest
 
     def build_session_summary(self, session_id: str) -> dict:
         session = self.get_session(session_id)

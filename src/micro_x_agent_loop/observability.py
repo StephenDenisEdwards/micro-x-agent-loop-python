@@ -10,6 +10,10 @@ consolidating here removes that triple-write.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import subprocess
 from collections.abc import Callable
 from typing import Protocol
 
@@ -17,6 +21,44 @@ from loguru import logger
 
 Subscriber = Callable[[str, dict], None]
 """Projection sink: ``(event_type, enriched_payload) -> None``."""
+
+_CODE_SHA: str | None = None
+
+
+def resolve_code_sha() -> str:
+    """Best-effort identity of the running code, computed once per process.
+
+    Order: ``MICRO_X_CODE_SHA`` env override → ``git rev-parse HEAD`` with a
+    ``-dirty`` suffix when the working tree has uncommitted changes → ``unknown``
+    when neither is available (e.g. a packaged deploy with no ``.git``). The
+    dirty suffix matters because step-through traces are most often read while
+    actively editing the very code that produced them.
+    """
+    global _CODE_SHA
+    if _CODE_SHA is not None:
+        return _CODE_SHA
+    sha = os.environ.get("MICRO_X_CODE_SHA", "").strip()
+    if not sha:
+        try:
+            sha = subprocess.run(
+                ["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=2
+            ).stdout.strip()
+            if sha:
+                dirty = subprocess.run(
+                    ["git", "status", "--porcelain"], capture_output=True, text=True, timeout=2
+                ).stdout.strip()
+                if dirty:
+                    sha += "-dirty"
+        except Exception:
+            sha = ""
+    _CODE_SHA = sha or "unknown"
+    return _CODE_SHA
+
+
+def config_hash(snapshot: dict) -> str:
+    """Stable short hash of a config snapshot — tags traces to the config that drove them."""
+    serialized = json.dumps(snapshot, sort_keys=True, default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
 class _EventLog(Protocol):

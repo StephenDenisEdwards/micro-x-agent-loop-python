@@ -29,6 +29,24 @@ class TurnEvents(Protocol):
         result_text: str,
         is_error: bool,
         message_id: str | None,
+        was_truncated: bool = False,
+        original_chars: int | None = None,
+    ) -> None: ...
+
+    def on_llm_call(
+        self,
+        *,
+        turn_iteration: int,
+        call_type: str,
+        effective_provider: str,
+        effective_model: str,
+        temperature: float,
+        max_tokens: int,
+        message_count: int,
+        tool_names: list[str],
+        system_prompt: str,
+        routing_rule: str = "",
+        routing_reason: str = "",
     ) -> None: ...
 
     def on_tool_started(self, tool_use_id: str, tool_name: str) -> None: ...
@@ -93,6 +111,25 @@ class BaseTurnEvents:
         result_text: str,
         is_error: bool,
         message_id: str | None,
+        was_truncated: bool = False,
+        original_chars: int | None = None,
+    ) -> None:
+        return
+
+    def on_llm_call(
+        self,
+        *,
+        turn_iteration: int,
+        call_type: str,
+        effective_provider: str,
+        effective_model: str,
+        temperature: float,
+        max_tokens: int,
+        message_count: int,
+        tool_names: list[str],
+        system_prompt: str,
+        routing_rule: str = "",
+        routing_reason: str = "",
     ) -> None:
         return
 
