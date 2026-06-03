@@ -7,13 +7,25 @@ from uuid import uuid4
 from micro_x_agent_loop.compaction import estimate_tokens
 from micro_x_agent_loop.memory.events import EventEmitter, utc_now
 from micro_x_agent_loop.memory.store import MemoryStore
+from micro_x_agent_loop.redaction import NullRedactor, Redactor
 
 
 class SessionManager:
-    def __init__(self, store: MemoryStore, model: str, events: EventEmitter):
+    def __init__(
+        self,
+        store: MemoryStore,
+        model: str,
+        events: EventEmitter,
+        *,
+        redactor: Redactor | None = None,
+    ):
         self._store = store
         self._model = model
         self._events = events
+        # Redaction applies to the observability/audit copies (tool_calls,
+        # system_prompts) — NOT append_message, which is the live conversation
+        # replayed into the model on resume.
+        self._redactor: Redactor = redactor or NullRedactor()
 
     def get_session(self, session_id: str) -> dict | None:
         row = self._store.execute(
@@ -181,6 +193,10 @@ class SessionManager:
     ) -> str:
         call_id = tool_call_id or str(uuid4())
         now = utc_now()
+        # Redact the audit copy only (the live tool_use / tool_result blocks in
+        # the messages table are left intact for faithful replay).
+        redacted_input = self._redactor.redact(tool_input)
+        redacted_result = self._redactor.redact(result_text)
         with self._store.transaction():
             self._store.execute(
                 """
@@ -194,8 +210,8 @@ class SessionManager:
                     session_id,
                     message_id,
                     tool_name,
-                    json.dumps(tool_input, ensure_ascii=True),
-                    result_text,
+                    json.dumps(redacted_input, ensure_ascii=True),
+                    redacted_result,
                     1 if is_error else 0,
                     now,
                     1 if was_truncated else 0,
@@ -216,10 +232,13 @@ class SessionManager:
         hash instead of carrying the full prompt. Idempotent: re-storing the same
         text is a no-op insert.
         """
+        # Hash the real prompt (so llm.call's sha matches), but persist a redacted
+        # body — system prompts can embed injected user-memory secrets.
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        stored = self._redactor.redact(text)
         self._store.execute(
             "INSERT OR IGNORE INTO system_prompts (sha256, text, chars, created_at) VALUES (?, ?, ?, ?)",
-            (digest, text, len(text), utc_now()),
+            (digest, stored, len(text), utc_now()),
         )
         self._store.commit()
         return digest

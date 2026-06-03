@@ -18,6 +18,7 @@ from micro_x_agent_loop.memory import CheckpointManager, EventEmitter, MemorySto
 from micro_x_agent_loop.memory.event_sink import AsyncEventSink
 from micro_x_agent_loop.native_tools import build_native_tools
 from micro_x_agent_loop.provider import create_provider
+from micro_x_agent_loop.redaction import build_redactor
 from micro_x_agent_loop.system_prompt import filesystem_roots_from_config, get_system_prompt
 
 
@@ -135,8 +136,9 @@ async def bootstrap_runtime(
         memory_store = MemoryStore(str(db_path))
         event_sink = AsyncEventSink(memory_store)
         await event_sink.start()
-        event_emitter = EventEmitter(memory_store, sink=event_sink)
-        session_manager = SessionManager(memory_store, app.model, event_emitter)
+        redactor = build_redactor(app.observability_redaction)
+        event_emitter = EventEmitter(memory_store, sink=event_sink, redactor=redactor)
+        session_manager = SessionManager(memory_store, app.model, event_emitter, redactor=redactor)
         checkpoint_manager = CheckpointManager(
             memory_store,
             event_emitter,

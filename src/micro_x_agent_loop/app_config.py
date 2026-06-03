@@ -141,6 +141,9 @@ class AppConfig:
     # System prompt customisation (Phase 2 of PLAN-gemma-model-support)
     system_prompt_compact: bool | None
     system_prompt_extras: list[str]
+    # Observability (PLAN-observability Phase 3): PII/secret redaction on the
+    # observability persistence path (events, tool_calls audit, system_prompts).
+    observability_redaction: dict
 
 
 def _expand_config(data: dict, config_dir: Path) -> dict:
@@ -487,6 +490,11 @@ def parse_app_config(config: dict) -> AppConfig:
         tui_task_panel_visible=_to_bool(config.get("TuiTaskPanelVisible", True), default=True),
         system_prompt_compact=_to_optional_bool(config.get("SystemPromptCompact")),
         system_prompt_extras=_parse_string_list(config.get("SystemPromptExtras"), "SystemPromptExtras"),
+        observability_redaction=(
+            config.get("ObservabilityRedaction", {})
+            if isinstance(config.get("ObservabilityRedaction"), dict)
+            else {}
+        ),
     )
 
 

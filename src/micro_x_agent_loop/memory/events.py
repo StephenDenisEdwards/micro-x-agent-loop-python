@@ -9,6 +9,7 @@ from loguru import logger
 
 from micro_x_agent_loop.memory.event_sink import AsyncEventSink
 from micro_x_agent_loop.memory.store import MemoryStore
+from micro_x_agent_loop.redaction import NullRedactor, Redactor
 
 EventCallback = Callable[[str, str, dict], None]
 """Signature: (session_id, event_type, payload) -> None"""
@@ -19,9 +20,16 @@ def utc_now() -> str:
 
 
 class EventEmitter:
-    def __init__(self, store: MemoryStore, sink: AsyncEventSink | None = None):
+    def __init__(
+        self,
+        store: MemoryStore,
+        sink: AsyncEventSink | None = None,
+        *,
+        redactor: Redactor | None = None,
+    ):
         self._store = store
         self._sink = sink
+        self._redactor: Redactor = redactor or NullRedactor()
         self._callbacks: dict[str | None, list[EventCallback]] = {}
 
     # -- Subscriber API --
@@ -49,6 +57,11 @@ class EventEmitter:
     # -- Emit --
 
     def emit(self, session_id: str, event_type: str, payload: dict) -> None:
+        # Redact secrets before this fact touches any sink (DB, async sink, or
+        # subscriber projections like metrics.jsonl). Returns a fresh structure,
+        # so the caller's dict is left intact.
+        payload = self._redactor.redact(payload)
+
         # Persist first (DB is source of truth).
         if self._sink is not None:
             self._sink.emit(session_id, event_type, payload)

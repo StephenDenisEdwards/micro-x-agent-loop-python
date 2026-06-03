@@ -2,7 +2,7 @@
 
 ## Status
 
-**In Progress** — Drafted 2026-06-02 from audit of current state. **Phases 0–2 implemented 2026-06-03**: Phase 0 (emit-path consolidation, [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md)), Phase 1 (session step-through MVP), Phase 2 (`/replay` command). Phases 3–7 still Planned. Deferred within their phases: Anthropic `thinking` capture (Phase 1) and the bespoke TUI trace-view panel (Phase 2). See [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md) for the framework this plan is measured against.
+**In Progress** — Drafted 2026-06-02 from audit of current state. **Phases 0–3 implemented 2026-06-03**: Phase 0 (emit-path consolidation, [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md)), Phase 1 (session step-through MVP), Phase 2 (`/replay` command), Phase 3 (PII/secret redaction). Phases 4–7 still Planned. Deferred within their phases: Anthropic `thinking` capture (Phase 1), bespoke TUI trace-view panel (Phase 2), per-table retention (Phase 3). See [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md) for the framework this plan is measured against.
 
 ## Goals
 
@@ -107,14 +107,15 @@ Surfaces the data from Phase 1.
 
 **Acceptance (met):** `/replay <session_id>` produces a complete turn-by-turn view; an engineer debugging a regression can identify the offending decision (mode/routing/llm.call/tool truncation) without leaving the agent. Covered by `tests/test_session_replay.py` (timeline render over a seeded store, confidence-gate flag, unknown-session error) and `tests/test_command_router.py::test_replay` (dispatch, and that `/replay` does not collide with `/cost`).
 
-### Phase 3 — PII redaction and access control
+### Phase 3 — PII redaction and access control — **Implemented 2026-06-03**
 
-- Pluggable `EventRedactor` applied at `EventEmitter.emit` and `MemoryStore` write paths.
-- Default redactor: regex set for common secrets (API keys, tokens, AWS creds, JWTs); configurable field allowlist; `ObservabilityRedaction` config block.
-- "Unredacted debug mode" gated behind an explicit env flag (e.g. `MICRO_X_OBSERVABILITY_UNREDACTED=1`) for incident response.
-- Per-table retention: prompts ≤ 30 days, metrics ≤ 180 days, lifecycle events ≤ 365 days (configurable).
+- ✅ Pluggable `Redactor` (`src/micro_x_agent_loop/redaction.py`): `RegexRedactor` recursively scrubs str/dict/list structures; `NullRedactor` passes through. Applied at `EventEmitter.emit` (all events, before any sink/projection) and in `SessionManager` for the `tool_calls` audit record and the `system_prompts` body.
+- ✅ Default redactor: high-signal regex set (Anthropic/OpenAI/Google/GitHub/Slack keys, AWS access keys, JWTs, bearer tokens, `secret|password|api_key|token=…` assignments) + a **field allowlist** (`sha256`, `model`, `provider`, `_meta`, …) so safe structural fields aren't mangled. Driven by the `ObservabilityRedaction` config block (`Enabled`, `ExtraPatterns`, `FieldAllowlist`) in `config-base.json`, parsed onto `AppConfig.observability_redaction` and built in `bootstrap`.
+- ✅ "Unredacted debug mode": `MICRO_X_OBSERVABILITY_UNREDACTED=1` forces a `NullRedactor` regardless of config, for incident-response capture.
+- 🔑 **Design correction (important):** redaction covers the *observability copies* — the `events` log, the `tool_calls` audit record, and `system_prompts` — but **NOT** the live `messages` table. `messages` is the working conversation replayed into the model on resume; scrubbing it would feed the model `[REDACTED]` and corrupt the session. The secret still appears once in the live `messages` row (raw, needed for replay) and is redacted in every observability copy. True multi-tenant message redaction needs a separate export pipeline (future).
+- ⏸️ **Deferred (within Phase 3): per-table retention** (prompts ≤ 30d, metrics ≤ 180d, events ≤ 365d). The existing whole-session pruning (`prune_memory`) still applies; granular per-table retention is a follow-up.
 
-**Acceptance:** sample tool args and assistant outputs containing known secrets land in the DB with secrets redacted; `MICRO_X_OBSERVABILITY_UNREDACTED=1` flips behaviour.
+**Acceptance (met):** tool args/results and event payloads containing known secrets land in the DB redacted; live `messages` stay raw (so replay is faithful); `MICRO_X_OBSERVABILITY_UNREDACTED=1` flips behaviour. Covered by `tests/test_redaction.py` (pattern set, allowlist, recursion, no-mutation, build/env-flag, and integration over real `EventEmitter`/`tool_calls`/`messages` write paths).
 
 ### Phase 4 — OpenTelemetry exporter
 
