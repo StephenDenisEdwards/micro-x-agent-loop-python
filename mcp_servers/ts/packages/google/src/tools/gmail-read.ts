@@ -44,8 +44,37 @@ function htmlToText(html: string): string {
 
 interface GmailPayload {
   mimeType?: string;
-  body?: { data?: string };
+  filename?: string;
+  body?: { data?: string; attachmentId?: string; size?: number };
   parts?: GmailPayload[];
+}
+
+interface AttachmentMeta {
+  filename: string;
+  attachmentId: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+/**
+ * Recursively collect attachment parts. A part is an attachment when it has a
+ * non-empty filename and an `attachmentId` (the bytes live behind a separate
+ * `messages.attachments.get` call — they are NOT inlined here).
+ */
+function collectAttachments(payload: GmailPayload, out: AttachmentMeta[]): void {
+  const filename = payload.filename ?? "";
+  const attachmentId = payload.body?.attachmentId;
+  if (filename && attachmentId) {
+    out.push({
+      filename,
+      attachmentId,
+      mimeType: payload.mimeType ?? "application/octet-stream",
+      sizeBytes: payload.body?.size ?? 0,
+    });
+  }
+  for (const part of payload.parts ?? []) {
+    collectAttachments(part, out);
+  }
 }
 
 /**
@@ -154,7 +183,22 @@ export function registerGmailRead(
           body = "(no text content)";
         }
 
-        const text = `From: ${fromAddr}\nTo: ${toAddr}\nDate: ${date}\nSubject: ${subject}\n\n${body}`;
+        const attachments: AttachmentMeta[] = [];
+        if (payload) {
+          collectAttachments(payload, attachments);
+        }
+
+        let attachmentsText = "";
+        if (attachments.length > 0) {
+          const lines = attachments.map(
+            (a) => `  - ${a.filename} (${a.mimeType}, ${a.sizeBytes} bytes) [attachmentId: ${a.attachmentId}]`,
+          );
+          attachmentsText =
+            `\n\nAttachments (${attachments.length}):\n${lines.join("\n")}` +
+            `\n(Use gmail_save_attachment with messageId + attachmentId to download to a file.)`;
+        }
+
+        const text = `From: ${fromAddr}\nTo: ${toAddr}\nDate: ${date}\nSubject: ${subject}\n\n${body}${attachmentsText}`;
 
         const durationMs = Date.now() - startTime;
         logger.info(
@@ -170,6 +214,7 @@ export function registerGmailRead(
             date,
             subject,
             body,
+            attachments,
           },
           content: [{ type: "text" as const, text }],
         };

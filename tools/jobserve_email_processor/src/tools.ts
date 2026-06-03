@@ -6,10 +6,11 @@
  * types so it can't drift from the upstream MCP schema. See documentation/docs/guides/codegen-tool-types.md.
  */
 
-import type { McpClient } from "../../_runtime/src/mcp-client.js";
+import type { IMcpClient } from "../../_runtime/src/mcp-client.js";
 import type {
   // google
-  GmailSearchArgs, GmailReadArgs, GmailSendArgs,
+  GmailSearchArgs, GmailReadArgs, GmailReadResult, GmailSendArgs,
+  GmailSaveAttachmentArgs, GmailSaveAttachmentResult,
   CalendarListEventsArgs, CalendarCreateEventArgs, CalendarGetEventArgs,
   ContactsSearchArgs, ContactsListArgs, ContactsGetArgs,
   ContactsCreateArgs, ContactsUpdateArgs, ContactsDeleteArgs,
@@ -46,9 +47,9 @@ import type {
   BrowserPressKeyArgs, BrowserEvaluateArgs, BrowserWaitForArgs,
 } from "./tool-types.js";
 
-export type Clients = Record<string, McpClient>;
+export type Clients = Record<string, IMcpClient>;
 
-function get(clients: Clients, server: string): McpClient {
+function get(clients: Clients, server: string): IMcpClient {
   const client = clients[server];
   if (!client) throw new Error(`MCP server '${server}' not connected`);
   return client;
@@ -72,14 +73,36 @@ export async function gmailSearch(
 
 export async function gmailRead(
   clients: Clients, messageId: GmailReadArgs["messageId"],
-): Promise<Record<string, string> | null> {
+): Promise<GmailReadResult | null> {
   const args: GmailReadArgs = { messageId };
   const result = await get(clients, "google").callTool("gmail_read", args);
   if (result && typeof result === "object" && !Array.isArray(result)) {
-    return result as Record<string, string>;
+    const r = result as Partial<GmailReadResult>;
+    return { ...r, attachments: r.attachments ?? [] } as GmailReadResult;
   }
   if (typeof result === "string" && result.trim()) {
     return parseGmailReadText(messageId, result);
+  }
+  return null;
+}
+
+/**
+ * Download one attachment to a file. Pass messageId + attachmentId from a
+ * prior gmailRead() result's `attachments` list. Returns the saved file's path
+ * and metadata (the bytes are NOT inlined — read the path with fsRead for
+ * text-readable files, or process the file directly for binary like PDFs).
+ */
+export async function gmailSaveAttachment(
+  clients: Clients,
+  messageId: GmailSaveAttachmentArgs["messageId"],
+  attachmentId: GmailSaveAttachmentArgs["attachmentId"],
+  filename?: GmailSaveAttachmentArgs["filename"],
+  mimeType?: GmailSaveAttachmentArgs["mimeType"],
+): Promise<GmailSaveAttachmentResult | null> {
+  const args: GmailSaveAttachmentArgs = { messageId, attachmentId, filename, mimeType };
+  const result = await get(clients, "google").callTool("gmail_save_attachment", args);
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    return result as GmailSaveAttachmentResult;
   }
   return null;
 }
@@ -107,7 +130,7 @@ function parseGmailSearchText(text: string): Array<Record<string, string>> {
   return messages;
 }
 
-function parseGmailReadText(messageId: string, text: string): Record<string, string> {
+function parseGmailReadText(messageId: string, text: string): GmailReadResult {
   const headers: Record<string, string> = {};
   const lines = text.split("\n");
   let bodyStart = 0;
@@ -128,6 +151,7 @@ function parseGmailReadText(messageId: string, text: string): Record<string, str
     date: headers["date"] ?? "",
     subject: headers["subject"] ?? "",
     body,
+    attachments: [],
   };
 }
 
@@ -415,6 +439,78 @@ export async function fsGlob(
     return { paths: result.split("\n").filter(Boolean), total: 0, truncated: false };
   }
   return result as GlobResult;
+}
+
+/** Append content to the end of an existing file. */
+export async function fsAppend(
+  clients: Clients, path: string, content: string,
+): Promise<boolean> {
+  const result = await get(clients, "filesystem").callTool("append_file", { path, content });
+  if (result && typeof result === "object") {
+    return ((result as Record<string, unknown>)["success"] as boolean) ?? false;
+  }
+  return false;
+}
+
+/** Delete a single file (refuses directories — use fsBash with rm -r for those). */
+export async function fsDelete(
+  clients: Clients, path: string,
+): Promise<boolean> {
+  const result = await get(clients, "filesystem").callTool("delete_file", { path });
+  if (result && typeof result === "object") {
+    return ((result as Record<string, unknown>)["deleted"] as boolean) ?? false;
+  }
+  return false;
+}
+
+/** Surgical exact-string edit. Returns the number of replacements made. */
+export async function fsEdit(
+  clients: Clients,
+  path: string,
+  oldString: string,
+  newString: string,
+  replaceAll = false,
+): Promise<number> {
+  const result = await get(clients, "filesystem").callTool("edit_file", {
+    path, old_string: oldString, new_string: newString, replace_all: replaceAll,
+  });
+  if (result && typeof result === "object") {
+    return ((result as Record<string, unknown>)["replacements"] as number) ?? 0;
+  }
+  return 0;
+}
+
+/** Save a persistent memory markdown file to the configured memory dir. */
+export async function fsSaveMemory(
+  clients: Clients, file: string, content: string,
+): Promise<boolean> {
+  const result = await get(clients, "filesystem").callTool("save_memory", { file, content });
+  if (result && typeof result === "object") {
+    return ((result as Record<string, unknown>)["success"] as boolean) ?? false;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// System info (server: "system-info")
+// ---------------------------------------------------------------------------
+
+/** OS / CPU / memory / runtime summary for this machine (human-readable text). */
+export async function systemInfo(clients: Clients): Promise<string> {
+  const result = await get(clients, "system-info").callTool("system_info", {});
+  return typeof result === "string" ? result : JSON.stringify(result);
+}
+
+/** Disk usage for fixed drives (human-readable text). */
+export async function diskInfo(clients: Clients): Promise<string> {
+  const result = await get(clients, "system-info").callTool("disk_info", {});
+  return typeof result === "string" ? result : JSON.stringify(result);
+}
+
+/** Network interface / IP-address summary (human-readable text). */
+export async function networkInfo(clients: Clients): Promise<string> {
+  const result = await get(clients, "system-info").callTool("network_info", {});
+  return typeof result === "string" ? result : JSON.stringify(result);
 }
 
 // ---------------------------------------------------------------------------

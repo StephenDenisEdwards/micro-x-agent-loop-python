@@ -44,6 +44,7 @@
   "ToolResultOverrides": {
     "filesystem__read_file": { "MaxChars": 0 },
     "google__gmail_read": { "Summarize": false, "MaxChars": 0 },
+    "google__gmail_save_attachment": { "Summarize": false, "MaxChars": 0 },
     "web__web_fetch": { "Summarize": false, "MaxChars": 0 },
     "playwright__*": { "Summarize": false, "MaxChars": 0 }
   },
@@ -125,6 +126,7 @@
     "github__comment_on_discussion": { "format": "json" },
     "google__gmail_search": { "format": "table", "max_rows": 15 },
     "google__gmail_read": { "format": "json" },
+    "google__gmail_save_attachment": { "format": "key_value" },
     "google__gmail_send": { "format": "key_value" },
     "google__calendar_list_events": { "format": "table", "max_rows": 20 },
     "google__calendar_create_event": { "format": "json" },
@@ -253,7 +255,8 @@
       "command": "node",
       "args": ["C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python\\mcp_servers\\ts\\packages\\google\\dist\\index.js"],
       "env": {
-        "GOOGLE_TOKEN_BASE_DIR": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python"
+        "GOOGLE_TOKEN_BASE_DIR": "C:\\Users\\steph\\source\\repos\\micro-x-agent-loop-python",
+        "GOOGLE_ATTACHMENT_DIR": "C:\\Users\\steph\\source\\repos\\resources\\documents\\attachments"
       }
     },
     "anthropic-admin": {

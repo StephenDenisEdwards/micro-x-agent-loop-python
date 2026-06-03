@@ -23,13 +23,13 @@
   },
   "jobserve_rss_processor": {
     "tool_name": "jobserve_rss_processor",
-    "description": "JobServe RSS processor — exposes process_feed (read the feed, score new jobs, write banded reports) and search (query saved job records for a given date by minimum score).",
+    "description": "JobServe RSS processor \u2014 exposes process_feed (read the feed, score new jobs, write banded reports) and search (query saved job records for a given date by minimum score).",
     "created": "2026-05-22",
     "input_schema": null,
     "tools": [
       {
         "tool_name": "process_feed",
-        "description": "Reads job items from a JobServe RSS feed and rebuilds a score-banded markdown report per date — each new job gets an LLM suitability score (0-10), a rank reason, and a brief cover letter judged against a CV. Idempotent: jobs already recorded are never re-scored.",
+        "description": "Reads job items from a JobServe RSS feed and rebuilds a score-banded markdown report per date \u2014 each new job gets an LLM suitability score (0-10), a rank reason, and a brief cover letter judged against a CV. Idempotent: jobs already recorded are never re-scored.",
         "input_schema": {
           "type": "object",
           "properties": {},
@@ -60,7 +60,9 @@
               "description": "Maximum number of jobs to return, ordered by score desc. Defaults to 50."
             }
           },
-          "required": ["date"],
+          "required": [
+            "date"
+          ],
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
@@ -76,6 +78,86 @@
         "../../config.json"
       ],
       "cwd": "tools/jobserve_rss_processor/"
+    }
+  },
+  "gmail_receipt_extractor": {
+    "tool_name": "gmail_receipt_extractor",
+    "description": "Search Gmail for receipt emails on a given date, extract PDF attachment data, and produce a markdown expense report.",
+    "created": "2026-06-02",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "email_date": {
+          "type": "string",
+          "description": "Date to search emails, format YYYY-MM-DD (required)"
+        },
+        "subject_pattern": {
+          "type": "string",
+          "default": "Your Trainline receipt",
+          "description": "Email subject pattern to search for"
+        },
+        "output_file": {
+          "type": "string",
+          "default": "expense_report.md",
+          "description": "Output markdown file path"
+        },
+        "attachment_dir": {
+          "type": "string",
+          "default": "attachments",
+          "description": "Directory for downloaded PDF attachments"
+        }
+      },
+      "required": [
+        "email_date"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "tools": [
+      {
+        "tool_name": "gmail_receipt_extractor",
+        "description": "Search Gmail for receipt emails on a given date, extract PDF attachment data, and produce a markdown expense report.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "email_date": {
+              "type": "string",
+              "description": "Date to search emails, format YYYY-MM-DD (required)"
+            },
+            "subject_pattern": {
+              "type": "string",
+              "default": "Your Trainline receipt",
+              "description": "Email subject pattern to search for"
+            },
+            "output_file": {
+              "type": "string",
+              "default": "expense_report.md",
+              "description": "Output markdown file path"
+            },
+            "attachment_dir": {
+              "type": "string",
+              "default": "attachments",
+              "description": "Directory for downloaded PDF attachments"
+            }
+          },
+          "required": [
+            "email_date"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      }
+    ],
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/gmail_receipt_extractor/"
     }
   }
 }
