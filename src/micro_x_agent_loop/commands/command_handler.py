@@ -80,6 +80,7 @@ class CommandHandler:
         self._print(f"{p}- /command <name> [arguments]")
         self._print(f"{p}- /cost")
         self._print(f"{p}- /cost reconcile [days] [--start YYYY-MM-DD] [--end YYYY-MM-DD]")
+        self._print(f"{p}- /replay [session_id] — turn-by-turn step-through of a session")
         self._print(
             f"{p}- /voice start [microphone|loopback] "
             "[--mic-device-id <id>] [--mic-device-name <name>] "
@@ -181,6 +182,29 @@ class CommandHandler:
             await self._handle_cost_reconcile(parts)
             return
         self._print(f"{self._p}{self._session_accumulator.format_summary()}")
+
+    async def handle_replay(self, command: str) -> None:
+        """`/replay [session_id]` — render a turn-by-turn step-through of a session."""
+        from micro_x_agent_loop.session_replay import reconstruct_session
+
+        store = self._memory.store
+        if not self._memory_enabled or store is None:
+            self._print(f"{self._p}Replay requires MemoryEnabled=true")
+            return
+
+        parts = command.split()
+        session_id = parts[1] if len(parts) >= 2 else self._memory.active_session_id
+        if not session_id:
+            self._print(f"{self._p}Usage: /replay [session_id]  (no active session)")
+            return
+
+        try:
+            lines = reconstruct_session(store, session_id)
+        except ValueError as ex:
+            self._print(f"{self._p}{ex}")
+            return
+        for line in lines:
+            self._print(f"{self._p}{line}")
 
     async def _handle_cost_reconcile(self, parts: list[str]) -> None:
         from micro_x_agent_loop.cost_reconciliation import reconcile_costs

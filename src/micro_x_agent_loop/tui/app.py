@@ -93,6 +93,8 @@ _STARTUP_BANNER_MARKUP = (
 _SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/help", "Show available commands"),
     ("/cost", "Show session cost breakdown"),
+    ("/replay", "Turn-by-turn step-through of the current session"),
+    ("/replay <session_id>", "Step-through of a specific session"),
     ("/cost reconcile", "Reconcile costs with provider API"),
     ("/session", "Show current session info"),
     ("/session list", "List recent sessions"),

@@ -406,6 +406,7 @@ class Agent:
             on_session=self._command_handler.handle_session,
             on_voice=self._command_handler.handle_voice,
             on_cost=self._command_handler.handle_cost,
+            on_replay=self._command_handler.handle_replay,
             on_memory=self._command_handler.handle_memory,
             on_tools=self._command_handler.handle_tools,
             on_tool=self._command_handler.handle_tool,

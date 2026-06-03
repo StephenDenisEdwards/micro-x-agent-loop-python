@@ -2,7 +2,7 @@
 
 ## Status
 
-**In Progress** — Drafted 2026-06-02 from audit of current state. **Phase 0 (emit-path consolidation, [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md)) and Phase 1 (session step-through MVP) implemented 2026-06-03**; Phases 2–7 still Planned (Phase 1's Anthropic `thinking` capture deferred within the phase — extended thinking not yet enabled). See [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md) for the framework this plan is measured against.
+**In Progress** — Drafted 2026-06-02 from audit of current state. **Phases 0–2 implemented 2026-06-03**: Phase 0 (emit-path consolidation, [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md)), Phase 1 (session step-through MVP), Phase 2 (`/replay` command). Phases 3–7 still Planned. Deferred within their phases: Anthropic `thinking` capture (Phase 1) and the bespoke TUI trace-view panel (Phase 2). See [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md) for the framework this plan is measured against.
 
 ## Goals
 
@@ -96,15 +96,16 @@ Unblocks goal 2 with minimal new schema. Targets the Phase 0 emit seam — every
 
 **Acceptance (met, except deferred thinking):** given any `session_id`, a script can query `memory.db` and reconstruct turn-by-turn (a) prompt (`system_prompts` via `llm.call.system_prompt_sha256`) + tools (`tool_names`) + sampling params, (b) the response (`messages`), (c) tools run with args/results (`tool_calls`, now incl. truncation), (d) mode/routing decisions and why (`mode.analyzed`, enriched `routing.decision`), and the config that drove them (`session.config`). Events correlate via `_meta {turn, iter, seq}`. Covered by `tests/test_observability_phase1.py` (schema + legacy migration, prompt dedup, truncation round-trip, code_sha/config_hash, routing rationale incl. confidence gate). No reliance on `api_payloads.jsonl` or the in-memory ring.
 
-### Phase 2 — `/replay` command
+### Phase 2 — `/replay` command — **Implemented 2026-06-03**
 
 Surfaces the data from Phase 1.
 
-- New `/replay <session_id>` slash command (TUI + REPL) rendering a turn-by-turn timeline.
-- Each turn shows: user input → mode decision → routing decision → LLM call (system prompt, tool names, sampling params) → LLM response (text + tool_use + thinking) → tool calls (input, output, duration, was_truncated) → compaction (if any) → assistant text.
-- TUI extension: new "trace view" panel alongside the existing session sidebar.
+- ✅ New `/replay [session_id]` slash command (REPL **and** TUI — output renders through the channel, so it works in both; defaults to the active session). Registered via `CommandRouter.on_replay` → `CommandHandler.handle_replay`; help text + TUI command-palette entries added.
+- ✅ Reconstruction lives in a pure, testable module — `session_replay.reconstruct_session(store, session_id) -> list[str]` (mirrors `cost_reconciliation`). It merges the `events` log (turn-tagged via `_meta.turn`), `messages`, and `tool_calls` into one chronological stream and renders a turn-by-turn timeline: `session.config` → per turn `mode.analyzed` → `routing.decision` (incl. confidence-gate / pin / tool-search / compact flags) → `llm.call` (provider/model, sampling params, system-prompt hash+chars, tool names) → `metric.api_call` → tool calls (input/result previews, `was_truncated` with `original_chars→chars`) → compaction → assistant/user message lines. This module is also the standalone "script can query memory.db" realisation from the Phase 1 acceptance.
+- ⏸️ **Deferred (within Phase 2): dedicated TUI "trace view" panel.** `/replay` already renders the full timeline as text in the TUI chat log; a bespoke side-panel widget is polish, not needed for the acceptance.
+- `thinking` blocks are absent from the render because Phase 1 deferred their capture (extended thinking not enabled).
 
-**Acceptance:** `/replay <session_id>` produces a complete turn-by-turn view; an engineer debugging a regression can identify the offending decision without leaving the agent.
+**Acceptance (met):** `/replay <session_id>` produces a complete turn-by-turn view; an engineer debugging a regression can identify the offending decision (mode/routing/llm.call/tool truncation) without leaving the agent. Covered by `tests/test_session_replay.py` (timeline render over a seeded store, confidence-gate flag, unknown-session error) and `tests/test_command_router.py::test_replay` (dispatch, and that `/replay` does not collide with `/cost`).
 
 ### Phase 3 — PII redaction and access control
 
