@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from pathlib import Path
 
 from loguru import logger
@@ -296,6 +297,9 @@ class Agent:
         self._obs.subscribe(metrics_jsonl_subscriber)
         if self._routing_feedback_store is not None:
             self._obs.subscribe(make_routing_outcome_subscriber(self._routing_feedback_store))
+        # Optional external observability exporters (OTel, alerting) attached
+        # post-construction by bootstrap; their closers run on shutdown.
+        self._observability_closers: list[Callable[[], None]] = []
 
         # Wire routing feedback callback (captures self). It no longer writes the
         # routing DB directly — it emits a routing.decision event onto the seam,
@@ -996,6 +1000,18 @@ class Agent:
             iteration=turn_iteration,
         )
 
+    def add_observability_subscriber(
+        self, callback: Callable[[str, dict], None], *, closer: Callable[[], None] | None = None
+    ) -> None:
+        """Attach an external observability sink (OTel, alerting) to the emit seam.
+
+        Called by bootstrap after construction so exporters needn't thread
+        through AgentConfig. ``closer`` (if given) runs on ``shutdown``.
+        """
+        self._obs.subscribe(callback)
+        if closer is not None:
+            self._observability_closers.append(closer)
+
     def _emit_session_config_once(self) -> None:
         """Emit a ``session.config`` event once per session.
 
@@ -1084,6 +1100,11 @@ class Agent:
             self._obs.emit("metric.session_summary", summary, turn_number=self._turn_number)
         if self._routing_feedback_store is not None:
             self._routing_feedback_store.close()
+        for closer in self._observability_closers:
+            try:
+                closer()
+            except Exception as ex:
+                logger.warning(f"Observability closer failed: {ex}")
         if self._voice_runtime:
             await self._voice_runtime.shutdown()
 

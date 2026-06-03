@@ -144,6 +144,11 @@ class AppConfig:
     # Observability (PLAN-observability Phase 3): PII/secret redaction on the
     # observability persistence path (events, tool_calls audit, system_prompts).
     observability_redaction: dict
+    # Observability Phase 4 (OpenTelemetry export) + Phase 5 (alerting) + Phase 7 (sampling).
+    otel_enabled: bool
+    otel_endpoint: str
+    observability_alerts: list
+    observability_sampling: dict
 
 
 def _expand_config(data: dict, config_dir: Path) -> dict:
@@ -494,6 +499,14 @@ def parse_app_config(config: dict) -> AppConfig:
             config.get("ObservabilityRedaction", {})
             if isinstance(config.get("ObservabilityRedaction"), dict)
             else {}
+        ),
+        otel_enabled=_to_bool(config.get("OtelEnabled", False), default=False),
+        otel_endpoint=str(config.get("OtelEndpoint", "")).strip(),
+        observability_alerts=(
+            config.get("ObservabilityAlerts", []) if isinstance(config.get("ObservabilityAlerts"), list) else []
+        ),
+        observability_sampling=(
+            config.get("ObservabilitySampling", {}) if isinstance(config.get("ObservabilitySampling"), dict) else {}
         ),
     )
 

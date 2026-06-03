@@ -271,6 +271,8 @@ async def bootstrap_runtime(
     await agent.initialize_tool_search_embeddings()
     await agent.initialize_task_embeddings()
 
+    _attach_observability_exporters(agent, app, memory_store)
+
     return AppRuntime(
         agent=agent,
         mcp_manager=mcp_manager,
@@ -280,3 +282,22 @@ async def bootstrap_runtime(
         native_tools=native_tools,
         log_descriptions=log_descriptions,
     )
+
+
+def _attach_observability_exporters(agent: Agent, app: AppConfig, memory_store: MemoryStore | None) -> None:
+    """Wire optional observability sinks (OTel export, alerting) onto the agent's emit seam."""
+    if app.otel_enabled and app.otel_endpoint:
+        from micro_x_agent_loop.otel_export import build_otel_exporter
+
+        exporter = build_otel_exporter(app.otel_endpoint)
+        if exporter is not None:
+            agent.add_observability_subscriber(exporter, closer=exporter.shutdown)
+            logger.info("OpenTelemetry export enabled → {endpoint}", endpoint=app.otel_endpoint)
+
+    if app.observability_alerts and memory_store is not None:
+        from micro_x_agent_loop.alerting import build_alert_subscriber
+
+        subscriber = build_alert_subscriber(app.observability_alerts, memory_store)
+        if subscriber is not None:
+            agent.add_observability_subscriber(subscriber)
+            logger.info("Observability alerting enabled ({n} rule(s))", n=len(app.observability_alerts))
