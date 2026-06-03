@@ -17,6 +17,7 @@ def _make_router() -> tuple[CommandRouter, dict[str, list]]:
             "command",
             "cost",
             "replay",
+            "feedback",
             "rewind",
             "checkpoint",
             "session",
@@ -45,6 +46,9 @@ def _make_router() -> tuple[CommandRouter, dict[str, list]]:
 
     async def on_replay(cmd: str) -> None:
         calls["replay"].append(cmd)
+
+    async def on_feedback(cmd: str) -> None:
+        calls["feedback"].append(cmd)
 
     async def on_rewind(cmd: str) -> None:
         calls["rewind"].append(cmd)
@@ -93,6 +97,7 @@ def _make_router() -> tuple[CommandRouter, dict[str, list]]:
         on_voice=on_voice,
         on_cost=on_cost,
         on_replay=on_replay,
+        on_feedback=on_feedback,
         on_memory=on_memory,
         on_tools=on_tools,
         on_tool=on_tool,
@@ -146,6 +151,12 @@ class CommandRouterTests(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(["/replay s-123"], calls["replay"])
         self.assertEqual(0, len(calls["cost"]))  # /replay must not match /cost
+
+    def test_feedback(self) -> None:
+        router, calls = _make_router()
+        result = asyncio.run(router.try_handle("/feedback +1 great"))
+        self.assertTrue(result)
+        self.assertEqual(["/feedback +1 great"], calls["feedback"])
 
     def test_rewind(self) -> None:
         router, calls = _make_router()

@@ -86,6 +86,17 @@ class MemoryStore:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS eval_results (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                turn_number INTEGER NOT NULL,
+                score REAL NOT NULL,
+                rubric TEXT NOT NULL,
+                rationale TEXT NOT NULL,
+                judge_model TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS checkpoints (
                 id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -128,6 +139,8 @@ class MemoryStore:
                 ON events(session_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_events_session_type
                 ON events(session_id, type);
+            CREATE INDEX IF NOT EXISTS idx_eval_results_session
+                ON eval_results(session_id, turn_number);
             CREATE INDEX IF NOT EXISTS idx_sessions_title_nocase
                 ON sessions((json_extract(metadata_json, '$.title') COLLATE NOCASE));
             """

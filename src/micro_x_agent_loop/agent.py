@@ -411,6 +411,7 @@ class Agent:
             on_voice=self._command_handler.handle_voice,
             on_cost=self._command_handler.handle_cost,
             on_replay=self._command_handler.handle_replay,
+            on_feedback=self.handle_feedback,
             on_memory=self._command_handler.handle_memory,
             on_tools=self._command_handler.handle_tools,
             on_tool=self._command_handler.handle_tool,
@@ -1011,6 +1012,38 @@ class Agent:
         self._obs.subscribe(callback)
         if closer is not None:
             self._observability_closers.append(closer)
+
+    async def handle_feedback(self, command: str) -> None:
+        """`/feedback +1|-1|<text>` — capture a user rating on the last assistant turn."""
+        rest = command[len("/feedback") :].strip()
+        if not rest:
+            self._system_print(f"{self._line_prefix}Usage: /feedback +1 | -1 | <text>")
+            return
+        if rest.startswith("+1") or rest.lower() in ("up", "good", "+"):
+            rating, text = 1, rest[2:].strip()
+        elif rest.startswith("-1") or rest.lower() in ("down", "bad", "-"):
+            rating, text = -1, rest[2:].strip()
+        else:
+            rating, text = 0, rest
+
+        self._obs.emit(
+            "feedback",
+            {
+                "session_id": self._memory.active_session_id or "",
+                "turn_number": self._turn_number,
+                "rating": rating,
+                "text": text,
+            },
+            turn_number=self._turn_number,
+        )
+        if self._routing_feedback_store is not None and rating != 0:
+            try:
+                self._routing_feedback_store.update_quality_signal(
+                    self._memory.active_session_id or "", self._turn_number, rating
+                )
+            except Exception as ex:
+                logger.warning(f"Feedback quality_signal update failed: {ex}")
+        self._system_print(f"{self._line_prefix}Thanks — feedback recorded ({rating:+d}).")
 
     def _emit_session_config_once(self) -> None:
         """Emit a ``session.config`` event once per session.

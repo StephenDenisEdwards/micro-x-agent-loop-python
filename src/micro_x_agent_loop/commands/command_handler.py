@@ -81,6 +81,7 @@ class CommandHandler:
         self._print(f"{p}- /cost")
         self._print(f"{p}- /cost reconcile [days] [--start YYYY-MM-DD] [--end YYYY-MM-DD]")
         self._print(f"{p}- /replay [session_id] — turn-by-turn step-through of a session")
+        self._print(f"{p}- /feedback +1|-1|<text> — rate the last assistant turn")
         self._print(
             f"{p}- /voice start [microphone|loopback] "
             "[--mic-device-id <id>] [--mic-device-name <name>] "

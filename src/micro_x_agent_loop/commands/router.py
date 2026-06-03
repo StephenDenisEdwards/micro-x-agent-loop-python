@@ -14,6 +14,7 @@ class CommandRouter:
         on_voice: Callable[[str], Awaitable[None]],
         on_cost: Callable[[str], Awaitable[None]],
         on_replay: Callable[[str], Awaitable[None]],
+        on_feedback: Callable[[str], Awaitable[None]],
         on_memory: Callable[[str], Awaitable[None]],
         on_tools: Callable[[str], Awaitable[None]],
         on_tool: Callable[[str], Awaitable[None]],
@@ -32,6 +33,7 @@ class CommandRouter:
         self._on_voice = on_voice
         self._on_cost = on_cost
         self._on_replay = on_replay
+        self._on_feedback = on_feedback
         self._on_memory = on_memory
         self._on_tools = on_tools
         self._on_tool = on_tool
@@ -66,6 +68,9 @@ class CommandRouter:
             return True
         if trimmed.startswith("/replay"):
             await self._on_replay(trimmed)
+            return True
+        if trimmed.startswith("/feedback"):
+            await self._on_feedback(trimmed)
             return True
         if trimmed.startswith("/rewind"):
             await self._on_rewind(trimmed)
