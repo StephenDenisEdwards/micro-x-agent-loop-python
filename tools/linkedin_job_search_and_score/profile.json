@@ -1,0 +1,19 @@
+{
+  "cv_path": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\Stephen Edwards CV-April-2026.md",
+  "output_path": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\results\\linkedin-jobs-scored.json",
+  "job_types": ["contract", "full time"],
+  "location": "United Kingdom",
+  "keywords": [
+    "Software Architect",
+    "Solution Architect",
+    "AI",
+    "LLM",
+    ".NET",
+    "C#"
+  ],
+  "batch_size": 5,
+  "limit_per_keyword": 20,
+  "rank_model": "anthropic/claude-haiku-4-5-20251001",
+  "cover_letter_max_chars": 1500,
+  "search_url_base": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+}

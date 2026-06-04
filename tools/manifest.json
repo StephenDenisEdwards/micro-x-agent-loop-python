@@ -159,5 +159,209 @@
       ],
       "cwd": "tools/gmail_receipt_extractor/"
     }
+  },
+  "linkedin_job_processor": {
+    "tool_name": "linkedin_job_processor",
+    "description": "Fetch LinkedIn job details, score against a CV, and generate cover letters for each job URL.",
+    "created": "2026-06-04",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "job_urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Array of LinkedIn job URLs to process"
+        },
+        "cv_path": {
+          "type": "string",
+          "description": "Path to the CV markdown file"
+        },
+        "output_path": {
+          "type": "string",
+          "description": "Where to write the JSON output"
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 5,
+          "description": "Jobs to fetch in parallel per batch"
+        }
+      },
+      "required": [
+        "job_urls",
+        "cv_path",
+        "output_path"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "tools": [
+      {
+        "tool_name": "linkedin_job_processor",
+        "description": "Fetch LinkedIn job details, score against a CV, and generate cover letters for each job URL.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "job_urls": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Array of LinkedIn job URLs to process"
+            },
+            "cv_path": {
+              "type": "string",
+              "description": "Path to the CV markdown file"
+            },
+            "output_path": {
+              "type": "string",
+              "description": "Where to write the JSON output"
+            },
+            "batch_size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 5,
+              "description": "Jobs to fetch in parallel per batch"
+            }
+          },
+          "required": [
+            "job_urls",
+            "cv_path",
+            "output_path"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      }
+    ],
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/linkedin_job_processor/"
+    }
+  },
+  "linkedin_job_search_and_score": {
+    "tool_name": "linkedin_job_search_and_score",
+    "description": "Search LinkedIn for jobs matching configured keywords and score them against a CV.",
+    "created": "2026-06-04",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "date_filter": {
+          "type": "string",
+          "enum": [
+            "24hr",
+            "past week",
+            "past month"
+          ],
+          "default": "past week",
+          "description": "Date posted filter for LinkedIn job search"
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "tools": [
+      {
+        "tool_name": "linkedin_job_search_and_score",
+        "description": "Search LinkedIn for jobs matching configured keywords and score them against a CV.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "date_filter": {
+              "type": "string",
+              "enum": [
+                "24hr",
+                "past week",
+                "past month"
+              ],
+              "default": "past week",
+              "description": "Date posted filter for LinkedIn job search"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      }
+    ],
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/linkedin_job_search_and_score/"
+    }
+  },
+  "linkedin_job_search_and_score_2": {
+    "tool_name": "linkedin_job_search_and_score_2",
+    "description": "Generated task: linkedin_job_search_and_score_2",
+    "created": "2026-06-04",
+    "input_schema": null,
+    "tools": [
+      {
+        "tool_name": "run_search",
+        "description": "Search LinkedIn for jobs based on profile keywords and output unique URLs to a JSON file.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "date_filter": {
+              "type": "string",
+              "enum": [
+                "24hr",
+                "past week",
+                "past month"
+              ],
+              "default": "past week",
+              "description": "Date posted filter: \"24hr\", \"past week\", or \"past month\""
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "tool_name": "score_save",
+        "description": "Fetch job details for a list of LinkedIn URLs, score against CV, generate cover letters, and save JSON.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "urls_input_path": {
+              "type": "string",
+              "description": "Path to the JSON file written by run_search (array of job records with url/title/company/salary/posted). A legacy array of plain URL strings is also accepted."
+            }
+          },
+          "required": [
+            "urls_input_path"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      }
+    ],
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "src/index.ts",
+        "--config",
+        "../../config.json"
+      ],
+      "cwd": "tools/linkedin_job_search_and_score_2/"
+    }
   }
 }

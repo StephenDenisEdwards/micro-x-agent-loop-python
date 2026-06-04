@@ -1,0 +1,13 @@
+{
+  "job_types": ["contract", "full time"],
+  "location": "United Kingdom",
+  "keywords": ["Software Architect", "Solution Architect", "AI Engineer", "LLM Engineer", ".NET Architect", "C# Architect"],
+  "limit_per_keyword": 20,
+  "urls_output_path": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\results\\linkedin_job_urls.json",
+  "cv_path": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\Stephen Edwards CV-April-2026.md",
+  "output_path": "C:\\Users\\steph\\source\\repos\\resources\\documents\\jobsearch\\results\\linkedin_scored_jobs.json",
+  "batch_size": 5,
+  "cover_letter_max_chars": 1500,
+  "rank_model": "anthropic/claude-haiku-4-5-20251001",
+  "search_url_base": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+}

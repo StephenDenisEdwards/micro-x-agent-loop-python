@@ -48,6 +48,12 @@ export function registerLinkedInJobs(server: McpServer, logger: Logger): void {
           .optional(),
         limit: z.number().int().min(1).max(50).default(10).describe("Max number of results to return (default 10)").optional(),
         sortBy: z.enum(["recent", "relevant"]).describe("Sort order").optional(),
+        searchUrlBase: z
+          .string()
+          .describe(
+            "Override the base search endpoint URL. Query params (keywords, location, f_TPR, count, sortBy) are still appended by the server.",
+          )
+          .optional(),
       },
       outputSchema: {
         jobs: z.array(
@@ -83,8 +89,10 @@ export function registerLinkedInJobs(server: McpServer, logger: Logger): void {
         const encodedKeyword = encodeURIComponent(input.keyword);
         const encodedLocation = input.location ? encodeURIComponent(input.location) : "";
 
-        let url =
-          `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodedKeyword}`;
+        const baseUrl =
+          input.searchUrlBase ?? "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search";
+        const sep = baseUrl.includes("?") ? "&" : "?";
+        let url = `${baseUrl}${sep}keywords=${encodedKeyword}`;
         if (encodedLocation) url += `&location=${encodedLocation}`;
         if (dateFilter) url += `&f_TPR=${dateFilter}`;
         url += `&start=0&count=${limit}${sortParam}`;
