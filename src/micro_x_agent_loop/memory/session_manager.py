@@ -18,6 +18,7 @@ class SessionManager:
         events: EventEmitter,
         *,
         redactor: Redactor | None = None,
+        verbatim_capture: bool = False,
     ):
         self._store = store
         self._model = model
@@ -26,6 +27,9 @@ class SessionManager:
         # system_prompts) — NOT append_message, which is the live conversation
         # replayed into the model on resume.
         self._redactor: Redactor = redactor or NullRedactor()
+        # Verbatim per-call request capture (exact system prompt + messages +
+        # tool schemas). Opt-in: heavy, so off unless ObservabilityVerbatimCapture.
+        self._verbatim_capture = verbatim_capture
 
     def get_session(self, session_id: str) -> dict | None:
         row = self._store.execute(
@@ -239,6 +243,48 @@ class SessionManager:
         self._store.execute(
             "INSERT OR IGNORE INTO system_prompts (sha256, text, chars, created_at) VALUES (?, ?, ?, ?)",
             (digest, stored, len(text), utc_now()),
+        )
+        self._store.commit()
+        return digest
+
+    def persist_llm_request(
+        self,
+        session_id: str,
+        *,
+        turn_number: int,
+        iteration: int,
+        system_prompt_sha256: str,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> str | None:
+        """Persist a verbatim per-call request snapshot; return its id (None if disabled).
+
+        Structurally verbatim — the exact system prompt (by hash), the exact
+        messages array, and the exact tool schemas sent. Secret *values* are
+        redacted unless ``MICRO_X_OBSERVABILITY_UNREDACTED=1`` (the redactor is a
+        NullRedactor in that mode). Tool schemas are deduped by hash.
+        """
+        if not self._verbatim_capture:
+            return None
+        tools_sha = self._persist_tool_schemas(tools)
+        messages_json = json.dumps(self._redactor.redact(messages), ensure_ascii=True)
+        request_id = str(uuid4())
+        self._store.execute(
+            "INSERT INTO llm_requests "
+            "(id, session_id, turn_number, iteration, system_prompt_sha256, tools_sha256, messages_json, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (request_id, session_id, turn_number, iteration, system_prompt_sha256, tools_sha, messages_json, utc_now()),
+        )
+        self._store.commit()
+        return request_id
+
+    def _persist_tool_schemas(self, tools: list[dict]) -> str:
+        """Dedupe-store the exact tool schema list (redacted); return its sha256."""
+        canonical = json.dumps(self._redactor.redact(tools), ensure_ascii=True, sort_keys=True)
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        self._store.execute(
+            "INSERT OR IGNORE INTO tool_schemas (sha256, json, chars, created_at) VALUES (?, ?, ?, ?)",
+            (digest, canonical, len(canonical), utc_now()),
         )
         self._store.commit()
         return digest

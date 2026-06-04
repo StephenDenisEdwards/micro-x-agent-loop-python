@@ -45,6 +45,8 @@ class TurnEvents(Protocol):
         message_count: int,
         tool_names: list[str],
         system_prompt: str,
+        messages: list[dict],
+        tools: list[dict],
         routing_rule: str = "",
         routing_reason: str = "",
     ) -> None: ...
@@ -128,6 +130,8 @@ class BaseTurnEvents:
         message_count: int,
         tool_names: list[str],
         system_prompt: str,
+        messages: list[dict],
+        tools: list[dict],
         routing_rule: str = "",
         routing_reason: str = "",
     ) -> None:

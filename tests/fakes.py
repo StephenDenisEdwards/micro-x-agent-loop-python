@@ -250,6 +250,9 @@ class SessionManagerFake:
 
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
+    def persist_llm_request(self, session_id: str, **_: Any) -> str | None:
+        return None
+
     def get_session(self, session_id: str) -> dict | None:
         return self._sessions.get(session_id)
 

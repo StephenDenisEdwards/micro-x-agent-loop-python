@@ -86,6 +86,24 @@ class MemoryStore:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS tool_schemas (
+                sha256 TEXT PRIMARY KEY,
+                json TEXT NOT NULL,
+                chars INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS llm_requests (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                turn_number INTEGER NOT NULL,
+                iteration INTEGER NOT NULL,
+                system_prompt_sha256 TEXT NOT NULL,
+                tools_sha256 TEXT NOT NULL,
+                messages_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS cost_rollups (
                 date TEXT NOT NULL,
                 user_id TEXT NOT NULL,
@@ -154,6 +172,8 @@ class MemoryStore:
                 ON events(session_id, type);
             CREATE INDEX IF NOT EXISTS idx_eval_results_session
                 ON eval_results(session_id, turn_number);
+            CREATE INDEX IF NOT EXISTS idx_llm_requests_session
+                ON llm_requests(session_id, turn_number, iteration);
             CREATE INDEX IF NOT EXISTS idx_sessions_title_nocase
                 ON sessions((json_extract(metadata_json, '$.title') COLLATE NOCASE));
             """

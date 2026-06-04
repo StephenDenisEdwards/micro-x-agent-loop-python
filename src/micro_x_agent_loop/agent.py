@@ -974,12 +974,23 @@ class Agent:
         message_count: int,
         tool_names: list[str],
         system_prompt: str,
+        messages: list[dict],
+        tools: list[dict],
         routing_rule: str = "",
         routing_reason: str = "",
     ) -> None:
         # Step-through trace of the exact LLM input. The full prompt is deduped
         # into the system_prompts table; the event carries only its hash + size.
         sha = self._memory.persist_system_prompt(system_prompt)
+        # Verbatim capture (opt-in): persist the exact system prompt + messages +
+        # tool schemas so /replay --full can show byte-for-byte what was sent.
+        request_id = self._memory.persist_llm_request(
+            turn_number=self._turn_number,
+            iteration=turn_iteration,
+            system_prompt_sha256=sha or "",
+            messages=messages,
+            tools=tools,
+        )
         self._obs.emit(
             "llm.call",
             {
@@ -994,6 +1005,7 @@ class Agent:
                 "tool_names": tool_names,
                 "system_prompt_sha256": sha,
                 "system_prompt_chars": len(system_prompt),
+                "request_id": request_id,
                 "routing_rule": routing_rule,
                 "routing_reason": routing_reason,
             },

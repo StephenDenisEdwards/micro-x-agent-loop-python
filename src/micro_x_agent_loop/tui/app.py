@@ -95,6 +95,7 @@ _SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/cost", "Show session cost breakdown"),
     ("/replay", "Turn-by-turn step-through of the current session"),
     ("/replay <session_id>", "Step-through of a specific session"),
+    ("/replay --full", "Step-through with the verbatim request (prompt + messages + tools)"),
     ("/feedback +1", "Rate the last assistant turn positively"),
     ("/feedback -1", "Rate the last assistant turn negatively"),
     ("/cost reconcile", "Reconcile costs with provider API"),

@@ -138,7 +138,13 @@ async def bootstrap_runtime(
         await event_sink.start()
         redactor = build_redactor(app.observability_redaction)
         event_emitter = EventEmitter(memory_store, sink=event_sink, redactor=redactor)
-        session_manager = SessionManager(memory_store, app.model, event_emitter, redactor=redactor)
+        session_manager = SessionManager(
+            memory_store,
+            app.model,
+            event_emitter,
+            redactor=redactor,
+            verbatim_capture=app.observability_verbatim_capture,
+        )
         checkpoint_manager = CheckpointManager(
             memory_store,
             event_emitter,

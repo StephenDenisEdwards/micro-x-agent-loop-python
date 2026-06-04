@@ -215,6 +215,8 @@ class TurnEngine:
                 message_count=len(messages),
                 tool_names=[str(t.get("name", "")) for t in api_tools],
                 system_prompt=system_prompt,
+                messages=messages,
+                tools=api_tools,
                 routing_rule=call_type,
                 routing_reason=decision.reason if decision is not None else "",
             )

@@ -80,7 +80,7 @@ class CommandHandler:
         self._print(f"{p}- /command <name> [arguments]")
         self._print(f"{p}- /cost")
         self._print(f"{p}- /cost reconcile [days] [--start YYYY-MM-DD] [--end YYYY-MM-DD]")
-        self._print(f"{p}- /replay [session_id] — turn-by-turn step-through of a session")
+        self._print(f"{p}- /replay [session_id] [--full] — step-through (--full = verbatim request)")
         self._print(f"{p}- /feedback +1|-1|<text> — rate the last assistant turn")
         self._print(
             f"{p}- /voice start [microphone|loopback] "
@@ -194,13 +194,16 @@ class CommandHandler:
             return
 
         parts = command.split()
-        session_id = parts[1] if len(parts) >= 2 else self._memory.active_session_id
+        flags = {p for p in parts[1:] if p.startswith("-")}
+        full = "--full" in flags or "--verbatim" in flags
+        positional = [p for p in parts[1:] if not p.startswith("-")]
+        session_id = positional[0] if positional else self._memory.active_session_id
         if not session_id:
-            self._print(f"{self._p}Usage: /replay [session_id]  (no active session)")
+            self._print(f"{self._p}Usage: /replay [session_id] [--full]  (no active session)")
             return
 
         try:
-            lines = reconstruct_session(store, session_id)
+            lines = reconstruct_session(store, session_id, full=full)
         except ValueError as ex:
             self._print(f"{self._p}{ex}")
             return

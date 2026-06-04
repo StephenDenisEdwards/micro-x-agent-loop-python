@@ -84,6 +84,7 @@
     "ExtraPatterns": [],
     "FieldAllowlist": []
   },
+  "ObservabilityVerbatimCapture": false,
   "TaskDecompositionEnabled": true,
   "SessionBudgetUSD": 0.0,
   "BrokerDatabase": ".micro_x/broker.db",

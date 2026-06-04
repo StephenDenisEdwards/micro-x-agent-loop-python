@@ -75,6 +75,16 @@ class MemoryFacade(Protocol):
 
     def persist_system_prompt(self, text: str) -> str | None: ...
 
+    def persist_llm_request(
+        self,
+        *,
+        turn_number: int,
+        iteration: int,
+        system_prompt_sha256: str,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> str | None: ...
+
     def load_messages(self, session_id: str) -> list[dict]: ...
 
 
@@ -144,6 +154,17 @@ class NullMemoryFacade:
         return
 
     def persist_system_prompt(self, text: str) -> str | None:
+        return None
+
+    def persist_llm_request(
+        self,
+        *,
+        turn_number: int,
+        iteration: int,
+        system_prompt_sha256: str,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> str | None:
         return None
 
     def load_messages(self, session_id: str) -> list[dict]:
@@ -281,6 +302,27 @@ class ActiveMemoryFacade:
         if self._session_manager is None:
             return None
         result: str = self._session_manager.persist_system_prompt(text)
+        return result
+
+    def persist_llm_request(
+        self,
+        *,
+        turn_number: int,
+        iteration: int,
+        system_prompt_sha256: str,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> str | None:
+        if self._session_manager is None or self._active_session_id is None:
+            return None
+        result: str | None = self._session_manager.persist_llm_request(
+            self._active_session_id,
+            turn_number=turn_number,
+            iteration=iteration,
+            system_prompt_sha256=system_prompt_sha256,
+            messages=messages,
+            tools=tools,
+        )
         return result
 
     def emit_tool_started(self, tool_use_id: str, tool_name: str) -> None:

@@ -149,6 +149,8 @@ class AppConfig:
     otel_endpoint: str
     observability_alerts: list
     observability_sampling: dict
+    # Verbatim per-call request capture (exact prompt + messages + tool schemas).
+    observability_verbatim_capture: bool
 
 
 def _expand_config(data: dict, config_dir: Path) -> dict:
@@ -508,6 +510,7 @@ def parse_app_config(config: dict) -> AppConfig:
         observability_sampling=(
             config.get("ObservabilitySampling", {}) if isinstance(config.get("ObservabilitySampling"), dict) else {}
         ),
+        observability_verbatim_capture=_to_bool(config.get("ObservabilityVerbatimCapture", False), default=False),
     )
 
 

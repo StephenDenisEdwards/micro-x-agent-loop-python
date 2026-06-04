@@ -112,17 +112,20 @@ def _render_routing(p: dict) -> list[str]:
     return [line]
 
 
-def _render_llm_call(p: dict, prompt_chars: dict[str, int]) -> list[str]:
+def _render_llm_call(p: dict, prompt_chars: dict[str, int], verbatim: _Verbatim | None = None) -> list[str]:
     tools = p.get("tool_names", [])
     tools_str = ",".join(tools) if isinstance(tools, list) else ""
     sha = str(p.get("system_prompt_sha256", ""))
     chars = p.get("system_prompt_chars") or prompt_chars.get(sha)
-    return [
+    lines = [
         f"  [llm.call] {p.get('call_type', '?')} → {p.get('effective_provider', '?')}/"
         f"{p.get('effective_model', '?')} temp={p.get('temperature', '?')} "
         f"max_tokens={p.get('max_tokens', '?')} msgs={p.get('message_count', '?')}",
         f"             prompt=sha:{sha[:8]}({chars} chars) tools=[{_preview(tools_str)}]",
     ]
+    if verbatim is not None:
+        lines.extend(verbatim.render(request_id=p.get("request_id"), system_prompt_sha=sha))
+    return lines
 
 
 def _render_api_metric(p: dict) -> list[str]:
@@ -140,11 +143,55 @@ def _render_compaction(p: dict) -> list[str]:
     ]
 
 
-def reconstruct_session(store: MemoryStore, session_id: str) -> list[str]:
+class _Verbatim:
+    """Loads the exact request snapshots for ``/replay --full`` expansion.
+
+    The full system prompt is always available (``system_prompts`` table). The
+    exact messages array + tool schemas are available only when
+    ``ObservabilityVerbatimCapture`` was on for the run (``llm_requests`` /
+    ``tool_schemas``). Secret values are redacted unless the run was captured
+    under ``MICRO_X_OBSERVABILITY_UNREDACTED=1``.
+    """
+
+    def __init__(self, store: MemoryStore, session_id: str) -> None:
+        self._prompt_text = {r["sha256"]: r["text"] for r in store.execute("SELECT sha256, text FROM system_prompts")}
+        self._tools = {r["sha256"]: r["json"] for r in store.execute("SELECT sha256, json FROM tool_schemas")}
+        self._requests = {
+            r["id"]: dict(r)
+            for r in store.execute(
+                "SELECT id, system_prompt_sha256, tools_sha256, messages_json FROM llm_requests WHERE session_id = ?",
+                (session_id,),
+            )
+        }
+
+    def render(self, *, request_id: Any, system_prompt_sha: str) -> list[str]:
+        out: list[str] = ["    ── verbatim request ──"]
+        prompt = self._prompt_text.get(system_prompt_sha)
+        if prompt is not None:
+            out.append("    SYSTEM PROMPT:")
+            out.extend(f"      {ln}" for ln in prompt.splitlines() or [""])
+        req = self._requests.get(request_id) if request_id else None
+        if req is None:
+            out.append("    (messages + tool schemas not captured — set ObservabilityVerbatimCapture=true)")
+            return out
+        out.append("    MESSAGES (verbatim):")
+        out.extend(f"      {ln}" for ln in json.dumps(_loads_any(req["messages_json"]), indent=2).splitlines())
+        tools_json = self._tools.get(req["tools_sha256"])
+        if tools_json is not None:
+            out.append("    TOOLS (verbatim):")
+            out.extend(f"      {ln}" for ln in json.dumps(_loads_any(tools_json), indent=2).splitlines())
+        return out
+
+
+def reconstruct_session(store: MemoryStore, session_id: str, *, full: bool = False) -> list[str]:
     """Reconstruct *session_id* as a turn-by-turn timeline of rendered lines.
+
+    When *full* is true, each ``llm.call`` is expanded with the verbatim request
+    (exact system prompt + messages + tool schemas) where available.
 
     Raises ``ValueError`` if the session has no persisted record at all.
     """
+    verbatim = _Verbatim(store, session_id) if full else None
     # System-prompt sizes (for llm.call rows whose own chars field is absent).
     prompt_chars: dict[str, int] = {
         row["sha256"]: row["chars"] for row in store.execute("SELECT sha256, chars FROM system_prompts")
@@ -205,7 +252,7 @@ def reconstruct_session(store: MemoryStore, session_id: str) -> list[str]:
             elif etype == "routing.decision":
                 lines.extend(_render_routing(data))
             elif etype == "llm.call":
-                lines.extend(_render_llm_call(data, prompt_chars))
+                lines.extend(_render_llm_call(data, prompt_chars, verbatim))
             elif etype == "metric.api_call":
                 lines.extend(_render_api_metric(data))
             elif etype == "metric.compaction":
