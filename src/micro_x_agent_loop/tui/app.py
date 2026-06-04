@@ -96,6 +96,7 @@ _SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/replay", "Turn-by-turn step-through of the current session"),
     ("/replay <session_id>", "Step-through of a specific session"),
     ("/replay --full", "Step-through with the verbatim request (prompt + messages + tools)"),
+    ("/trace", "Open the visual session trace browser (tree + detail · Ctrl+R)"),
     ("/feedback +1", "Rate the last assistant turn positively"),
     ("/feedback -1", "Rate the last assistant turn negatively"),
     ("/cost reconcile", "Reconcile costs with provider API"),
@@ -292,6 +293,7 @@ class AgentTUI(App[None]):
         Binding("ctrl+t", "toggle_tools", "Tools", show=False),
         Binding("ctrl+k", "toggle_tasks", "Tasks", show=False),
         Binding("ctrl+l", "toggle_logs", "Logs", show=False),
+        Binding("ctrl+r", "open_trace", "Trace", show=False),
         Binding("ctrl+p", "command_palette", "Commands", show=False),
         Binding("ctrl+d", "toggle_dark", "Theme", show=False),
         Binding("ctrl+c", "quit", "Quit", show=False),
@@ -419,6 +421,9 @@ class AgentTUI(App[None]):
             self.exit()
             return
 
+        if self._handle_tui_local_command(text):
+            return
+
         chat_log = self.query_one("#chat-log", ChatLog)
         chat_log.add_user_message(text)
 
@@ -426,11 +431,22 @@ class AgentTUI(App[None]):
 
         self._running_task = asyncio.create_task(self._run_agent(text))
 
+    def _handle_tui_local_command(self, text: str) -> bool:
+        """Handle commands the TUI renders itself (panels, trace). Returns True if handled."""
+        stripped = text.strip()
+        if stripped == "/tasks":
+            self.action_toggle_tasks()
+            return True
+        if stripped == "/trace" or stripped.startswith("/trace "):
+            parts = stripped.split()
+            self.action_open_trace(parts[1] if len(parts) > 1 else None)
+            return True
+        return False
+
     def _submit_slash_command(self, cmd: str) -> None:
         """Submit a slash command from the command palette."""
         # TUI-local commands handled without sending to agent
-        if cmd.strip() == "/tasks":
-            self.action_toggle_tasks()
+        if self._handle_tui_local_command(cmd):
             return
 
         chat_log = self.query_one("#chat-log", ChatLog)
@@ -503,6 +519,23 @@ class AgentTUI(App[None]):
         """Toggle the log panel visibility."""
         log_panel = self.query_one("#log-panel", LogPanel)
         log_panel.display = not log_panel.display
+
+    def action_open_trace(self, session_id: str | None = None) -> None:
+        """Open the full-screen session step-through browser."""
+        from micro_x_agent_loop.tui.screens.trace_screen import TraceScreen
+
+        store = getattr(self._agent._memory, "store", None)
+        if store is None:
+            self.query_one("#chat-log", ChatLog).add_system_message("Trace requires MemoryEnabled=true")
+            return
+        sm = getattr(self._agent._memory, "session_manager", None)
+        sessions: list[tuple[str, str]] = []
+        if sm is not None:
+            sessions = [(s["id"], s.get("title", "")) for s in sm.list_sessions(limit=50)]
+        focus = session_id or self._agent.active_session_id
+        if focus and focus not in {sid for sid, _ in sessions}:
+            sessions.insert(0, (focus, "(current)"))
+        self.push_screen(TraceScreen(store, sessions, focus_session_id=focus))
 
     # 5.2: Responsive layout — hide sidebars on narrow terminals
     def on_resize(self, event: object) -> None:

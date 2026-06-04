@@ -14,6 +14,7 @@ it is trivially testable and reusable as a standalone script.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from typing import Any
 
 from micro_x_agent_loop.memory.store import MemoryStore
@@ -164,6 +165,15 @@ class _Verbatim:
             )
         }
 
+    def prompt_text(self, sha: str) -> str | None:
+        return self._prompt_text.get(sha)
+
+    def request(self, request_id: Any) -> dict | None:
+        return self._requests.get(request_id) if request_id else None
+
+    def tools(self, tools_sha: str) -> str | None:
+        return self._tools.get(tools_sha)
+
     def render(self, *, request_id: Any, system_prompt_sha: str) -> list[str]:
         out: list[str] = ["    ── verbatim request ──"]
         prompt = self._prompt_text.get(system_prompt_sha)
@@ -183,6 +193,41 @@ class _Verbatim:
         return out
 
 
+def _session_stream(store: MemoryStore, session_id: str) -> list[tuple[str, int, int, str, Any]]:
+    """Merge events + messages + tool_calls into one chronological stream.
+
+    Each item is ``(created_at, source_rank, ordinal, kind, data)``; ``source_rank``
+    orders within-second ties so decisions precede output. Returns ``[]`` if the
+    session has no persisted record.
+    """
+    stream: list[tuple[str, int, int, str, Any]] = []
+    for i, row in enumerate(
+        store.execute(
+            "SELECT type, payload_json, created_at FROM events WHERE session_id = ? ORDER BY rowid",
+            (session_id,),
+        )
+    ):
+        stream.append((row["created_at"], 0, i, f"event:{row['type']}", _loads(row["payload_json"])))
+    for i, row in enumerate(
+        store.execute(
+            "SELECT role, content_json, created_at FROM messages WHERE session_id = ? ORDER BY seq",
+            (session_id,),
+        )
+    ):
+        msg = {"role": row["role"], "content": _loads_any(row["content_json"])}
+        stream.append((row["created_at"], 1, i, "message", msg))
+    for i, row in enumerate(
+        store.execute(
+            "SELECT tool_name, input_json, result_text, is_error, was_truncated, original_chars, created_at "
+            "FROM tool_calls WHERE session_id = ? ORDER BY created_at, rowid",
+            (session_id,),
+        )
+    ):
+        stream.append((row["created_at"], 2, i, "tool_call", dict(row)))
+    stream.sort(key=lambda e: (e[0], e[1], e[2]))
+    return stream
+
+
 def reconstruct_session(store: MemoryStore, session_id: str, *, full: bool = False) -> list[str]:
     """Reconstruct *session_id* as a turn-by-turn timeline of rendered lines.
 
@@ -197,40 +242,9 @@ def reconstruct_session(store: MemoryStore, session_id: str, *, full: bool = Fal
         row["sha256"]: row["chars"] for row in store.execute("SELECT sha256, chars FROM system_prompts")
     }
 
-    # Build a single chronological stream of (created_at, source_rank, ordinal, kind, data).
-    # source_rank orders within-second ties so decisions precede output.
-    stream: list[tuple[str, int, int, str, Any]] = []
-
-    for i, row in enumerate(
-        store.execute(
-            "SELECT type, payload_json, created_at FROM events WHERE session_id = ? ORDER BY rowid",
-            (session_id,),
-        )
-    ):
-        stream.append((row["created_at"], 0, i, f"event:{row['type']}", _loads(row["payload_json"])))
-
-    for i, row in enumerate(
-        store.execute(
-            "SELECT role, content_json, created_at FROM messages WHERE session_id = ? ORDER BY seq",
-            (session_id,),
-        )
-    ):
-        msg = {"role": row["role"], "content": _loads_any(row["content_json"])}
-        stream.append((row["created_at"], 1, i, "message", msg))
-
-    for i, row in enumerate(
-        store.execute(
-            "SELECT tool_name, input_json, result_text, is_error, was_truncated, original_chars, created_at "
-            "FROM tool_calls WHERE session_id = ? ORDER BY created_at, rowid",
-            (session_id,),
-        )
-    ):
-        stream.append((row["created_at"], 2, i, "tool_call", dict(row)))
-
+    stream = _session_stream(store, session_id)
     if not stream:
         raise ValueError(f"No persisted record for session {session_id!r}")
-
-    stream.sort(key=lambda e: (e[0], e[1], e[2]))
 
     lines: list[str] = [f"═══ Session {session_id} ═══"]
     current_turn = -1
@@ -285,3 +299,205 @@ def _loads_any(raw: Any) -> Any:
         return json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return raw
+
+
+# ---------------------------------------------------------------------------
+# Structured model — drives the TUI trace tree + detail panel.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class EventNode:
+    """One selectable event in a turn. ``detail_md`` is Markdown for the panel."""
+
+    kind: str  # config | mode | routing | llm_call | api | tool | compaction | message
+    label: str  # short label for the tree node
+    detail_md: str
+
+
+@dataclass
+class TurnNode:
+    number: int  # 0 = session-level preamble (config etc.)
+    label: str
+    events: list[EventNode] = field(default_factory=list)
+
+
+@dataclass
+class SessionModel:
+    session_id: str
+    turns: list[TurnNode] = field(default_factory=list)
+
+
+def _fence(text: str, lang: str = "") -> str:
+    return f"```{lang}\n{text}\n```"
+
+
+def _json_block(value: Any) -> str:
+    return _fence(json.dumps(value, indent=2, default=str), "json")
+
+
+def _detail_config(p: dict) -> str:
+    cfg = p.get("config", {})
+    body = [f"**code_sha:** `{p.get('code_sha', '?')}`", f"**config_hash:** `{p.get('config_hash', '?')}`", ""]
+    body.append(_json_block(cfg))
+    return "\n".join(body)
+
+
+def _detail_mode(p: dict) -> str:
+    out = [
+        f"**stage1:** {p.get('stage1_recommendation', '?')}",
+        f"**stage2:** {p.get('stage2_recommendation')}",
+        f"**choice:** {p.get('user_choice')}",
+    ]
+    if p.get("stage2_reasoning"):
+        out.append(f"\n**reasoning:** {p['stage2_reasoning']}")
+    if p.get("signals"):
+        out.append("\n**signals:**")
+        out.append(_json_block(p["signals"]))
+    return "\n".join(out)
+
+
+def _detail_routing(p: dict) -> str:
+    flags = [
+        name
+        for name, key in (
+            ("confidence-gate", "confidence_gate_triggered"),
+            ("pinned", "pin_continuation_latched"),
+            ("tool-search-only", "tool_search_only"),
+            ("compact-prompt", "system_prompt_compact"),
+        )
+        if p.get(key)
+    ]
+    return "\n".join(
+        [
+            f"**task_type:** {p.get('task_type', '?')}",
+            f"**stage:** {p.get('stage', '?')}  **confidence:** {p.get('confidence', '?')}",
+            f"**policy:** {p.get('policy_name', '')}",
+            f"**→** {p.get('provider', '?')}/{p.get('model', '?')}",
+            f"**reason:** {p.get('reason', '')}",
+            f"**flags:** {', '.join(flags) if flags else '—'}",
+        ]
+    )
+
+
+def _detail_api(p: dict) -> str:
+    return "\n".join(
+        [
+            f"**in:** {p.get('input_tokens', 0)}  **out:** {p.get('output_tokens', 0)}  "
+            f"**cache_read:** {p.get('cache_read_input_tokens', 0)}",
+            f"**cost:** ${p.get('estimated_cost_usd', 0):.4f}  **duration:** {p.get('duration_ms', 0):.0f}ms",
+            f"**stop_reason:** {p.get('stop_reason', '?')}  **call_type:** {p.get('call_type', '?')}",
+        ]
+    )
+
+
+def _detail_compaction(p: dict) -> str:
+    return (
+        f"**{p.get('estimated_tokens_before', 0)} → {p.get('estimated_tokens_after', 0)} tokens**\n\n"
+        f"messages compacted: {p.get('messages_compacted', 0)}  cost: ${p.get('compaction_cost_usd', 0):.4f}"
+    )
+
+
+def _detail_llm_call(p: dict, verbatim: _Verbatim) -> str:
+    sha = str(p.get("system_prompt_sha256", ""))
+    out = [
+        f"**{p.get('call_type', '?')} → {p.get('effective_provider', '?')}/{p.get('effective_model', '?')}**",
+        f"temperature={p.get('temperature', '?')}  max_tokens={p.get('max_tokens', '?')}  "
+        f"messages={p.get('message_count', '?')}",
+        f"tools: {', '.join(p.get('tool_names', []) or [])}",
+        "",
+    ]
+    prompt = verbatim.prompt_text(sha)
+    if prompt is not None:
+        out += [f"### System prompt  `sha:{sha[:8]}`", _fence(prompt)]
+    req = verbatim.request(p.get("request_id"))
+    if req is None:
+        out.append("_Messages + tool schemas not captured — set ObservabilityVerbatimCapture=true._")
+    else:
+        out += ["### Messages (verbatim)", _json_block(_loads_any(req["messages_json"]))]
+        tools_json = verbatim.tools(req["tools_sha256"])
+        if tools_json is not None:
+            out += ["### Tools (verbatim)", _json_block(_loads_any(tools_json))]
+    return "\n".join(out)
+
+
+def _detail_tool(d: dict) -> str:
+    out = [f"**{d.get('tool_name', '?')}**"]
+    if d.get("is_error"):
+        out.append("⚠️ **error**")
+    if d.get("was_truncated"):
+        out.append(f"_truncated {d.get('original_chars')} → {len(d.get('result_text', ''))} chars_")
+    out += ["", "**Input:**", _json_block(_loads_any(d.get("input_json")))]
+    out += ["", "**Result:**", _fence(str(d.get("result_text", "")))]
+    return "\n".join(out)
+
+
+def _detail_message(d: dict) -> str:
+    content = d.get("content")
+    if isinstance(content, str):
+        return content
+    return _json_block(content)
+
+
+def build_session_model(store: MemoryStore, session_id: str) -> SessionModel:
+    """Build a structured turn/event model of a session for the trace tree.
+
+    Always loads full detail (system prompt text + verbatim request where
+    captured) — the detail panel is where the operator wants everything.
+    Raises ``ValueError`` if the session has no persisted record.
+    """
+    stream = _session_stream(store, session_id)
+    if not stream:
+        raise ValueError(f"No persisted record for session {session_id!r}")
+    verbatim = _Verbatim(store, session_id)
+
+    model = SessionModel(session_id=session_id)
+    turns: dict[int, TurnNode] = {}
+
+    def _turn(n: int) -> TurnNode:
+        if n not in turns:
+            turns[n] = TurnNode(number=n, label="Session preamble" if n == 0 else f"Turn {n}")
+            model.turns.append(turns[n])
+        return turns[n]
+
+    current = 0
+    for _created_at, _rank, _ord, kind, data in stream:
+        if kind.startswith("event:"):
+            etype = kind.split(":", 1)[1]
+            current = _turn_of(data) or current
+            node = _event_node(etype, data, verbatim)
+            if node is not None:
+                _turn(current).events.append(node)
+        elif kind == "message":
+            role = str(data.get("role", "?"))
+            _turn(current).events.append(
+                EventNode("message", f"{role}: {_summarize_content(data.get('content'))}", _detail_message(data))
+            )
+        elif kind == "tool_call":
+            name = data.get("tool_name", "?")
+            _turn(current).events.append(EventNode("tool", f"tool: {name}", _detail_tool(data)))
+
+    model.turns.sort(key=lambda t: t.number)
+    return model
+
+
+def _event_node(etype: str, data: dict, verbatim: _Verbatim) -> EventNode | None:
+    if etype == "session.config":
+        return EventNode("config", "config", _detail_config(data))
+    if etype == "mode.analyzed":
+        label = f"mode: {data.get('user_choice') or data.get('stage1_recommendation', '?')}"
+        return EventNode("mode", label, _detail_mode(data))
+    if etype == "routing.decision":
+        return EventNode("routing", f"routing: {data.get('task_type', '?')}", _detail_routing(data))
+    if etype == "llm.call":
+        return EventNode(
+            "llm_call",
+            f"llm.call: {data.get('call_type', '?')} → {data.get('effective_model', '?')}",
+            _detail_llm_call(data, verbatim),
+        )
+    if etype == "metric.api_call":
+        label = f"api: ${data.get('estimated_cost_usd', 0):.4f} {data.get('duration_ms', 0):.0f}ms"
+        return EventNode("api", label, _detail_api(data))
+    if etype == "metric.compaction":
+        return EventNode("compaction", "compaction", _detail_compaction(data))
+    return None
