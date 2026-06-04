@@ -22,6 +22,8 @@ The agent loop is the core runtime cycle of the application. It manages the conv
    h. Loop back to step 3
 7. If the provider returns a final text response, control returns to the REPL
 
+The tool-use loop (steps 4–6) is otherwise unbounded — it exits only when the model stops requesting tools. A hard iteration cap, `MaxAgenticIterations` (default `15`), bounds it as a safety rail. See [Loop Termination](#loop-termination).
+
 ## Components
 
 ### Agent
@@ -116,6 +118,21 @@ Large tool outputs (e.g., reading a big file) can consume excessive tokens. When
 
 This ensures Claude knows the output was truncated and can request a more targeted read if needed.
 
+## Loop Termination
+
+A turn is one `TurnEngine.run()` call wrapping a `while True:` loop. Each iteration makes exactly one LLM call, so a single turn can contain many LLM calls when tools are involved. The loop has four independent exits:
+
+| Bound | Trigger | Config |
+|-------|---------|--------|
+| **Convergence** (normal exit) | The model returns a final text response with no tool-use blocks | — |
+| **Iteration cap** | `turn_iteration` reaches the hard ceiling — the safety rail against a non-converging prompt thrashing tool calls indefinitely | `MaxAgenticIterations` (default `15`) |
+| **Max-tokens retries** | A response is truncated by `max_tokens` (with no tool calls) N times in a row; each truncation prompts a "continue, be concise" nudge before giving up | `MAX_TOKENS_RETRIES` constant |
+| **Timeout** | Wall-clock timeout wrapping the run (primarily for sub-agents) | sub-agent `timeout` |
+
+When the iteration cap is hit, the turn returns **cleanly** — no exception, mirroring the max-tokens give-up path. The channel emits a *"Stopped: agentic turn cap reached"* message and an `on_turn_cap_reached` event fires, so the agent (`agent.py`) can log *"Agentic turn cap reached"* and distinguish it from a normal completion. The cap is defined as `DEFAULT_MAX_AGENTIC_ITERATIONS = 15` in `constants.py` and is overridable per-config via `MaxAgenticIterations`.
+
+The cap bounds **iterations within a single turn**, not turns within a session, and is orthogonal to `MaxConversationMessages` (which bounds history length).
+
 ## Error Handling
 
 | Error | Handling |
@@ -125,6 +142,7 @@ This ensures Claude knows the output was truncated and can request a more target
 | Tool raises exception | Error message returned to Claude |
 | API rate limit (429) | tenacity retries with exponential backoff |
 | Unrecoverable API error | Exception propagates to REPL, user sees error |
+| Non-converging tool loop | Iteration cap (`MaxAgenticIterations`) stops the turn cleanly; see [Loop Termination](#loop-termination) |
 
 ## Local Commands
 

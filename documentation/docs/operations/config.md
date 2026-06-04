@@ -92,6 +92,7 @@ The required API key depends on the configured `Provider`. The `ollama` provider
 | `Provider` | string | `"anthropic"` | LLM provider: `"anthropic"`, `"openai"`, `"deepseek"`, `"gemini"`, or `"ollama"` |
 | `Model` | string | `"claude-sonnet-4-5-20250929"` | Model ID to use (provider-specific) |
 | `MaxTokens` | int | `8192` | Maximum tokens per API response |
+| `MaxAgenticIterations` | int | `15` | Hard cap on tool-use iterations within a single turn — safety rail against a non-converging prompt thrashing tool calls indefinitely (see [MaxAgenticIterations](#maxagenticiterations)) |
 | `Temperature` | float | `0.7` | Sampling temperature — tuned for agentic tool-use reliability (see [Temperature](#temperature)) |
 | `MaxToolResultChars` | int | `40000` | Maximum characters per tool result before truncation |
 | `MaxConversationMessages` | int | `50` | Maximum messages in conversation history before trimming |
@@ -272,6 +273,14 @@ See [Local LLM with Ollama](local-llm-ollama.md) for setup and config profiles.
 ### MaxTokens
 
 Controls the maximum length of Claude's response. Higher values allow longer responses but use more of your rate limit budget.
+
+### MaxAgenticIterations
+
+A single turn runs the LLM in a loop: each iteration makes one LLM call, and if the model requests tools, their results are fed back and another iteration begins. The loop normally exits when the model returns a final text response with no tool calls. `MaxAgenticIterations` is a hard ceiling on how many of these tool-use iterations a single turn may run — a safety rail against a non-converging prompt that thrashes tool calls indefinitely.
+
+When the cap is reached, the turn stops cleanly (no exception), the channel emits a *"Stopped: agentic turn cap reached"* message, and an `on_turn_cap_reached` event fires so the stop is distinguishable from normal completion. The default of `15` is generous for most workloads; raise it if a task legitimately needs more tool steps.
+
+> Note: this caps **iterations within one turn**, not turns within a session. It is independent of `MaxConversationMessages` (which bounds conversation history length) and the `max_tokens` retry limit (which bounds consecutive truncated responses).
 
 ### Temperature
 

@@ -417,7 +417,7 @@ sequenceDiagram
 5. Pseudo-tool blocks (search/ask_user/subagent/task) are handled inline — no MCP execution needed
 6. Regular tool calls are executed **in parallel** via `asyncio.gather`
 7. All results (inline + regular) are merged in original order and sent back to the LLM
-8. Steps 3-7 repeat until the LLM responds with text only (no tool calls)
+8. Steps 3-7 repeat until the LLM responds with text only (no tool calls), or until the per-turn iteration cap `MaxAgenticIterations` (default `15`) is reached — a safety rail that stops a non-converging prompt from thrashing tool calls indefinitely
 9. Conversation history is maintained across prompts in the same session
 10. When the conversation grows large, compaction summarizes older messages to stay within context limits
 

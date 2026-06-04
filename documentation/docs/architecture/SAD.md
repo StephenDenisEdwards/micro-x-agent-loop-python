@@ -307,6 +307,7 @@ sequenceDiagram
     P-->>TE: (message, tool_use_blocks, stop_reason)
     TE->>Mem: append_message(assistant)
 
+    Note over TE: Guard: stop turn cleanly if turn_iteration ≥ MaxAgenticIterations (default 15)
     Note over TE: Classify blocks: search / ask_user / subagent / task / regular
 
     alt tool_search blocks
@@ -353,6 +354,10 @@ sequenceDiagram
     P-->>U: Print text in real time
     TE-->>A: Return
 ```
+
+### Loop Termination
+
+A turn runs the tool-use loop until the model returns text with no tool calls (normal convergence). As a safety rail against a non-converging prompt thrashing tool calls indefinitely, the loop is bounded by a hard iteration cap, `MaxAgenticIterations` (default `15`). When reached, the turn returns cleanly (no exception) and fires an `on_turn_cap_reached` event so it is distinguishable from a normal completion. This caps iterations **within a turn** — orthogonal to `MaxConversationMessages`, which bounds history length across turns. See [Loop Termination](../design/DESIGN-agent-loop.md#loop-termination).
 
 ### Conversation History Management
 
