@@ -17,6 +17,7 @@ from loguru import logger
 from micro_x_agent_loop.agent_config import AgentConfig, LLMConfig, RoutingConfig, ToolSearchConfig
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
 from micro_x_agent_loop.app_config import ToolResultOverride, resolve_runtime_env
+from micro_x_agent_loop.embedding import TaskEmbeddingIndex
 from micro_x_agent_loop.memory.facade import ActiveMemoryFacade, NullMemoryFacade
 from micro_x_agent_loop.metrics import SessionAccumulator
 from micro_x_agent_loop.provider import create_provider
@@ -69,7 +70,7 @@ class AgentComponents:
     api_payload_store: ApiPayloadStore
     semantic_routing_enabled: bool
     routing_feedback_store: Any
-    task_embedding_index: object | None
+    task_embedding_index: TaskEmbeddingIndex | None
     # TurnEngine construction args (routing-related)
     summarization_provider: Any
     summarization_model: str
@@ -216,7 +217,7 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
     provider_pool, semantic_classifier = None, None
     routing_feedback_callback = None
     routing_feedback_store = None
-    task_embedding_index: object | None = None
+    task_embedding_index: TaskEmbeddingIndex | None = None
 
     if config.semantic_routing_enabled:
         provider_pool, semantic_classifier, routing_feedback_store, routing_feedback_callback, task_embedding_index = (
@@ -328,9 +329,9 @@ def _build_semantic_routing(
         fallback_provider=rc.routing_fallback_provider or llm.provider,
     )
 
-    task_embedding_index: object | None = None
+    task_embedding_index: TaskEmbeddingIndex | None = None
     if ts.ollama_base_url and ts.embedding_model:
-        from micro_x_agent_loop.embedding import OllamaEmbeddingClient, TaskEmbeddingIndex
+        from micro_x_agent_loop.embedding import OllamaEmbeddingClient
 
         task_client = OllamaEmbeddingClient(ts.ollama_base_url, ts.embedding_model)
         task_embedding_index = TaskEmbeddingIndex(task_client)

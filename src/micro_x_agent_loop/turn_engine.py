@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -10,28 +11,42 @@ from loguru import logger
 from micro_x_agent_loop.agent_channel import ASK_USER_SCHEMA
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
 from micro_x_agent_loop.constants import DEFAULT_MAX_AGENTIC_ITERATIONS
+from micro_x_agent_loop.embedding import TaskEmbeddingIndex
+from micro_x_agent_loop.provider import LLMCompactor, LLMProvider
 from micro_x_agent_loop.provider_pool import ProviderPool, RoutingTarget
+from micro_x_agent_loop.pseudo_tool_handlers import (
+    AskUserHandler,
+    PseudoToolHandler,
+    SubAgentHandler,
+    TaskToolHandler,
+    ToolSearchHandler,
+)
 from micro_x_agent_loop.routing_strategy import RoutingDecision, RoutingStrategy
-from micro_x_agent_loop.sub_agent import SPAWN_SUBAGENT_SCHEMA, SubAgentRunner, SubAgentType
+from micro_x_agent_loop.semantic_classifier import TaskClassification
+from micro_x_agent_loop.sub_agent import SPAWN_SUBAGENT_SCHEMA, SubAgentRunner
+from micro_x_agent_loop.system_prompt import resolve_system_prompt
 from micro_x_agent_loop.tasks.manager import TaskManager
-from micro_x_agent_loop.tasks.schemas import ALL_TASK_SCHEMAS, is_task_tool
+from micro_x_agent_loop.tasks.schemas import ALL_TASK_SCHEMAS
+from micro_x_agent_loop.tool import Tool
+from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
+from micro_x_agent_loop.tool_search import ToolSearchManager
+from micro_x_agent_loop.turn_events import TurnEvents
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
 
 if TYPE_CHECKING:
     from micro_x_agent_loop.agent_channel import AgentChannel
     from micro_x_agent_loop.app_config import ToolResultOverride
-from micro_x_agent_loop.system_prompt import resolve_system_prompt
-from micro_x_agent_loop.tool import Tool
-from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
-from micro_x_agent_loop.tool_search import ToolSearchManager
-from micro_x_agent_loop.turn_events import TurnEvents
+
+# Callable signatures for routing collaborators (used as legacy params).
+SemanticClassifierFn = Callable[..., TaskClassification]
+RoutingFeedbackFn = Callable[..., None]
 
 
 class TurnEngine:
     def __init__(
         self,
         *,
-        provider: Any,
+        provider: LLMProvider,
         model: str,
         max_tokens: int,
         temperature: float,
@@ -43,7 +58,7 @@ class TurnEngine:
         max_agentic_iterations: int = DEFAULT_MAX_AGENTIC_ITERATIONS,
         events: TurnEvents,
         channel: AgentChannel | None = None,
-        summarization_provider: Any | None = None,
+        summarization_provider: LLMCompactor | None = None,
         summarization_model: str = "",
         summarization_enabled: bool = False,
         summarization_threshold: int = 4000,
@@ -57,13 +72,13 @@ class TurnEngine:
         routing: RoutingStrategy | None = None,
         # Legacy params — used when `routing` is None (backward compat for tests)
         provider_pool: ProviderPool | None = None,
-        semantic_classifier: Any | None = None,
+        semantic_classifier: SemanticClassifierFn | None = None,
         routing_policies: dict[str, dict] | None = None,
         routing_fallback_provider: str = "",
         routing_fallback_model: str = "",
-        routing_feedback_callback: Any | None = None,
+        routing_feedback_callback: RoutingFeedbackFn | None = None,
         routing_confidence_threshold: float = 0.6,
-        task_embedding_index: Any | None = None,
+        task_embedding_index: TaskEmbeddingIndex | None = None,
         tool_result_overrides: dict[str, ToolResultOverride] | None = None,
     ) -> None:
         self._provider = provider
@@ -90,6 +105,20 @@ class TurnEngine:
         self._compact_system_prompt = compact_system_prompt
         self._sub_agent_runner = sub_agent_runner
         self._task_manager = task_manager
+        # Pseudo-tool dispatch — list order is dispatch priority. Each handler
+        # claims tool calls by name. Adding a 5th pseudo tool means writing a
+        # handler and appending it here; no dispatch surgery required.
+        self._pseudo_handlers: list[PseudoToolHandler] = []
+        if tool_search_manager is not None:
+            self._pseudo_handlers.append(ToolSearchHandler(tool_search_manager))
+        if channel is not None:
+            self._pseudo_handlers.append(AskUserHandler(channel))
+        if task_manager is not None:
+            self._pseudo_handlers.append(TaskToolHandler(task_manager))
+        if sub_agent_runner is not None:
+            self._pseudo_handlers.append(
+                SubAgentHandler(sub_agent_runner, channel=channel, events=events),
+            )
         # Build RoutingStrategy from legacy params if not provided directly
         resolved_routing: RoutingStrategy | None = None
         if routing is not None:
@@ -310,76 +339,28 @@ class TurnEngine:
             if not tool_use_blocks:
                 return current_user_message_id, last_assistant_message_id
 
-            # Classify blocks: search / ask_user / subagent / task / regular
-            search_blocks: list[dict] = []
-            ask_user_blocks: list[dict] = []
-            subagent_blocks: list[dict] = []
-            task_blocks: list[dict] = []
+            # Dispatch each block to its matching pseudo-tool handler, or fall
+            # through to "regular" for MCP execution. Preserves per-handler
+            # batching so SubAgentHandler can still gather() concurrently.
+            grouped: dict[int, list[dict]] = {}
             regular_blocks: list[dict] = []
             for block in tool_use_blocks:
                 name = block["name"]
-                if self._tool_search_manager is not None and ToolSearchManager.is_tool_search_call(name):
-                    search_blocks.append(block)
-                elif self._channel is not None and name == "ask_user":
-                    ask_user_blocks.append(block)
-                elif self._sub_agent_runner is not None and name == "spawn_subagent":
-                    subagent_blocks.append(block)
-                elif self._task_manager is not None and is_task_tool(name):
-                    task_blocks.append(block)
-                else:
+                matched_idx: int | None = None
+                for i, handler in enumerate(self._pseudo_handlers):
+                    if handler.matches(name):
+                        matched_idx = i
+                        break
+                if matched_idx is None:
                     regular_blocks.append(block)
+                else:
+                    grouped.setdefault(matched_idx, []).append(block)
 
-            # Handle tool_search calls inline (no MCP execution needed)
             inline_results: list[dict] = []
-            for block in search_blocks:
-                assert self._tool_search_manager is not None
-                query = block["input"].get("query", "")
-                result_text = await self._tool_search_manager.handle_tool_search(query)
-                inline_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block["id"],
-                        "content": result_text,
-                    }
+            for handler_idx, handler_blocks in grouped.items():
+                inline_results.extend(
+                    await self._pseudo_handlers[handler_idx].execute_batch(handler_blocks),
                 )
-                logger.info(f"tool_search query={query!r} loaded={self._tool_search_manager.loaded_tool_count}")
-
-            # Handle ask_user calls inline (route through the channel)
-            for block in ask_user_blocks:
-                assert self._channel is not None
-                question = block["input"].get("question", "")
-                options = block["input"].get("options")
-                answer = await self._channel.ask_user(question, options)
-                result_text = json.dumps({"answer": answer})
-                inline_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block["id"],
-                        "content": result_text,
-                    }
-                )
-                logger.info(f"ask_user question={question!r}")
-
-            # Handle task decomposition calls inline
-            for block in task_blocks:
-                assert self._task_manager is not None
-                result_text = await self._task_manager.handle_tool_call(
-                    block["name"],
-                    block["input"],
-                )
-                inline_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block["id"],
-                        "content": result_text,
-                    }
-                )
-                logger.info(f"task tool={block['name']}")
-
-            # Handle spawn_subagent calls (run sub-agents concurrently)
-            if subagent_blocks:
-                subagent_results = await self._execute_subagent_blocks(subagent_blocks)
-                inline_results.extend(subagent_results)
 
             # If only pseudo-tool calls (no regular tools), append results and continue
             if not regular_blocks:
@@ -545,63 +526,6 @@ class TurnEngine:
                 }
 
         return list(await asyncio.gather(*(run_one(b) for b in tool_use_blocks)))
-
-    async def _execute_subagent_blocks(self, blocks: list[dict]) -> list[dict]:
-        """Execute one or more spawn_subagent calls concurrently."""
-
-        async def _run_one(block: dict) -> dict:
-            tool_input = block["input"]
-            task = tool_input.get("task", "")
-            type_str = tool_input.get("type", "explore")
-            try:
-                agent_type = SubAgentType(type_str)
-            except ValueError:
-                agent_type = SubAgentType.EXPLORE
-
-            if self._channel is not None:
-                self._channel.emit_tool_started(block["id"], f"subagent:{agent_type.value}")
-
-            try:
-                assert self._sub_agent_runner is not None
-                result = await self._sub_agent_runner.run(task, agent_type)
-
-                # Aggregate sub-agent usage to parent metrics
-                for usage in result.usage:
-                    self._events.on_api_call_completed(usage, f"subagent:{agent_type.value}")
-
-                self._events.on_subagent_completed(
-                    agent_type=agent_type.value,
-                    task=task,
-                    result_summary=result.text[:500],
-                    turns=result.turns,
-                    timed_out=result.timed_out,
-                    cost_usd=sum(estimate_cost(u) for u in result.usage),
-                    api_calls=len(result.usage),
-                )
-
-                logger.info(
-                    f"spawn_subagent type={agent_type.value} turns={result.turns} "
-                    f"result_chars={len(result.text)} timed_out={result.timed_out}"
-                )
-
-                return {
-                    "type": "tool_result",
-                    "tool_use_id": block["id"],
-                    "content": result.text,
-                }
-            except Exception as ex:
-                logger.error(f"spawn_subagent failed: {ex}")
-                return {
-                    "type": "tool_result",
-                    "tool_use_id": block["id"],
-                    "content": f"Sub-agent error: {ex}",
-                    "is_error": True,
-                }
-            finally:
-                if self._channel is not None:
-                    self._channel.emit_tool_completed(block["id"], f"subagent:{agent_type.value}", False)
-
-        return list(await asyncio.gather(*(_run_one(b) for b in blocks)))
 
     def _resolve_tool_result_overrides(self, tool_name: str) -> tuple[bool, int, int]:
         """Resolve effective (summarize_enabled, threshold, max_chars) for a tool.

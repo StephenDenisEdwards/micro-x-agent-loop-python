@@ -17,6 +17,7 @@ the F6 atomic flip, so the running MCP filesystem is undisturbed until then.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import subprocess
@@ -301,7 +302,10 @@ class GrepTool:
             search_path = resolve_allowed(self._policy, tool_input.get("path"), must_exist=True)
             rg = _resolve_rg()
             try:
-                proc = subprocess.run(
+                # subprocess.run blocks; run it in a worker thread so the
+                # event loop stays responsive (called from async execute).
+                proc = await asyncio.to_thread(
+                    subprocess.run,
                     [rg, *self._build_args(tool_input, search_path)],
                     capture_output=True,
                     text=True,

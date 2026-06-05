@@ -106,6 +106,13 @@ class WebSocketChannel:
             )
         )
 
+    def begin_streaming(self) -> None:
+        # WebSocket clients manage their own spinner; nothing to push here.
+        pass
+
+    def end_streaming(self) -> None:
+        pass
+
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:
         self._question_counter += 1
         question_id = f"q{self._question_counter}"

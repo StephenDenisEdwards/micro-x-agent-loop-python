@@ -18,6 +18,7 @@ fails only when bash is actually invoked.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import subprocess
@@ -228,7 +229,10 @@ class BashTool:
         timed_out = False
         output_truncated = False
         try:
-            proc = subprocess.run(
+            # subprocess.run blocks; run it in a worker thread so the event
+            # loop stays responsive (this tool runs from within async execute).
+            proc = await asyncio.to_thread(
+                subprocess.run,
                 [shell, "-c", command],
                 cwd=self._policy.working_dir,
                 capture_output=True,

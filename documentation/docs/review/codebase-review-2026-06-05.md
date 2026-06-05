@@ -255,14 +255,14 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 
 | ID | Item | Location | Status | Action taken |
 |---|---|---|---|---|
-| T2-1 | Split `agent.py` — extract `mode_orchestrator.py`, `history_repair.py`, observability-listener mixin | `agent.py` (1,219 LOC) | ❌ Gap | |
-| T2-2 | Split `commands/command_handler.py` per command group with a registry | `commands/command_handler.py` (1,062 LOC) | ❌ Gap | |
-| T2-3 | Replace `Any`-typed dependencies with real Protocols | `turn_engine.py:34, 46, 60, 64, 66` | ❌ Gap | |
-| T2-4 | Sync `AgentChannel` Protocol with `TerminalChannel` extras (`begin_streaming`/`end_streaming`/`print_line`) or split into `StreamingChannel` | `agent_channel.py:70` | ❌ Gap | |
-| T2-5 | Decide on flat vs nested `AgentConfig` — drop either 55 fields or sub-config factory methods | `agent_config.py:117-191, 195-266` | ❌ Gap | |
-| T2-6 | Move 30+ eval/testing config files out of repo root into `configs/evals/` | `config-*.json` (36 files) | ❌ Gap | |
-| T2-7 | Extract `PseudoToolHandler` protocol from inline dispatch | `turn_engine.py:313-396` | ❌ Gap | |
-| T2-8 | Wrap blocking `subprocess.run` in `asyncio.to_thread` if called from async tool execution | `native_tools/filesystem/bash_tool.py:231`, `read_tools.py:304` | ⚠️ Partial | Verify if `.execute` is async first |
+| T2-1 | Split `agent.py` — extract `mode_orchestrator.py`, `history_repair.py`, observability-listener mixin | `agent.py` (1,219 LOC) | ❌ Gap | Big surgery — needs user direction before starting |
+| T2-2 | Split `commands/command_handler.py` per command group with a registry | `commands/command_handler.py` (1,062 LOC) | ❌ Gap | Big surgery — needs user direction before starting |
+| T2-3 | Replace `Any`-typed dependencies with real Protocols | `turn_engine.py:34, 46, 60, 64, 66` | ✅ Done | `provider: LLMProvider`, `summarization_provider: LLMCompactor \| None`, `semantic_classifier: SemanticClassifierFn \| None`, `routing_feedback_callback: RoutingFeedbackFn \| None`, `task_embedding_index: TaskEmbeddingIndex \| None`. Also typed `task_embedding_index` in `agent_builder.AgentComponents` to clear the type chain. |
+| T2-4 | Sync `AgentChannel` Protocol with `TerminalChannel` extras (`begin_streaming`/`end_streaming`/`print_line`) or split into `StreamingChannel` | `agent_channel.py:70` | ✅ Done | Added `begin_streaming()` / `end_streaming()` to the Protocol with no-op implementations in `BufferedChannel`, `BrokerChannel`, `WebSocketChannel`. Dropped the `hasattr` guard in `agent.py:612-622`. `print_line` left as a TerminalChannel-private method (not called via the protocol from the agent). |
+| T2-5 | Decide on flat vs nested `AgentConfig` — drop either 55 fields or sub-config factory methods | `agent_config.py:117-191, 195-266` | ⚠️ Partial | Dropped 4 of 7 sub-config dataclasses (`MemoryConfig`, `SubAgentConfig`, `CostReductionConfig`, `ToolResultConfig`) and their factory methods — all were unused outside `agent_config.py`. File shrank 268→176 LOC. Remaining 55 flat fields + 3 used factory methods (`llm_config`, `routing_config`, `tool_search_config`) untouched — final shape (flat vs nested) needs user direction. |
+| T2-6 | Move 30+ eval/testing config files out of repo root into `configs/evals/` | `config-*.json` (36 files) | ❌ Gap | Deferred — each config has a `Base` reference resolved relative to its own directory, so moving requires per-file path updates + test updates. Needs user direction on target layout. |
+| T2-7 | Extract `PseudoToolHandler` protocol from inline dispatch | `turn_engine.py:313-396` | ✅ Done | New `pseudo_tool_handlers.py` with `PseudoToolHandler` Protocol + 4 concrete handlers (`ToolSearchHandler`, `AskUserHandler`, `TaskToolHandler`, `SubAgentHandler`). Dispatch in `turn_engine.run` is now ~20 lines vs the previous ~80; `_execute_subagent_blocks` removed (`turn_engine.py` 752→676 LOC). |
+| T2-8 | Wrap blocking `subprocess.run` in `asyncio.to_thread` if called from async tool execution | `native_tools/filesystem/bash_tool.py:231`, `read_tools.py:304` | ✅ Done | Confirmed `.execute` is async in both files. Wrapped both `subprocess.run` calls in `asyncio.to_thread` so the event loop stays responsive. |
 
 ### Tier 3 — test quality
 
@@ -304,12 +304,12 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 
 ## Summary
 
-| Tier | Items | Open |
-|---|---:|---:|
-| Tier 1 (must-fix) | 9 | 0 |
-| Tier 2 (architecture) | 8 | 8 |
-| Tier 3 (test quality) | 7 | 7 |
-| Tier 4 (hygiene) | 6 | 6 |
-| **Total** | **30** | **21** |
+| Tier | Items | Open | Notes |
+|---|---:|---:|---|
+| Tier 1 (must-fix) | 9 | 0 | All done. Build green. |
+| Tier 2 (architecture) | 8 | 4 | T2-3, T2-4, T2-7, T2-8 done. T2-5 partial (unused subset dropped). T2-1, T2-2, T2-6 await user direction. |
+| Tier 3 (test quality) | 7 | 7 | |
+| Tier 4 (hygiene) | 6 | 6 | |
+| **Total** | **30** | **17** | |
 
 Remaining work is concentrated, fixable, and well within reach of the same discipline already on display elsewhere in the codebase.

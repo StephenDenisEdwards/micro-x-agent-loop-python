@@ -39,20 +39,6 @@ class LLMConfig:
 
 
 @dataclass
-class MemoryConfig:
-    """Session persistence and checkpoint settings."""
-
-    memory_enabled: bool = False
-    session_id: str | None = None
-    memory_store: MemoryStore | None = None
-    session_manager: SessionManager | None = None
-    checkpoint_manager: CheckpointManager | None = None
-    event_emitter: EventEmitter | None = None
-    user_memory_enabled: bool = False
-    user_memory_dir: str = ""
-
-
-@dataclass
 class ToolSearchConfig:
     """On-demand tool discovery settings."""
 
@@ -76,41 +62,6 @@ class RoutingConfig:
     routing_confidence_threshold: float = 0.6
     routing_feedback_enabled: bool = False
     routing_feedback_db_path: str = ".micro_x/routing.db"
-
-
-@dataclass
-class SubAgentConfig:
-    """Sub-agent spawning settings."""
-
-    sub_agents_enabled: bool = False
-    sub_agent_provider: str = ""
-    sub_agent_model: str = ""
-    sub_agent_timeout: int = DEFAULT_SUBAGENT_TIMEOUT
-    sub_agent_max_turns: int = DEFAULT_SUBAGENT_MAX_TURNS
-    sub_agent_max_tokens: int = DEFAULT_SUBAGENT_MAX_TOKENS
-
-
-@dataclass
-class CostReductionConfig:
-    """Cost optimisation: summarization, mode analysis, stage-2 classification."""
-
-    tool_result_summarization_enabled: bool = False
-    tool_result_summarization_model: str = ""
-    tool_result_summarization_threshold: int = DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD
-    mode_analysis_enabled: bool = False
-    stage2_classification_enabled: bool = False
-    stage2_provider: str = ""
-    stage2_model: str = ""
-
-
-@dataclass
-class ToolResultConfig:
-    """Tool result formatting and limits."""
-
-    max_tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
-    tool_formatting: dict = field(default_factory=dict)
-    default_format: dict = field(default_factory=lambda: {"format": "json"})
-    tool_result_overrides: dict[str, ToolResultOverride] = field(default_factory=dict)
 
 
 @dataclass
@@ -202,18 +153,6 @@ class AgentConfig:
             prompt_caching_enabled=self.prompt_caching_enabled,
         )
 
-    def memory_config(self) -> MemoryConfig:
-        return MemoryConfig(
-            memory_enabled=self.memory_enabled,
-            session_id=self.session_id,
-            memory_store=self.memory_store,
-            session_manager=self.session_manager,
-            checkpoint_manager=self.checkpoint_manager,
-            event_emitter=self.event_emitter,
-            user_memory_enabled=self.user_memory_enabled,
-            user_memory_dir=self.user_memory_dir,
-        )
-
     def tool_search_config(self) -> ToolSearchConfig:
         return ToolSearchConfig(
             tool_search_enabled=self.tool_search_enabled,
@@ -234,33 +173,4 @@ class AgentConfig:
             routing_confidence_threshold=self.routing_confidence_threshold,
             routing_feedback_enabled=self.routing_feedback_enabled,
             routing_feedback_db_path=self.routing_feedback_db_path,
-        )
-
-    def sub_agent_config(self) -> SubAgentConfig:
-        return SubAgentConfig(
-            sub_agents_enabled=self.sub_agents_enabled,
-            sub_agent_provider=self.sub_agent_provider,
-            sub_agent_model=self.sub_agent_model,
-            sub_agent_timeout=self.sub_agent_timeout,
-            sub_agent_max_turns=self.sub_agent_max_turns,
-            sub_agent_max_tokens=self.sub_agent_max_tokens,
-        )
-
-    def cost_reduction_config(self) -> CostReductionConfig:
-        return CostReductionConfig(
-            tool_result_summarization_enabled=self.tool_result_summarization_enabled,
-            tool_result_summarization_model=self.tool_result_summarization_model,
-            tool_result_summarization_threshold=self.tool_result_summarization_threshold,
-            mode_analysis_enabled=self.mode_analysis_enabled,
-            stage2_classification_enabled=self.stage2_classification_enabled,
-            stage2_provider=self.stage2_provider,
-            stage2_model=self.stage2_model,
-        )
-
-    def tool_result_config(self) -> ToolResultConfig:
-        return ToolResultConfig(
-            max_tool_result_chars=self.max_tool_result_chars,
-            tool_formatting=self.tool_formatting,
-            default_format=self.default_format,
-            tool_result_overrides=self.tool_result_overrides,
         )

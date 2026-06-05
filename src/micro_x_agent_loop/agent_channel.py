@@ -116,6 +116,17 @@ class AgentChannel(Protocol):
         """Called for non-LLM system output (e.g. slash-command results)."""
         ...
 
+    # Streaming lifecycle — bracket each LLM stream so UI channels can manage
+    # spinners / progress indicators. Output-only channels (Buffered, Broker,
+    # WebSocket) implement these as no-ops.
+    def begin_streaming(self) -> None:
+        """Called before an LLM stream starts."""
+        ...
+
+    def end_streaming(self) -> None:
+        """Called after an LLM stream ends."""
+        ...
+
     # Agent → Client → Agent (bidirectional)
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:
         """Ask the user a question. Returns the answer text."""
@@ -391,6 +402,12 @@ class BufferedChannel:
     def emit_system_message(self, text: str) -> None:
         self.text += text + "\n"
 
+    def begin_streaming(self) -> None:
+        pass
+
+    def end_streaming(self) -> None:
+        pass
+
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:
         return (
             "No response from human — question timed out. "
@@ -448,6 +465,12 @@ class BrokerChannel:
         pass
 
     def emit_system_message(self, text: str) -> None:
+        pass
+
+    def begin_streaming(self) -> None:
+        pass
+
+    def end_streaming(self) -> None:
         pass
 
     async def ask_user(self, question: str, options: list[dict[str, str]] | None = None) -> str:

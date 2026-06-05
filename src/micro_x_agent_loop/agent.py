@@ -609,7 +609,7 @@ class Agent:
         self._last_assistant_message_id = None
         self._current_user_message_text = user_message
 
-        if self._channel is not None and hasattr(self._channel, "begin_streaming"):
+        if self._channel is not None:
             self._channel.begin_streaming()
         try:
             current_user_message_id, last_assistant_message_id = await self._turn_engine.run(
@@ -618,7 +618,7 @@ class Agent:
                 turn_number=self._turn_number,
             )
         finally:
-            if self._channel is not None and hasattr(self._channel, "end_streaming"):
+            if self._channel is not None:
                 self._channel.end_streaming()
 
         self._current_user_message_id = current_user_message_id
