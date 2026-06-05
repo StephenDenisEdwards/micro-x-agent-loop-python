@@ -158,7 +158,7 @@ _TOOL_SEARCH_HINTS = {
 
 ### Validated end-to-end result
 
-With `config-testing-semantic-routing-local-1.json` (pinned, Ollama for factual_lookup):
+With `configs/testing/config-testing-semantic-routing-local-1.json` (pinned, Ollama for factual_lookup):
 
 Prompt: "list my files"
 1. **Iteration 0:** Ollama calls `tool_search("list files")` — semantic search returns 5 tools ✓

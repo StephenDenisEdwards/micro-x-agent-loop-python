@@ -24,7 +24,7 @@ The project supports four execution modes:
 - **API Server** — HTTP/WebSocket for web, desktop, mobile clients (`--server start`)
 - **Trigger Broker** — cron scheduler, webhooks, HITL (`--broker start` or `--server start --broker`)
 
-There is a `config-base.json` with `${VAR}` environment variable placeholders and a `Base` inheritance system for config variants. Config profiles exist: `config-baseline.json`, `config-standard-sonnet.json`, `config-standard-cheap.json`, `config-standard-openai.json`, etc.
+There is a `config-base.json` with `${VAR}` environment variable placeholders and a `Base` inheritance system for config variants. Config profiles exist: `config-baseline.json`, `configs/profiles/config-standard-sonnet.json`, `configs/profiles/config-standard-cheap.json`, `configs/profiles/config-standard-openai.json`, etc.
 
 Everything has sensible defaults — an empty `{}` config.json works (no MCP servers, but the agent runs).
 

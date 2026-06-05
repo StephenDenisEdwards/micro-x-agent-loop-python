@@ -189,7 +189,7 @@ Keys use the same schema as existing entries: `input`, `output`, `cache_read`, `
 
 ### New profile configs
 
-**`config-standard-deepseek.json`:**
+**`configs/profiles/config-standard-deepseek.json`:**
 ```json
 {
   "Base": "config-base.json",
@@ -200,7 +200,7 @@ Keys use the same schema as existing entries: `input`, `output`, `cache_read`, `
 }
 ```
 
-**`config-standard-gemini.json`:**
+**`configs/profiles/config-standard-gemini.json`:**
 ```json
 {
   "Base": "config-base.json",
@@ -223,8 +223,8 @@ Keys use the same schema as existing entries: `input`, `output`, `cache_read`, `
 | `provider.py` | Add `deepseek` and `gemini` branches to factory |
 | `app_config.py` | Add `deepseek` → `DEEPSEEK_API_KEY` and `gemini` → `GEMINI_API_KEY` to `resolve_runtime_env` — currently unknown providers silently fall through to `ANTHROPIC_API_KEY` |
 | `config-base.json` | Add Gemini + DeepSeek pricing entries |
-| `config-standard-deepseek.json` | **New** profile |
-| `config-standard-gemini.json` | **New** profile |
+| `configs/profiles/config-standard-deepseek.json` | **New** profile |
+| `configs/profiles/config-standard-gemini.json` | **New** profile |
 | `pyproject.toml` | Add `google-genai>=1.0.0` dependency |
 
 ---

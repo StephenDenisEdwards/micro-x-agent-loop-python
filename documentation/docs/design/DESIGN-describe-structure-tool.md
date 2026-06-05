@@ -44,7 +44,7 @@ The child is not smarter. They have **bounded perception** ("I can see *a bit* w
 
 ### 1.3 Hypothesis verified by the eval suite
 
-Holding fixture, config (`config-anthropic-eval-0001.json`), and model (Sonnet 4.5) constant, varying only the prompt:
+Holding fixture, config (`configs/evals/config-anthropic-eval-0001.json`), and model (Sonnet 4.5) constant, varying only the prompt:
 
 | Eval | Prompt | Observed |
 |---|---|---|
@@ -261,7 +261,7 @@ The same apparatus this session built is how this design is judged. No new instr
 
 1. **Build** `filesystem__describe_structure` per §4–6.
 2. **Add** the §7 directive to `system_prompt.py` (gated by a flag so `0002a` can omit it).
-3. **Create three configs** per §7's table: `config-anthropic-eval-0002a.json` (tool-only), `…-0002b.json` (directive-only), `…-0002c.json` (both). All inherit from `config-0001`; same model pin (Sonnet 4.5).
+3. **Create three configs** per §7's table: `configs/evals/config-anthropic-eval-0002a.json` (tool-only), `…-0002b.json` (directive-only), `…-0002c.json` (both). All inherit from `config-0001`; same model pin (Sonnet 4.5).
 4. **Run** `test_count_jobs.py` (the **honest, non-leaking** prompt — no structure given) against each of `0002a`/`b`/`c` ≥ 5 times.
 5. **Read** for each run, in the `[eval record]`:
    - Was `filesystem__describe_structure` called *first*, unprompted? (the real metric for `0002a`/`c`)
@@ -315,7 +315,7 @@ The verdict is *trajectory + rate across fixtures*, not a single green on RSS. C
 - stdlib parsers only.
 - Body-incapable contract enforced, with `body_safety` block in every payload.
 - Directive added to `system_prompt.py` (generic, not task-specific), flag-gated so the three-config split in §7 is mechanical.
-- Three configs committed: `config-anthropic-eval-0002a.json` (tool-only), `0002b.json` (directive-only), `0002c.json` (both).
+- Three configs committed: `configs/evals/config-anthropic-eval-0002a.json` (tool-only), `0002b.json` (directive-only), `0002c.json` (both).
 - Fixture suite per §8 step 7 committed (RSS, JSON array, JSON envelope, JSONL, CSV with quoted newlines, malformed XML, two-competing-repeats XML, minified JSON, large log).
 - Each fixture's count/identify eval run 5× against the three configs. Decision gate on §8 success criteria *per config and per fixture*.
 

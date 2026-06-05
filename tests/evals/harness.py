@@ -17,7 +17,7 @@ Eval test files stay trivial:
     from tests.evals.harness import run_eval, assert_tool_used
 
     def test_x():
-        r = run_eval("prompt", config_path="config-anthropic-eval-0001.json")
+        r = run_eval("prompt", config_path="configs/evals/config-anthropic-eval-0001.json")
         assert_tool_used(r, "filesystem__bash")
 """
 

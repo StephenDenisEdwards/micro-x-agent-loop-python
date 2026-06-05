@@ -17,13 +17,13 @@ produced **are** shipped (see §Related changes).
 
 ## Severity
 
-Medium — affects the all-Gemini profile (`config-standard-gemini-flash.json`)
+Medium — affects the all-Gemini profile (`configs/profiles/config-standard-gemini-flash.json`)
 and the codegen RSS task (`rank_model: gemini/gemini-2.5-flash`) on Google's
 free tier. Anthropic profiles are unaffected.
 
 ## Summary
 
-Running on `config-standard-gemini-flash.json`, or running the
+Running on `configs/profiles/config-standard-gemini-flash.json`, or running the
 `jobserve_rss_processor` `process_feed` task (which scores each job with one
 Gemini call), fails with HTTP 429 `RESOURCE_EXHAUSTED`. The captured error body
 (2026-06-01) names the exact quota:

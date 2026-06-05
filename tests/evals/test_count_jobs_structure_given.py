@@ -25,7 +25,7 @@ import pytest
 
 from tests.evals.harness import EvalResult, assert_answer_matches, run_eval
 
-_CONFIG = "config-anthropic-eval-0001.json"
+_CONFIG = "configs/evals/config-anthropic-eval-0001.json"
 _EXPECTED_BASELINE_MODEL = "claude-sonnet-4-5-20250929"
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "jobserve-sample.rss"

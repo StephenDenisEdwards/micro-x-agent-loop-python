@@ -78,8 +78,8 @@ No API key required — Ollama runs locally via Docker. See [Local LLM with Olla
 
 Pre-built config profiles are available:
 
-- **Local only** (fully offline): `config-standard-ollama-phi3.json`, `config-standard-ollama-llama3.json`, `config-standard-ollama-mistral.json`, `config-standard-ollama-gemma2.json`
-- **Hybrid** (local main + cloud secondary features): `config-standard-ollama-phi3-hybrid.json`, `config-standard-ollama-llama3-hybrid.json`, `config-standard-ollama-mistral-hybrid.json`, `config-standard-ollama-gemma2-hybrid.json`
+- **Local only** (fully offline): `configs/profiles/config-standard-ollama-phi3.json`, `configs/profiles/config-standard-ollama-llama3.json`, `configs/profiles/config-standard-ollama-mistral.json`, `configs/profiles/config-standard-ollama-gemma2.json`
+- **Hybrid** (local main + cloud secondary features): `configs/profiles/config-standard-ollama-phi3-hybrid.json`, `configs/profiles/config-standard-ollama-llama3-hybrid.json`, `configs/profiles/config-standard-ollama-mistral-hybrid.json`, `configs/profiles/config-standard-ollama-gemma2-hybrid.json`
 
 ## Available Models
 

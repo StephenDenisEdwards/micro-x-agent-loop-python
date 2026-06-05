@@ -93,7 +93,7 @@ LINKEDIN_CLIENT_ID=your-client-id
 LINKEDIN_CLIENT_SECRET=your-client-secret
 ```
 
-These are passed to the LinkedIn MCP server via the config's `env` block (already configured in `config-standard-no-summarization.json`).
+These are passed to the LinkedIn MCP server via the config's `env` block (already configured in `configs/profiles/config-standard-no-summarization.json`).
 
 ### 5. First-Time Authorization
 

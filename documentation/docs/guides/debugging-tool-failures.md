@@ -96,7 +96,7 @@ Or use the `/debug` command during a session to see detailed tool execution info
 - `ToolResultSummarizationEnabled=true` and the result exceeds `ToolResultSummarizationThreshold`
 - The summarization model drops key data
 
-**Fix:** Use `config-standard-no-summarization.json` (recommended profile). ADR-013 documents why tool result summarization is unreliable.
+**Fix:** Use `configs/profiles/config-standard-no-summarization.json` (recommended profile). ADR-013 documents why tool result summarization is unreliable.
 
 ### Gmail OAuth Errors
 

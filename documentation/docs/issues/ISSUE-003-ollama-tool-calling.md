@@ -15,7 +15,7 @@ A successful end-to-end Ollama tool-calling session observed on 2026-03-23.
 
 ### Config
 
-Config file: `config-testing-semantic-routing-local-4.json`
+Config file: `configs/testing/config-testing-semantic-routing-local-4.json`
 
 ```json
 {
@@ -89,7 +89,7 @@ A two-turn Ollama session observed on 2026-03-23. Turn 1 succeeds (repeatability
 
 ### Config
 
-Same config as session `3d36e2ed` above: `config-testing-semantic-routing-local-4.json`
+Same config as session `3d36e2ed` above: `configs/testing/config-testing-semantic-routing-local-4.json`
 
 ### Turn 1: "list my files" (success)
 
@@ -150,7 +150,7 @@ Same config as session `3d36e2ed` above: `config-testing-semantic-routing-local-
 
 ### Comparison: Turn 1 across Sessions
 
-**Config**: Both sessions used the same config file (`config-testing-semantic-routing-local-4.json`), same configured model (`claude-sonnet-4-5-20250929`), same routing policies. Sessions are 14 minutes apart (13:12 vs 13:26) on the same day. The database does not store the config file path, but identical routing behaviour (same classification, same tool schema counts 2→7, same stop reasons) confirms the same configuration.
+**Config**: Both sessions used the same config file (`configs/testing/config-testing-semantic-routing-local-4.json`), same configured model (`claude-sonnet-4-5-20250929`), same routing policies. Sessions are 14 minutes apart (13:12 vs 13:26) on the same day. The database does not store the config file path, but identical routing behaviour (same classification, same tool schema counts 2→7, same stop reasons) confirms the same configuration.
 
 **Performance** (turn 1 only):
 
@@ -179,7 +179,7 @@ Retry of the failed "list last 10 emails" prompt from session `f24fa307` turn 2,
 
 ### Config
 
-Same config as previous sessions: `config-testing-semantic-routing-local-4.json`
+Same config as previous sessions: `configs/testing/config-testing-semantic-routing-local-4.json`
 
 ### Conversation Flow
 
@@ -273,7 +273,7 @@ Same two prompts ("list my files" then "list last 10 emails") run in the **same 
 
 ### Config
 
-Config file: `config-testing-haiku-baseline.json`
+Config file: `configs/testing/config-testing-haiku-baseline.json`
 
 ```json
 {
@@ -374,7 +374,7 @@ Config file: `config-testing-haiku-baseline.json`
 
 ## Optimal Anthropic Config: Session `7e366d5c-b585-48e2-bc00-1b726e2a8508`
 
-A 5-turn, multi-task session using `config-optimal-anthropic.json` — Haiku for simple tasks, Sonnet for complex ones. This session tests the cost/quality split across varied workloads.
+A 5-turn, multi-task session using `configs/profiles/config-optimal-anthropic.json` — Haiku for simple tasks, Sonnet for complex ones. This session tests the cost/quality split across varied workloads.
 
 ### Session Summary
 
@@ -391,7 +391,7 @@ A 5-turn, multi-task session using `config-optimal-anthropic.json` — Haiku for
 
 ### Config
 
-Config file: `config-optimal-anthropic.json` — Haiku for trivial/conversational/factual\_lookup/summarization, Sonnet for code/analysis/creative/tool\_continuation. Semantic routing with `rules+keywords` strategy, routing feedback enabled.
+Config file: `configs/profiles/config-optimal-anthropic.json` — Haiku for trivial/conversational/factual\_lookup/summarization, Sonnet for code/analysis/creative/tool\_continuation. Semantic routing with `rules+keywords` strategy, routing feedback enabled.
 
 ### Turn-by-Turn Breakdown
 
@@ -457,7 +457,7 @@ Config file: `config-optimal-anthropic.json` — Haiku for trivial/conversationa
 
 ### Changes Made
 
-#### 1. Config: `config-optimal-anthropic.json`
+#### 1. Config: `configs/profiles/config-optimal-anthropic.json`
 
 - **`CompactionThresholdTokens`**: 80,000 → **25,000** — triggers compaction much earlier, preventing Haiku from re-processing 28K+ tokens of stale history on simple lookups.
 - **`ToolResultSummarizationEnabled`**: `false` → **`true`** — summarizes tool results over 4,000 tokens before feeding them back to the LLM, reducing input costs on continuation calls (e.g. the 15K+ GitHub content in turn 5).

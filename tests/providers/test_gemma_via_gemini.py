@@ -46,10 +46,10 @@ class GemmaPricingEntriesCompleteTests(unittest.TestCase):
     """
 
     GEMMA_PROFILE_NAMES = (
-        "config-standard-gemma-cloud.json",
-        "config-standard-ollama-gemma2.json",
-        "config-standard-ollama-gemma2-hybrid.json",
-        "config-standard-ollama-gemma3.json",
+        "configs/profiles/config-standard-gemma-cloud.json",
+        "configs/profiles/config-standard-ollama-gemma2.json",
+        "configs/profiles/config-standard-ollama-gemma2-hybrid.json",
+        "configs/profiles/config-standard-ollama-gemma3.json",
     )
 
     def _load_pricing(self) -> dict[str, dict[str, float]]:

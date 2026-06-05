@@ -81,7 +81,7 @@ Let a Base-inheriting profile switch off heavy MCP servers it doesn't need, so
 the tool count drops under the cap. Implemented: `McpManager._is_disabled`
 skips a server whose config a profile overrides with `false`/`null`/
 `{"enabled": false}` (deep-merge can override a key but not delete a Base
-entry). `config-standard-groq-scout.json` disables discord/playwright/
+entry). `configs/profiles/config-standard-groq-scout.json` disables discord/playwright/
 interview-assist/whatsapp → ~60 tools, well under 128.
 
 - **Pros:** Simple, explicit, no model cooperation needed, works today. Also a
@@ -141,5 +141,5 @@ cap-aware so adding servers can't silently re-breach a provider limit.
 - [ISSUE-007](ISSUE-007-prose-contract-drift-across-policy-layers.md) — same
   underlying theme: behaviours that depend on the model honouring a prose
   contract (here, "call tool_search first") are fragile.
-- `tool_search.py`, `mcp/mcp_manager.py` (`_is_disabled`), `config-standard-groq-scout.json`.
+- `tool_search.py`, `mcp/mcp_manager.py` (`_is_disabled`), `configs/profiles/config-standard-groq-scout.json`.
 - [model-tool-calling-and-free-apis](../research/model-tool-calling-and-free-apis.md) — provider/model tool-calling reliability.

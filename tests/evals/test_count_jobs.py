@@ -43,7 +43,7 @@ from tests.evals.harness import EvalResult, assert_answer_matches, run_eval
 # holding prompt/fixture/assertions constant) to walk the config series.
 # The config — not this test — owns the model; the harness uses whatever the
 # config resolves to and reports it as result.model.
-_CONFIG = "config-anthropic-eval-0001.json"
+_CONFIG = "configs/evals/config-anthropic-eval-0001.json"
 # eval-0001 is the Sonnet baseline (inherits #Model from config-base). This
 # is the reproducibility guard: if the base default drifts off Sonnet, the
 # baseline is no longer the baseline and this must fail loudly.

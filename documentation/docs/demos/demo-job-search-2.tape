@@ -18,7 +18,7 @@ Set Height 750
 Set TypingSpeed 30
 
 # Launch the agent
-Type "run.bat --config config-standard-no-summarization-sonnet.json"
+Type "run.bat --config configs/profiles/config-standard-no-summarization-sonnet.json"
 Enter
 Sleep 12s
 

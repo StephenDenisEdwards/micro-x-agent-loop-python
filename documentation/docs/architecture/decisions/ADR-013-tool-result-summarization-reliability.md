@@ -46,7 +46,7 @@ The honest architecture for a general assistant is: **reliable tools for reliabl
 
 1. **Do not recommend tool result summarization for general-purpose use.** It remains available as an opt-in feature for workloads where partial information loss is acceptable (e.g., large log file analysis where the gist suffices). It is disabled in the recommended config.
 
-2. **Create `config-standard-no-summarization.json`** as the recommended config for general assistant use — all cost savings except tool result summarization.
+2. **Create `configs/profiles/config-standard-no-summarization.json`** as the recommended config for general assistant use — all cost savings except tool result summarization.
 
 3. **Retain `config-standard.json`** (with summarization enabled) for users who explicitly accept the tradeoff for cost-sensitive, loss-tolerant workloads.
 

@@ -154,7 +154,7 @@ An opt-in rich terminal interface launched via `--tui` or `run-tui.bat`, built o
 ![Textual TUI](images/Screenshot%202026-04-02%20161341.png)
 
 ```bash
-run-tui.bat --config config-optimal-anthropic.json   # Windows
+run-tui.bat --config configs/profiles/config-optimal-anthropic.json   # Windows
 python -m micro_x_agent_loop --tui                    # Direct (requires: pip install -e ".[tui]")
 ```
 

@@ -145,10 +145,10 @@ There are two variants of config for each model:
 
 | Config file | Model |
 |---|---|
-| `config-standard-ollama-phi3.json` | `phi3:mini` |
-| `config-standard-ollama-llama3.json` | `llama3.2:3b` |
-| `config-standard-ollama-mistral.json` | `mistral:7b` |
-| `config-standard-ollama-gemma2.json` | `gemma2:2b` |
+| `configs/profiles/config-standard-ollama-phi3.json` | `phi3:mini` |
+| `configs/profiles/config-standard-ollama-llama3.json` | `llama3.2:3b` |
+| `configs/profiles/config-standard-ollama-mistral.json` | `mistral:7b` |
+| `configs/profiles/config-standard-ollama-gemma2.json` | `gemma2:2b` |
 
 These configs disable features that require additional LLM calls:
 
@@ -168,10 +168,10 @@ With 4GB VRAM, only one model can be loaded at a time, and these features defaul
 
 | Config file | Model |
 |---|---|
-| `config-standard-ollama-phi3-hybrid.json` | `phi3:mini` |
-| `config-standard-ollama-llama3-hybrid.json` | `llama3.2:3b` |
-| `config-standard-ollama-mistral-hybrid.json` | `mistral:7b` |
-| `config-standard-ollama-gemma2-hybrid.json` | `gemma2:2b` |
+| `configs/profiles/config-standard-ollama-phi3-hybrid.json` | `phi3:mini` |
+| `configs/profiles/config-standard-ollama-llama3-hybrid.json` | `llama3.2:3b` |
+| `configs/profiles/config-standard-ollama-mistral-hybrid.json` | `mistral:7b` |
+| `configs/profiles/config-standard-ollama-gemma2-hybrid.json` | `gemma2:2b` |
 
 These configs route secondary features to Anthropic Haiku in the cloud:
 
@@ -192,22 +192,22 @@ These configs route secondary features to Anthropic Haiku in the cloud:
 
 #### Default config
 
-`config-standard-ollama.json` is a pointer (via `ConfigFile` indirection) to `config-standard-ollama-phi3.json`.
+`configs/profiles/config-standard-ollama.json` is a pointer (via `ConfigFile` indirection) to `configs/profiles/config-standard-ollama-phi3.json`.
 
 ### Running the agent
 
 ```bash
 # Local only — fully offline
-python -m micro_x_agent_loop --config config-standard-ollama-phi3.json
-python -m micro_x_agent_loop --config config-standard-ollama-llama3.json
-python -m micro_x_agent_loop --config config-standard-ollama-mistral.json
-python -m micro_x_agent_loop --config config-standard-ollama-gemma2.json
+python -m micro_x_agent_loop --config configs/profiles/config-standard-ollama-phi3.json
+python -m micro_x_agent_loop --config configs/profiles/config-standard-ollama-llama3.json
+python -m micro_x_agent_loop --config configs/profiles/config-standard-ollama-mistral.json
+python -m micro_x_agent_loop --config configs/profiles/config-standard-ollama-gemma2.json
 
 # Hybrid — local main conversation, cloud secondary features
-python -m micro_x_agent_loop --config config-standard-ollama-phi3-hybrid.json
-python -m micro_x_agent_loop --config config-standard-ollama-llama3-hybrid.json
-python -m micro_x_agent_loop --config config-standard-ollama-mistral-hybrid.json
-python -m micro_x_agent_loop --config config-standard-ollama-gemma2-hybrid.json
+python -m micro_x_agent_loop --config configs/profiles/config-standard-ollama-phi3-hybrid.json
+python -m micro_x_agent_loop --config configs/profiles/config-standard-ollama-llama3-hybrid.json
+python -m micro_x_agent_loop --config configs/profiles/config-standard-ollama-mistral-hybrid.json
+python -m micro_x_agent_loop --config configs/profiles/config-standard-ollama-gemma2-hybrid.json
 ```
 
 ### Pricing

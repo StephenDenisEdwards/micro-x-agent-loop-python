@@ -85,7 +85,7 @@ Send any prompt, then run `/cost`.
 
 ### Test 2.2: Known OpenAI model shows pricing
 
-Start the agent with `--config` pointing to an OpenAI config (e.g., `config-standard-openai-no-console.json`).
+Start the agent with `--config` pointing to an OpenAI config (e.g., `configs/profiles/config-standard-openai-no-console.json`).
 
 Send any prompt, then run `/cost`.
 

@@ -12,7 +12,7 @@ documenting which features degrade and which features have to be polyfilled.
 
 **2026-05-30 — Phase 1 (Path C) profile + offline tests shipped.**
 
-- New profile `config-standard-gemma-cloud.json` targets `gemma-3-12b-it` as the main model and `gemma-3-4b-it` for sub-agents and compaction. The plan's original §4.2 default was `gemma-3-27b-it`, but the user flagged a cost concern: AI Studio's free tier definitely covers 12B but 27B is the plan's open question §11 (possibly Vertex-billing-only). Defaulting to 12B keeps the profile inside the free tier; users can flip the field manually for higher quality.
+- New profile `configs/profiles/config-standard-gemma-cloud.json` targets `gemma-3-12b-it` as the main model and `gemma-3-4b-it` for sub-agents and compaction. The plan's original §4.2 default was `gemma-3-27b-it`, but the user flagged a cost concern: AI Studio's free tier definitely covers 12B but 27B is the plan's open question §11 (possibly Vertex-billing-only). Defaulting to 12B keeps the profile inside the free tier; users can flip the field manually for higher quality.
 - New offline test file `tests/providers/test_gemma_via_gemini.py` adds 4 unit tests: `TOOL_SEARCH_CONTEXT_WINDOWS` prefix matches for `gemma3:*`, `orieg/gemma3-tools:*`, and `gemma-3-*-it`; pricing-entry completeness across all Gemma profiles (gated on `SubAgentsEnabled` / `CompactionStrategy` so disabled features aren't checked); pricing-entry shape (every Gemma key has `input`/`output`/`cache_read`/`cache_create`).
 - Live smoke tests `test_streams_text_for_chat_prompt` and `test_returns_function_call_for_tool_prompt` are gated on `GEMINI_API_KEY`. They confirm the no-code-change claim of §4.1 — `GeminiProvider.stream_chat(model="gemma-3-*-it")` passes through to `client.aio.models.generate_content_stream(model=...)` and returns the same internal `{type, id, name, input}` tool_use shape the rest of the codebase expects. Both skip cleanly when `GEMINI_API_KEY` is unset, so the suite stays offline-runnable.
 
@@ -20,7 +20,7 @@ documenting which features degrade and which features have to be polyfilled.
 
 Findings from live validation against the running Ollama 0.24 container:
 
-- **Ollama 0.24 hard-rejects `tools=` for stock `gemma3:4b`** with `400 - registry.ollama.ai/library/gemma3:4b does not support tools`. The OpenAI-compatible endpoint checks the Modelfile for a tool-calling template and refuses the request before the model runs. This contradicts the plan's original §6.4 assumption that Ollama would prompted-wrap tool calls for any model. The plan's pre-declared §4.5 fallback (`orieg/gemma3-tools:4b-ft`) is therefore not a fallback — it is the **primary headline model** for Path A on current Ollama versions. The `config-standard-ollama-gemma3.json` profile now uses it directly. Stock `gemma3:4b` remains useful for chat-only profiles (no `tools=`).
+- **Ollama 0.24 hard-rejects `tools=` for stock `gemma3:4b`** with `400 - registry.ollama.ai/library/gemma3:4b does not support tools`. The OpenAI-compatible endpoint checks the Modelfile for a tool-calling template and refuses the request before the model runs. This contradicts the plan's original §6.4 assumption that Ollama would prompted-wrap tool calls for any model. The plan's pre-declared §4.5 fallback (`orieg/gemma3-tools:4b-ft`) is therefore not a fallback — it is the **primary headline model** for Path A on current Ollama versions. The `configs/profiles/config-standard-ollama-gemma3.json` profile now uses it directly. Stock `gemma3:4b` remains useful for chat-only profiles (no `tools=`).
 - **End-to-end tool-calling validated** against `orieg/gemma3-tools:4b-ft`: model emitted a well-formed `<tool_call>` block for `tool_search`, `OllamaProvider` parsed it cleanly into an internal `tool_use` block, dispatcher executed the pseudo-tool, second turn returned the expected text with the new tool surface (6→18 schemas bound). No `gemma_unparsed.*` warnings fired. Per-turn cost: $0.
 - **`SystemPromptExtras` "only call a tool when asked" directive works**: a plain "what model are you?" prompt produced 137 output tokens of text with `stop_reason: end_turn`, zero tool calls — no spurious tool invocation on a conversational turn.
 - **`ToolSearchMaxLoad: 12` is respected** — the model saw a 6-tool surface at turn 0 (always-on pseudo-tools), then 18 after `tool_search` loaded 12 more. Compatible with the empirically observed ~15-tool limit before fenced-JSON degradation.
@@ -100,9 +100,9 @@ the agent's contract.
 There is no `GemmaProvider`. Gemma support today is purely config-driven on
 top of the existing `OllamaProvider`:
 
-- `config-standard-ollama-gemma2.json` — runs `gemma2:2b` through Ollama's
+- `configs/profiles/config-standard-ollama-gemma2.json` — runs `gemma2:2b` through Ollama's
   OpenAI-compatible endpoint
-- `config-standard-ollama-gemma2-hybrid.json` — same model for the main loop,
+- `configs/profiles/config-standard-ollama-gemma2-hybrid.json` — same model for the main loop,
   Anthropic Haiku for sub-agents, compaction, and Stage 2 classification
 - Pricing entry `"ollama/gemma2:2b"` (zero-cost) in `config-base.json`
 - Context-window entry `"gemma2": 8_000` in `constants.py`
@@ -170,7 +170,7 @@ slot. Serving layers handle this two different ways:
 - **`google-genai`** accepts `system_instruction=` and handles the mapping
   internally, similar to Gemini. Same path as the existing GeminiProvider.
 
-This is why the existing `config-standard-ollama-gemma2.json` sets
+This is why the existing `configs/profiles/config-standard-ollama-gemma2.json` sets
 `PromptCachingEnabled: false`, disables tool search, disables mode analysis,
 and disables sub-agents — every one of those features depends on either tool
 calling working or the system prompt being honoured.
@@ -208,7 +208,7 @@ with real tool calling on day one. Two edits:
 itself — just verify with a smoke test that `model="gemma-3-27b-it"` returns
 a `FunctionCall` part for a tool-using prompt.
 
-**4.2 New profile config — `config-standard-gemma-cloud.json`:**
+**4.2 New profile config — `configs/profiles/config-standard-gemma-cloud.json`:**
 
 ```json
 {
@@ -273,7 +273,7 @@ The provider already advertises `tool_choice="auto"`; the work here is in
 narrowing the tool surface and instructing the model so its 4B-scale
 tool-calling reliability lands inside the usable envelope (see §6.4).
 
-**4.5 New profile config — `config-standard-ollama-gemma3.json`:**
+**4.5 New profile config — `configs/profiles/config-standard-ollama-gemma3.json`:**
 
 ```json
 {
@@ -389,7 +389,7 @@ Depends on [PLAN-local-model-ecosystems.md](PLAN-local-model-ecosystems.md)
 Phase 1 (the generic `openai-compatible` provider). Once that exists *and*
 hardware permits:
 
-**4.8 New profile config — `config-standard-gemma-vllm.json`:**
+**4.8 New profile config — `configs/profiles/config-standard-gemma-vllm.json`:**
 
 ```json
 {
@@ -655,9 +655,9 @@ No new top-level `Provider` value is required for Gemma. Path A uses
 
 | File | Phase | Purpose |
 |------|-------|---------|
-| `config-standard-gemma-cloud.json` | 1 | Google AI Studio / Vertex AI Gemma 3 profile |
-| `config-standard-ollama-gemma3.json` | 2 | Local Gemma 3 via Ollama |
-| `config-standard-gemma-vllm.json` | 3 | vLLM-served Gemma 3 |
+| `configs/profiles/config-standard-gemma-cloud.json` | 1 | Google AI Studio / Vertex AI Gemma 3 profile |
+| `configs/profiles/config-standard-ollama-gemma3.json` | 2 | Local Gemma 3 via Ollama |
+| `configs/profiles/config-standard-gemma-vllm.json` | 3 | vLLM-served Gemma 3 |
 | `tests/providers/test_gemma_via_gemini.py` | 1 | Smoke test that `GeminiProvider` accepts Gemma model IDs and surfaces FunctionCall parts |
 | `tests/providers/test_gemma_via_ollama.py` | 2 | Tool-call reliability fake-stream test for the Ollama+Gemma path |
 | `documentation/docs/operations/gemma-setup.md` | 1–3 | Per-runtime setup guide, picking a Gemma size, the feature matrix |
@@ -722,11 +722,11 @@ Phase 2   Ollama hardening for Gemma 3                       (depends on Phase 1
             - SystemPromptExtras: new list[str] appended to system prompt
             - Enrich existing unknown-tool error at turn_engine.py:397 with available-tool list; add hallucinated_name counter
             - Add fenced_json / bare_xml unparsed tool-call metrics in OllamaProvider
-            - config-standard-ollama-gemma3.json profile (reuses existing ToolSearchMaxLoad)
+            - configs/profiles/config-standard-ollama-gemma3.json profile (reuses existing ToolSearchMaxLoad)
             - documentation: gemma-setup.md (Path A section)
 
 Phase 3   Path B (vLLM / OpenAI-compatible)                  (depends on PLAN-local-model-ecosystems Phase 1)
-            - config-standard-gemma-vllm.json profile
+            - configs/profiles/config-standard-gemma-vllm.json profile
             - vLLM launch-line documentation
             - ProviderOverrides {tool_choice: auto}
 

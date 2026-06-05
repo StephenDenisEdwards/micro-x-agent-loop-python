@@ -34,7 +34,7 @@ Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message':
 'You exceeded your current quota, please check your plan and billing details...'}}
 ```
 
-On `config-standard-gemini-flash.json` (everything routed to
+On `configs/profiles/config-standard-gemini-flash.json` (everything routed to
 `gemini-2.5-flash`), or when the codegen RSS task ranks with
 `gemini/gemini-2.5-flash`, the binding free-tier limit is the **daily request
 cap: 20 `generateContent` requests per day** (per project, per model —

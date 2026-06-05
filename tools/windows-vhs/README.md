@@ -79,7 +79,7 @@ Set TypingSpeed 25
 Set Fps 10
 
 # Start the agent
-Type "run.bat --config config-standard-no-summarization-sonnet.json"
+Type "run.bat --config configs/profiles/config-standard-no-summarization-sonnet.json"
 Enter
 Sleep 10s
 

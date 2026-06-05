@@ -397,8 +397,8 @@ class LoadJsonConfigExtraTests(unittest.TestCase):
     def test_shipped_no_console_profiles_do_not_enable_console_logging(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         for config_name in (
-            "config-standard-sonnet-no-console.json",
-            "config-standard-openai-no-console.json",
+            "configs/profiles/config-standard-sonnet-no-console.json",
+            "configs/profiles/config-standard-openai-no-console.json",
         ):
             with self.subTest(config_name=config_name):
                 data, _ = load_json_config(str(repo_root / config_name))
