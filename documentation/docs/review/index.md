@@ -10,6 +10,7 @@ This folder contains code review documents for micro-x-agent-loop-python. Each r
 | [tool-result-summarisation-investigation.md](tool-result-summarisation-investigation.md) | Deep investigation — tool result summarisation with structured results | 2026-03-12 | Phase 1 formatter extensions not yet built |
 | [claude-code-feature-comparison.md](claude-code-feature-comparison.md) | Feature-by-feature comparison against Claude Code agent infrastructure | 2026-04-06 | 3 priority gaps: lifecycle hooks, permissions, typed memory |
 | [prompt-versioning-review.md](prompt-versioning-review.md) | Prompt versioning — current content-addressed storage vs. patterns in other agents | 2026-06-05 | 2 recommended cheap additions (`PROMPT_SCHEMA_VERSION` constant, `/replay --diff`); full registry deferred until evals exist |
+| [codebase-review-2026-06-05.md](codebase-review-2026-06-05.md) | Full-codebase audit — architecture, coding standards, type hygiene, test coverage & quality, structure | 2026-06-05 | 30 open items across 4 tiers: T1 (9 must-fix incl. 5 failing tests, 2 mypy errors, ADR-024 dist violation), T2 (8 architecture), T3 (7 test quality), T4 (6 hygiene) |
 
 ### Manual Test Plans
 
