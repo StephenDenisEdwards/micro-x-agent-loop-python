@@ -31,18 +31,22 @@ class FilesystemRootsFromConfigTests(unittest.TestCase):
         self.assertEqual([], ro)
 
     def test_parses_split_by_pathsep(self) -> None:
+        # Use platform-agnostic paths that do not collide with os.pathsep
+        # (which is ":" on POSIX and ";" on Windows).
+        a, b, c = "/path/one", "/path/two", "/path/three"
         cfg = {
-            "AllowedDirs": os.pathsep.join(["C:\\path one", "C:\\path two"]),
-            "ReadonlyDirs": "C:\\path three",
+            "AllowedDirs": os.pathsep.join([a, b]),
+            "ReadonlyDirs": c,
         }
         extra, ro = filesystem_roots_from_config(cfg)
-        self.assertEqual(["C:\\path one", "C:\\path two"], extra)
-        self.assertEqual(["C:\\path three"], ro)
+        self.assertEqual([a, b], extra)
+        self.assertEqual([c], ro)
 
     def test_skips_blank_entries(self) -> None:
-        cfg = {"AllowedDirs": os.pathsep.join(["C:\\real", "", "  "])}
+        real = "/path/real"
+        cfg = {"AllowedDirs": os.pathsep.join([real, "", "  "])}
         extra, _ = filesystem_roots_from_config(cfg)
-        self.assertEqual(["C:\\real"], extra)
+        self.assertEqual([real], extra)
 
 
 class SystemPromptFilesystemSectionTests(unittest.TestCase):

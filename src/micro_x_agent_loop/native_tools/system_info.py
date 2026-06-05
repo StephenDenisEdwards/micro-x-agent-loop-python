@@ -105,7 +105,13 @@ class DiskInfoTool(_NativeReadTool):
     def _render(self) -> str:
         psutil = _require_psutil()
         lines = ["Disk Information", "================"]
-        for part in psutil.disk_partitions(all=False):
+        try:
+            partitions = psutil.disk_partitions(all=False)
+        except (PermissionError, OSError):
+            # Some sandboxed Linux environments restrict /proc/filesystems;
+            # surface an empty list rather than failing the tool.
+            partitions = []
+        for part in partitions:
             opts = part.opts or ""
             # Skip removable/CD drives (mirror the .NET DriveType.Fixed filter)
             if "cdrom" in opts or part.fstype == "":
@@ -138,8 +144,14 @@ class NetworkInfoTool(_NativeReadTool):
 
         psutil = _require_psutil()
         lines = ["Network Interfaces", "=================="]
-        stats = psutil.net_if_stats()
-        for name, addrs in psutil.net_if_addrs().items():
+        try:
+            stats = psutil.net_if_stats()
+            addrs_by_iface = psutil.net_if_addrs()
+        except (PermissionError, OSError):
+            # Sandboxed environments may restrict /proc/net/*; degrade
+            # gracefully rather than erroring out the tool.
+            return "\n".join(lines)
+        for name, addrs in addrs_by_iface.items():
             st = stats.get(name)
             if st is None or not st.isup:
                 continue

@@ -139,5 +139,6 @@ def create_provider(
 
         return OllamaProvider(api_key, base_url=ollama_base_url)
     raise ValueError(
-        f"Unknown provider: {provider_name!r}. Supported: 'anthropic', 'openai', 'deepseek', 'groq', 'gemini', 'ollama'",
+        f"Unknown provider: {provider_name!r}. "
+        "Supported: 'anthropic', 'openai', 'deepseek', 'groq', 'gemini', 'ollama'",
     )

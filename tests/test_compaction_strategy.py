@@ -117,7 +117,11 @@ class VerbatimToolResultTests(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "tool_result", "tool_use_id": "tu1", "content": "VERBATIM_FILE_BYTES_KEEP_ME line A\nline B\nline C"},
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tu1",
+                        "content": "VERBATIM_FILE_BYTES_KEEP_ME line A\nline B\nline C",
+                    },
                 ],
             },
             {"role": "assistant", "content": [{"type": "text", "text": "more padding " * 200}]},

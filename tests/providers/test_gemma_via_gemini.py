@@ -16,7 +16,6 @@ from typing import Any
 from micro_x_agent_loop.app_config import load_json_config, parse_app_config
 from micro_x_agent_loop.tool_search import _get_context_window
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 

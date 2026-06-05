@@ -110,7 +110,7 @@ Tool descriptions advertising a default cap that no longer exists are misleading
 
 ### Open / deferred
 
-- **A lint rule for the no-default invariant.** A small AST check (or even a grep CI step) for `maxChars\s*[:=]\s*[A-Za-z]*\s*=\s*\d+` in `tools.ts` files would mechanically prevent re-introduction. Not implemented in this ADR.
+- **A lint rule for the no-default invariant.** ✅ Implemented as a grep step in the `lint` job of `.github/workflows/python-tests.yml`. The check fails CI if `DEFAULT_MAX_CHARS`, `maxChars ??`, or `maxChars ||` appears in `*.ts` / `*.js` / `*.py` under `mcp_servers/`, `codegen-templates/`, `tools/`, or `src/`, excluding `src/micro_x_agent_loop/turn_engine.py` (the one allowed location).
 - **Per-server byte caps**, where they exist, are not yet uniformly documented or configurable. Each MCP server currently picks its own number (`web_fetch`: 2 MB). Standardising this is out of scope.
 - **Truncation telemetry**. The agent already emits `was_summarized` in tool-execution metrics. A symmetric `was_truncated` flag would make it easier to spot when `ToolResultOverrides` is actually firing in production. Not required here.
 

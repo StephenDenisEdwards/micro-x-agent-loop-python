@@ -232,9 +232,9 @@ and contained to the workspace via `FILESYSTEM_WORKING_DIR` + `FILESYSTEM_ALLOWE
 |-----------|-----|-----------|
 | Read a file | `read_file` (line-numbered, supports `offset`/`limit`) | `bash cat` / `head` / `tail` |
 | Search file contents | `grep` (ripgrep, three output modes) | `bash grep` / `rg` |
-| Count lines or pattern matches | `grep` with `output_mode: "count"`, or read_file's `total_lines` structured field | counting from `read_file` content |
+| Count lines / matches | `grep` with `output_mode: "count"`, or `read_file`'s `total_lines` | counting `read_file` |
 | Find files by name pattern | `glob` (mtime-sorted, fast-glob) | `bash find` / `ls -R` |
-| Edit a few lines of a file | `edit_file` (exact-string, atomic) | `write_file` to rewrite the whole file / `bash sed` / `awk` |
+| Edit a few lines | `edit_file` (exact-string, atomic) | `write_file` (whole-file) / `bash sed` / `awk` |
 | Create a new file | `write_file` | `bash echo > file` |
 | Append to an existing file | `append_file` | `bash echo >> file` |
 | Delete a single file | `delete_file` (checkpointed — `/rewind` restores it) | `bash rm` |
@@ -565,7 +565,10 @@ Be concise in your responses. When you've completed a task, briefly summarize wh
         for d in extra_allowed_dirs or []:
             prompt += f"\n- {d} (read/write)"
         for d in readonly_dirs or []:
-            prompt += f"\n- {d} (read-only — read_file, grep, glob work; write_file, append_file, edit_file, delete_file will be rejected)"
+            prompt += (
+                f"\n- {d} (read-only — read_file, grep, glob work; "
+                "write_file, append_file, edit_file, delete_file will be rejected)"
+            )
         prompt += (
             "\nFiles under these roots are absolutely accessible — use the filesystem tools "
             "directly on their full paths. Do not refuse a request just because a path is "

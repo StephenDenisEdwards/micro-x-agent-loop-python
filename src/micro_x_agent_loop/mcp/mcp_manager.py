@@ -61,7 +61,7 @@ async def _wait_for_port(host: str, port: int, timeout: float) -> None:
             except Exception:
                 pass
             return
-        except (ConnectionRefusedError, asyncio.TimeoutError, OSError) as ex:
+        except (ConnectionRefusedError, TimeoutError, OSError) as ex:
             last_err = ex
             await asyncio.sleep(_HTTP_READY_INTERVAL)
     raise TimeoutError(
@@ -330,7 +330,7 @@ class _ServerConnection:
                 )
                 try:
                     await asyncio.wait_for(kill_proc.wait(), timeout=_SHUTDOWN_TIMEOUT)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
             except Exception as ex:
                 logger.warning(f"taskkill failed for {self.name} (pid {pid}): {ex}")
@@ -339,7 +339,7 @@ class _ServerConnection:
                 self._proc.terminate()
                 try:
                     await asyncio.wait_for(self._proc.wait(), timeout=_SHUTDOWN_TIMEOUT)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     try:
                         self._proc.kill()
                         await self._proc.wait()
@@ -351,7 +351,7 @@ class _ServerConnection:
         if self._proc.returncode is None:
             try:
                 await asyncio.wait_for(self._proc.wait(), timeout=_SHUTDOWN_TIMEOUT)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
 

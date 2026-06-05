@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
-from typing import Any
+from typing import Any, cast
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -550,7 +550,8 @@ class AgentTUI(App[None]):
     # 5.4: Theme toggle
     def action_toggle_dark(self) -> None:
         """Toggle between dark and light theme."""
-        self.theme = "textual-light" if self.theme == "textual-dark" else "textual-dark"
+        current = cast(str, self.theme)  # type: ignore[has-type]
+        self.theme = "textual-light" if current == "textual-dark" else "textual-dark"
 
     # -- Session sidebar events --
 

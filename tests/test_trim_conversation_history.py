@@ -176,7 +176,9 @@ class RepairOrphanToolUsesTests(unittest.TestCase):
             {
                 "type": "tool_result",
                 "tool_use_id": "toolu_1",
-                "content": __import__("micro_x_agent_loop.agent", fromlist=["_INTERRUPTED_TOOL_RESULT"])._INTERRUPTED_TOOL_RESULT,
+                "content": __import__(
+                    "micro_x_agent_loop.agent", fromlist=["_INTERRUPTED_TOOL_RESULT"],
+                )._INTERRUPTED_TOOL_RESULT,
                 "is_error": True,
             }
         ], repaired[2]["content"])

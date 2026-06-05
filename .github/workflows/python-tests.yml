@@ -31,6 +31,28 @@ jobs:
       - name: Ruff format check
         run: ruff format --check src tests
 
+      - name: ADR-024 — no char-truncation defaults outside turn_engine.py
+        run: |
+          # ADR-024 requires that char-cap / summarisation policy lives only
+          # in the agent's ToolResultOverrides config (applied in
+          # src/micro_x_agent_loop/turn_engine.py). MCP servers, codegen
+          # templates, and per-task tool wrappers MUST NOT ship their own
+          # `DEFAULT_MAX_CHARS` or apply `maxChars ?? <default>` fallbacks.
+          # See documentation/docs/architecture/decisions/ADR-024-single-layer-tool-result-truncation.md
+          set -e
+          patterns='(DEFAULT_MAX_CHARS|maxChars[[:space:]]*\?\?|maxChars[[:space:]]*\|\|)'
+          hits=$(grep -rEn "$patterns" \
+            --include='*.ts' --include='*.js' --include='*.py' \
+            mcp_servers codegen-templates tools src \
+            2>/dev/null \
+            | grep -v 'src/micro_x_agent_loop/turn_engine.py' \
+            || true)
+          if [ -n "$hits" ]; then
+            echo "ADR-024 violation: forbidden truncation-default pattern found outside turn_engine.py:"
+            echo "$hits"
+            exit 1
+          fi
+
   typecheck:
     runs-on: ubuntu-latest
     steps:

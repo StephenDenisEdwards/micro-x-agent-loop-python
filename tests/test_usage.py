@@ -234,6 +234,10 @@ class EstimateCostAllModelsTests(unittest.TestCase):
         "ollama/llama3.2:3b": ("ollama", "llama3.2:3b", 0.0),
         "ollama/mistral:7b": ("ollama", "mistral:7b", 0.0),
         "ollama/phi3:mini": ("ollama", "phi3:mini", 0.0),
+        "groq/llama-3.3-70b-versatile": ("groq", "llama-3.3-70b-versatile", 0.0),
+        "groq/meta-llama/llama-4-scout-17b-16e-instruct": (
+            "groq", "meta-llama/llama-4-scout-17b-16e-instruct", 0.0,
+        ),
     }
 
     def setUp(self) -> None:
@@ -364,6 +368,12 @@ class EstimateCostAllModelsTests(unittest.TestCase):
 
     def test_ollama_phi3_mini(self) -> None:
         self._assert_model_cost("ollama/phi3:mini")
+
+    def test_groq_llama_3_3_70b_versatile(self) -> None:
+        self._assert_model_cost("groq/llama-3.3-70b-versatile")
+
+    def test_groq_llama_4_scout_17b(self) -> None:
+        self._assert_model_cost("groq/meta-llama/llama-4-scout-17b-16e-instruct")
 
     # --- Completeness guard ---
 

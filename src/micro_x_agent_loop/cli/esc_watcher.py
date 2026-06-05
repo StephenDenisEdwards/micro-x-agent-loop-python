@@ -22,7 +22,7 @@ class EscWatcher:
         try:
             import ctypes
 
-            self._kernel32 = ctypes.windll.kernel32
+            self._kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
             self._available = True
         except (ImportError, AttributeError, OSError):
             pass

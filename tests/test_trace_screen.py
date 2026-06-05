@@ -101,6 +101,14 @@ class BuildSessionModelTests(unittest.TestCase):
             build_session_model(self.store, "nope")
 
 
+try:
+    import textual  # noqa: F401
+    _HAS_TEXTUAL = True
+except ImportError:
+    _HAS_TEXTUAL = False
+
+
+@unittest.skipUnless(_HAS_TEXTUAL, "textual extra not installed")
 class TraceScreenPilotTests(unittest.IsolatedAsyncioTestCase):
     async def test_screen_populates_tree_and_shows_detail(self) -> None:
         from textual.app import App
