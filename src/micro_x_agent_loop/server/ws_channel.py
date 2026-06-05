@@ -22,6 +22,21 @@ class WebSocketChannel:
         self._ask_user_timeout = ask_user_timeout
         self._pending_questions: dict[str, asyncio.Future[str]] = {}
         self._question_counter = 0
+        # Fire-and-forget _send() futures tracked here so tests can drain
+        # them deterministically without sleep-as-sync.
+        self._pending_sends: list[asyncio.Future[None]] = []
+
+    def _fire_and_forget(self, coro: Any) -> None:
+        task = asyncio.ensure_future(coro)
+        self._pending_sends.append(task)
+
+    async def _drain_pending_sends(self) -> None:
+        """Test helper — wait for all background _send() tasks to complete."""
+        if not self._pending_sends:
+            return
+        pending = list(self._pending_sends)
+        self._pending_sends.clear()
+        await asyncio.gather(*pending, return_exceptions=True)
 
     async def _send(self, data: dict[str, Any]) -> None:
         try:
@@ -30,7 +45,7 @@ class WebSocketChannel:
             logger.debug("WebSocket disconnected during send")
 
     def emit_text_delta(self, text: str) -> None:
-        asyncio.ensure_future(self._send({"type": "text_delta", "text": text}))
+        self._fire_and_forget(self._send({"type": "text_delta", "text": text}))
 
     def emit_tool_started(
         self,
@@ -39,7 +54,7 @@ class WebSocketChannel:
         *,
         tool_input: dict[str, Any] | None = None,
     ) -> None:
-        asyncio.ensure_future(
+        self._fire_and_forget(
             self._send(
                 {
                     "type": "tool_started",
@@ -61,7 +76,7 @@ class WebSocketChannel:
         was_truncated: bool = False,
         duration_ms: float = 0.0,
     ) -> None:
-        asyncio.ensure_future(
+        self._fire_and_forget(
             self._send(
                 {
                     "type": "tool_completed",
@@ -77,7 +92,7 @@ class WebSocketChannel:
         )
 
     def emit_turn_complete(self, usage: dict[str, Any]) -> None:
-        asyncio.ensure_future(
+        self._fire_and_forget(
             self._send(
                 {
                     "type": "turn_complete",
@@ -87,7 +102,7 @@ class WebSocketChannel:
         )
 
     def emit_error(self, message: str) -> None:
-        asyncio.ensure_future(
+        self._fire_and_forget(
             self._send(
                 {
                     "type": "error",
@@ -97,7 +112,7 @@ class WebSocketChannel:
         )
 
     def emit_system_message(self, text: str) -> None:
-        asyncio.ensure_future(
+        self._fire_and_forget(
             self._send(
                 {
                     "type": "system_message",

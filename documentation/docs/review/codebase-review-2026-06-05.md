@@ -270,10 +270,10 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 |---|---|---|---|---|
 | T3-1 | Standardize on `@pytest.mark.asyncio` — migrate 30+ `asyncio.run()`-in-unittest tests | many | ❌ Gap | |
 | T3-2 | Add `tests/integration/test_agent_loop.py` covering full multi-turn / tool / sub-agent / ask_user path with `FakeStreamProvider` | `tests/integration/` | ❌ Gap | |
-| T3-3 | Add direct tests for `cli/dispatch.py`, `cli/repl.py`, `agent_builder.py`, `services/checkpoint_service.py`, `services/session_controller.py` | n/a | ❌ Gap | |
-| T3-4 | Replace `Path.cwd() / ".tmp-run"` + `os.chdir` with `tempfile.TemporaryDirectory` | `tests/test_command_handler.py:368, 411` | ❌ Gap | |
-| T3-5 | Replace sleep-as-sync with `asyncio.Event` / `wait_for` | `tests/server/test_ws_channel.py:35-135`, `tests/broker/test_store_runs.py:145, 155` | ❌ Gap | |
-| T3-6 | Drop `**kwargs` from `FakeStreamProvider.stream_chat` to catch Provider-protocol drift | `tests/fakes.py:195` | ❌ Gap | |
+| T3-3 | Add direct tests for `cli/dispatch.py`, `cli/repl.py`, `agent_builder.py`, `services/checkpoint_service.py`, `services/session_controller.py` | n/a | ✅ Done | Added `tests/services/test_session_controller.py` (10 tests), `tests/services/test_checkpoint_service.py` (6 tests), `tests/test_agent_builder.py` (12 tests verifying build branch points + DI), and `tests/cli/test_dispatch.py` (10 tests covering job/broker/server/run/oneshot routing). 38 new tests in total. `cli/repl.py` left untested — tightly coupled to interactive `prompt_toolkit` + `EscWatcher`; high-effort low-value. |
+| T3-4 | Replace `Path.cwd() / ".tmp-run"` + `os.chdir` with `tempfile.TemporaryDirectory` | `tests/test_command_handler.py:368, 411` | ✅ Done | Both sites now use `tempfile.TemporaryDirectory`. `os.chdir` remains inside the TempDir because the code under test reads `Path.cwd()` — but the directory is now `/tmp/xxx` instead of inside the repo, so the test never litters and never races on `.tmp-run`. |
+| T3-5 | Replace sleep-as-sync with `asyncio.Event` / `wait_for` | `tests/server/test_ws_channel.py:35-135`, `tests/broker/test_store_runs.py:145, 155` | ✅ Done | (1) `WebSocketChannel` now tracks fire-and-forget `_send()` futures in `_pending_sends`; added `_drain_pending_sends()` helper. Tests use `await ch._drain_pending_sends()` instead of `asyncio.sleep(0.05)` — deterministic. The two `ask_user` tests still need to yield once for the background task to register the question; they use `asyncio.sleep(0)` (one event-loop tick) instead of `0.05`. (2) `tests/broker/test_store_runs.py` uses `timeout_seconds=-1` to create a question that's already timed out at creation, eliminating the `time.sleep(0.01)` wall-clock waits. |
+| T3-6 | Drop `**kwargs` from `FakeStreamProvider.stream_chat` to catch Provider-protocol drift | `tests/fakes.py:195` | ✅ Done | Signature now mirrors `LLMProvider.stream_chat` exactly (`*, channel=None`). The 1842-test suite still passes — no protocol drift was being masked. |
 | T3-7 | Replace MagicMock sprawl in command tests with `SessionManagerFake`/`CheckpointManagerFake` from `tests/fakes.py` | `tests/test_command_handler.py:41-69` | ❌ Gap | |
 
 ### Tier 4 — hygiene
@@ -308,8 +308,8 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 |---|---:|---:|---|
 | Tier 1 (must-fix) | 9 | 0 | All done. Build green. |
 | Tier 2 (architecture) | 8 | 1 | T2-1, T2-2, T2-3, T2-4, T2-7, T2-8 fully done. T2-5 partial (unused subset dropped). T2-6 awaits user direction. |
-| Tier 3 (test quality) | 7 | 7 | |
+| Tier 3 (test quality) | 7 | 3 | T3-3, T3-4, T3-5, T3-6 done. T3-1 (async-test sprawl), T3-2 (integration test), T3-7 (MagicMock sprawl) remain. |
 | Tier 4 (hygiene) | 6 | 6 | |
-| **Total** | **30** | **14** | |
+| **Total** | **30** | **10** | |
 
 Remaining work is concentrated, fixable, and well within reach of the same discipline already on display elsewhere in the codebase.

@@ -32,7 +32,7 @@ class TestWebSocketChannelEmit(unittest.TestCase):
 
         async def go():
             ch.emit_text_delta("Hello")
-            await asyncio.sleep(0.05)  # let ensure_future run
+            await ch._drain_pending_sends()
 
         self._run(go())
         self.assertEqual(1, len(ws.sent))
@@ -44,7 +44,7 @@ class TestWebSocketChannelEmit(unittest.TestCase):
 
         async def go():
             ch.emit_tool_started("t1", "read_file")
-            await asyncio.sleep(0.05)
+            await ch._drain_pending_sends()
 
         self._run(go())
         self.assertEqual(1, len(ws.sent))
@@ -59,7 +59,7 @@ class TestWebSocketChannelEmit(unittest.TestCase):
 
         async def go():
             ch.emit_tool_completed("t1", "read_file", True)
-            await asyncio.sleep(0.05)
+            await ch._drain_pending_sends()
 
         self._run(go())
         self.assertEqual(1, len(ws.sent))
@@ -73,7 +73,7 @@ class TestWebSocketChannelEmit(unittest.TestCase):
 
         async def go():
             ch.emit_turn_complete({"input_tokens": 100})
-            await asyncio.sleep(0.05)
+            await ch._drain_pending_sends()
 
         self._run(go())
         self.assertEqual(1, len(ws.sent))
@@ -85,7 +85,7 @@ class TestWebSocketChannelEmit(unittest.TestCase):
 
         async def go():
             ch.emit_error("something broke")
-            await asyncio.sleep(0.05)
+            await ch._drain_pending_sends()
 
         self._run(go())
         self.assertEqual(1, len(ws.sent))
@@ -100,7 +100,9 @@ class TestWebSocketChannelAskUser(unittest.TestCase):
         async def go():
             # Start ask_user in background
             task = asyncio.create_task(ch.ask_user("Which file?"))
-            await asyncio.sleep(0.05)  # let question be sent
+            # Yield once so the task runs up to the first await — that's all
+            # ask_user needs to register the question in _pending_questions.
+            await asyncio.sleep(0)
 
             # Simulate client answer
             ch.receive_answer("q1", "main.py")
@@ -132,7 +134,8 @@ class TestWebSocketChannelAskUserWithOptions(unittest.TestCase):
 
         async def go():
             task = asyncio.create_task(ch.ask_user("Pick one", options))
-            await asyncio.sleep(0.05)
+            # One yield is enough to let ask_user register the question.
+            await asyncio.sleep(0)
             ch.receive_answer("q1", "A")
             return await task
 

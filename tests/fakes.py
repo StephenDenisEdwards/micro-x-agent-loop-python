@@ -192,7 +192,20 @@ class FakeStreamProvider:
             )
         )
 
-    async def stream_chat(self, model, max_tokens, temperature, system_prompt, messages, tools, **kwargs):
+    async def stream_chat(
+        self,
+        model,
+        max_tokens,
+        temperature,
+        system_prompt,
+        messages,
+        tools,
+        *,
+        channel=None,
+    ):
+        # Signature mirrors LLMProvider.stream_chat exactly so that protocol
+        # drift surfaces as a test failure instead of being silently absorbed
+        # by **kwargs. The agent passes channel as a keyword arg.
         self.stream_calls.append(
             {
                 "model": model,

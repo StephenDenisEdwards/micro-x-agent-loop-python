@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -365,11 +364,9 @@ class ToolTests(unittest.TestCase):
     def test_tool_delete_generated_task(self) -> None:
         from tests.fakes import FakeTool
 
-        project_root = Path.cwd() / ".tmp-run" / "tool-delete-test"
-        if project_root.exists():
-            shutil.rmtree(project_root)
         deleted: list[list[str]] = []
-        try:
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
             task_dir = project_root / "tools" / "email_summary"
             task_dir.mkdir(parents=True)
             manifest_path = project_root / "tools" / "manifest.json"
@@ -391,6 +388,9 @@ class ToolTests(unittest.TestCase):
                 on_tools_deleted=deleted.append,
             )
 
+            # The handler resolves the manifest via Path.cwd(); contain the
+            # chdir inside the TemporaryDirectory so the test still works in
+            # parallel and never writes inside the repo.
             original_cwd = Path.cwd()
             os.chdir(project_root)
             try:
@@ -403,15 +403,10 @@ class ToolTests(unittest.TestCase):
             self.assertNotIn("email_summary__email_summary", handler._tool_map)
             self.assertEqual([["email_summary__email_summary"]], deleted)
             self.assertTrue(any("Deleted generated task: email_summary" in line for line in out))
-        finally:
-            if project_root.exists():
-                shutil.rmtree(project_root)
 
     def test_tool_delete_generated_task_not_found(self) -> None:
-        project_root = Path.cwd() / ".tmp-run" / "tool-delete-missing-test"
-        if project_root.exists():
-            shutil.rmtree(project_root)
-        try:
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
             manifest_dir = project_root / "tools"
             manifest_dir.mkdir(parents=True)
             (manifest_dir / "manifest.json").write_text("{}", encoding="utf-8")
@@ -425,9 +420,6 @@ class ToolTests(unittest.TestCase):
                 os.chdir(original_cwd)
 
             self.assertTrue(any("Generated task not found: missing_task" in line for line in out))
-        finally:
-            if project_root.exists():
-                shutil.rmtree(project_root)
 
 
 class DebugTests(unittest.TestCase):

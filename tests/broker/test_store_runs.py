@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
@@ -136,13 +135,13 @@ class BrokerStoreQuestionTests(unittest.TestCase):
         self.assertIsNone(q)
 
     def test_get_question_timed_out(self) -> None:
+        # Negative timeout_seconds → timeout_at is in the past at creation,
+        # so the question is already timed out (no wall-clock sleep needed).
         qid = self.store.create_question(
             run_id=self.run_id,
             question_text="Expired?",
-            timeout_seconds=0,  # immediate timeout
+            timeout_seconds=-1,
         )
-        # Wait a tiny bit so timeout_at <= now
-        time.sleep(0.01)
         q = self.store.get_question(qid)
         self.assertEqual("timed_out", q["status"])
 
@@ -150,9 +149,8 @@ class BrokerStoreQuestionTests(unittest.TestCase):
         self.store.create_question(
             run_id=self.run_id,
             question_text="T?",
-            timeout_seconds=0,
+            timeout_seconds=-1,
         )
-        time.sleep(0.01)
         q = self.store.get_pending_question(self.run_id)
         self.assertIsNone(q)
 
