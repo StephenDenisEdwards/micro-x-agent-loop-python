@@ -8,8 +8,15 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
+from micro_x_agent_loop.commands import (
+    checkpoint_command,
+    compact_command,
+    routing_command,
+    session_command,
+    voice_command_handler,
+)
+from micro_x_agent_loop.commands.command_context import CommandContext
 from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
-from micro_x_agent_loop.commands.voice_command import parse_voice_command, parse_voice_start_options
 from micro_x_agent_loop.memory.facade import ActiveMemoryFacade, NullMemoryFacade
 from micro_x_agent_loop.metrics import SessionAccumulator
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
@@ -62,6 +69,28 @@ class CommandHandler:
         self._on_force_compact = on_force_compact
         self._on_tools_deleted = on_tools_deleted or (lambda _tool_names: None)
         self._routing_feedback_store = routing_feedback_store
+        # Per-command modules take a CommandContext so they don't need a
+        # reference to the full CommandHandler. See commands/command_context.py.
+        self._ctx = CommandContext(
+            line_prefix=line_prefix,
+            print=self._print,
+            session_accumulator=session_accumulator,
+            memory=memory,
+            memory_enabled=memory_enabled,
+            tool_map=tool_map,
+            tool_result_formatter=tool_result_formatter,
+            api_payload_store=api_payload_store,
+            voice_runtime=voice_runtime,
+            session_controller=session_controller,
+            checkpoint_service=checkpoint_service,
+            user_memory_enabled=user_memory_enabled,
+            user_memory_dir=user_memory_dir,
+            prompt_command_store=prompt_command_store,
+            on_session_reset=on_session_reset,
+            on_force_compact=on_force_compact,
+            on_tools_deleted=self._on_tools_deleted,
+            routing_feedback_store=routing_feedback_store,
+        )
 
     # -- /help --
 
@@ -708,355 +737,30 @@ class CommandHandler:
     # -- /session --
 
     async def handle_session(self, command: str) -> None:
-        sm = self._memory.session_manager
-        if not self._memory_enabled or sm is None:
-            self._print(f"{self._p}Session commands require MemoryEnabled=true")
-            return
-
-        parts = command.split()
-        if len(parts) == 1:
-            active_id = self._memory.active_session_id
-            if active_id is None:
-                self._print(f"{self._p}Current session: none")
-                return
-            session = sm.get_session(active_id)
-            title = session.get("title", active_id) if session else active_id
-            self._print(
-                f"{self._p}Current session: {title} [{self._session_controller.short_id(active_id)}] (id={active_id})"
-            )
-            return
-
-        if len(parts) >= 2 and parts[1] == "list":
-            limit = 20
-            if len(parts) >= 3:
-                try:
-                    limit = int(parts[2])
-                except ValueError:
-                    self._print(f"{self._p}Usage: /session list [limit]")
-                    return
-            sessions = sm.list_sessions(limit=limit)
-            if not sessions:
-                self._print(f"{self._p}No sessions found.")
-                return
-            self._print(f"{self._p}Recent sessions:")
-            for s in sessions:
-                self._print(
-                    self._session_controller.format_session_list_entry(
-                        s, active_session_id=self._memory.active_session_id
-                    )
-                )
-            return
-
-        if len(parts) >= 2 and parts[1] == "new":
-            title = command.partition("new")[2].strip()
-            new_id = sm.create_session(title=title if title else None)
-            self._memory.active_session_id = new_id
-            self._on_session_reset(new_id, self._memory.load_messages(new_id))
-            session = sm.get_session(new_id) or {"title": new_id}
-            self._print(
-                f"{self._p}Started new session: {session.get('title', new_id)} "
-                f"[{self._session_controller.short_id(new_id)}] (id={new_id})"
-            )
-            return
-
-        if len(parts) >= 3 and parts[1] == "name":
-            active_id = self._memory.active_session_id
-            if active_id is None:
-                self._print(f"{self._p}No active session to name")
-                return
-            title = command.partition("name")[2].strip()
-            if not title:
-                self._print(f"{self._p}Usage: /session name <title>")
-                return
-            sm.set_session_title(active_id, title)
-            self._print(f"{self._p}Session named: {title}")
-            return
-
-        if len(parts) >= 3 and parts[1] == "resume":
-            target = command.partition("resume")[2].strip()
-            if not target:
-                self._print(f"{self._p}Usage: /session resume <id-or-name>")
-                return
-            try:
-                session = sm.resolve_session_identifier(target)
-            except ValueError as ex:
-                self._print(f"{self._p}{ex}")
-                return
-            if session is None:
-                self._print(f"{self._p}Session not found: {target}")
-                return
-            resolved_id = session["id"]
-            self._memory.active_session_id = resolved_id
-            new_messages = self._memory.load_messages(resolved_id)
-            self._on_session_reset(resolved_id, new_messages)
-            summary = sm.build_session_summary(resolved_id)
-            self._print(
-                f"{self._p}Resumed session {summary['title']} "
-                f"[{self._session_controller.short_id(resolved_id)}] (id={resolved_id}, {len(new_messages)} messages)"
-            )
-            for line in self._session_controller.format_resumed_summary_lines(summary):
-                self._print(line)
-            return
-
-        if len(parts) == 2 and parts[1] == "fork":
-            active_id = self._memory.active_session_id
-            if active_id is None:
-                self._print(f"{self._p}No active session to fork")
-                return
-            source_id = active_id
-            fork_id = sm.fork_session(source_id)
-            self._memory.active_session_id = fork_id
-            self._on_session_reset(fork_id, self._memory.load_messages(fork_id))
-            self._print(f"{self._p}Forked session {source_id} -> {fork_id}")
-            return
-
-        self._print(
-            f"{self._p}Usage: /session | /session new [title] | /session list [limit] | "
-            "/session name <title> | /session resume <id-or-name> | /session fork"
-        )
+        await session_command.handle_session(self._ctx, command)
 
     # -- /rewind --
 
     async def handle_rewind(self, command: str) -> None:
-        cm = self._memory.checkpoint_manager
-        if not self._memory_enabled or cm is None:
-            self._print(f"{self._p}Rewind requires MemoryEnabled=true")
-            return
-        parts = command.split()
-        if len(parts) != 2:
-            self._print(f"{self._p}Usage: /rewind <checkpoint_id>")
-            return
-
-        checkpoint_id = parts[1]
-        try:
-            _, outcomes = cm.rewind_files(checkpoint_id)
-        except Exception as ex:
-            self._print(f"{self._p}Rewind failed: {ex}")
-            return
-
-        for line in self._checkpoint_service.format_rewind_outcome_lines(checkpoint_id, outcomes):
-            self._print(line)
+        await checkpoint_command.handle_rewind(self._ctx, command)
 
     # -- /checkpoint --
 
     async def handle_checkpoint(self, command: str) -> None:
-        cm = self._memory.checkpoint_manager
-        active_id = self._memory.active_session_id
-        if not self._memory_enabled or cm is None or active_id is None:
-            self._print(f"{self._p}Checkpoint commands require MemoryEnabled=true")
-            return
-
-        parts = command.split()
-        if len(parts) == 1 or (len(parts) >= 2 and parts[1] == "list"):
-            limit = 20
-            if len(parts) >= 3:
-                try:
-                    limit = int(parts[2])
-                except ValueError:
-                    self._print(f"{self._p}Usage: /checkpoint list [limit]")
-                    return
-            checkpoints = cm.list_checkpoints(active_id, limit=limit)
-            if not checkpoints:
-                self._print(f"{self._p}No checkpoints found for current session.")
-                return
-            self._print(f"{self._p}Recent checkpoints:")
-            for cp in checkpoints:
-                self._print(self._checkpoint_service.format_checkpoint_list_entry(cp))
-            return
-
-        if len(parts) == 3 and parts[1] == "rewind":
-            await self.handle_rewind(f"/rewind {parts[2]}")
-            return
-
-        self._print(f"{self._p}Usage: /checkpoint list [limit] | /checkpoint rewind <checkpoint_id>")
+        await checkpoint_command.handle_checkpoint(self._ctx, command)
 
     # -- /routing --
 
     async def handle_routing(self, command: str) -> None:
-        if self._routing_feedback_store is None:
-            self._print(f"{self._p}Routing stats require SemanticRoutingEnabled=true and RoutingFeedbackEnabled=true")
-            return
-
-        from micro_x_agent_loop.routing_feedback import RoutingFeedbackStore
-
-        store: RoutingFeedbackStore = self._routing_feedback_store  # type: ignore[assignment]
-
-        parts = command.split()
-        sub = parts[1] if len(parts) >= 2 else ""
-
-        if sub == "tasks":
-            stats = store.get_task_type_stats()
-            if not stats:
-                self._print(f"{self._p}No routing data recorded yet.")
-                return
-            self._print(f"{self._p}Routing stats by task type:")
-            self._print(
-                f"{self._p}{'Task Type':<20s} {'Count':>6s} {'Avg Cost':>10s}"
-                f" {'Avg Latency':>12s} {'Avg Conf':>9s} {'+ / -':>7s}"
-            )
-            for s in stats:
-                self._print(
-                    f"{self._p}{s['task_type']:<20s} {s['total']:>6d} "
-                    f"${s['avg_cost']:.4f}  {s['avg_latency']:>8.0f} ms  "
-                    f"{s['avg_confidence']:.2f}   "
-                    f"{s['positive_signals']:>3d}/{s['negative_signals']:<3d}"
-                )
-            return
-
-        if sub == "providers":
-            stats = store.get_provider_stats()
-            if not stats:
-                self._print(f"{self._p}No routing data recorded yet.")
-                return
-            self._print(f"{self._p}Routing stats by provider:")
-            self._print(
-                f"{self._p}{'Provider':<15s} {'Count':>6s} {'Avg Cost':>10s}"
-                f" {'Avg Latency':>12s} {'Errors':>7s} {'Total Cost':>11s}"
-            )
-            for s in stats:
-                self._print(
-                    f"{self._p}{s['provider']:<15s} {s['total']:>6d} "
-                    f"${s['avg_cost']:.4f}  {s['avg_latency']:>8.0f} ms  "
-                    f"{s['errors']:>7d} ${s['total_cost']:.4f}"
-                )
-            return
-
-        if sub == "stages":
-            stats = store.get_stage_stats()
-            if not stats:
-                self._print(f"{self._p}No routing data recorded yet.")
-                return
-            self._print(f"{self._p}Classification stage breakdown:")
-            for s in stats:
-                self._print(
-                    f"{self._p}  {s['stage']}: {s['total']} calls "
-                    f"({s['percentage']:.1f}%), avg confidence {s['avg_confidence']:.2f}"
-                )
-            return
-
-        if sub == "recent":
-            outcomes = store.get_recent_outcomes(20)
-            if not outcomes:
-                self._print(f"{self._p}No routing data recorded yet.")
-                return
-            self._print(f"{self._p}Recent routing decisions:")
-            for o in outcomes:
-                self._print(
-                    f"{self._p}  T{o['turn_number']} {o['task_type']:<18s}"
-                    f" {o['provider']}/{o['model']:<20s}"
-                    f" stage={o['stage']} conf={o['confidence']:.2f}"
-                    f" ${o['cost_usd']:.4f}"
-                )
-            return
-
-        # Default: summary view
-        task_stats = store.get_task_type_stats()
-        if not task_stats:
-            self._print(f"{self._p}No routing data recorded yet.")
-            self._print(
-                f"{self._p}Usage: /routing | /routing tasks | /routing providers | /routing stages | /routing recent"
-            )
-            return
-
-        total_calls = sum(s["total"] for s in task_stats)
-        total_cost = sum(s["total_cost"] for s in task_stats)
-        self._print(f"{self._p}Semantic Routing Summary")
-        self._print(f"{self._p}  Total routed calls: {total_calls}")
-        self._print(f"{self._p}  Total routed cost:  ${total_cost:.4f}")
-        self._print(f"{self._p}  Task types active:  {len(task_stats)}")
-
-        stage_stats = store.get_stage_stats()
-        for s in stage_stats:
-            self._print(f"{self._p}  Stage {s['stage']}: {s['percentage']:.1f}% of calls")
-
-        self._print(f"{self._p}Use /routing tasks|providers|stages|recent for details.")
+        await routing_command.handle_routing(self._ctx, command)
 
     # -- /voice --
 
     async def handle_voice(self, command: str) -> None:
-        if self._voice_runtime is None:
-            self._print(f"{self._p}Voice runtime is not available.")
-            return
-        try:
-            parts = parse_voice_command(command)
-        except ValueError:
-            self._print(f"{self._p}Invalid command syntax")
-            return
-        if len(parts) == 1:
-            self._print(
-                f"{self._p}Usage: /voice start [microphone|loopback] "
-                "[--mic-device-id <id>] [--mic-device-name <name>] "
-                "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>] | "
-                "/voice status | /voice devices | /voice events [limit] | /voice stop"
-            )
-            return
+        await voice_command_handler.handle_voice(self._ctx, command)
 
-        action = parts[1].lower()
-        if action == "start":
-            opts, error = parse_voice_start_options(parts, line_prefix=self._p)
-            if error:
-                self._print(error)
-                return
-            assert opts is not None
-            self._print(
-                await self._voice_runtime.start(
-                    opts.source,
-                    opts.mic_device_id,
-                    opts.mic_device_name,
-                    opts.chunk_seconds,
-                    opts.endpointing_ms,
-                    opts.utterance_end_ms,
-                )
-            )
-            return
-
-        if action == "status":
-            self._print(await self._voice_runtime.status())
-            return
-
-        if action == "devices":
-            self._print(await self._voice_runtime.devices())
-            return
-
-        if action == "events":
-            limit = 50
-            if len(parts) >= 3:
-                try:
-                    limit = int(parts[2])
-                except ValueError:
-                    self._print(f"{self._p}Usage: /voice events [limit]")
-                    return
-            self._print(await self._voice_runtime.events(limit))
-            return
-
-        if action == "stop":
-            self._print(await self._voice_runtime.stop())
-            return
-
-        self._print(
-            f"{self._p}Usage: /voice start [microphone|loopback] "
-            "[--mic-device-id <id>] [--mic-device-name <name>] "
-            "[--chunk-seconds <n>] [--endpointing-ms <n>] [--utterance-end-ms <n>] | "
-            "/voice status | /voice devices | /voice events [limit] | /voice stop"
-        )
+    # -- /compact --
 
     async def handle_compact(self, command: str) -> None:
         """Handle /compact [tail N] — force conversation compaction now."""
-        if self._on_force_compact is None:
-            self._print(f"{self._p}Compaction not available (strategy is 'none').")
-            return
-
-        parts = command.split()
-        protected_tail: int | None = None
-        if len(parts) >= 3 and parts[1] == "tail":
-            try:
-                protected_tail = int(parts[2])
-            except ValueError:
-                self._print(f"{self._p}Usage: /compact [tail N]")
-                return
-        elif len(parts) > 1:
-            self._print(f"{self._p}Usage: /compact [tail N]")
-            return
-
-        ok, message = await self._on_force_compact(protected_tail)
-        self._print(f"{self._p}{message}")
+        await compact_command.handle_compact(self._ctx, command)
