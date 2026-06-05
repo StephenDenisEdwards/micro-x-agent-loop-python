@@ -10,7 +10,7 @@ This folder contains code review documents for micro-x-agent-loop-python. Each r
 | [tool-result-summarisation-investigation.md](tool-result-summarisation-investigation.md) | Deep investigation — tool result summarisation with structured results | 2026-03-12 | Phase 1 formatter extensions not yet built |
 | [claude-code-feature-comparison.md](claude-code-feature-comparison.md) | Feature-by-feature comparison against Claude Code agent infrastructure | 2026-04-06 | 3 priority gaps: lifecycle hooks, permissions, typed memory |
 | [prompt-versioning-review.md](prompt-versioning-review.md) | Prompt versioning — current content-addressed storage vs. patterns in other agents | 2026-06-05 | 2 recommended cheap additions (`PROMPT_SCHEMA_VERSION` constant, `/replay --diff`); full registry deferred until evals exist |
-| [codebase-review-2026-06-05.md](codebase-review-2026-06-05.md) | Full-codebase audit — architecture, coding standards, type hygiene, test coverage & quality, structure | 2026-06-05 | 9 open items: T1 ✅ all 9 done; T2 ⚠️ 7/8 fully done; T3 ⚠️ 5/7 done (T3-1, T3-3, T3-4, T3-5, T3-6; T3-2, T3-7 remain); T4 (6). Build green: ruff/mypy clean, 1880 tests pass. |
+| [codebase-review-2026-06-05.md](codebase-review-2026-06-05.md) | Full-codebase audit — architecture, coding standards, type hygiene, test coverage & quality, structure | 2026-06-05 | 8 open items: T1 ✅ all 9 done; T2 ⚠️ 7/8 fully done; T3 ⚠️ 6/7 done (T3-7 MagicMock sprawl remains); T4 (6). Build green: ruff/mypy clean, 1886 tests pass. |
 
 ### Manual Test Plans
 

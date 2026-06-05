@@ -14,6 +14,7 @@ from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.metrics import SessionAccumulator
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
+from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
 
 
 def _make_handler(
@@ -27,6 +28,7 @@ def _make_handler(
     voice_runtime=None,
     prompt_commands: dict[str, str] | None = None,
     on_tools_deleted=None,
+    tool_result_formatter: ToolResultFormatter | None = None,
 ) -> tuple[CommandHandler, list[str]]:
     """Build a CommandHandler with minimal mocks. Returns (handler, output_list)."""
     out: list[str] = [] if output is None else output
@@ -41,10 +43,11 @@ def _make_handler(
     memory.checkpoint_manager = MagicMock()
     memory.active_session_id = "test-session"
 
-    # ToolResultFormatter mock
-    formatter = MagicMock()
-    formatter.get_tool_format.return_value = None
-    formatter.default_format = {"strategy": "json"}
+    # ToolResultFormatter — real instance so per-test format configs land in the
+    # actual tool_formatting dict (no more pre-canned mock return_values that
+    # tests then assert on, which the original codebase review flagged as
+    # tautological).
+    formatter = tool_result_formatter or ToolResultFormatter(default_format={"format": "json"})
 
     # Payload store
     if api_payload_store is None:
@@ -57,13 +60,11 @@ def _make_handler(
     pcs.list_commands.return_value = [(name, f"desc-{name}") for name in prompt_commands]
     pcs.load_command.side_effect = lambda name: prompt_commands.get(name)
 
-    # SessionController
+    # SessionController and CheckpointService — both are pure formatters;
+    # the real instances let tests assert on the actual rendered text
+    # rather than the mock's pre-canned return value.
     sc = SessionController(line_prefix="  ")
-
-    # CheckpointService
-    cs = MagicMock(spec=CheckpointService)
-    cs.format_rewind_outcome_lines.return_value = ["  Rewound."]
-    cs.format_checkpoint_list_entry.return_value = "  cp1"
+    cs = CheckpointService(line_prefix="  ")
 
     handler = CommandHandler(
         line_prefix="  ",
@@ -345,9 +346,16 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
         from tests.fakes import FakeTool
 
         tool = FakeTool("server__foo")
-        handler, out = _make_handler(tool_map={"server__foo": tool})
-        # Override formatter mock to return a config
-        handler._tool_result_formatter.get_tool_format.return_value = {"strategy": "table"}
+        # Wire a real ToolFormatting config for this tool — the real
+        # ToolResultFormatter reads it and the handler prints the result.
+        formatter = ToolResultFormatter(
+            tool_formatting={"server__foo": {"strategy": "table"}},
+            default_format={"format": "json"},
+        )
+        handler, out = _make_handler(
+            tool_map={"server__foo": tool},
+            tool_result_formatter=formatter,
+        )
         await handler.handle_tool("/tool server__foo config")
         combined = "\n".join(out)
         self.assertIn("table", combined)
