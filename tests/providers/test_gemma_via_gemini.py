@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 
 from micro_x_agent_loop.app_config import load_json_config, parse_app_config
-from micro_x_agent_loop.tool_search import _get_context_window
+from micro_x_agent_loop.tool_search import get_context_window
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -22,22 +22,22 @@ class GemmaContextWindowLookupTests(unittest.TestCase):
     """Phase 1 §4.4 — prefix matches on TOOL_SEARCH_CONTEXT_WINDOWS."""
 
     def test_ollama_gemma3_prefix_resolves(self) -> None:
-        self.assertEqual(128_000, _get_context_window("gemma3:4b"))
-        self.assertEqual(128_000, _get_context_window("gemma3:12b"))
-        self.assertEqual(128_000, _get_context_window("gemma3:27b"))
+        self.assertEqual(128_000, get_context_window("gemma3:4b"))
+        self.assertEqual(128_000, get_context_window("gemma3:12b"))
+        self.assertEqual(128_000, get_context_window("gemma3:27b"))
 
     def test_hosted_gemma3_variants_resolve(self) -> None:
-        self.assertEqual(32_000, _get_context_window("gemma-3-1b-it"))
-        self.assertEqual(128_000, _get_context_window("gemma-3-4b-it"))
-        self.assertEqual(128_000, _get_context_window("gemma-3-12b-it"))
-        self.assertEqual(128_000, _get_context_window("gemma-3-27b-it"))
+        self.assertEqual(32_000, get_context_window("gemma-3-1b-it"))
+        self.assertEqual(128_000, get_context_window("gemma-3-4b-it"))
+        self.assertEqual(128_000, get_context_window("gemma-3-12b-it"))
+        self.assertEqual(128_000, get_context_window("gemma-3-27b-it"))
 
     def test_orieg_fine_tune_resolves(self) -> None:
-        self.assertEqual(128_000, _get_context_window("orieg/gemma3-tools:4b-ft"))
+        self.assertEqual(128_000, get_context_window("orieg/gemma3-tools:4b-ft"))
 
     def test_legacy_gemma2_unchanged(self) -> None:
         """Phase 1 must not regress the existing gemma2 entry."""
-        self.assertEqual(8_000, _get_context_window("gemma2:2b"))
+        self.assertEqual(8_000, get_context_window("gemma2:2b"))
 
 
 class GemmaPricingEntriesCompleteTests(unittest.TestCase):

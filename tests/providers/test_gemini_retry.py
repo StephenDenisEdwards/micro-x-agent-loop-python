@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 from google.genai.errors import ClientError, ServerError
 
-from micro_x_agent_loop.providers.gemini_provider import GeminiProvider, _is_retryable_gemini_error
+from micro_x_agent_loop.providers.gemini_provider import GeminiProvider, is_retryable_gemini_error
 
 
 def _err(cls: type[Exception], code: int) -> Exception:
@@ -22,19 +22,19 @@ def _err(cls: type[Exception], code: int) -> Exception:
 
 class PredicateTests(unittest.TestCase):
     def test_rate_limit_is_retryable(self) -> None:
-        self.assertTrue(_is_retryable_gemini_error(_err(ClientError, 429)))
+        self.assertTrue(is_retryable_gemini_error(_err(ClientError, 429)))
 
     def test_server_error_is_retryable(self) -> None:
-        self.assertTrue(_is_retryable_gemini_error(_err(ServerError, 500)))
-        self.assertTrue(_is_retryable_gemini_error(_err(ServerError, 503)))
+        self.assertTrue(is_retryable_gemini_error(_err(ServerError, 500)))
+        self.assertTrue(is_retryable_gemini_error(_err(ServerError, 503)))
 
     def test_other_client_errors_not_retryable(self) -> None:
-        self.assertFalse(_is_retryable_gemini_error(_err(ClientError, 400)))
-        self.assertFalse(_is_retryable_gemini_error(_err(ClientError, 403)))
-        self.assertFalse(_is_retryable_gemini_error(_err(ClientError, 404)))
+        self.assertFalse(is_retryable_gemini_error(_err(ClientError, 400)))
+        self.assertFalse(is_retryable_gemini_error(_err(ClientError, 403)))
+        self.assertFalse(is_retryable_gemini_error(_err(ClientError, 404)))
 
     def test_non_api_errors_not_retryable(self) -> None:
-        self.assertFalse(_is_retryable_gemini_error(ValueError("boom")))
+        self.assertFalse(is_retryable_gemini_error(ValueError("boom")))
 
 
 def _make_provider() -> GeminiProvider:

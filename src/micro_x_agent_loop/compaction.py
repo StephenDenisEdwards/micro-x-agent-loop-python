@@ -186,7 +186,7 @@ def estimate_tokens(messages: list[dict]) -> int:
     return total
 
 
-def _format_for_summarization(messages: list[dict]) -> str:
+def format_for_summarization(messages: list[dict]) -> str:
     parts = []
     for msg in messages:
         role = msg.get("role", "unknown")
@@ -262,7 +262,7 @@ async def _summarize(
     model: str,
     messages: list[dict],
 ) -> tuple[str, UsageResult]:
-    formatted = _format_for_summarization(messages)
+    formatted = format_for_summarization(messages)
 
     # Cap summarization input
     if len(formatted) > COMPACTION_SUMMARIZE_INPUT_CAP:

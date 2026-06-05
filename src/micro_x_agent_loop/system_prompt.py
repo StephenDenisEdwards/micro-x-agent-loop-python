@@ -96,7 +96,7 @@ Do NOT use `ask_user` for routine confirmations or questions you can answer from
 """
 
 
-_SUBAGENT_DIRECTIVE = """\
+SUBAGENT_DIRECTIVE = """\
 
 
 # Sub-Agent Delegation — IMPORTANT

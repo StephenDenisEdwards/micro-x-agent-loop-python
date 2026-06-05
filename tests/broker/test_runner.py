@@ -6,7 +6,7 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from micro_x_agent_loop.broker.runner import RunResult, _truncate_output, run_agent
+from micro_x_agent_loop.broker.runner import RunResult, run_agent, truncate_output
 
 
 class RunResultTests(unittest.TestCase):
@@ -44,18 +44,18 @@ class RunResultTests(unittest.TestCase):
 class TruncateOutputTests(unittest.TestCase):
     def test_short_output_unchanged(self) -> None:
         data = b"hello world"
-        result = _truncate_output(data, "stdout")
+        result = truncate_output(data, "stdout")
         self.assertEqual("hello world", result)
 
     def test_large_output_truncated(self) -> None:
         limit = 10 * 1024 * 1024  # 10 MB
         data = b"x" * (limit + 1000)
-        result = _truncate_output(data, "stdout")
+        result = truncate_output(data, "stdout")
         self.assertEqual(limit, len(result))
 
     def test_handles_invalid_utf8(self) -> None:
         data = b"\xff\xfe" + b"hello"
-        result = _truncate_output(data, "stdout")
+        result = truncate_output(data, "stdout")
         self.assertIsInstance(result, str)
 
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -12,9 +11,9 @@ from micro_x_agent_loop.llm_client import Spinner, print_through_spinner
 
 class SpinnerTests(unittest.TestCase):
     def test_start_and_stop(self) -> None:
+        # Just verifies start/stop are idempotent — no wall-clock wait needed.
         spinner = Spinner(prefix="", label=" Thinking...")
         spinner.start()
-        time.sleep(0.05)
         spinner.stop()
 
     def test_stop_idempotent(self) -> None:
@@ -67,7 +66,7 @@ class PrintThroughSpinnerTests(unittest.TestCase):
 
 class OnRetryTests(unittest.TestCase):
     def test_on_retry_logs_warning(self) -> None:
-        from micro_x_agent_loop.llm_client import _on_retry
+        from micro_x_agent_loop.llm_client import on_retry
 
         retry_state = MagicMock()
         retry_state.attempt_number = 2
@@ -79,7 +78,7 @@ class OnRetryTests(unittest.TestCase):
         retry_state.outcome = outcome
 
         # Should not raise
-        _on_retry(retry_state)
+        on_retry(retry_state)
 
 
 if __name__ == "__main__":

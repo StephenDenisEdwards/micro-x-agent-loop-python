@@ -319,7 +319,7 @@ class ParseJsonObjectTests(unittest.TestCase):
             tool_map={},
             on_utterance=AsyncMock(),
         )
-        return runtime._parse_json_object(raw)
+        return runtime.parse_json_object(raw)
 
     def test_plain_json(self) -> None:
         self.assertEqual({"a": 1}, self._parse('{"a": 1}'))

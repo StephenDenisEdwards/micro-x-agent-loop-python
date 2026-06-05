@@ -33,7 +33,7 @@ class RunResult:
         return "\n".join(lines[-5:]) if lines else "(no output)"
 
 
-def _truncate_output(data: bytes, label: str) -> str:
+def truncate_output(data: bytes, label: str) -> str:
     """Decode output bytes, truncating if over the size limit."""
     if len(data) > _MAX_OUTPUT_BYTES:
         logger.warning(f"Agent {label} truncated: {len(data):,} bytes > {_MAX_OUTPUT_BYTES:,} limit")
@@ -91,8 +91,8 @@ async def run_agent(
         )
         return RunResult(
             exit_code=process.returncode or 0,
-            stdout=_truncate_output(stdout_bytes, "stdout"),
-            stderr=_truncate_output(stderr_bytes, "stderr"),
+            stdout=truncate_output(stdout_bytes, "stdout"),
+            stderr=truncate_output(stderr_bytes, "stderr"),
         )
     except TimeoutError:
         logger.warning(f"Agent run timed out after {effective_timeout}s, killing process")

@@ -478,26 +478,26 @@ class TestSubAgentDirective(unittest.TestCase):
     """Tests for the sub-agent system prompt directive."""
 
     def test_directive_contains_delegation_guidance(self) -> None:
-        from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
+        from micro_x_agent_loop.system_prompt import SUBAGENT_DIRECTIVE
 
-        self.assertIn("DELEGATE", _SUBAGENT_DIRECTIVE)
-        self.assertIn("spawn_subagent", _SUBAGENT_DIRECTIVE)
-        self.assertIn("explore", _SUBAGENT_DIRECTIVE)
-        self.assertIn("summarize", _SUBAGENT_DIRECTIVE)
-        self.assertIn("general", _SUBAGENT_DIRECTIVE)
+        self.assertIn("DELEGATE", SUBAGENT_DIRECTIVE)
+        self.assertIn("spawn_subagent", SUBAGENT_DIRECTIVE)
+        self.assertIn("explore", SUBAGENT_DIRECTIVE)
+        self.assertIn("summarize", SUBAGENT_DIRECTIVE)
+        self.assertIn("general", SUBAGENT_DIRECTIVE)
 
     def test_directive_contains_examples(self) -> None:
-        from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
+        from micro_x_agent_loop.system_prompt import SUBAGENT_DIRECTIVE
 
-        self.assertIn("Examples", _SUBAGENT_DIRECTIVE)
-        self.assertIn("Good delegation", _SUBAGENT_DIRECTIVE)
-        self.assertIn("Not worth delegating", _SUBAGENT_DIRECTIVE)
+        self.assertIn("Examples", SUBAGENT_DIRECTIVE)
+        self.assertIn("Good delegation", SUBAGENT_DIRECTIVE)
+        self.assertIn("Not worth delegating", SUBAGENT_DIRECTIVE)
 
     def test_directive_contains_cost_motivation(self) -> None:
-        from micro_x_agent_loop.system_prompt import _SUBAGENT_DIRECTIVE
+        from micro_x_agent_loop.system_prompt import SUBAGENT_DIRECTIVE
 
-        self.assertIn("cost", _SUBAGENT_DIRECTIVE.lower())
-        self.assertIn("context", _SUBAGENT_DIRECTIVE.lower())
+        self.assertIn("cost", SUBAGENT_DIRECTIVE.lower())
+        self.assertIn("context", SUBAGENT_DIRECTIVE.lower())
 
 
 if __name__ == "__main__":

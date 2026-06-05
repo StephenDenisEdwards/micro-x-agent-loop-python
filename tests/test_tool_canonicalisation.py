@@ -5,27 +5,27 @@ from __future__ import annotations
 import json
 import unittest
 
-from micro_x_agent_loop.tool import _sort_schema, canonicalise_tools
+from micro_x_agent_loop.tool import canonicalise_tools, sort_schema
 from tests.fakes import FakeTool
 
 
 class TestSortSchema(unittest.TestCase):
     def test_sorts_dict_keys(self) -> None:
-        self.assertEqual({"a": 1, "b": 2, "z": 3}, _sort_schema({"z": 3, "a": 1, "b": 2}))
+        self.assertEqual({"a": 1, "b": 2, "z": 3}, sort_schema({"z": 3, "a": 1, "b": 2}))
 
     def test_nested_dicts(self) -> None:
-        result = _sort_schema({"z": {"b": 2, "a": 1}, "a": 0})
+        result = sort_schema({"z": {"b": 2, "a": 1}, "a": 0})
         self.assertEqual({"a": 0, "z": {"a": 1, "b": 2}}, result)
 
     def test_list_preserved(self) -> None:
-        result = _sort_schema([{"b": 1, "a": 2}, {"d": 3, "c": 4}])
+        result = sort_schema([{"b": 1, "a": 2}, {"d": 3, "c": 4}])
         self.assertEqual([{"a": 2, "b": 1}, {"c": 4, "d": 3}], result)
 
     def test_primitives_unchanged(self) -> None:
-        self.assertEqual(42, _sort_schema(42))
-        self.assertEqual("hello", _sort_schema("hello"))
-        self.assertTrue(_sort_schema(True))
-        self.assertIsNone(_sort_schema(None))
+        self.assertEqual(42, sort_schema(42))
+        self.assertEqual("hello", sort_schema("hello"))
+        self.assertTrue(sort_schema(True))
+        self.assertIsNone(sort_schema(None))
 
     def test_complex_schema(self) -> None:
         schema = {
@@ -36,7 +36,7 @@ class TestSortSchema(unittest.TestCase):
             },
             "required": ["path", "content"],
         }
-        result = _sort_schema(schema)
+        result = sort_schema(schema)
         keys = list(result.keys())
         self.assertEqual(sorted(keys), keys)
         prop_keys = list(result["properties"].keys())

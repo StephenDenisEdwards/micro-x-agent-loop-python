@@ -814,6 +814,20 @@ class Agent:
     def session_accumulator(self) -> SessionAccumulator:
         return self._session_accumulator
 
+    @property
+    def history(self) -> list[dict]:
+        """The current in-memory conversation messages list.
+
+        Public accessor for integration tests and external observers.
+        Returns a live reference; do not mutate from outside the agent.
+        """
+        return self._messages
+
+    @property
+    def turn_number(self) -> int:
+        """Number of completed turns in this session."""
+        return self._turn_number
+
     # -- Budget helpers --
 
     def _is_budget_exceeded(self) -> bool:

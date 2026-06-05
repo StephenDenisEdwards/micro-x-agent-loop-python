@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from micro_x_agent_loop.system_prompt import (
     _ASK_USER_DIRECTIVE,
-    _SUBAGENT_DIRECTIVE,
     _TOOL_SEARCH_DIRECTIVE,
+    SUBAGENT_DIRECTIVE,
 )
 
 
@@ -39,5 +39,5 @@ def build_system_prompt(
     if ask_user_enabled:
         prompt += _ASK_USER_DIRECTIVE
     if sub_agents_enabled:
-        prompt += _SUBAGENT_DIRECTIVE
+        prompt += SUBAGENT_DIRECTIVE
     return prompt

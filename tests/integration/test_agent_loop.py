@@ -38,16 +38,20 @@ def _build_agent(
     channel: BufferedChannel | None = None,
     max_agentic_iterations: int = DEFAULT_MAX_AGENTIC_ITERATIONS,
     autonomous: bool = True,
+    sub_agents_enabled: bool = False,
 ) -> Agent:
     """Build a real Agent with the LLM provider mocked.
 
     ``autonomous=True`` is the default so the run path doesn't try to
     prompt the user for mode analysis. ``channel`` defaults to a
     ``BufferedChannel`` so output is captured and ``ask_user`` returns
-    the standard timeout sentinel.
+    the standard timeout sentinel. ``sub_agents_enabled=True`` wires
+    a ``SubAgentRunner`` (using the same provider patch) via a routing
+    policy that requests the compact system prompt — that's the only
+    code path in ``agent_builder`` that constructs the runner today.
     """
     channel = channel or BufferedChannel()
-    config = AgentConfig(
+    config_kwargs: dict = dict(
         api_key="test-key",
         provider="anthropic",
         model="test-model",
@@ -58,6 +62,14 @@ def _build_agent(
         metrics_enabled=True,
         max_agentic_iterations=max_agentic_iterations,
     )
+    if sub_agents_enabled:
+        config_kwargs.update(
+            sub_agents_enabled=True,
+            sub_agent_provider="anthropic",
+            sub_agent_model="test-subagent-model",
+            routing_policies={"trivial": {"system_prompt": "compact"}},
+        )
+    config = AgentConfig(**config_kwargs)
     with patch(
         "micro_x_agent_loop.agent_builder.create_provider",
         return_value=provider,
@@ -82,12 +94,12 @@ class SingleTurnTextOnlyTests(unittest.IsolatedAsyncioTestCase):
         # Channel text is only populated via emit_text_delta, which
         # FakeStreamProvider does not emit, but the assistant message
         # was still appended to the in-memory history.
-        history = agent._messages
+        history = agent.history
         self.assertEqual("user", history[0]["role"])
         self.assertEqual("hi", history[0]["content"])
         self.assertEqual("assistant", history[1]["role"])
         # One turn fully completed.
-        self.assertEqual(1, agent._turn_number)
+        self.assertEqual(1, agent.turn_number)
 
 
 class MultiTurnToolCallTests(unittest.IsolatedAsyncioTestCase):
@@ -116,7 +128,7 @@ class MultiTurnToolCallTests(unittest.IsolatedAsyncioTestCase):
         # Two API calls in the same turn.
         self.assertEqual(2, len(provider.stream_calls))
         # History layout: user, assistant(tool_use), user(tool_result), assistant(final)
-        history = agent._messages
+        history = agent.history
         self.assertEqual("user", history[0]["role"])
         self.assertEqual("assistant", history[1]["role"])
         self.assertEqual("user", history[2]["role"])
@@ -155,7 +167,7 @@ class MultipleToolsInOneResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(1, tool_a.execute_calls)
         self.assertEqual(1, tool_b.execute_calls)
         # Tool results appended to history with correct ordering.
-        results = agent._messages[2]["content"]
+        results = agent.history[2]["content"]
         self.assertEqual(2, len(results))
         self.assertEqual("ta", results[0]["tool_use_id"])
         self.assertEqual("tb", results[1]["tool_use_id"])
@@ -185,7 +197,7 @@ class AskUserPseudoToolTests(unittest.IsolatedAsyncioTestCase):
 
         # The tool_map was never touched (no tools registered).
         # The ask_user result lands as a tool_result with the channel's answer.
-        results = agent._messages[2]["content"]
+        results = agent.history[2]["content"]
         self.assertEqual(1, len(results))
         self.assertEqual("au1", results[0]["tool_use_id"])
         parsed = json.loads(results[0]["content"])
@@ -217,7 +229,7 @@ class IterationCapTests(unittest.IsolatedAsyncioTestCase):
         await agent.run("loop forever")
 
         # The cap signal must be set on the accumulator.
-        self.assertTrue(agent._session_accumulator.turn_cap_reached)
+        self.assertTrue(agent.session_accumulator.turn_cap_reached)
 
 
 class ToolErrorPropagationTests(unittest.IsolatedAsyncioTestCase):
@@ -245,11 +257,66 @@ class ToolErrorPropagationTests(unittest.IsolatedAsyncioTestCase):
         # Tool was attempted.
         self.assertEqual(1, tool.execute_calls)
         # The tool_result block carries is_error: True
-        results = agent._messages[2]["content"]
+        results = agent.history[2]["content"]
         self.assertEqual(1, len(results))
         self.assertTrue(results[0].get("is_error"))
         # The final assistant message is still present.
-        self.assertEqual("assistant", agent._messages[3]["role"])
+        self.assertEqual("assistant", agent.history[3]["role"])
+
+
+class SpawnSubagentPseudoToolTests(unittest.IsolatedAsyncioTestCase):
+    """spawn_subagent results are appended as tool_result and the loop continues."""
+
+    async def test_subagent_result_appended_and_loop_continues(self) -> None:
+        from micro_x_agent_loop.sub_agent import SubAgentResult
+        from micro_x_agent_loop.usage import UsageResult as _U
+
+        provider = FakeStreamProvider()
+        # Turn 1 (iter 0): assistant spawns a sub-agent.
+        provider.responses.append(
+            (
+                {"role": "assistant", "content": [{"type": "text", "text": "Delegating."}]},
+                [
+                    {
+                        "name": "spawn_subagent",
+                        "id": "sa1",
+                        "input": {"type": "explore", "task": "find the config"},
+                    },
+                ],
+                "tool_use",
+                _U(input_tokens=10, output_tokens=5, model="m"),
+            )
+        )
+        # Turn 1 (iter 1): assistant produces the final reply.
+        provider.queue(text="Got it.", stop_reason="end_turn")
+
+        canned = SubAgentResult(
+            text="Sub-agent reports: config is at configs/config-base.json",
+            usage=[_U(input_tokens=20, output_tokens=10, model="sub-m")],
+            turns=2,
+            timed_out=False,
+        )
+
+        # Patch the runner's run method so no real sub-agent loop spins up.
+        # The patch lives on the class, so any instance the agent builds picks it up.
+        with patch(
+            "micro_x_agent_loop.sub_agent.SubAgentRunner.run",
+            return_value=canned,
+        ):
+            agent = _build_agent(provider, sub_agents_enabled=True)
+            await agent.run("look it up")
+
+        # The sub-agent's text landed as a tool_result block.
+        results = agent.history[2]["content"]
+        self.assertEqual(1, len(results))
+        self.assertEqual("sa1", results[0]["tool_use_id"])
+        self.assertIn("configs/config-base.json", results[0]["content"])
+        # The agent continued to a final assistant message.
+        self.assertEqual("assistant", agent.history[3]["role"])
+        # Sub-agent usage was aggregated into the parent accumulator.
+        # (1 main call before spawn, 1 main call after, + the spawn itself
+        # records a per-iteration api_call event in the accumulator.)
+        self.assertGreaterEqual(agent.session_accumulator.total_api_calls, 2)
 
 
 if __name__ == "__main__":

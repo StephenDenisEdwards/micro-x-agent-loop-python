@@ -30,12 +30,12 @@ class Tool(Protocol):
     async def execute(self, tool_input: dict[str, Any]) -> ToolResult: ...
 
 
-def _sort_schema(value: Any) -> Any:
+def sort_schema(value: Any) -> Any:
     """Recursively sort dict keys and preserve list order for deterministic serialisation."""
     if isinstance(value, dict):
-        return {k: _sort_schema(v) for k, v in sorted(value.items())}
+        return {k: sort_schema(v) for k, v in sorted(value.items())}
     if isinstance(value, list):
-        return [_sort_schema(item) for item in value]
+        return [sort_schema(item) for item in value]
     return value
 
 
@@ -61,7 +61,7 @@ def canonicalise_tools(tools: list[Tool]) -> list[dict]:
         {
             "name": t.name,
             "description": t.description,
-            "input_schema": _sort_schema(t.input_schema),
+            "input_schema": sort_schema(t.input_schema),
         }
         for t in sorted(tools, key=lambda t: t.name)
     ]

@@ -28,7 +28,7 @@ class PollingVoiceIngress:
 
         while True:
             result = await tool.execute({"session_id": session_id, "since_seq": last_seq, "limit": 100})
-            payload = _parse_json_object(result.text)
+            payload = parse_json_object(result.text)
             events = payload.get("events", []) or []
             for event in events:
                 seq = int(event.get("seq", 0))
@@ -38,7 +38,7 @@ class PollingVoiceIngress:
             await asyncio.sleep(self._poll_interval_seconds)
 
 
-def _parse_json_object(raw: str) -> dict[str, Any]:
+def parse_json_object(raw: str) -> dict[str, Any]:
     import json
 
     text = raw.strip()

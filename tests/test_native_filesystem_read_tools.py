@@ -169,8 +169,13 @@ class GlobTests(unittest.IsolatedAsyncioTestCase):
         old = Path(self.root) / "old.ts"
         new = Path(self.root) / "new.ts"
         old.write_text("a", encoding="utf-8")
-        time.sleep(0.02)
         new.write_text("b", encoding="utf-8")
+        # Force an explicit mtime delta instead of a wall-clock sleep so the
+        # test is deterministic on every filesystem (some have 1s mtime
+        # resolution and a 20ms sleep wouldn't suffice anyway).
+        now = time.time()
+        os.utime(old, (now - 10, now - 10))
+        os.utime(new, (now, now))
         os.makedirs(os.path.join(self.root, "sub.ts"))  # dir must be excluded
         r = await self.tool.execute({"pattern": "**/*.ts"})
         lines = r.text.splitlines()

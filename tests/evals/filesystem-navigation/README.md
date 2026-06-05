@@ -61,7 +61,7 @@ The path matches whatever `JsonlSinks` entry in your `config-base.json` (or over
 ```sh
 python tests/evals/filesystem-navigation/run.py \
     --metrics-path /path/to/metrics.jsonl \
-    --config configs/eval-haiku.json \
+    --config configs/evals/config-eval-haiku.json \
     --retries 2 \
     --output eval-results-2026-05-09.json
 ```
@@ -104,6 +104,6 @@ If the eval shows the model still inlines greps for vague questions or reaches f
 1. Tighten the relevant section of `_FS_NAVIGATION_DIRECTIVE` in `src/micro_x_agent_loop/system_prompt.py`.
 2. Tighten the affected tool's description in `mcp_servers/ts/packages/filesystem/src/tools/<tool>.ts` (the descriptions are the model's primary signal — directives reinforce, descriptions decide).
 3. Re-run the eval.
-4. If the vague-prompts category specifically is failing, check the `explore` sub-agent's description and the `_SUBAGENT_DIRECTIVE` in `system_prompt.py`.
+4. If the vague-prompts category specifically is failing, check the `explore` sub-agent's description and the `SUBAGENT_DIRECTIVE` in `system_prompt.py`.
 
 Each tuning round is fast (~minutes) and the eval gives a fast yes/no answer.

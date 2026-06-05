@@ -5,42 +5,42 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from micro_x_agent_loop.voice_ingress import PollingVoiceIngress, _parse_json_object
+from micro_x_agent_loop.voice_ingress import PollingVoiceIngress, parse_json_object
 
 
 class ParseJsonObjectTests(unittest.TestCase):
     def test_plain_json(self) -> None:
-        result = _parse_json_object('{"events": []}')
+        result = parse_json_object('{"events": []}')
         self.assertEqual({"events": []}, result)
 
     def test_json_in_markdown_block(self) -> None:
         raw = '```json\n{"events": [{"seq": 1}]}\n```'
-        result = _parse_json_object(raw)
+        result = parse_json_object(raw)
         self.assertEqual([{"seq": 1}], result["events"])
 
     def test_json_embedded_in_text(self) -> None:
         raw = 'Some text before {"events": []} and after'
-        result = _parse_json_object(raw)
+        result = parse_json_object(raw)
         self.assertEqual({"events": []}, result)
 
     def test_invalid_raises_value_error(self) -> None:
         with self.assertRaises(ValueError):
-            _parse_json_object("not json at all")
+            parse_json_object("not json at all")
 
     def test_whitespace_stripped(self) -> None:
-        result = _parse_json_object('  {"key": "val"}  ')
+        result = parse_json_object('  {"key": "val"}  ')
         self.assertEqual({"key": "val"}, result)
 
     def test_markdown_block_no_language(self) -> None:
         raw = '```\n{"x": 1}\n```'
-        result = _parse_json_object(raw)
+        result = parse_json_object(raw)
         self.assertEqual({"x": 1}, result)
 
     def test_non_dict_json_falls_through_to_extract(self) -> None:
         # Array at top level -> not a dict -> falls through to brace extraction
         # Since there's no { ... } pair for a dict, this should raise
         with self.assertRaises((ValueError, Exception)):
-            _parse_json_object("[1, 2, 3]")
+            parse_json_object("[1, 2, 3]")
 
 
 class PollingVoiceIngressTests(unittest.IsolatedAsyncioTestCase):

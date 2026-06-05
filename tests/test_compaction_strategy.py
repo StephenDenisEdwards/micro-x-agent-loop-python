@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from micro_x_agent_loop.compaction import NoneCompactionStrategy, SummarizeCompactionStrategy, _format_for_summarization
+from micro_x_agent_loop.compaction import NoneCompactionStrategy, SummarizeCompactionStrategy, format_for_summarization
 from micro_x_agent_loop.usage import UsageResult
 from tests.fakes import FakeProvider
 
@@ -19,7 +19,7 @@ class CompactionStrategyTests(unittest.IsolatedAsyncioTestCase):
                 ],
             },
         ]
-        formatted = _format_for_summarization(messages)
+        formatted = format_for_summarization(messages)
         self.assertIn("[user]: hello", formatted)
         self.assertIn("[Tool call: read_file", formatted)
         self.assertIn("[Tool result (1)]:", formatted)

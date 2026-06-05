@@ -214,7 +214,9 @@ class TestWebSocketPing(unittest.TestCase):
         fake = FakeAgent()
 
         async def slow_run(text: str, channel: Any) -> None:
-            await asyncio.sleep(2.0)
+            # Short enough to keep the test fast; long enough that the ping
+            # below arrives mid-turn (the test sleeps 0.05s before pinging).
+            await asyncio.sleep(0.5)
             channel.emit_text_delta("Done")
 
         fake.run_fn = slow_run
@@ -226,7 +228,8 @@ class TestWebSocketPing(unittest.TestCase):
 
                 import time
 
-                time.sleep(0.1)
+                # Give the server a moment to start the turn before pinging.
+                time.sleep(0.05)
 
                 ws.send_json({"type": "ping"})
                 data = ws.receive_json(mode="text")

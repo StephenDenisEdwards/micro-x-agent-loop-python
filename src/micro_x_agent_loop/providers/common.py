@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from tenacity import retry_if_exception, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from micro_x_agent_loop.llm_client import _on_retry
+from micro_x_agent_loop.llm_client import on_retry
 
 
 def default_retry_kwargs(exception_types: tuple[type[Exception], ...]) -> dict:
@@ -12,7 +12,7 @@ def default_retry_kwargs(exception_types: tuple[type[Exception], ...]) -> dict:
         "retry": retry_if_exception_type(exception_types),
         "wait": wait_exponential(multiplier=10, min=10, max=320),
         "stop": stop_after_attempt(5),
-        "before_sleep": _on_retry,
+        "before_sleep": on_retry,
         "reraise": True,
     }
 
@@ -29,6 +29,6 @@ def predicate_retry_kwargs(predicate: Callable[[BaseException], bool]) -> dict:
         "retry": retry_if_exception(predicate),
         "wait": wait_exponential(multiplier=10, min=10, max=320),
         "stop": stop_after_attempt(5),
-        "before_sleep": _on_retry,
+        "before_sleep": on_retry,
         "reraise": True,
     }

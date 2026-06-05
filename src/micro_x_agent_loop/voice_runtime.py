@@ -255,9 +255,9 @@ class VoiceRuntime:
         if tool is None:
             raise ValueError(f"Tool not found: {tool_name}")
         result = await tool.execute(tool_input)
-        return self._parse_json_object(result.text)
+        return self.parse_json_object(result.text)
 
-    def _parse_json_object(self, raw: str) -> dict[str, Any]:
+    def parse_json_object(self, raw: str) -> dict[str, Any]:
         text = raw.strip()
         if text.startswith("```"):
             lines = text.splitlines()

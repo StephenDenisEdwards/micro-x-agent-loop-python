@@ -3,10 +3,10 @@ import unittest
 
 from micro_x_agent_loop.compaction import (
     _adjust_boundary,
-    _format_for_summarization,
     _preview_text,
     _rebuild_messages,
     estimate_tokens,
+    format_for_summarization,
 )
 from micro_x_agent_loop.llm_client import Spinner
 from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
@@ -93,7 +93,7 @@ class EstimateTokensExtraTests(unittest.TestCase):
 
 class FormatForSummarizationTests(unittest.TestCase):
     def test_text_message(self) -> None:
-        result = _format_for_summarization(
+        result = format_for_summarization(
             [
                 {"role": "user", "content": "hello"},
                 {"role": "assistant", "content": "world"},
@@ -103,25 +103,25 @@ class FormatForSummarizationTests(unittest.TestCase):
         self.assertIn("[assistant]: world", result)
 
     def test_tool_use_block(self) -> None:
-        result = _format_for_summarization(
+        result = format_for_summarization(
             [{"role": "assistant", "content": [{"type": "tool_use", "name": "search", "input": {"q": "foo"}}]}]
         )
         self.assertIn("Tool call: search", result)
 
     def test_tool_use_long_input_truncated(self) -> None:
-        result = _format_for_summarization(
+        result = format_for_summarization(
             [{"role": "assistant", "content": [{"type": "tool_use", "name": "x", "input": {"data": "x" * 300}}]}]
         )
         self.assertIn("...", result)
 
     def test_tool_result_string_content(self) -> None:
-        result = _format_for_summarization(
+        result = format_for_summarization(
             [{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "result"}]}]
         )
         self.assertIn("Tool result", result)
 
     def test_tool_result_list_content(self) -> None:
-        result = _format_for_summarization(
+        result = format_for_summarization(
             [
                 {
                     "role": "user",
@@ -138,7 +138,7 @@ class FormatForSummarizationTests(unittest.TestCase):
         self.assertIn("partial result", result)
 
     def test_tool_result_other_content(self) -> None:
-        result = _format_for_summarization(
+        result = format_for_summarization(
             [{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": 42}]}]
         )
         self.assertIn("Tool result", result)

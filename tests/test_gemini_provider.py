@@ -28,7 +28,7 @@ _mock_types.Tool = lambda function_declarations: MagicMock(function_declarations
 
 class BuildToolUseIdMapTests(unittest.TestCase):
     def test_extracts_tool_use_ids(self) -> None:
-        from micro_x_agent_loop.providers.gemini_provider import _build_tool_use_id_map
+        from micro_x_agent_loop.providers.gemini_provider import build_tool_use_id_map
 
         messages = [
             {"role": "user", "content": "hello"},
@@ -47,25 +47,25 @@ class BuildToolUseIdMapTests(unittest.TestCase):
                 ],
             },
         ]
-        id_map = _build_tool_use_id_map(messages)
+        id_map = build_tool_use_id_map(messages)
         self.assertEqual({"tu_1": "web_search", "tu_2": "read_file"}, id_map)
 
     def test_empty_messages(self) -> None:
-        from micro_x_agent_loop.providers.gemini_provider import _build_tool_use_id_map
+        from micro_x_agent_loop.providers.gemini_provider import build_tool_use_id_map
 
-        self.assertEqual({}, _build_tool_use_id_map([]))
+        self.assertEqual({}, build_tool_use_id_map([]))
 
     def test_no_assistant_messages(self) -> None:
-        from micro_x_agent_loop.providers.gemini_provider import _build_tool_use_id_map
+        from micro_x_agent_loop.providers.gemini_provider import build_tool_use_id_map
 
         messages = [{"role": "user", "content": "hello"}]
-        self.assertEqual({}, _build_tool_use_id_map(messages))
+        self.assertEqual({}, build_tool_use_id_map(messages))
 
     def test_string_content_skipped(self) -> None:
-        from micro_x_agent_loop.providers.gemini_provider import _build_tool_use_id_map
+        from micro_x_agent_loop.providers.gemini_provider import build_tool_use_id_map
 
         messages = [{"role": "assistant", "content": "just text"}]
-        self.assertEqual({}, _build_tool_use_id_map(messages))
+        self.assertEqual({}, build_tool_use_id_map(messages))
 
 
 class ToGeminiContentsTests(unittest.TestCase):
@@ -78,7 +78,7 @@ class ToGeminiContentsTests(unittest.TestCase):
 
         importlib.reload(gemini_provider)
 
-        with patch.object(gemini_provider, "_build_tool_use_id_map", return_value={}):
+        with patch.object(gemini_provider, "build_tool_use_id_map", return_value={}):
             with patch("google.genai.types", _mock_types):
                 messages = [{"role": "user", "content": "hello"}]
                 result = gemini_provider._to_gemini_contents(messages)
@@ -92,7 +92,7 @@ class ToGeminiContentsTests(unittest.TestCase):
 
         importlib.reload(gemini_provider)
 
-        with patch.object(gemini_provider, "_build_tool_use_id_map", return_value={}):
+        with patch.object(gemini_provider, "build_tool_use_id_map", return_value={}):
             with patch("google.genai.types", _mock_types):
                 messages = [
                     {

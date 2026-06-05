@@ -353,11 +353,9 @@ class SpinnerTests(unittest.TestCase):
     def test_start_stop(self) -> None:
         from micro_x_agent_loop.terminal_renderer import PlainSpinner as _Spinner
 
+        # Spinner threading idempotency — no wall-clock wait needed.
         spinner = _Spinner(prefix="", label=" Thinking...")
         spinner.start()
-        import time
-
-        time.sleep(0.05)
         spinner.stop()
 
     def test_stop_idempotent(self) -> None:

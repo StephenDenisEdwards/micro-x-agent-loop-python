@@ -54,7 +54,7 @@ def estimate_tool_schema_tokens(converted_tools: list[dict]) -> int:
     return total
 
 
-def _get_context_window(model: str) -> int:
+def get_context_window(model: str) -> int:
     for prefix, window in TOOL_SEARCH_CONTEXT_WINDOWS.items():
         if model.startswith(prefix):
             return window
@@ -105,7 +105,7 @@ def should_activate_tool_search(
         threshold_percent = int(match.group(1))
 
     tool_tokens = estimate_tool_schema_tokens(converted_tools)
-    context_window = _get_context_window(model)
+    context_window = get_context_window(model)
     threshold_tokens = int(context_window * threshold_percent / 100)
 
     active = tool_tokens > threshold_tokens

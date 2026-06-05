@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 _RATE_LIMIT_STATUS = 429
 
 
-def _is_retryable_gemini_error(exc: BaseException) -> bool:
+def is_retryable_gemini_error(exc: BaseException) -> bool:
     """Retry transient Gemini failures only.
 
     Gemini collapses 429 (rate limit / quota), 400 (bad request) and 404 (model
@@ -45,7 +45,7 @@ _STOP_REASON_MAP = {
 }
 
 
-def _build_tool_use_id_map(messages: list[dict]) -> dict[str, str]:
+def build_tool_use_id_map(messages: list[dict]) -> dict[str, str]:
     """Return a mapping of tool_use_id → tool_name from all assistant messages."""
     id_to_name: dict[str, str] = {}
     for msg in messages:
@@ -64,7 +64,7 @@ def _to_gemini_contents(messages: list[dict]) -> list[Any]:
     """Convert internal (Anthropic-style) messages to Gemini Content objects."""
     from google.genai import types
 
-    id_to_name = _build_tool_use_id_map(messages)
+    id_to_name = build_tool_use_id_map(messages)
     contents: list[Any] = []
 
     for msg in messages:
@@ -252,7 +252,7 @@ class GeminiProvider:
     def convert_tools(self, tools: list[Tool]) -> list[dict]:
         return canonicalise_tools(tools)
 
-    @retry(**predicate_retry_kwargs(_is_retryable_gemini_error))
+    @retry(**predicate_retry_kwargs(is_retryable_gemini_error))
     async def stream_chat(
         self,
         model: str,
@@ -375,7 +375,7 @@ class GeminiProvider:
 
         return message, tool_use_blocks, stop_reason, usage_result
 
-    @retry(**predicate_retry_kwargs(_is_retryable_gemini_error))
+    @retry(**predicate_retry_kwargs(is_retryable_gemini_error))
     async def create_message(
         self,
         model: str,

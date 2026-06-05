@@ -7,7 +7,12 @@ import os
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from micro_x_agent_loop.broker.dispatcher import RunDispatcher
+    from micro_x_agent_loop.broker.scheduler import Scheduler
+    from micro_x_agent_loop.broker.store import BrokerStore
 
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -192,11 +197,15 @@ def create_app(
 
         # -- Shutdown --
 
-        # Stop broker components
+        # Stop broker components. The startup block above stored the
+        # scheduler/dispatcher/store in `_state` so the shutdown can find
+        # them even though the local names were reassigned in this
+        # function; re-read with explicit narrowed types so mypy doesn't
+        # need the ignores.
         if broker_enabled:
-            scheduler = _state.get("broker_scheduler")  # type: ignore[assignment]
-            if scheduler:
-                scheduler.stop()
+            sched: Scheduler | None = _state.get("broker_scheduler")
+            if sched:
+                sched.stop()
             for ingress in polling_ingresses:
                 ingress.stop()
 
@@ -208,13 +217,13 @@ def create_app(
                 except asyncio.CancelledError:
                     pass
 
-            dispatcher = _state.get("broker_dispatcher")  # type: ignore[assignment]
-            if dispatcher:
-                await dispatcher.wait_for_all()
+            disp: RunDispatcher | None = _state.get("broker_dispatcher")
+            if disp:
+                await disp.wait_for_all()
 
-            broker_store = _state.get("broker_store")  # type: ignore[assignment]
-            if broker_store:
-                broker_store.close()
+            store: BrokerStore | None = _state.get("broker_store")
+            if store:
+                store.close()
 
         await agent_manager.shutdown_all()
         if mcp_manager:

@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -30,12 +30,20 @@ from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
 from micro_x_agent_loop.tool_search import ToolSearchManager, should_activate_tool_search
 
+if TYPE_CHECKING:
+    from micro_x_agent_loop.agent_channel import AgentChannel
+    from micro_x_agent_loop.compaction import CompactionStrategy
+    from micro_x_agent_loop.provider import LLMCompactor, LLMProvider
+    from micro_x_agent_loop.provider_pool import ProviderPool
+    from micro_x_agent_loop.routing_feedback import RoutingFeedbackStore
+    from micro_x_agent_loop.turn_engine import RoutingFeedbackFn, SemanticClassifierFn
+
 
 @dataclass
 class AgentComponents:
     """All subsystems constructed by the builder, ready for Agent to consume."""
 
-    provider: Any
+    provider: LLMProvider
     model: str
     max_tokens: int
     temperature: float
@@ -45,7 +53,7 @@ class AgentComponents:
     tool_search_active: bool
     tool_search_manager: ToolSearchManager | None
     autonomous: bool
-    channel: Any
+    channel: AgentChannel | None
     line_prefix: str
     sub_agent_runner: SubAgentRunner | None
     task_manager: TaskManager | None
@@ -53,7 +61,7 @@ class AgentComponents:
     max_tool_result_chars: int
     max_conversation_messages: int
     max_agentic_iterations: int
-    compaction_strategy: Any
+    compaction_strategy: CompactionStrategy
     memory_enabled: bool
     memory: ActiveMemoryFacade | NullMemoryFacade
     user_memory_enabled: bool
@@ -64,25 +72,25 @@ class AgentComponents:
     mode_analysis_enabled: bool
     stage2_classification_enabled: bool
     stage2_model: str
-    stage2_provider: Any
+    stage2_provider: LLMCompactor | None
     working_directory: str | None
     tool_result_formatter: ToolResultFormatter
     api_payload_store: ApiPayloadStore
     semantic_routing_enabled: bool
-    routing_feedback_store: Any
+    routing_feedback_store: RoutingFeedbackStore | None
     task_embedding_index: TaskEmbeddingIndex | None
     # TurnEngine construction args (routing-related)
-    summarization_provider: Any
+    summarization_provider: LLMCompactor | None
     summarization_model: str
     summarization_enabled: bool
     summarization_threshold: int
     tool_result_overrides: dict[str, ToolResultOverride]
-    provider_pool: Any
-    semantic_classifier: Any
+    provider_pool: ProviderPool | None
+    semantic_classifier: SemanticClassifierFn | None
     routing_policies: dict
     routing_fallback_provider: str
     routing_fallback_model: str
-    routing_feedback_callback: Any
+    routing_feedback_callback: RoutingFeedbackFn | None
     routing_confidence_threshold: float
     markdown_rendering_enabled: bool = True
 

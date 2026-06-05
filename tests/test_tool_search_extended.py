@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 from micro_x_agent_loop.tool_search import (
     ToolSearchManager,
-    _get_context_window,
     estimate_tool_schema_tokens,
+    get_context_window,
 )
 from tests.fakes import FakeTool
 
@@ -28,11 +28,11 @@ def _convert_tools(tools: list[FakeTool]) -> list[dict]:
 
 class GetContextWindowTests(unittest.TestCase):
     def test_known_model(self) -> None:
-        window = _get_context_window("claude-sonnet-4-5")
+        window = get_context_window("claude-sonnet-4-5")
         self.assertGreater(window, 0)
 
     def test_unknown_model_returns_default(self) -> None:
-        window = _get_context_window("totally-unknown-model-xyz")
+        window = get_context_window("totally-unknown-model-xyz")
         self.assertGreater(window, 0)
 
 
