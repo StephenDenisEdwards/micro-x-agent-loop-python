@@ -55,9 +55,9 @@ class CliArgParsingTests(unittest.TestCase):
         original = sys.argv
         try:
             sys.argv = ["prog", "--run", "hello world"]
-            from micro_x_agent_loop.__main__ import _parse_cli_args
+            from micro_x_agent_loop.__main__ import parse_cli_args
 
-            args = _parse_cli_args()
+            args = parse_cli_args()
             self.assertEqual(args["run"], "hello world")
         finally:
             sys.argv = original
@@ -68,9 +68,9 @@ class CliArgParsingTests(unittest.TestCase):
         original = sys.argv
         try:
             sys.argv = ["prog", "--run", "hello", "--session", "abc123"]
-            from micro_x_agent_loop.__main__ import _parse_cli_args
+            from micro_x_agent_loop.__main__ import parse_cli_args
 
-            args = _parse_cli_args()
+            args = parse_cli_args()
             self.assertEqual(args["run"], "hello")
             self.assertEqual(args["session"], "abc123")
         finally:
@@ -82,9 +82,9 @@ class CliArgParsingTests(unittest.TestCase):
         original = sys.argv
         try:
             sys.argv = ["prog", "--broker", "start"]
-            from micro_x_agent_loop.__main__ import _parse_cli_args
+            from micro_x_agent_loop.__main__ import parse_cli_args
 
-            args = _parse_cli_args()
+            args = parse_cli_args()
             self.assertEqual(args["broker"], ["start"])
         finally:
             sys.argv = original
@@ -95,9 +95,9 @@ class CliArgParsingTests(unittest.TestCase):
         original = sys.argv
         try:
             sys.argv = ["prog", "--job", "add", "test", "* * * * *", "hello"]
-            from micro_x_agent_loop.__main__ import _parse_cli_args
+            from micro_x_agent_loop.__main__ import parse_cli_args
 
-            args = _parse_cli_args()
+            args = parse_cli_args()
             self.assertEqual(args["job"], ["add", "test", "* * * * *", "hello"])
         finally:
             sys.argv = original

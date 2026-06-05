@@ -35,9 +35,9 @@ class TestClientArgParsing(unittest.TestCase):
         original = sys.argv
         try:
             sys.argv = ["prog", "--server", "http://localhost:8321"]
-            from micro_x_agent_loop.__main__ import _parse_cli_args
+            from micro_x_agent_loop.__main__ import parse_cli_args
 
-            args = _parse_cli_args()
+            args = parse_cli_args()
             self.assertEqual(["http://localhost:8321"], args["server"])
         finally:
             sys.argv = original
@@ -49,9 +49,9 @@ class TestClientArgParsing(unittest.TestCase):
         original = sys.argv
         try:
             sys.argv = ["prog", "--session", "my-session", "--server", "http://localhost:8321"]
-            from micro_x_agent_loop.__main__ import _parse_cli_args
+            from micro_x_agent_loop.__main__ import parse_cli_args
 
-            args = _parse_cli_args()
+            args = parse_cli_args()
             self.assertEqual(["http://localhost:8321"], args["server"])
             self.assertEqual("my-session", args["session"])
         finally:

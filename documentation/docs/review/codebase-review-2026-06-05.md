@@ -280,12 +280,12 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 
 | ID | Item | Location | Status | Action taken |
 |---|---|---|---|---|
-| T4-1 | Promote `_resolve_api_key_id`, `_load_user_memory`, `_parse_cli_args` to public API or test through consumers | various | ❌ Gap | |
-| T4-2 | Remove dead `getattr(tool, "predict_touched_paths", None)` defensive read | `memory/facade.py:253` | ❌ Gap | |
-| T4-3 | Add `from __future__ import annotations` to 6 non-trivial files | `llm_client.py`, `system_prompt.py`, `constants.py`, `mcp/mcp_manager.py`, `mcp/mcp_tool_proxy.py`, `server/sdk.py` | ❌ Gap | |
-| T4-4 | Replace 15 `# type: ignore[no-untyped-def]` with real return annotations | `server/app.py`, `server/broker_routes.py` | ❌ Gap | |
-| T4-5 | Reconcile test placement — pick `tests/voice/` or top-level for voice tests | `tests/voice/`, top-level `test_voice_*.py` | ❌ Gap | |
-| T4-6 | Add coverage gate to CI to prevent regression below current 77% | n/a | ❌ Gap | |
+| T4-1 | Promote `_resolve_api_key_id`, `_load_user_memory`, `_parse_cli_args` to public API or test through consumers | various | ✅ Done | All three renamed (no leading underscore). Tests now import the public names — `resolve_api_key_id`, `load_user_memory`, `parse_cli_args`. |
+| T4-2 | Remove dead `getattr(tool, "predict_touched_paths", None)` defensive read | `memory/facade.py:253` | ✅ Done | Direct method call now that the Tool Protocol mandates the method on every implementation. |
+| T4-3 | Add `from __future__ import annotations` to 6 non-trivial files | `llm_client.py`, `system_prompt.py`, `constants.py`, `mcp/mcp_manager.py`, `mcp/mcp_tool_proxy.py`, `server/sdk.py` | ✅ Done | Added to the first 5; `server/sdk.py` already had it. |
+| T4-4 | Replace 15 `# type: ignore[no-untyped-def]` with real return annotations | `server/app.py`, `server/broker_routes.py` | ✅ Done | All 12 routes typed (`Response \| dict[str, Any]`); lifespan as `AsyncIterator[None]`; middleware as `Callable[[Request], Awaitable[Response]] -> Response`. Zero ignores left. |
+| T4-5 | Reconcile test placement — pick `tests/voice/` or top-level for voice tests | `tests/voice/`, top-level `test_voice_*.py` | ✅ Done | `tests/voice/test_voice_runtime.py` moved up to `tests/test_voice_runtime.py`; `tests/voice/` subdir removed. All 4 voice test files now at the top level. |
+| T4-6 | Add coverage gate to CI to prevent regression below current 77% | n/a | ✅ Done | New `coverage` job in `.github/workflows/python-tests.yml` runs `pytest --cov=micro_x_agent_loop --cov-fail-under=75 -q` on Python 3.11. Threshold set at 75% (slightly below the current 76% measured value) to absorb natural variance while still catching regressions. Raise the floor when coverage climbs further. |
 
 ---
 
@@ -309,7 +309,7 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 | Tier 1 (must-fix) | 9 | 0 | All done. Build green. |
 | Tier 2 (architecture) | 8 | 1 | T2-1, T2-2, T2-3, T2-4, T2-7, T2-8 fully done. T2-5 partial (unused subset dropped). T2-6 awaits user direction. |
 | Tier 3 (test quality) | 7 | 0 | All Tier 3 items done. |
-| Tier 4 (hygiene) | 6 | 6 | |
-| **Total** | **30** | **7** | |
+| Tier 4 (hygiene) | 6 | 0 | All Tier 4 items done. |
+| **Total** | **30** | **1** | Only T2-6 (config-file reorganisation) remains — awaits a user decision on target layout. |
 
 Remaining work is concentrated, fixable, and well within reach of the same discipline already on display elsewhere in the codebase.
