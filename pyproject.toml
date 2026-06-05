@@ -1,6 +1,6 @@
 [project]
 name = "micro-x-agent-loop"
-version = "0.1.0"
+version = "0.2.0"
 description = "A general-purpose, cost-aware AI agent with multi-provider LLM support, MCP tool orchestration, and session persistence"
 requires-python = ">=3.11"
 dependencies = [
