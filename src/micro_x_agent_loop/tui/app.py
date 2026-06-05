@@ -341,7 +341,7 @@ class AgentTUI(App[None]):
         )
         yield Static(
             "Esc:Cancel  Ctrl+S:Sessions  Ctrl+T:Tools  Ctrl+K:Tasks  "
-            "Ctrl+L:Logs  Ctrl+P:Commands  Ctrl+D:Theme  Ctrl+C:Quit",
+            "Ctrl+L:Logs  Ctrl+R:Trace  Ctrl+P:Commands  Ctrl+D:Theme  Ctrl+C:Quit",
             id="keyhints",
         )
 
