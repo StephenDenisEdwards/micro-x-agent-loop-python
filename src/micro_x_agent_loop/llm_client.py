@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 import threading
 from typing import Any
@@ -7,7 +9,7 @@ from loguru import logger
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
-_active_spinner: "Spinner | None" = None
+_active_spinner: Spinner | None = None
 
 
 class Spinner:

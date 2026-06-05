@@ -4,6 +4,8 @@ Every module that previously hard-coded these values now imports them from here
 so a single change propagates everywhere.
 """
 
+from __future__ import annotations
+
 # ---------------------------------------------------------------------------
 # Agent / AgentConfig defaults
 # ---------------------------------------------------------------------------

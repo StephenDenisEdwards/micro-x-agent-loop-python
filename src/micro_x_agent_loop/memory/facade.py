@@ -250,13 +250,11 @@ class ActiveMemoryFacade:
         if not is_mutating and tool_name not in _MUTATING_TOOL_NAMES:
             return
         try:
-            predict = getattr(tool, "predict_touched_paths", None)
-            if callable(predict):
-                paths = predict(tool_input)
-                if paths:
-                    self._checkpoint_manager.track_paths(checkpoint_id, paths)
-                else:
-                    self._checkpoint_manager.maybe_track_tool_input(checkpoint_id, tool_input)
+            # The Tool Protocol now mandates predict_touched_paths on every
+            # implementation; the defensive getattr is obsolete.
+            paths = tool.predict_touched_paths(tool_input)
+            if paths:
+                self._checkpoint_manager.track_paths(checkpoint_id, paths)
             else:
                 self._checkpoint_manager.maybe_track_tool_input(checkpoint_id, tool_input)
         except Exception as ex:

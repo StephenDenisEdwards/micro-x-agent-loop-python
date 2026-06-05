@@ -8,7 +8,6 @@ actually starting any subsystem.
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 

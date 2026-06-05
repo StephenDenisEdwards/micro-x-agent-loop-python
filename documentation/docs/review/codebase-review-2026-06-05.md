@@ -274,7 +274,7 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 | T3-4 | Replace `Path.cwd() / ".tmp-run"` + `os.chdir` with `tempfile.TemporaryDirectory` | `tests/test_command_handler.py:368, 411` | ✅ Done | Both sites now use `tempfile.TemporaryDirectory`. `os.chdir` remains inside the TempDir because the code under test reads `Path.cwd()` — but the directory is now `/tmp/xxx` instead of inside the repo, so the test never litters and never races on `.tmp-run`. |
 | T3-5 | Replace sleep-as-sync with `asyncio.Event` / `wait_for` | `tests/server/test_ws_channel.py:35-135`, `tests/broker/test_store_runs.py:145, 155` | ✅ Done | (1) `WebSocketChannel` now tracks fire-and-forget `_send()` futures in `_pending_sends`; added `_drain_pending_sends()` helper. Tests use `await ch._drain_pending_sends()` instead of `asyncio.sleep(0.05)` — deterministic. The two `ask_user` tests still need to yield once for the background task to register the question; they use `asyncio.sleep(0)` (one event-loop tick) instead of `0.05`. (2) `tests/broker/test_store_runs.py` uses `timeout_seconds=-1` to create a question that's already timed out at creation, eliminating the `time.sleep(0.01)` wall-clock waits. |
 | T3-6 | Drop `**kwargs` from `FakeStreamProvider.stream_chat` to catch Provider-protocol drift | `tests/fakes.py:195` | ✅ Done | Signature now mirrors `LLMProvider.stream_chat` exactly (`*, channel=None`). The 1842-test suite still passes — no protocol drift was being masked. |
-| T3-7 | Replace MagicMock sprawl in command tests with `SessionManagerFake`/`CheckpointManagerFake` from `tests/fakes.py` | `tests/test_command_handler.py:41-69` | ❌ Gap | |
+| T3-7 | Replace MagicMock sprawl in command tests with `SessionManagerFake`/`CheckpointManagerFake` from `tests/fakes.py` | `tests/test_command_handler.py:41-69` | ✅ Done | `_make_handler` now wires a real `ActiveMemoryFacade` around `SessionManagerFake` + `CheckpointManagerFake`, a real `ToolResultFormatter`, and a real `CheckpointService`. The tautological `cs.format_rewind_outcome_lines.return_value = ["  Rewound."]` → `assertIn("Rewound.")` pattern is gone — tests now verify the real services' formatting and the fakes' actual state mutations (e.g. `cm.rewinds == ["cp1"]`, `sm.get_session("s1")["title"] == "My New Title"`). 23 affected tests rewritten to drive fake behaviour directly instead of MagicMock `return_value`/`side_effect`/`assert_called_with`. Remaining MagicMock uses in this file are limited to `PromptCommandStore` and `VoiceRuntime` (no fakes exist for those). |
 
 ### Tier 4 — hygiene
 
@@ -308,8 +308,8 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 |---|---:|---:|---|
 | Tier 1 (must-fix) | 9 | 0 | All done. Build green. |
 | Tier 2 (architecture) | 8 | 1 | T2-1, T2-2, T2-3, T2-4, T2-7, T2-8 fully done. T2-5 partial (unused subset dropped). T2-6 awaits user direction. |
-| Tier 3 (test quality) | 7 | 1 | T3-1, T3-2, T3-3, T3-4, T3-5, T3-6 done. Only T3-7 (MagicMock sprawl) remains. |
+| Tier 3 (test quality) | 7 | 0 | All Tier 3 items done. |
 | Tier 4 (hygiene) | 6 | 6 | |
-| **Total** | **30** | **8** | |
+| **Total** | **30** | **7** | |
 
 Remaining work is concentrated, fixable, and well within reach of the same discipline already on display elsewhere in the codebase.

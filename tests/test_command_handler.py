@@ -11,10 +11,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from micro_x_agent_loop.api_payload_store import ApiPayload, ApiPayloadStore
 from micro_x_agent_loop.commands.command_handler import CommandHandler
 from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
+from micro_x_agent_loop.memory.facade import ActiveMemoryFacade
 from micro_x_agent_loop.metrics import SessionAccumulator
 from micro_x_agent_loop.services.checkpoint_service import CheckpointService
 from micro_x_agent_loop.services.session_controller import SessionController
 from micro_x_agent_loop.tool_result_formatter import ToolResultFormatter
+from tests.fakes import CheckpointManagerFake, SessionManagerFake
 
 
 def _make_handler(
@@ -35,13 +37,22 @@ def _make_handler(
 
     # SessionAccumulator
     acc = SessionAccumulator()
-    acc.session_id = "test-session"
+    acc.session_id = "s1"
 
-    # Memory facade mock
-    memory = MagicMock()
-    memory.session_manager = MagicMock()
-    memory.checkpoint_manager = MagicMock()
-    memory.active_session_id = "test-session"
+    # Memory facade — real ActiveMemoryFacade wrapping the existing
+    # SessionManagerFake and CheckpointManagerFake from tests/fakes.py.
+    # The fakes pre-populate "s1" with sensible defaults so most tests
+    # don't need any further setup; tests that need a different state
+    # (e.g. empty list_sessions) reach into the fake directly.
+    session_manager = SessionManagerFake()
+    checkpoint_manager = CheckpointManagerFake()
+    memory = ActiveMemoryFacade(
+        session_manager=session_manager,
+        checkpoint_manager=checkpoint_manager,
+        event_emitter=None,
+        active_session_id="s1",
+        store=None,
+    )
 
     # ToolResultFormatter — real instance so per-test format configs land in the
     # actual tool_formatting dict (no more pre-canned mock return_values that
@@ -613,39 +624,16 @@ class VoiceCommandTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SessionCommandTests(unittest.IsolatedAsyncioTestCase):
-    """Tests for /session subcommands requiring memory_enabled=True."""
+    """Tests for /session subcommands requiring memory_enabled=True.
 
-    def _make_with_memory(self) -> tuple[CommandHandler, list[str]]:
+    Drives SessionManagerFake (from tests/fakes.py) directly rather than
+    asserting against a MagicMock's pre-canned return values — assertions
+    exercise the real command-handler formatting code path.
+    """
+
+    def _make_with_memory(self) -> tuple[CommandHandler, list[str], SessionManagerFake]:
         handler, out = _make_handler(memory_enabled=True)
-        sm = handler._memory.session_manager
-        # Set up session manager mocks
-        sm.get_session.return_value = {"id": "sess-1", "title": "My Session"}
-        sm.list_sessions.return_value = [
-            {
-                "id": "sess-1",
-                "title": "Test",
-                "status": "active",
-                "created_at": "2024-01-01",
-                "updated_at": "2024-01-02",
-                "parent_session_id": None,
-            }
-        ]
-        sm.create_session.return_value = "new-sess-id"
-        sm.fork_session.return_value = "forked-id"
-        sm.resolve_session_identifier.return_value = {"id": "sess-1"}
-        sm.build_session_summary.return_value = {
-            "title": "Test Session",
-            "created_at": "2024-01-01",
-            "updated_at": "2024-01-02",
-            "message_count": 5,
-            "user_message_count": 3,
-            "assistant_message_count": 2,
-            "checkpoint_count": 1,
-            "last_user_preview": "hi",
-            "last_assistant_preview": "hello",
-        }
-        handler._memory.load_messages.return_value = []
-        return handler, out
+        return handler, out, handler._memory.session_manager  # type: ignore[return-value]
 
     async def test_session_memory_disabled(self) -> None:
         handler, out = _make_handler(memory_enabled=False)
@@ -653,98 +641,117 @@ class SessionCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("MemoryEnabled" in line for line in out))
 
     async def test_session_show_current(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         await handler.handle_session("/session")
         combined = "\n".join(out)
-        self.assertIn("Current session", combined)
+        # SessionManagerFake pre-populates s1 with title "Session One"
+        self.assertIn("Current session: Session One", combined)
 
     async def test_session_list(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         await handler.handle_session("/session list")
         combined = "\n".join(out)
         self.assertIn("Recent sessions", combined)
+        self.assertIn("Session One", combined)
 
     async def test_session_list_with_limit(self) -> None:
-        handler, out = self._make_with_memory()
-        await handler.handle_session("/session list 5")
-        handler._memory.session_manager.list_sessions.assert_called_with(limit=5)
+        handler, out, sm = self._make_with_memory()
+        # Pre-populate more sessions and verify limit truncates output.
+        # SessionManagerFake.create_session always returns the same id;
+        # add them by writing directly into its _sessions dict.
+        for i in range(2, 8):
+            sm._sessions[f"s{i}"] = {
+                "id": f"s{i}",
+                "title": f"Session {i}",
+                "parent_session_id": None,
+                "created_at": "2026-02-19T00:00:00+00:00",
+                "updated_at": "2026-02-19T00:00:00+00:00",
+                "status": "active",
+            }
+        await handler.handle_session("/session list 3")
+        # Session list-entry lines contain "(id=", so count those.
+        listed = sum(1 for line in out if "(id=" in line)
+        self.assertEqual(3, listed)
 
     async def test_session_list_invalid_limit(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         await handler.handle_session("/session list notanint")
         self.assertTrue(any("Usage:" in line for line in out))
 
     async def test_session_list_empty(self) -> None:
-        handler, out = self._make_with_memory()
-        handler._memory.session_manager.list_sessions.return_value = []
+        handler, out, sm = self._make_with_memory()
+        # Empty the fake's session store directly.
+        sm._sessions.clear()
         await handler.handle_session("/session list")
         self.assertTrue(any("No sessions found" in line for line in out))
 
     async def test_session_new(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         await handler.handle_session("/session new My Title")
         combined = "\n".join(out)
         self.assertIn("Started new session", combined)
 
     async def test_session_name(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, sm = self._make_with_memory()
         await handler.handle_session("/session name My New Title")
         combined = "\n".join(out)
         self.assertIn("Session named", combined)
+        # The fake's session store was actually mutated — verify the title.
+        self.assertEqual("My New Title", sm.get_session("s1")["title"])
 
     async def test_session_name_no_active(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         handler._memory.active_session_id = None
         await handler.handle_session("/session name foo")
         self.assertTrue(any("No active session" in line for line in out))
 
     async def test_session_name_empty(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         await handler.handle_session("/session name")
         self.assertTrue(any("Usage:" in line for line in out))
 
     async def test_session_resume(self) -> None:
-        handler, out = self._make_with_memory()
-        await handler.handle_session("/session resume sess-1")
+        handler, out, _ = self._make_with_memory()
+        await handler.handle_session("/session resume s1")
         combined = "\n".join(out)
         self.assertIn("Resumed session", combined)
 
     async def test_session_resume_not_found(self) -> None:
-        handler, out = self._make_with_memory()
-        handler._memory.session_manager.resolve_session_identifier.return_value = None
+        handler, out, _ = self._make_with_memory()
         await handler.handle_session("/session resume nonexistent")
         self.assertTrue(any("not found" in line for line in out))
 
     async def test_session_resume_error(self) -> None:
-        handler, out = self._make_with_memory()
-        handler._memory.session_manager.resolve_session_identifier.side_effect = ValueError("ambiguous")
+        handler, out, _ = self._make_with_memory()
+        # SessionManagerFake.resolve_session_identifier raises ValueError
+        # for the identifier "ambiguous" — a real error path, not a mock.
         await handler.handle_session("/session resume ambiguous")
         self.assertTrue(any("ambiguous" in line for line in out))
 
     async def test_session_fork(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         await handler.handle_session("/session fork")
         combined = "\n".join(out)
         self.assertIn("Forked session", combined)
 
     async def test_session_fork_no_active(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         handler._memory.active_session_id = None
         await handler.handle_session("/session fork")
         self.assertTrue(any("No active session" in line for line in out))
 
     async def test_session_unknown_sub(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         await handler.handle_session("/session bogus")
         self.assertTrue(any("Usage:" in line for line in out))
 
 
 class RewindCommandTests(unittest.IsolatedAsyncioTestCase):
-    def _make_with_memory(self):
+    """Drives CheckpointManagerFake instead of pre-canned MagicMock returns."""
+
+    def _make_with_memory(self) -> tuple[CommandHandler, list[str], CheckpointManagerFake]:
         handler, out = _make_handler(memory_enabled=True)
-        cm = handler._memory.checkpoint_manager
-        cm.rewind_files.return_value = ("cp1", [])
-        return handler, out
+        return handler, out, handler._memory.checkpoint_manager  # type: ignore[return-value]
 
     async def test_rewind_memory_disabled(self) -> None:
         handler, out = _make_handler(memory_enabled=False)
@@ -752,29 +759,34 @@ class RewindCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("MemoryEnabled" in line for line in out))
 
     async def test_rewind_usage(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         await handler.handle_rewind("/rewind")
         self.assertTrue(any("Usage:" in line for line in out))
 
     async def test_rewind_success(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, cm = self._make_with_memory()
         await handler.handle_rewind("/rewind cp1")
-        handler._memory.checkpoint_manager.rewind_files.assert_called_once_with("cp1")
+        # CheckpointManagerFake records the call in .rewinds and the real
+        # CheckpointService formats the outcome — assert on both observable
+        # effects instead of a mock's call_args.
+        self.assertEqual(["cp1"], cm.rewinds)
+        self.assertTrue(any("Rewind cp1 results" in line for line in out))
 
     async def test_rewind_error(self) -> None:
-        handler, out = self._make_with_memory()
-        handler._memory.checkpoint_manager.rewind_files.side_effect = RuntimeError("bad checkpoint")
+        handler, out, cm = self._make_with_memory()
+        # Replace the fake's rewind_files with a function that raises so
+        # the error path is exercised end-to-end.
+        cm.rewind_files = lambda _cid: (_ for _ in ()).throw(RuntimeError("bad checkpoint"))  # type: ignore[assignment]
         await handler.handle_rewind("/rewind cp-bad")
         self.assertTrue(any("Rewind failed" in line for line in out))
 
 
 class CheckpointCommandTests(unittest.IsolatedAsyncioTestCase):
-    def _make_with_memory(self):
+    """Drives CheckpointManagerFake instead of pre-canned MagicMock returns."""
+
+    def _make_with_memory(self) -> tuple[CommandHandler, list[str], CheckpointManagerFake]:
         handler, out = _make_handler(memory_enabled=True)
-        cm = handler._memory.checkpoint_manager
-        cm.list_checkpoints.return_value = [{"id": "cp1", "created_at": "2024-01-01"}]
-        cm.rewind_files.return_value = ("cp1", [])
-        return handler, out
+        return handler, out, handler._memory.checkpoint_manager  # type: ignore[return-value]
 
     async def test_checkpoint_memory_disabled(self) -> None:
         handler, out = _make_handler(memory_enabled=False)
@@ -782,29 +794,30 @@ class CheckpointCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("MemoryEnabled" in line for line in out))
 
     async def test_checkpoint_list(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         await handler.handle_checkpoint("/checkpoint list")
         combined = "\n".join(out)
         self.assertIn("Recent checkpoints", combined)
 
     async def test_checkpoint_list_empty(self) -> None:
-        handler, out = self._make_with_memory()
-        handler._memory.checkpoint_manager.list_checkpoints.return_value = []
+        handler, out, cm = self._make_with_memory()
+        cm.list_checkpoints = lambda *_a, **_kw: []  # type: ignore[assignment]
         await handler.handle_checkpoint("/checkpoint list")
         self.assertTrue(any("No checkpoints found" in line for line in out))
 
     async def test_checkpoint_list_invalid_limit(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         await handler.handle_checkpoint("/checkpoint list notanint")
         self.assertTrue(any("Usage:" in line for line in out))
 
     async def test_checkpoint_rewind(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, cm = self._make_with_memory()
         await handler.handle_checkpoint("/checkpoint rewind cp1")
-        handler._memory.checkpoint_manager.rewind_files.assert_called_once_with("cp1")
+        # Real CheckpointManagerFake records the rewind in .rewinds.
+        self.assertEqual(["cp1"], cm.rewinds)
 
     async def test_checkpoint_unknown_sub(self) -> None:
-        handler, out = self._make_with_memory()
+        handler, out, _ = self._make_with_memory()
         await handler.handle_checkpoint("/checkpoint bogus")
         self.assertTrue(any("Usage:" in line for line in out))
 
