@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import unittest
 
-from micro_x_agent_loop.agent import (
-    _find_safe_trim_count,
-    _find_tail_orphan_tool_use_ids,
-    _is_safe_message_head,
-    _repair_orphan_head,
-    _repair_orphan_tool_uses,
+from micro_x_agent_loop.history_repair import (
+    find_safe_trim_count as _find_safe_trim_count,
+)
+from micro_x_agent_loop.history_repair import (
+    find_tail_orphan_tool_use_ids as _find_tail_orphan_tool_use_ids,
+)
+from micro_x_agent_loop.history_repair import (
+    is_safe_message_head as _is_safe_message_head,
+)
+from micro_x_agent_loop.history_repair import (
+    repair_orphan_head as _repair_orphan_head,
+)
+from micro_x_agent_loop.history_repair import (
+    repair_orphan_tool_uses as _repair_orphan_tool_uses,
 )
 
 
@@ -177,8 +185,9 @@ class RepairOrphanToolUsesTests(unittest.TestCase):
                 "type": "tool_result",
                 "tool_use_id": "toolu_1",
                 "content": __import__(
-                    "micro_x_agent_loop.agent", fromlist=["_INTERRUPTED_TOOL_RESULT"],
-                )._INTERRUPTED_TOOL_RESULT,
+                    "micro_x_agent_loop.history_repair",
+                    fromlist=["INTERRUPTED_TOOL_RESULT"],
+                ).INTERRUPTED_TOOL_RESULT,
                 "is_error": True,
             }
         ], repaired[2]["content"])

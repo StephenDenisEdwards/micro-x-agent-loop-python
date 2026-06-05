@@ -12,6 +12,13 @@ from micro_x_agent_loop.commands.prompt_commands import PromptCommandStore
 from micro_x_agent_loop.commands.router import CommandRouter
 from micro_x_agent_loop.compaction import SummarizeCompactionStrategy
 from micro_x_agent_loop.constants import MAX_TOKENS_RETRIES, SESSION_BUDGET_WARN_THRESHOLD
+from micro_x_agent_loop.history_repair import (
+    INTERRUPTED_TOOL_RESULT,
+    find_safe_trim_count,
+    find_tail_orphan_tool_use_ids,
+    repair_orphan_head,
+    repair_orphan_tool_uses,
+)
 from micro_x_agent_loop.memory.facade import ActiveMemoryFacade, NullMemoryFacade
 from micro_x_agent_loop.metrics import (
     SessionAccumulator,
@@ -22,15 +29,7 @@ from micro_x_agent_loop.metrics import (
     build_tool_execution_metric,
     metrics_jsonl_subscriber,
 )
-from micro_x_agent_loop.mode_selector import (
-    ModeAnalysis,
-    RecommendedMode,
-    Stage2Result,
-    analyze_prompt,
-    build_stage2_prompt,
-    format_analysis,
-    parse_stage2_response,
-)
+from micro_x_agent_loop.mode_orchestrator import ModeOrchestrator
 from micro_x_agent_loop.observability import ObservabilityEmitter, config_hash, resolve_code_sha
 from micro_x_agent_loop.routing_feedback import make_routing_outcome_subscriber
 from micro_x_agent_loop.routing_strategy import RoutingDecision
@@ -40,154 +39,6 @@ from micro_x_agent_loop.tool import Tool
 from micro_x_agent_loop.turn_engine import TurnEngine
 from micro_x_agent_loop.usage import UsageResult, estimate_cost
 from micro_x_agent_loop.voice_runtime import VoiceRuntime
-
-
-def _is_safe_message_head(msg: dict) -> bool:
-    """True if ``msg`` can safely sit at ``messages[0]`` of an Anthropic request:
-    role is ``user`` and content is not solely ``tool_result`` blocks (whose
-    matching ``tool_use`` would have been trimmed away).
-    """
-    if msg.get("role") != "user":
-        return False
-    content = msg.get("content", "")
-    if isinstance(content, str):
-        return True
-    if not isinstance(content, list):
-        return False
-    return any(isinstance(b, dict) and b.get("type") != "tool_result" for b in content)
-
-
-def _find_safe_trim_count(messages: list[dict], max_messages: int) -> int:
-    """Return how many leading messages can be dropped to bring the list to
-    at most ``max_messages`` without leaving an orphan ``tool_result`` at the
-    head. Returns 0 when no safe boundary exists in the trim range.
-    """
-    if max_messages <= 0 or len(messages) <= max_messages:
-        return 0
-    target = len(messages) - max_messages
-    safe = target
-    while safe < len(messages) and not _is_safe_message_head(messages[safe]):
-        safe += 1
-    if safe >= len(messages):
-        return 0
-    return safe
-
-
-def _repair_orphan_head(messages: list[dict]) -> tuple[list[dict], int]:
-    """Drop leading messages from ``messages`` until the head is safe to send
-    to Anthropic. Returns ``(repaired, dropped_count)``. Used after loading a
-    persisted session that may have been corrupted by older trim logic.
-    """
-    drop = 0
-    while drop < len(messages) and not _is_safe_message_head(messages[drop]):
-        drop += 1
-    if drop == 0:
-        return messages, 0
-    return messages[drop:], drop
-
-
-_INTERRUPTED_TOOL_RESULT = (
-    "Tool execution did not complete (interrupted, cancelled, or crashed). "
-    "No result is available."
-)
-
-
-def _find_tail_orphan_tool_use_ids(messages: list[dict]) -> list[str]:
-    """Return any ``tool_use`` ids in the LAST message that lack a matching
-    ``tool_result`` afterwards. The "tail orphan" pattern is the typical
-    fallout from cancelling a run mid-tool: the assistant ``tool_use`` was
-    appended, then tool execution was cancelled before the user
-    ``tool_result`` could be appended.
-    """
-    if not messages:
-        return []
-    last = messages[-1]
-    if last.get("role") != "assistant":
-        return []
-    content = last.get("content")
-    if not isinstance(content, list):
-        return []
-    ids: list[str] = []
-    for b in content:
-        if isinstance(b, dict) and b.get("type") == "tool_use":
-            bid = b.get("id")
-            if isinstance(bid, str) and bid:
-                ids.append(bid)
-    return ids
-
-
-def _repair_orphan_tool_uses(messages: list[dict]) -> tuple[list[dict], int]:
-    """Walk through ``messages`` and ensure every assistant ``tool_use`` block
-    has a matching ``tool_result`` block in the immediately-following user
-    message. Synthesises ``is_error: true`` tool_results for any orphans
-    (typically left behind when tool execution was interrupted). Returns
-    ``(repaired, inserted_count)``.
-
-    Anthropic rejects the request if any ``tool_use`` is not followed by a
-    matching ``tool_result``, so this repair runs both at session load and at
-    the start of every ``run()`` to keep an interrupted prior turn from
-    poisoning the next request.
-    """
-    repaired: list[dict] = []
-    inserted = 0
-    i = 0
-    while i < len(messages):
-        msg = messages[i]
-        repaired.append(msg)
-        if msg.get("role") != "assistant":
-            i += 1
-            continue
-        content = msg.get("content")
-        if not isinstance(content, list):
-            i += 1
-            continue
-        tool_use_ids = [
-            b.get("id")
-            for b in content
-            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("id")
-        ]
-        if not tool_use_ids:
-            i += 1
-            continue
-
-        existing_result_ids: set[str] = set()
-        next_idx = i + 1
-        next_is_user_results = (
-            next_idx < len(messages)
-            and messages[next_idx].get("role") == "user"
-            and isinstance(messages[next_idx].get("content"), list)
-        )
-        if next_is_user_results:
-            for b in messages[next_idx]["content"]:
-                if isinstance(b, dict) and b.get("type") == "tool_result":
-                    tid = b.get("tool_use_id")
-                    if tid:
-                        existing_result_ids.add(tid)
-
-        missing = [tid for tid in tool_use_ids if tid not in existing_result_ids]
-        if not missing:
-            i += 1
-            continue
-
-        synthetic = [
-            {
-                "type": "tool_result",
-                "tool_use_id": tid,
-                "content": _INTERRUPTED_TOOL_RESULT,
-                "is_error": True,
-            }
-            for tid in missing
-        ]
-        if next_is_user_results:
-            merged_content = list(messages[next_idx]["content"]) + synthetic
-            repaired.append({"role": "user", "content": merged_content})
-            inserted += len(synthetic)
-            i += 2
-        else:
-            repaired.append({"role": "user", "content": synthetic})
-            inserted += len(synthetic)
-            i += 1
-    return repaired, inserted
 
 
 class Agent:
@@ -276,9 +127,17 @@ class Agent:
         # --- Mode analysis ---
         self._mode_analysis_enabled = c.mode_analysis_enabled
         self._stage2_classification_enabled = c.stage2_classification_enabled
-        self._stage2_model = c.stage2_model
-        self._stage2_provider = c.stage2_provider
         self._working_directory = c.working_directory
+        self._mode_orchestrator = ModeOrchestrator(
+            enabled=c.mode_analysis_enabled,
+            autonomous=c.autonomous,
+            stage2_enabled=c.stage2_classification_enabled,
+            stage2_provider=c.stage2_provider,
+            stage2_model=c.stage2_model,
+            channel=c.channel,
+            system_print=self._system_print,
+            on_api_call_completed=self.on_api_call_completed,
+        )
 
         # --- Tool result formatting ---
         self._tool_result_formatter = c.tool_result_formatter
@@ -428,13 +287,13 @@ class Agent:
         if not self._memory_enabled or session_id is None:
             return
         loaded = self._memory.load_messages(session_id)
-        repaired, dropped = _repair_orphan_head(loaded)
+        repaired, dropped = repair_orphan_head(loaded)
         if dropped > 0:
             logger.warning(
                 f"Session {session_id}: dropped {dropped} leading message(s) with orphan tool_result "
                 f"blocks before the head — likely corrupted by an earlier trim bug"
             )
-        repaired, inserted = _repair_orphan_tool_uses(repaired)
+        repaired, inserted = repair_orphan_tool_uses(repaired)
         if inserted > 0:
             logger.warning(
                 f"Session {session_id}: synthesised {inserted} tool_result block(s) for orphan tool_use "
@@ -466,7 +325,7 @@ class Agent:
 
     async def run(self, user_message: str) -> None:
         async with self._run_lock:
-            self._messages, inserted = _repair_orphan_tool_uses(self._messages)
+            self._messages, inserted = repair_orphan_tool_uses(self._messages)
             if inserted > 0:
                 logger.warning(
                     f"Repaired {inserted} orphan tool_use block(s) in-memory before run "
@@ -499,14 +358,14 @@ class Agent:
         request. Without this, the next prompt sends an unpaired ``tool_use``
         and Anthropic rejects with HTTP 400.
         """
-        orphan_ids = _find_tail_orphan_tool_use_ids(self._messages)
+        orphan_ids = find_tail_orphan_tool_use_ids(self._messages)
         if not orphan_ids:
             return
         synthetic = [
             {
                 "type": "tool_result",
                 "tool_use_id": tid,
-                "content": _INTERRUPTED_TOOL_RESULT,
+                "content": INTERRUPTED_TOOL_RESULT,
                 "is_error": True,
             }
             for tid in orphan_ids
@@ -556,36 +415,10 @@ class Agent:
         if isinstance(command_result, str):
             user_message = command_result
 
-        mode_event: dict | None = None
-        if self._mode_analysis_enabled and not self._autonomous:
-            analysis = analyze_prompt(user_message)
-            stage2: Stage2Result | None = None
-
-            if analysis.recommended_mode == RecommendedMode.AMBIGUOUS and self._stage2_classification_enabled:
-                try:
-                    stage2 = await self._classify_ambiguous(user_message, analysis)
-                except Exception as ex:
-                    logger.warning(f"Stage 2 classification failed: {ex}")
-
-            user_choice: str | None = None
-            if analysis.signals:
-                chosen_mode = await self._prompt_mode_choice(analysis, stage2)
-                user_choice = chosen_mode.value
-                self._system_print(f"[Mode] Proceeding in {chosen_mode.value} mode")
-            else:
-                self._system_print(format_analysis(analysis))
-
-            mode_event = {
-                "session_id": self._memory.active_session_id or "",
-                "signals": [
-                    {"name": s.name, "strength": s.strength.value, "matched_text": s.matched_text}
-                    for s in analysis.signals
-                ],
-                "stage1_recommendation": analysis.recommended_mode.value,
-                "stage2_recommendation": stage2.recommended_mode.value if stage2 is not None else None,
-                "stage2_reasoning": stage2.reasoning if stage2 is not None else "",
-                "user_choice": user_choice,
-            }
+        mode_event = await self._mode_orchestrator.analyze(
+            user_message,
+            session_id=self._memory.active_session_id or "",
+        )
 
         # Budget check — refuse to start a new turn if budget is exhausted
         if self._is_budget_exceeded():
@@ -624,117 +457,6 @@ class Agent:
         self._current_user_message_id = current_user_message_id
         self._last_assistant_message_id = last_assistant_message_id
         self._update_context_stats()
-
-    # -- Mode choice prompt --
-
-    async def _prompt_mode_choice(
-        self,
-        analysis: ModeAnalysis,
-        stage2: Stage2Result | None,
-    ) -> RecommendedMode:
-        """Prompt the user to choose between PROMPT and COMPILED execution mode."""
-        # Determine the recommendation to present
-        if stage2:
-            recommended = stage2.recommended_mode
-        else:
-            recommended = analysis.recommended_mode
-        # AMBIGUOUS with no stage2 override defaults to COMPILED recommendation
-        if recommended == RecommendedMode.AMBIGUOUS:
-            recommended = RecommendedMode.COMPILED
-
-        # Build signal descriptions for display
-        signal_texts = [f'{s.name} ({s.strength.value}): "{s.matched_text}"' for s in analysis.signals]
-        reasoning = stage2.reasoning if stage2 and stage2.reasoning else ""
-        recommended_str = recommended.value
-
-        # Route through channel if it supports mode choice (e.g. TUI modal)
-        if self._channel is not None and hasattr(self._channel, "prompt_mode_choice"):
-            selected = await self._channel.prompt_mode_choice(
-                signal_texts,
-                recommended_str,
-                reasoning,
-            )
-            if selected == "COMPILED":
-                return RecommendedMode.COMPILED
-            if selected == "PROMPT":
-                return RecommendedMode.PROMPT
-            return recommended
-
-        # Fallback: interactive terminal prompt via questionary
-        self._system_print(
-            "[Mode Analysis] Your prompt contains signals that suggest compiled (batch) mode may be more appropriate:"
-        )
-        for text in signal_texts:
-            self._system_print(f"  * {text}")
-        if reasoning:
-            self._system_print(f"  LLM assessment: {reasoning}")
-        self._system_print(
-            "  PROMPT mode: conversational, single-turn responses\n  COMPILED mode: structured batch execution"
-        )
-
-        import questionary
-        from questionary import Choice, Style
-
-        compiled_label = "COMPILED"
-        prompt_label = "PROMPT"
-        if recommended == RecommendedMode.COMPILED:
-            compiled_label += " (recommended)"
-        else:
-            prompt_label += " (recommended)"
-
-        choices = [
-            Choice(
-                title=f"{compiled_label} — structured batch execution",
-                value="COMPILED",
-            ),
-            Choice(
-                title=f"{prompt_label} — conversational response",
-                value="PROMPT",
-            ),
-        ]
-
-        style = Style(
-            [
-                ("qmark", "fg:cyan bold"),
-                ("question", "bold"),
-                ("pointer", "fg:cyan bold"),
-                ("highlighted", "fg:cyan bold"),
-                ("selected", "fg:cyan"),
-            ]
-        )
-
-        def _do_select() -> str | None:
-            result: str | None = questionary.select(
-                "Which execution mode should be used?",
-                choices=choices,
-                style=style,
-            ).ask()
-            return result
-
-        try:
-            selected = await asyncio.to_thread(_do_select)
-        except Exception:
-            self._system_print(f"[Mode Analysis] Non-interactive terminal, using recommendation: {recommended.value}")
-            return recommended
-
-        if selected == "COMPILED":
-            return RecommendedMode.COMPILED
-        if selected == "PROMPT":
-            return RecommendedMode.PROMPT
-        # User cancelled (Ctrl-C) — use recommendation
-        return recommended
-
-    # -- Stage 2 LLM classification --
-
-    async def _classify_ambiguous(self, user_message: str, stage1: ModeAnalysis) -> Stage2Result:
-        """Call the LLM to classify an ambiguous prompt as PROMPT or COMPILED."""
-        prompt = build_stage2_prompt(user_message, stage1)
-        assert self._stage2_provider is not None
-        response_text, usage = await self._stage2_provider.create_message(
-            self._stage2_model, 300, 0.0, [{"role": "user", "content": prompt}]
-        )
-        self.on_api_call_completed(usage, call_type="stage2_classification")
-        return parse_stage2_response(response_text)
 
     # -- TurnEvents protocol: metrics --
 
@@ -871,7 +593,7 @@ class Agent:
         self._session_accumulator.context_messages = len(self._messages)
 
     def _trim_conversation_history(self) -> None:
-        safe = _find_safe_trim_count(self._messages, self._max_conversation_messages)
+        safe = find_safe_trim_count(self._messages, self._max_conversation_messages)
         if safe == 0:
             target = max(0, len(self._messages) - self._max_conversation_messages)
             if target > 0:

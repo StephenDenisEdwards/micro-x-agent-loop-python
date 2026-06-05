@@ -410,7 +410,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
         )
         agent = self._make_agent()
         mock_choice = AsyncMock(return_value=RecommendedMode.COMPILED)
-        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+        with patch.object(agent._mode_orchestrator, "prompt_mode_choice", mock_choice):
             buf = io.StringIO()
             with redirect_stdout(buf):
                 asyncio.run(agent.run(prompt))
@@ -423,7 +423,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
         prompt = "Score each job and calculate the total count across all listings"
         agent = self._make_agent()
         mock_choice = AsyncMock(return_value=RecommendedMode.PROMPT)
-        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+        with patch.object(agent._mode_orchestrator, "prompt_mode_choice", mock_choice):
             buf = io.StringIO()
             with redirect_stdout(buf):
                 asyncio.run(agent.run(prompt))
@@ -434,7 +434,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
         """AMBIGUOUS → Stage 2 runs, then user is prompted with the recommendation."""
         agent = self._make_agent(stage2_response="COMPILED\nBatch task with 50 items.")
         mock_choice = AsyncMock(return_value=RecommendedMode.COMPILED)
-        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+        with patch.object(agent._mode_orchestrator, "prompt_mode_choice", mock_choice):
             buf = io.StringIO()
             with redirect_stdout(buf):
                 asyncio.run(
@@ -455,7 +455,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
         """AMBIGUOUS → Stage 2 says PROMPT → user still gets prompted."""
         agent = self._make_agent(stage2_response="PROMPT\nSingle item, no batch.")
         mock_choice = AsyncMock(return_value=RecommendedMode.PROMPT)
-        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+        with patch.object(agent._mode_orchestrator, "prompt_mode_choice", mock_choice):
             buf = io.StringIO()
             with redirect_stdout(buf):
                 asyncio.run(agent.run("Score this document for readability"))
@@ -480,7 +480,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
                 )
             )
         mock_choice = AsyncMock(return_value=RecommendedMode.COMPILED)
-        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+        with patch.object(agent._mode_orchestrator, "prompt_mode_choice", mock_choice):
             buf = io.StringIO()
             with redirect_stdout(buf):
                 asyncio.run(agent.run("Score this document for readability"))
@@ -513,7 +513,7 @@ class Stage2AgentIntegrationTests(unittest.TestCase):
                 )
             )
         mock_choice = AsyncMock(return_value=RecommendedMode.COMPILED)
-        with patch.object(agent, "_prompt_mode_choice", mock_choice):
+        with patch.object(agent._mode_orchestrator, "prompt_mode_choice", mock_choice):
             buf = io.StringIO()
             with redirect_stdout(buf):
                 asyncio.run(agent.run("Score this document for readability"))
