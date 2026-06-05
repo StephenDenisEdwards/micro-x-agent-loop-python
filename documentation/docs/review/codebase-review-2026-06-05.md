@@ -255,7 +255,7 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 
 | ID | Item | Location | Status | Action taken |
 |---|---|---|---|---|
-| T2-1 | Split `agent.py` — extract `mode_orchestrator.py`, `history_repair.py`, observability-listener mixin | `agent.py` (1,219 LOC) | ⚠️ Partial | Extracted `history_repair.py` (167 LOC — pure history-repair utilities) and `mode_orchestrator.py` (210 LOC — mode-analysis orchestrator with DI). `agent.py` shrunk 1,219 → 941 LOC (-23%). Observability-listener mixin extraction deferred (cleanest pure-observability methods are tangled with `_messages` mutations). |
+| T2-1 | Split `agent.py` — extract `mode_orchestrator.py`, `history_repair.py`, observability-listener mixin | `agent.py` (1,219 LOC) | ✅ Done | Extracted `history_repair.py` (167 LOC), `mode_orchestrator.py` (210 LOC), and `agent_listener.py` (255 LOC — `AgentEventListener` implementing the pure-observability subset of TurnEvents with DI: memory, obs, accumulator, turn-number provider, optional compaction-tokens handler, optional budget-check callback). `agent.py` shrunk 1,219 → 872 LOC (-28%). Message-history and checkpoint-state callbacks (`on_maybe_compact`, `on_append_message`, `on_ensure_checkpoint_for_turn`, etc.) stay on Agent because they must mutate Agent state. |
 | T2-2 | Split `commands/command_handler.py` per command group with a registry | `commands/command_handler.py` (1,062 LOC) | ⚠️ Partial | Added `commands/command_context.py` (read-only dataclass bundling the 16 collaborators). Extracted 5 command groups into per-command modules: `routing_command.py` (106 LOC), `session_command.py` (116 LOC), `voice_command_handler.py` (73 LOC), `checkpoint_command.py` (60 LOC), `compact_command.py` (27 LOC). `command_handler.py` shrunk 1,062 → 766 LOC (-28%). Remaining handlers (`/cost`, `/replay`, `/memory`, `/codegen-task-list`, `/tools`, `/tool`, `/debug`, `/help`, `/console`) can be extracted with the same pattern. |
 | T2-3 | Replace `Any`-typed dependencies with real Protocols | `turn_engine.py:34, 46, 60, 64, 66` | ✅ Done | `provider: LLMProvider`, `summarization_provider: LLMCompactor \| None`, `semantic_classifier: SemanticClassifierFn \| None`, `routing_feedback_callback: RoutingFeedbackFn \| None`, `task_embedding_index: TaskEmbeddingIndex \| None`. Also typed `task_embedding_index` in `agent_builder.AgentComponents` to clear the type chain. |
 | T2-4 | Sync `AgentChannel` Protocol with `TerminalChannel` extras (`begin_streaming`/`end_streaming`/`print_line`) or split into `StreamingChannel` | `agent_channel.py:70` | ✅ Done | Added `begin_streaming()` / `end_streaming()` to the Protocol with no-op implementations in `BufferedChannel`, `BrokerChannel`, `WebSocketChannel`. Dropped the `hasattr` guard in `agent.py:612-622`. `print_line` left as a TerminalChannel-private method (not called via the protocol from the agent). |
@@ -307,9 +307,9 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 | Tier | Items | Open | Notes |
 |---|---:|---:|---|
 | Tier 1 (must-fix) | 9 | 0 | All done. Build green. |
-| Tier 2 (architecture) | 8 | 4 | T2-3, T2-4, T2-7, T2-8 done. T2-5 partial (unused subset dropped). T2-1, T2-2, T2-6 await user direction. |
+| Tier 2 (architecture) | 8 | 2 | T2-1, T2-2, T2-3, T2-4, T2-7, T2-8 done. T2-5 partial (unused subset dropped). T2-6 awaits user direction. |
 | Tier 3 (test quality) | 7 | 7 | |
 | Tier 4 (hygiene) | 6 | 6 | |
-| **Total** | **30** | **17** | |
+| **Total** | **30** | **15** | |
 
 Remaining work is concentrated, fixable, and well within reach of the same discipline already on display elsewhere in the codebase.
