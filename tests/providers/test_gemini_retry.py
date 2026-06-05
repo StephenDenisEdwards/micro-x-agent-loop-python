@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from types import SimpleNamespace
 from typing import Any
@@ -55,7 +54,7 @@ def _fake_response() -> SimpleNamespace:
     )
 
 
-class CreateMessageRetryTests(unittest.TestCase):
+class CreateMessageRetryTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         # Make tenacity's backoff instant so the 10s exponential wait doesn't
         # slow the suite; the retry still goes through its real decision path.
@@ -63,41 +62,37 @@ class CreateMessageRetryTests(unittest.TestCase):
         self._sleep_patch.start()
         self.addCleanup(self._sleep_patch.stop)
 
-    def _run(self, side_effect: Any) -> tuple[str, Any, int]:
+    async def _run(self, side_effect: Any) -> tuple[str, Any, int]:
         provider = _make_provider()
         gen = AsyncMock(side_effect=side_effect)
         provider._client = SimpleNamespace(aio=SimpleNamespace(models=SimpleNamespace(generate_content=gen)))
-        result = asyncio.run(
-            provider.create_message(
-                model="gemini-2.5-flash",
-                max_tokens=64,
-                temperature=0.0,
-                messages=[{"role": "user", "content": "hi"}],
-            )
+        result = await provider.create_message(
+            model="gemini-2.5-flash",
+            max_tokens=64,
+            temperature=0.0,
+            messages=[{"role": "user", "content": "hi"}],
         )
         return result[0], result[1], gen.await_count
 
-    def test_retries_on_429_then_succeeds(self) -> None:
-        text, _usage, calls = self._run([_err(ClientError, 429), _fake_response()])
+    async def test_retries_on_429_then_succeeds(self) -> None:
+        text, _usage, calls = await self._run([_err(ClientError, 429), _fake_response()])
         self.assertEqual("OK", text)
         self.assertEqual(2, calls)  # failed once, retried, succeeded
 
-    def test_does_not_retry_on_400(self) -> None:
+    async def test_does_not_retry_on_400(self) -> None:
         with self.assertRaises(ClientError):
-            self._run([_err(ClientError, 400), _fake_response()])
+            await self._run([_err(ClientError, 400), _fake_response()])
 
-    def test_does_not_retry_on_404(self) -> None:
+    async def test_does_not_retry_on_404(self) -> None:
         provider = _make_provider()
         gen = AsyncMock(side_effect=_err(ClientError, 404))
         provider._client = SimpleNamespace(aio=SimpleNamespace(models=SimpleNamespace(generate_content=gen)))
         with self.assertRaises(ClientError):
-            asyncio.run(
-                provider.create_message(
-                    model="gemini-2.5-flash",
-                    max_tokens=64,
-                    temperature=0.0,
-                    messages=[{"role": "user", "content": "hi"}],
-                )
+            await provider.create_message(
+                model="gemini-2.5-flash",
+                max_tokens=64,
+                temperature=0.0,
+                messages=[{"role": "user", "content": "hi"}],
             )
         self.assertEqual(1, gen.await_count)  # no retry on permanent error
 

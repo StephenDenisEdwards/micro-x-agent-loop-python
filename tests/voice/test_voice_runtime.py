@@ -38,8 +38,8 @@ class _FakeIngress:
             await asyncio.sleep(0.05)
 
 
-class VoiceRuntimeTests(unittest.TestCase):
-    def test_runtime_processes_final_utterance(self) -> None:
+class VoiceRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_runtime_processes_final_utterance(self) -> None:
         captured: list[str] = []
 
         async def on_utterance(text: str) -> None:
@@ -73,7 +73,7 @@ class VoiceRuntimeTests(unittest.TestCase):
             self.assertIn("processed=1", status)
             await runtime.stop()
 
-        asyncio.run(scenario())
+        await scenario()
         self.assertEqual(["hello world"], captured)
 
 

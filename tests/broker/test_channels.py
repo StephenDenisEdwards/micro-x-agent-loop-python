@@ -101,7 +101,7 @@ class TriggerFilterIsEmptyTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class HttpAdapterTests(unittest.TestCase):
+class HttpAdapterTests(unittest.IsolatedAsyncioTestCase):
     def test_channel_name(self) -> None:
         a = HttpAdapter()
         self.assertEqual("http", a.channel_name)
@@ -160,30 +160,26 @@ class HttpAdapterTests(unittest.TestCase):
         self.assertIsNotNone(req)
         self.assertEqual("http", req.sender_id)
 
-    def test_poll_messages_returns_empty(self) -> None:
-        import asyncio
+    async def test_poll_messages_returns_empty(self) -> None:
 
         a = HttpAdapter()
-        result = asyncio.run(a.poll_messages())
+        result = await a.poll_messages()
         self.assertEqual([], result)
 
-    def test_send_response_no_target(self) -> None:
-        import asyncio
+    async def test_send_response_no_target(self) -> None:
 
         a = HttpAdapter()
         result_obj = RunResult(exit_code=0, stdout="done", stderr="")
-        result = asyncio.run(a.send_response("", result_obj))
+        result = await a.send_response("", result_obj)
         self.assertFalse(result)
 
-    def test_send_question_no_target(self) -> None:
-        import asyncio
+    async def test_send_question_no_target(self) -> None:
 
         a = HttpAdapter()
-        result = asyncio.run(a.send_question("", "a question?"))
+        result = await a.send_question("", "a question?")
         self.assertFalse(result)
 
-    def test_send_response_http_success(self) -> None:
-        import asyncio
+    async def test_send_response_http_success(self) -> None:
 
         a = HttpAdapter()
         result_obj = RunResult(exit_code=0, stdout="done", stderr="")
@@ -194,11 +190,10 @@ class HttpAdapterTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            result = asyncio.run(a.send_response("http://callback", result_obj))
+            result = await a.send_response("http://callback", result_obj)
         self.assertTrue(result)
 
-    def test_send_response_http_failure(self) -> None:
-        import asyncio
+    async def test_send_response_http_failure(self) -> None:
 
         a = HttpAdapter()
         result_obj = RunResult(exit_code=1, stdout="", stderr="error")
@@ -207,11 +202,10 @@ class HttpAdapterTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            result = asyncio.run(a.send_response("http://callback", result_obj))
+            result = await a.send_response("http://callback", result_obj)
         self.assertFalse(result)
 
-    def test_send_question_http_success(self) -> None:
-        import asyncio
+    async def test_send_question_http_success(self) -> None:
 
         a = HttpAdapter()
         mock_resp = MagicMock()
@@ -221,11 +215,10 @@ class HttpAdapterTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            result = asyncio.run(a.send_question("http://target", "what?", [{"label": "yes", "description": "yes"}]))
+            result = await a.send_question("http://target", "what?", [{"label": "yes", "description": "yes"}])
         self.assertTrue(result)
 
-    def test_send_question_http_exception(self) -> None:
-        import asyncio
+    async def test_send_question_http_exception(self) -> None:
 
         a = HttpAdapter()
         mock_client = AsyncMock()
@@ -233,7 +226,7 @@ class HttpAdapterTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            result = asyncio.run(a.send_question("http://target", "what?"))
+            result = await a.send_question("http://target", "what?")
         self.assertFalse(result)
 
 
@@ -242,7 +235,7 @@ class HttpAdapterTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class LogAdapterTests(unittest.TestCase):
+class LogAdapterTests(unittest.IsolatedAsyncioTestCase):
     def test_channel_name(self) -> None:
         self.assertEqual("log", LogAdapter().channel_name)
 
@@ -258,40 +251,35 @@ class LogAdapterTests(unittest.TestCase):
     def test_parse_webhook_always_none(self) -> None:
         self.assertIsNone(LogAdapter().parse_webhook({}))
 
-    def test_poll_messages_returns_empty(self) -> None:
-        import asyncio
+    async def test_poll_messages_returns_empty(self) -> None:
 
-        result = asyncio.run(LogAdapter().poll_messages())
+        result = await LogAdapter().poll_messages()
         self.assertEqual([], result)
 
-    def test_send_response_logs_and_returns_true(self) -> None:
-        import asyncio
+    async def test_send_response_logs_and_returns_true(self) -> None:
 
         a = LogAdapter()
         result_obj = RunResult(exit_code=0, stdout="done", stderr="")
-        result = asyncio.run(a.send_response("", result_obj))
+        result = await a.send_response("", result_obj)
         self.assertTrue(result)
 
-    def test_send_response_failed_run(self) -> None:
-        import asyncio
+    async def test_send_response_failed_run(self) -> None:
 
         a = LogAdapter()
         result_obj = RunResult(exit_code=1, stdout="", stderr="err")
-        result = asyncio.run(a.send_response("", result_obj))
+        result = await a.send_response("", result_obj)
         self.assertTrue(result)
 
-    def test_send_question_returns_false(self) -> None:
-        import asyncio
+    async def test_send_question_returns_false(self) -> None:
 
         a = LogAdapter()
-        result = asyncio.run(a.send_question("", "q?"))
+        result = await a.send_question("", "q?")
         self.assertFalse(result)
 
-    def test_send_question_with_options(self) -> None:
-        import asyncio
+    async def test_send_question_with_options(self) -> None:
 
         a = LogAdapter()
-        result = asyncio.run(a.send_question("", "q?", [{"label": "yes"}]))
+        result = await a.send_question("", "q?", [{"label": "yes"}])
         self.assertFalse(result)
 
 
@@ -300,7 +288,7 @@ class LogAdapterTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class TelegramAdapterParseTests(unittest.TestCase):
+class TelegramAdapterParseTests(unittest.IsolatedAsyncioTestCase):
     def _make_update(self, text: str = "hello", chat_id: int = 42, from_id: int = 99) -> dict:
         return {
             "update_id": 1,
@@ -350,8 +338,7 @@ class TelegramAdapterParseTests(unittest.TestCase):
         self.assertTrue(a.supports_webhook)
         self.assertTrue(a.supports_polling)
 
-    def test_send_response(self) -> None:
-        import asyncio
+    async def test_send_response(self) -> None:
 
         a = TelegramAdapter(bot_token="TOKEN")
         result_obj = RunResult(exit_code=0, stdout="done", stderr="")
@@ -362,11 +349,10 @@ class TelegramAdapterParseTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            result = asyncio.run(a.send_response("42", result_obj))
+            result = await a.send_response("42", result_obj)
         self.assertTrue(result)
 
-    def test_send_question_with_options(self) -> None:
-        import asyncio
+    async def test_send_question_with_options(self) -> None:
 
         a = TelegramAdapter(bot_token="TOKEN")
         mock_resp = MagicMock()
@@ -376,11 +362,10 @@ class TelegramAdapterParseTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            result = asyncio.run(a.send_question("42", "Do it?", [{"label": "yes", "description": "proceed"}]))
+            result = await a.send_question("42", "Do it?", [{"label": "yes", "description": "proceed"}])
         self.assertTrue(result)
 
-    def test_send_text_exception(self) -> None:
-        import asyncio
+    async def test_send_text_exception(self) -> None:
 
         a = TelegramAdapter(bot_token="TOKEN")
         result_obj = RunResult(exit_code=0, stdout="", stderr="")
@@ -389,11 +374,10 @@ class TelegramAdapterParseTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            result = asyncio.run(a.send_response("42", result_obj))
+            result = await a.send_response("42", result_obj)
         self.assertFalse(result)
 
-    def test_poll_messages_success(self) -> None:
-        import asyncio
+    async def test_poll_messages_success(self) -> None:
 
         a = TelegramAdapter(bot_token="TOKEN")
         mock_resp = MagicMock()
@@ -411,13 +395,12 @@ class TelegramAdapterParseTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            results = asyncio.run(a.poll_messages())
+            results = await a.poll_messages()
         self.assertEqual(1, len(results))
         self.assertEqual("hello", results[0].prompt)
         self.assertEqual(11, a._update_offset)
 
-    def test_poll_messages_not_ok(self) -> None:
-        import asyncio
+    async def test_poll_messages_not_ok(self) -> None:
 
         a = TelegramAdapter(bot_token="TOKEN")
         mock_resp = MagicMock()
@@ -427,11 +410,10 @@ class TelegramAdapterParseTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            results = asyncio.run(a.poll_messages())
+            results = await a.poll_messages()
         self.assertEqual([], results)
 
-    def test_poll_messages_exception(self) -> None:
-        import asyncio
+    async def test_poll_messages_exception(self) -> None:
 
         a = TelegramAdapter(bot_token="TOKEN")
         mock_client = AsyncMock()
@@ -439,7 +421,7 @@ class TelegramAdapterParseTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            results = asyncio.run(a.poll_messages())
+            results = await a.poll_messages()
         self.assertEqual([], results)
 
 
@@ -448,7 +430,7 @@ class TelegramAdapterParseTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class WhatsAppAdapterTests(unittest.TestCase):
+class WhatsAppAdapterTests(unittest.IsolatedAsyncioTestCase):
     def _make_payload(self, text: str = "hello", from_id: str = "1234567890") -> dict:
         return {
             "entry": [
@@ -535,15 +517,13 @@ class WhatsAppAdapterTests(unittest.TestCase):
         self.assertTrue(a.supports_webhook)
         self.assertFalse(a.supports_polling)
 
-    def test_poll_messages_returns_empty(self) -> None:
-        import asyncio
+    async def test_poll_messages_returns_empty(self) -> None:
 
         a = WhatsAppAdapter(phone_number_id="PH", access_token="TOK")
-        result = asyncio.run(a.poll_messages())
+        result = await a.poll_messages()
         self.assertEqual([], result)
 
-    def test_send_response(self) -> None:
-        import asyncio
+    async def test_send_response(self) -> None:
 
         a = WhatsAppAdapter(phone_number_id="PH", access_token="TOK")
         result_obj = RunResult(exit_code=0, stdout="done", stderr="")
@@ -554,11 +534,10 @@ class WhatsAppAdapterTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            result = asyncio.run(a.send_response("1234", result_obj))
+            result = await a.send_response("1234", result_obj)
         self.assertTrue(result)
 
-    def test_send_question_with_options(self) -> None:
-        import asyncio
+    async def test_send_question_with_options(self) -> None:
 
         a = WhatsAppAdapter(phone_number_id="PH", access_token="TOK")
         mock_resp = MagicMock()
@@ -568,11 +547,10 @@ class WhatsAppAdapterTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            result = asyncio.run(a.send_question("1234", "Choose:", [{"label": "A", "description": "Option A"}]))
+            result = await a.send_question("1234", "Choose:", [{"label": "A", "description": "Option A"}])
         self.assertTrue(result)
 
-    def test_send_text_exception(self) -> None:
-        import asyncio
+    async def test_send_text_exception(self) -> None:
 
         a = WhatsAppAdapter(phone_number_id="PH", access_token="TOK")
         result_obj = RunResult(exit_code=0, stdout="", stderr="")
@@ -581,7 +559,7 @@ class WhatsAppAdapterTests(unittest.TestCase):
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("httpx.AsyncClient", return_value=mock_client):
-            result = asyncio.run(a.send_response("1234", result_obj))
+            result = await a.send_response("1234", result_obj)
         self.assertFalse(result)
 
 

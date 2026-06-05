@@ -5,8 +5,8 @@ from micro_x_agent_loop.memory.event_sink import AsyncEventSink
 from micro_x_agent_loop.memory.store import MemoryStore
 
 
-class EventSinkTests(unittest.TestCase):
-    def test_event_sink_flushes_events(self) -> None:
+class EventSinkTests(unittest.IsolatedAsyncioTestCase):
+    async def test_event_sink_flushes_events(self) -> None:
         store = MemoryStore(":memory:")
         store.execute(
             """
@@ -25,7 +25,7 @@ class EventSinkTests(unittest.TestCase):
             await asyncio.sleep(0.12)
             await sink.close()
 
-        asyncio.run(scenario())
+        await scenario()
 
         row = store.execute("SELECT COUNT(*) AS c FROM events WHERE session_id = ?", ("s1",)).fetchone()
         self.assertEqual(2, int(row["c"]))

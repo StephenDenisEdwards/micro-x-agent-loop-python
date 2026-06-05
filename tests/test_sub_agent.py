@@ -122,7 +122,7 @@ class TestSpawnSubagentSchema(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class TestSubAgentRunner(unittest.TestCase):
+class TestSubAgentRunner(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.tools = [
             FakeTool(name="filesystem__read_file", execute_result="file content here"),
@@ -130,7 +130,7 @@ class TestSubAgentRunner(unittest.TestCase):
             FakeTool(name="web__web_search", execute_result="search results"),
         ]
 
-    def test_run_explore_completes(self) -> None:
+    async def test_run_explore_completes(self) -> None:
         runner = SubAgentRunner(
             parent_tools=self.tools,
             provider_name="anthropic",
@@ -144,13 +144,13 @@ class TestSubAgentRunner(unittest.TestCase):
         fake_provider.queue(text="Here is the summary of what I found.")
 
         with patch("micro_x_agent_loop.sub_agent.create_provider", return_value=fake_provider):
-            result = asyncio.run(runner.run("Find X in the codebase", SubAgentType.EXPLORE))
+            result = await runner.run("Find X in the codebase", SubAgentType.EXPLORE)
 
         self.assertIn("summary", result.text.lower())
         self.assertFalse(result.timed_out)
         self.assertGreaterEqual(len(result.usage), 1)
 
-    def test_run_summarize_no_tools(self) -> None:
+    async def test_run_summarize_no_tools(self) -> None:
         runner = SubAgentRunner(
             parent_tools=self.tools,
             provider_name="anthropic",
@@ -163,7 +163,7 @@ class TestSubAgentRunner(unittest.TestCase):
         fake_provider.queue(text="Concise summary of content.")
 
         with patch("micro_x_agent_loop.sub_agent.create_provider", return_value=fake_provider):
-            result = asyncio.run(runner.run("Summarize this", SubAgentType.SUMMARIZE))
+            result = await runner.run("Summarize this", SubAgentType.SUMMARIZE)
 
         self.assertIn("summary", result.text.lower())
         # Verify no tools were passed to the provider
@@ -171,7 +171,7 @@ class TestSubAgentRunner(unittest.TestCase):
         # from the result that it completed successfully
         self.assertFalse(result.timed_out)
 
-    def test_run_timeout(self) -> None:
+    async def test_run_timeout(self) -> None:
         runner = SubAgentRunner(
             parent_tools=self.tools,
             provider_name="anthropic",
@@ -190,12 +190,12 @@ class TestSubAgentRunner(unittest.TestCase):
                 return {}, [], "end_turn", UsageResult(input_tokens=0, output_tokens=0, model="m")
 
         with patch("micro_x_agent_loop.sub_agent.create_provider", return_value=HangingProvider()):
-            result = asyncio.run(runner.run("Do something slow", SubAgentType.EXPLORE))
+            result = await runner.run("Do something slow", SubAgentType.EXPLORE)
 
         self.assertTrue(result.timed_out)
         self.assertIn("timed out", result.text.lower())
 
-    def test_run_error_handling(self) -> None:
+    async def test_run_error_handling(self) -> None:
         runner = SubAgentRunner(
             parent_tools=self.tools,
             provider_name="anthropic",
@@ -212,11 +212,11 @@ class TestSubAgentRunner(unittest.TestCase):
                 raise RuntimeError("API error")
 
         with patch("micro_x_agent_loop.sub_agent.create_provider", return_value=ErrorProvider()):
-            result = asyncio.run(runner.run("Do something", SubAgentType.EXPLORE))
+            result = await runner.run("Do something", SubAgentType.EXPLORE)
 
         self.assertIn("error", result.text.lower())
 
-    def test_general_uses_parent_model(self) -> None:
+    async def test_general_uses_parent_model(self) -> None:
         runner = SubAgentRunner(
             parent_tools=self.tools,
             provider_name="anthropic",
@@ -230,13 +230,13 @@ class TestSubAgentRunner(unittest.TestCase):
         fake_provider.queue(text="Done.")
 
         with patch("micro_x_agent_loop.sub_agent.create_provider", return_value=fake_provider):
-            asyncio.run(runner.run("Complex task", SubAgentType.GENERAL))
+            await runner.run("Complex task", SubAgentType.GENERAL)
 
         # General type should use parent model, not sub_agent_model
         call = fake_provider.stream_calls[0]
         self.assertEqual(call["model"], "claude-sonnet-4")
 
-    def test_explore_uses_sub_agent_model(self) -> None:
+    async def test_explore_uses_sub_agent_model(self) -> None:
         runner = SubAgentRunner(
             parent_tools=self.tools,
             provider_name="anthropic",
@@ -250,7 +250,7 @@ class TestSubAgentRunner(unittest.TestCase):
         fake_provider.queue(text="Found it.")
 
         with patch("micro_x_agent_loop.sub_agent.create_provider", return_value=fake_provider):
-            asyncio.run(runner.run("Search for X", SubAgentType.EXPLORE))
+            await runner.run("Search for X", SubAgentType.EXPLORE)
 
         call = fake_provider.stream_calls[0]
         self.assertEqual(call["model"], "claude-haiku-3")
@@ -286,7 +286,7 @@ class _ListEvents(BaseTurnEvents):
         )
 
 
-class TestTurnEngineSubAgent(unittest.TestCase):
+class TestTurnEngineSubAgent(unittest.IsolatedAsyncioTestCase):
     """Test that TurnEngine handles spawn_subagent blocks as pseudo-tools."""
 
     def _make_engine(
@@ -311,7 +311,7 @@ class TestTurnEngineSubAgent(unittest.TestCase):
         )
         return engine, messages, events
 
-    def test_subagent_schema_included_when_runner_present(self) -> None:
+    async def test_subagent_schema_included_when_runner_present(self) -> None:
         """spawn_subagent schema should be in api_tools when runner is set."""
         provider = FakeStreamProvider()
         provider.queue(text="No tools needed.")
@@ -325,22 +325,22 @@ class TestTurnEngineSubAgent(unittest.TestCase):
         )
 
         engine, messages, _ = self._make_engine(provider, sub_agent_runner=runner)
-        asyncio.run(engine.run(messages=messages, user_message="hello"))
+        await engine.run(messages=messages, user_message="hello")
 
         # The FakeStreamProvider doesn't expose the tools argument directly,
         # but the schema should be included. We verify the engine ran successfully.
         self.assertTrue(len(messages) > 0)
 
-    def test_subagent_schema_excluded_when_no_runner(self) -> None:
+    async def test_subagent_schema_excluded_when_no_runner(self) -> None:
         """spawn_subagent schema should NOT be in api_tools when runner is None."""
         provider = FakeStreamProvider()
         provider.queue(text="Hello.")
 
         engine, messages, _ = self._make_engine(provider, sub_agent_runner=None)
-        asyncio.run(engine.run(messages=messages, user_message="hello"))
+        await engine.run(messages=messages, user_message="hello")
         self.assertTrue(len(messages) > 0)
 
-    def test_subagent_block_dispatched(self) -> None:
+    async def test_subagent_block_dispatched(self) -> None:
         """spawn_subagent tool_use block should be handled as a pseudo-tool."""
         provider = FakeStreamProvider()
 
@@ -380,7 +380,7 @@ class TestTurnEngineSubAgent(unittest.TestCase):
         runner.run = mock_run
 
         engine, messages, _ = self._make_engine(provider, sub_agent_runner=runner)
-        asyncio.run(engine.run(messages=messages, user_message="How many Python files?"))
+        await engine.run(messages=messages, user_message="How many Python files?")
 
         # Should have: user, assistant (with tool_use), user (tool_result), assistant (final)
         self.assertEqual(len(messages), 4)
@@ -392,7 +392,7 @@ class TestTurnEngineSubAgent(unittest.TestCase):
         self.assertEqual(content[0]["tool_use_id"], "tu_1")
         self.assertIn("42 Python files", content[0]["content"])
 
-    def test_on_subagent_completed_called(self) -> None:
+    async def test_on_subagent_completed_called(self) -> None:
         """on_subagent_completed should be called with task, type, result, and cost info."""
         from micro_x_agent_loop.sub_agent import SubAgentResult
 
@@ -428,7 +428,7 @@ class TestTurnEngineSubAgent(unittest.TestCase):
         runner.run = mock_run
 
         engine, messages, events = self._make_engine(provider, sub_agent_runner=runner)
-        asyncio.run(engine.run(messages=messages, user_message="Find configs"))
+        await engine.run(messages=messages, user_message="Find configs")
 
         self.assertEqual(len(events.subagent_completed_calls), 1)
         call = events.subagent_completed_calls[0]

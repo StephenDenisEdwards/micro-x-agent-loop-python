@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -159,8 +158,8 @@ class ToGeminiContentsExtendedTests(unittest.TestCase):
             self.assertEqual(1, len(result))
 
 
-class GeminiStreamChatTests(unittest.TestCase):
-    def test_stream_chat_text_only(self) -> None:
+class GeminiStreamChatTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stream_chat_text_only(self) -> None:
         with patch("google.genai.types", _mock_types):
             chunk = MagicMock()
             chunk.text = "Hello world"
@@ -185,8 +184,7 @@ class GeminiStreamChatTests(unittest.TestCase):
             provider = _gp.GeminiProvider.__new__(_gp.GeminiProvider)
             provider._client = mock_client
 
-            msg, tool_blocks, stop_reason, usage_result = asyncio.run(
-                provider.stream_chat(
+            msg, tool_blocks, stop_reason, usage_result = await provider.stream_chat(
                     model="gemini-2.5-pro",
                     max_tokens=1024,
                     temperature=0.5,
@@ -194,7 +192,6 @@ class GeminiStreamChatTests(unittest.TestCase):
                     messages=[{"role": "user", "content": "hi"}],
                     tools=[],
                 )
-            )
 
             self.assertEqual("assistant", msg["role"])
             self.assertEqual("Hello world", msg["content"][0]["text"])
@@ -203,7 +200,7 @@ class GeminiStreamChatTests(unittest.TestCase):
             self.assertEqual(10, usage_result.input_tokens)
             self.assertEqual(5, usage_result.output_tokens)
 
-    def test_stream_chat_with_tool_calls(self) -> None:
+    async def test_stream_chat_with_tool_calls(self) -> None:
         with patch("google.genai.types", _mock_types):
             fc = MagicMock()
             fc.name = "read_file"
@@ -226,8 +223,7 @@ class GeminiStreamChatTests(unittest.TestCase):
             provider = _gp.GeminiProvider.__new__(_gp.GeminiProvider)
             provider._client = mock_client
 
-            msg, tool_blocks, stop_reason, usage_result = asyncio.run(
-                provider.stream_chat(
+            msg, tool_blocks, stop_reason, usage_result = await provider.stream_chat(
                     model="gemini-2.5-pro",
                     max_tokens=1024,
                     temperature=0.5,
@@ -235,13 +231,12 @@ class GeminiStreamChatTests(unittest.TestCase):
                     messages=[{"role": "user", "content": "read test.py"}],
                     tools=[{"name": "read_file", "description": "Read file", "input_schema": {}}],
                 )
-            )
 
             self.assertEqual("tool_use", stop_reason)
             self.assertEqual(1, len(tool_blocks))
             self.assertEqual("read_file", tool_blocks[0]["name"])
 
-    def test_stream_chat_emits_text_delta(self) -> None:
+    async def test_stream_chat_emits_text_delta(self) -> None:
         with patch("google.genai.types", _mock_types):
             chunk = MagicMock()
             chunk.text = "delta text"
@@ -261,8 +256,7 @@ class GeminiStreamChatTests(unittest.TestCase):
             provider = _gp.GeminiProvider.__new__(_gp.GeminiProvider)
             provider._client = mock_client
 
-            asyncio.run(
-                provider.stream_chat(
+            await provider.stream_chat(
                     model="gemini-2.5-pro",
                     max_tokens=1024,
                     temperature=0.5,
@@ -271,13 +265,12 @@ class GeminiStreamChatTests(unittest.TestCase):
                     tools=[],
                     channel=channel,
                 )
-            )
 
             channel.emit_text_delta.assert_called_once_with("delta text")
 
 
-class GeminiCreateMessageTests(unittest.TestCase):
-    def test_create_message(self) -> None:
+class GeminiCreateMessageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_create_message(self) -> None:
         with patch("google.genai.types", _mock_types):
             response = MagicMock()
             response.text = "summary text"
@@ -291,21 +284,19 @@ class GeminiCreateMessageTests(unittest.TestCase):
             provider = _gp.GeminiProvider.__new__(_gp.GeminiProvider)
             provider._client = mock_client
 
-            text, usage = asyncio.run(
-                provider.create_message(
+            text, usage = await provider.create_message(
                     model="gemini-2.5-pro",
                     max_tokens=1024,
                     temperature=0.0,
                     messages=[{"role": "user", "content": "summarize"}],
                 )
-            )
 
             self.assertEqual("summary text", text)
             self.assertEqual(20, usage.input_tokens)
             self.assertEqual(10, usage.output_tokens)
             self.assertEqual(2, usage.cache_read_input_tokens)
 
-    def test_create_message_none_text(self) -> None:
+    async def test_create_message_none_text(self) -> None:
         with patch("google.genai.types", _mock_types):
             response = MagicMock()
             response.text = None
@@ -319,14 +310,12 @@ class GeminiCreateMessageTests(unittest.TestCase):
             provider = _gp.GeminiProvider.__new__(_gp.GeminiProvider)
             provider._client = mock_client
 
-            text, usage = asyncio.run(
-                provider.create_message(
+            text, usage = await provider.create_message(
                     model="gemini-2.5-pro",
                     max_tokens=1024,
                     temperature=0.0,
                     messages=[{"role": "user", "content": "hi"}],
                 )
-            )
 
             self.assertEqual("", text)
 

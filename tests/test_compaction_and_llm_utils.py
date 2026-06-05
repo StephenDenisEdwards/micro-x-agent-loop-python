@@ -13,7 +13,7 @@ from micro_x_agent_loop.providers.anthropic_provider import AnthropicProvider
 from tests.fakes import FakeTool
 
 
-class CompactionAndLlmUtilsTests(unittest.TestCase):
+class CompactionAndLlmUtilsTests(unittest.IsolatedAsyncioTestCase):
     def test_estimate_tokens_counts_text_and_tool_blocks(self) -> None:
         messages = [
             {"role": "user", "content": "abcde"},
@@ -56,10 +56,10 @@ class CompactionAndLlmUtilsTests(unittest.TestCase):
         self.assertEqual("read_file", mapped[0]["name"])
         self.assertEqual("reads files", mapped[0]["description"])
 
-    def test_spinner_start_stop_is_safe(self) -> None:
+    async def test_spinner_start_stop_is_safe(self) -> None:
         spinner = Spinner(prefix="x", label=" test")
         spinner.start()
-        asyncio.run(asyncio.sleep(0.01))
+        await asyncio.sleep(0.01)
         spinner.stop()
 
 

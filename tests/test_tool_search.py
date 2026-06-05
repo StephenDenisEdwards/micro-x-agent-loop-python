@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 
 from micro_x_agent_loop.tool_search import (
@@ -152,7 +151,7 @@ class TestEstimateToolSchemaTokens(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class TestToolSearchManager(unittest.TestCase):
+class TestToolSearchManager(unittest.IsolatedAsyncioTestCase):
     def _make_manager(self) -> ToolSearchManager:
         tools = _make_tools()
         return ToolSearchManager(all_tools=tools, converted_tools=_convert_tools(tools))
@@ -168,40 +167,40 @@ class TestToolSearchManager(unittest.TestCase):
         self.assertEqual(1, len(api_tools))
         self.assertEqual("tool_search", api_tools[0]["name"])
 
-    def test_search_loads_matching_tools(self) -> None:
+    async def test_search_loads_matching_tools(self) -> None:
         mgr = self._make_manager()
-        result = asyncio.run(mgr.handle_tool_search("file"))
+        result = await mgr.handle_tool_search("file")
         self.assertIn("read_file", result)
         self.assertIn("write_file", result)
         self.assertGreater(mgr.loaded_tool_count, 0)
 
-    def test_loaded_tools_appear_in_api_call(self) -> None:
+    async def test_loaded_tools_appear_in_api_call(self) -> None:
         mgr = self._make_manager()
-        asyncio.run(mgr.handle_tool_search("file"))
+        await mgr.handle_tool_search("file")
         api_tools = mgr.get_tools_for_api_call()
         names = [t["name"] for t in api_tools]
         self.assertIn("tool_search", names)
         self.assertIn("fs__read_file", names)
         self.assertIn("fs__write_file", names)
 
-    def test_begin_turn_clears_loaded(self) -> None:
+    async def test_begin_turn_clears_loaded(self) -> None:
         mgr = self._make_manager()
-        asyncio.run(mgr.handle_tool_search("file"))
+        await mgr.handle_tool_search("file")
         self.assertGreater(mgr.loaded_tool_count, 0)
         mgr.begin_turn()
         self.assertEqual(0, mgr.loaded_tool_count)
         api_tools = mgr.get_tools_for_api_call()
         self.assertEqual(1, len(api_tools))
 
-    def test_no_matches_returns_helpful_message(self) -> None:
+    async def test_no_matches_returns_helpful_message(self) -> None:
         mgr = self._make_manager()
-        result = asyncio.run(mgr.handle_tool_search("zzzznonexistent"))
+        result = await mgr.handle_tool_search("zzzznonexistent")
         self.assertIn("No tools found", result)
         self.assertEqual(0, mgr.loaded_tool_count)
 
-    def test_name_match_scores_higher(self) -> None:
+    async def test_name_match_scores_higher(self) -> None:
         mgr = self._make_manager()
-        result = asyncio.run(mgr.handle_tool_search("read"))
+        result = await mgr.handle_tool_search("read")
         # "read" appears in both fs__read_file name and email__read name
         self.assertIn("fs__read_file", result)
         self.assertIn("email__read", result)
@@ -210,11 +209,11 @@ class TestToolSearchManager(unittest.TestCase):
         self.assertTrue(ToolSearchManager.is_tool_search_call("tool_search"))
         self.assertFalse(ToolSearchManager.is_tool_search_call("read_file"))
 
-    def test_multiple_searches_accumulate(self) -> None:
+    async def test_multiple_searches_accumulate(self) -> None:
         mgr = self._make_manager()
-        asyncio.run(mgr.handle_tool_search("file"))
+        await mgr.handle_tool_search("file")
         count_after_first = mgr.loaded_tool_count
-        asyncio.run(mgr.handle_tool_search("email"))
+        await mgr.handle_tool_search("email")
         # Should have accumulated more tools
         self.assertGreater(mgr.loaded_tool_count, count_after_first)
 
@@ -252,8 +251,8 @@ def _make_engine_with_search(
     )
 
 
-class TestTurnEngineToolSearch(unittest.TestCase):
-    def test_tool_search_then_tool_call(self) -> None:
+class TestTurnEngineToolSearch(unittest.IsolatedAsyncioTestCase):
+    async def test_tool_search_then_tool_call(self) -> None:
         """LLM searches for tools, then calls a discovered tool."""
         tool = FakeTool(name="fs__read_file", description="Read a file", execute_result="contents")
         provider = FakeStreamProvider()
@@ -288,14 +287,14 @@ class TestTurnEngineToolSearch(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine_with_search(provider, events, tools=[tool])
 
-        asyncio.run(engine.run(messages=[], user_message="read a.py"))
+        await engine.run(messages=[], user_message="read a.py")
 
         # tool_search should NOT go through execute_tools
         self.assertEqual(1, tool.execute_calls)
         # 3 API calls total
         self.assertEqual(3, len(events.api_call_metrics))
 
-    def test_tool_search_only_continues_loop(self) -> None:
+    async def test_tool_search_only_continues_loop(self) -> None:
         """When LLM only calls tool_search (no regular tools), loop continues without checkpoint."""
         provider = FakeStreamProvider()
 
@@ -317,14 +316,14 @@ class TestTurnEngineToolSearch(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine_with_search(provider, events)
 
-        asyncio.run(engine.run(messages=[], user_message="check email"))
+        await engine.run(messages=[], user_message="check email")
 
         # No checkpoint calls (tool_search is handled inline)
         self.assertEqual(0, len(events.checkpoint_calls))
         # 2 API calls
         self.assertEqual(2, len(events.api_call_metrics))
 
-    def test_mixed_search_and_regular_tools(self) -> None:
+    async def test_mixed_search_and_regular_tools(self) -> None:
         """LLM calls tool_search and a regular tool in the same response."""
         tool = FakeTool(name="fs__read_file", description="Read a file", execute_result="data")
         provider = FakeStreamProvider()
@@ -350,7 +349,7 @@ class TestTurnEngineToolSearch(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine_with_search(provider, events, tools=[tool])
 
-        asyncio.run(engine.run(messages=[], user_message="read and search"))
+        await engine.run(messages=[], user_message="read and search")
 
         self.assertEqual(1, tool.execute_calls)
         # Results should be merged — check that user message has both results
@@ -363,7 +362,7 @@ class TestTurnEngineToolSearch(unittest.TestCase):
         self.assertEqual("ts1", results[0]["tool_use_id"])
         self.assertEqual("t1", results[1]["tool_use_id"])
 
-    def test_no_manager_bypasses_search(self) -> None:
+    async def test_no_manager_bypasses_search(self) -> None:
         """Without tool_search_manager, engine works normally."""
         tool = FakeTool(name="read_file", description="Read", execute_result="ok")
         provider = FakeStreamProvider()
@@ -395,7 +394,7 @@ class TestTurnEngineToolSearch(unittest.TestCase):
             events=events,
         )
 
-        asyncio.run(engine.run(messages=[], user_message="read"))
+        await engine.run(messages=[], user_message="read")
 
         self.assertEqual(1, tool.execute_calls)
 

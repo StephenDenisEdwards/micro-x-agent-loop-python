@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -37,8 +36,8 @@ class GetContextWindowTests(unittest.TestCase):
         self.assertGreater(window, 0)
 
 
-class ToolSearchRemoveTests(unittest.TestCase):
-    def test_remove_tools(self) -> None:
+class ToolSearchRemoveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_remove_tools(self) -> None:
         tools = _make_tools()
         mgr = ToolSearchManager(all_tools=tools, converted_tools=_convert_tools(tools))
         self.assertEqual(4, mgr.total_tool_count)
@@ -46,7 +45,7 @@ class ToolSearchRemoveTests(unittest.TestCase):
         mgr.remove_tools(["fs__read_file", "web__search"])
         self.assertEqual(2, mgr.total_tool_count)
         # Removed tools should not appear in search
-        result = asyncio.run(mgr.handle_tool_search("read file"))
+        result = await mgr.handle_tool_search("read file")
         self.assertNotIn("fs__read_file", result)
 
     def test_remove_empty_list(self) -> None:
@@ -61,10 +60,10 @@ class ToolSearchRemoveTests(unittest.TestCase):
         mgr.remove_tools(["nonexistent_tool"])
         self.assertEqual(4, mgr.total_tool_count)
 
-    def test_remove_clears_loaded(self) -> None:
+    async def test_remove_clears_loaded(self) -> None:
         tools = _make_tools()
         mgr = ToolSearchManager(all_tools=tools, converted_tools=_convert_tools(tools))
-        asyncio.run(mgr.handle_tool_search("file"))
+        await mgr.handle_tool_search("file")
         self.assertGreater(mgr.loaded_tool_count, 0)
         mgr.remove_tools(["fs__read_file", "fs__write_file"])
         # loaded_tool_names should have been discarded
@@ -73,8 +72,8 @@ class ToolSearchRemoveTests(unittest.TestCase):
         self.assertNotIn("fs__read_file", names)
 
 
-class ToolSearchSemanticTests(unittest.TestCase):
-    def test_semantic_search_used_when_available(self) -> None:
+class ToolSearchSemanticTests(unittest.IsolatedAsyncioTestCase):
+    async def test_semantic_search_used_when_available(self) -> None:
         tools = _make_tools()
         converted = _convert_tools(tools)
 
@@ -91,12 +90,12 @@ class ToolSearchSemanticTests(unittest.TestCase):
             embedding_index=mock_index,
         )
 
-        result = asyncio.run(mgr.handle_tool_search("read a file"))
+        result = await mgr.handle_tool_search("read a file")
         self.assertIn("fs__read_file", result)
         self.assertIn("matching tool", result)
         mock_index.search.assert_called_once()
 
-    def test_semantic_search_fallback_to_keyword(self) -> None:
+    async def test_semantic_search_fallback_to_keyword(self) -> None:
         """When semantic search raises, falls back to keyword search."""
         tools = _make_tools()
         converted = _convert_tools(tools)
@@ -112,11 +111,11 @@ class ToolSearchSemanticTests(unittest.TestCase):
             embedding_index=mock_index,
         )
 
-        result = asyncio.run(mgr.handle_tool_search("file"))
+        result = await mgr.handle_tool_search("file")
         # Should still find tools via keyword
         self.assertIn("fs__read_file", result)
 
-    def test_semantic_search_no_results(self) -> None:
+    async def test_semantic_search_no_results(self) -> None:
         tools = _make_tools()
         converted = _convert_tools(tools)
 
@@ -132,17 +131,17 @@ class ToolSearchSemanticTests(unittest.TestCase):
             embedding_index=mock_index,
         )
 
-        result = asyncio.run(mgr.handle_tool_search("zzzznothing"))
+        result = await mgr.handle_tool_search("zzzznothing")
         self.assertIn("No tools found", result)
 
-    def test_initialize_embeddings_no_index(self) -> None:
+    async def test_initialize_embeddings_no_index(self) -> None:
         """initialize_embeddings is a no-op without an index."""
         tools = _make_tools()
         mgr = ToolSearchManager(all_tools=tools, converted_tools=_convert_tools(tools))
         # Should not raise
-        asyncio.run(mgr.initialize_embeddings())
+        await mgr.initialize_embeddings()
 
-    def test_initialize_embeddings_with_index(self) -> None:
+    async def test_initialize_embeddings_with_index(self) -> None:
         tools = _make_tools()
         converted = _convert_tools(tools)
 
@@ -154,12 +153,12 @@ class ToolSearchSemanticTests(unittest.TestCase):
             converted_tools=converted,
             embedding_index=mock_index,
         )
-        asyncio.run(mgr.initialize_embeddings())
+        await mgr.initialize_embeddings()
         mock_index.build.assert_called_once()
 
 
-class ToolSearchKeywordMaxLoadTests(unittest.TestCase):
-    def test_max_load_limits_results(self) -> None:
+class ToolSearchKeywordMaxLoadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_max_load_limits_results(self) -> None:
         tools = [FakeTool(name=f"tool_{i}", description=f"keyword match tool {i}") for i in range(20)]
         converted = _convert_tools(tools)
         mgr = ToolSearchManager(
@@ -167,15 +166,15 @@ class ToolSearchKeywordMaxLoadTests(unittest.TestCase):
             converted_tools=converted,
             max_load=3,
         )
-        result = asyncio.run(mgr.handle_tool_search("keyword"))
+        result = await mgr.handle_tool_search("keyword")
         self.assertIn("Showing top 3", result)
         self.assertEqual(3, mgr.loaded_tool_count)
 
-    def test_long_description_truncated_in_output(self) -> None:
+    async def test_long_description_truncated_in_output(self) -> None:
         tools = [FakeTool(name="fs__tool", description="x" * 300)]
         converted = _convert_tools(tools)
         mgr = ToolSearchManager(all_tools=tools, converted_tools=converted)
-        result = asyncio.run(mgr.handle_tool_search("tool"))
+        result = await mgr.handle_tool_search("tool")
         self.assertIn("...", result)
 
 

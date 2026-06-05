@@ -7,7 +7,6 @@ don't break), and that each tool returns non-error text.
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 
 from micro_x_agent_loop.native_tools import build_native_tools
@@ -15,7 +14,7 @@ from micro_x_agent_loop.native_tools.system_info import build_system_info_tools
 from micro_x_agent_loop.tool import Tool
 
 
-class NativeSystemInfoTests(unittest.TestCase):
+class NativeSystemInfoTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.tools = build_system_info_tools()
 
@@ -35,14 +34,14 @@ class NativeSystemInfoTests(unittest.TestCase):
             self.assertEqual(t.predict_touched_paths({}), [])
             self.assertTrue(t.description)
 
-    def test_execute_returns_text(self) -> None:
+    async def test_execute_returns_text(self) -> None:
         expected_head = {
             "system-info__system_info": "System Information",
             "system-info__disk_info": "Disk Information",
             "system-info__network_info": "Network Interfaces",
         }
         for t in self.tools:
-            result = asyncio.run(t.execute({}))
+            result = await t.execute({})
             self.assertFalse(result.is_error, f"{t.name} errored: {result.text}")
             self.assertTrue(result.text.startswith(expected_head[t.name]))
 

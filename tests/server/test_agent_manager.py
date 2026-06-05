@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 
 from micro_x_agent_loop.agent_channel import BufferedChannel
@@ -29,8 +28,8 @@ def _make_manager(max_sessions: int = 5, timeout_minutes: int = 30) -> AgentMana
     )
 
 
-class TestAgentManagerBasic(unittest.TestCase):
-    def test_get_or_create_creates_agent(self) -> None:
+class TestAgentManagerBasic(unittest.IsolatedAsyncioTestCase):
+    async def test_get_or_create_creates_agent(self) -> None:
         mgr = _make_manager()
         channel = BufferedChannel()
 
@@ -39,9 +38,9 @@ class TestAgentManagerBasic(unittest.TestCase):
             self.assertIsNotNone(agent)
             self.assertEqual(1, mgr.active_count)
 
-        asyncio.run(go())
+        await go()
 
-    def test_get_or_create_returns_same_agent(self) -> None:
+    async def test_get_or_create_returns_same_agent(self) -> None:
         mgr = _make_manager()
 
         async def go():
@@ -50,9 +49,9 @@ class TestAgentManagerBasic(unittest.TestCase):
             self.assertIs(a1, a2)
             self.assertEqual(1, mgr.active_count)
 
-        asyncio.run(go())
+        await go()
 
-    def test_destroy_removes_agent(self) -> None:
+    async def test_destroy_removes_agent(self) -> None:
         mgr = _make_manager()
 
         async def go():
@@ -62,18 +61,18 @@ class TestAgentManagerBasic(unittest.TestCase):
             self.assertTrue(result)
             self.assertEqual(0, mgr.active_count)
 
-        asyncio.run(go())
+        await go()
 
-    def test_destroy_nonexistent_returns_false(self) -> None:
+    async def test_destroy_nonexistent_returns_false(self) -> None:
         mgr = _make_manager()
 
         async def go():
             result = await mgr.destroy("no-such-session")
             self.assertFalse(result)
 
-        asyncio.run(go())
+        await go()
 
-    def test_list_sessions(self) -> None:
+    async def test_list_sessions(self) -> None:
         mgr = _make_manager()
 
         async def go():
@@ -84,9 +83,9 @@ class TestAgentManagerBasic(unittest.TestCase):
             ids = {s["session_id"] for s in sessions}
             self.assertEqual({"s1", "s2"}, ids)
 
-        asyncio.run(go())
+        await go()
 
-    def test_capacity_eviction(self) -> None:
+    async def test_capacity_eviction(self) -> None:
         mgr = _make_manager(max_sessions=2)
 
         async def go():
@@ -100,9 +99,9 @@ class TestAgentManagerBasic(unittest.TestCase):
             self.assertIn("s2", ids)
             self.assertIn("s3", ids)
 
-        asyncio.run(go())
+        await go()
 
-    def test_shutdown_all(self) -> None:
+    async def test_shutdown_all(self) -> None:
         mgr = _make_manager()
 
         async def go():
@@ -111,7 +110,7 @@ class TestAgentManagerBasic(unittest.TestCase):
             await mgr.shutdown_all()
             self.assertEqual(0, mgr.active_count)
 
-        asyncio.run(go())
+        await go()
 
 
 if __name__ == "__main__":

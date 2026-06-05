@@ -236,13 +236,10 @@ class TestUnassignAgentTasks(unittest.TestCase):
         self.assertEqual(t2.owner, "bob")
 
 
-class TestAutoOwner(unittest.TestCase):
+class TestAutoOwner(unittest.IsolatedAsyncioTestCase):
     """Tests for auto-owner assignment in TaskManager (guide Section 9.4)."""
 
     def setUp(self) -> None:
-        import asyncio
-
-        self._asyncio = asyncio
         self._tmpdir = tempfile.mkdtemp()
         db_path = os.path.join(self._tmpdir, "tasks.db")
         self.store = TaskStore(db_path)
@@ -251,31 +248,24 @@ class TestAutoOwner(unittest.TestCase):
     def tearDown(self) -> None:
         self.store.close()
 
-    def _run(self, coro: object) -> str:
-        return self._asyncio.run(coro)  # type: ignore[arg-type]
-
-    def test_auto_owner_on_in_progress(self) -> None:
+    async def test_auto_owner_on_in_progress(self) -> None:
         from micro_x_agent_loop.tasks.manager import TaskManager
 
         mgr = TaskManager(self.store, self.list_id, agent_id="alice")
-        self._run(
-            mgr.handle_tool_call(
+        await mgr.handle_tool_call(
                 "task_create",
                 {
                     "subject": "Task",
                     "description": "desc",
                 },
             )
-        )
-        result = self._run(
-            mgr.handle_tool_call(
+        result = await mgr.handle_tool_call(
                 "task_update",
                 {
                     "taskId": "1",
                     "status": "in_progress",
                 },
             )
-        )
         self.assertIn("status", result)
         self.assertIn("owner", result)
 
@@ -283,47 +273,40 @@ class TestAutoOwner(unittest.TestCase):
         assert task is not None
         self.assertEqual(task.owner, "alice")
 
-    def test_no_auto_owner_without_agent_id(self) -> None:
+    async def test_no_auto_owner_without_agent_id(self) -> None:
         from micro_x_agent_loop.tasks.manager import TaskManager
 
         mgr = TaskManager(self.store, self.list_id)  # no agent_id
-        self._run(
-            mgr.handle_tool_call(
+        await mgr.handle_tool_call(
                 "task_create",
                 {
                     "subject": "Task",
                     "description": "desc",
                 },
             )
-        )
-        self._run(
-            mgr.handle_tool_call(
+        await mgr.handle_tool_call(
                 "task_update",
                 {
                     "taskId": "1",
                     "status": "in_progress",
                 },
             )
-        )
         task = self.store.get_task(self.list_id, "1")
         assert task is not None
         self.assertIsNone(task.owner)
 
-    def test_explicit_owner_overrides_auto(self) -> None:
+    async def test_explicit_owner_overrides_auto(self) -> None:
         from micro_x_agent_loop.tasks.manager import TaskManager
 
         mgr = TaskManager(self.store, self.list_id, agent_id="alice")
-        self._run(
-            mgr.handle_tool_call(
+        await mgr.handle_tool_call(
                 "task_create",
                 {
                     "subject": "Task",
                     "description": "desc",
                 },
             )
-        )
-        self._run(
-            mgr.handle_tool_call(
+        await mgr.handle_tool_call(
                 "task_update",
                 {
                     "taskId": "1",
@@ -331,44 +314,37 @@ class TestAutoOwner(unittest.TestCase):
                     "owner": "bob",
                 },
             )
-        )
         task = self.store.get_task(self.list_id, "1")
         assert task is not None
         self.assertEqual(task.owner, "bob")
 
-    def test_no_auto_owner_if_already_owned(self) -> None:
+    async def test_no_auto_owner_if_already_owned(self) -> None:
         from micro_x_agent_loop.tasks.manager import TaskManager
 
         mgr = TaskManager(self.store, self.list_id, agent_id="alice")
-        self._run(
-            mgr.handle_tool_call(
+        await mgr.handle_tool_call(
                 "task_create",
                 {
                     "subject": "Task",
                     "description": "desc",
                 },
             )
-        )
         # Set owner first
-        self._run(
-            mgr.handle_tool_call(
+        await mgr.handle_tool_call(
                 "task_update",
                 {
                     "taskId": "1",
                     "owner": "bob",
                 },
             )
-        )
         # Now mark in_progress — should NOT override bob with alice
-        self._run(
-            mgr.handle_tool_call(
+        await mgr.handle_tool_call(
                 "task_update",
                 {
                     "taskId": "1",
                     "status": "in_progress",
                 },
             )
-        )
         task = self.store.get_task(self.list_id, "1")
         assert task is not None
         self.assertEqual(task.owner, "bob")

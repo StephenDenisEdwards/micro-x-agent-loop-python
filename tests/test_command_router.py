@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 
 from micro_x_agent_loop.commands.router import CommandRouter
@@ -112,115 +111,115 @@ def _make_router() -> tuple[CommandRouter, dict[str, list]]:
     return router, calls
 
 
-class CommandRouterTests(unittest.TestCase):
-    def test_non_command_returns_false(self) -> None:
+class CommandRouterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_non_command_returns_false(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("hello world"))
+        result = await router.try_handle("hello world")
         self.assertFalse(result)
 
-    def test_help(self) -> None:
+    async def test_help(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/help"))
+        result = await router.try_handle("/help")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["help"]))
 
-    def test_command_returns_prompt(self) -> None:
+    async def test_command_returns_prompt(self) -> None:
         async def on_command(cmd: str) -> str | None:
             return "run this prompt"
 
         router, calls = _make_router()
         router._on_command = on_command
-        result = asyncio.run(router.try_handle("/command greet"))
+        result = await router.try_handle("/command greet")
         self.assertEqual("run this prompt", result)
 
-    def test_command_returns_true_when_none(self) -> None:
+    async def test_command_returns_true_when_none(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/command"))
+        result = await router.try_handle("/command")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["command"]))
 
-    def test_cost(self) -> None:
+    async def test_cost(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/cost"))
+        result = await router.try_handle("/cost")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["cost"]))
 
-    def test_replay(self) -> None:
+    async def test_replay(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/replay s-123"))
+        result = await router.try_handle("/replay s-123")
         self.assertTrue(result)
         self.assertEqual(["/replay s-123"], calls["replay"])
         self.assertEqual(0, len(calls["cost"]))  # /replay must not match /cost
 
-    def test_feedback(self) -> None:
+    async def test_feedback(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/feedback +1 great"))
+        result = await router.try_handle("/feedback +1 great")
         self.assertTrue(result)
         self.assertEqual(["/feedback +1 great"], calls["feedback"])
 
-    def test_rewind(self) -> None:
+    async def test_rewind(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/rewind abc"))
+        result = await router.try_handle("/rewind abc")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["rewind"]))
 
-    def test_checkpoint(self) -> None:
+    async def test_checkpoint(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/checkpoint list"))
+        result = await router.try_handle("/checkpoint list")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["checkpoint"]))
 
-    def test_session(self) -> None:
+    async def test_session(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/session new"))
+        result = await router.try_handle("/session new")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["session"]))
 
-    def test_voice(self) -> None:
+    async def test_voice(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/voice status"))
+        result = await router.try_handle("/voice status")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["voice"]))
 
-    def test_memory(self) -> None:
+    async def test_memory(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/memory list"))
+        result = await router.try_handle("/memory list")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["memory"]))
 
-    def test_tools(self) -> None:
+    async def test_tools(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/tools mcp"))
+        result = await router.try_handle("/tools mcp")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["tools"]))
 
-    def test_tool(self) -> None:
+    async def test_tool(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/tool foo"))
+        result = await router.try_handle("/tool foo")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["tool"]))
 
-    def test_console_log_level(self) -> None:
+    async def test_console_log_level(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/console-log-level DEBUG"))
+        result = await router.try_handle("/console-log-level DEBUG")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["console_log_level"]))
 
-    def test_debug(self) -> None:
+    async def test_debug(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/debug show-api-payload"))
+        result = await router.try_handle("/debug show-api-payload")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["debug"]))
 
-    def test_unknown_command(self) -> None:
+    async def test_unknown_command(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("/frobnitz"))
+        result = await router.try_handle("/frobnitz")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["unknown"]))
 
-    def test_whitespace_stripped(self) -> None:
+    async def test_whitespace_stripped(self) -> None:
         router, calls = _make_router()
-        result = asyncio.run(router.try_handle("   /help   "))
+        result = await router.try_handle("   /help   ")
         self.assertTrue(result)
         self.assertEqual(1, len(calls["help"]))
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -191,12 +190,12 @@ def _make_chunk(*, content: str | None = None, tool_calls=None, finish_reason: s
     return chunk
 
 
-class OpenAIProviderStreamChatTests(unittest.TestCase):
+class OpenAIProviderStreamChatTests(unittest.IsolatedAsyncioTestCase):
     def _make_provider(self) -> OpenAIProvider:
         with patch("openai.AsyncOpenAI"):
             return OpenAIProvider(api_key="test")
 
-    def test_simple_text_response(self) -> None:
+    async def test_simple_text_response(self) -> None:
         async def go():
             provider = self._make_provider()
 
@@ -227,9 +226,9 @@ class OpenAIProviderStreamChatTests(unittest.TestCase):
             self.assertEqual("Hello world", msg["content"][0]["text"])
             self.assertEqual([], tool_blocks)
 
-        asyncio.run(go())
+        await go()
 
-    def test_tool_call_response(self) -> None:
+    async def test_tool_call_response(self) -> None:
         async def go():
             provider = self._make_provider()
 
@@ -262,9 +261,9 @@ class OpenAIProviderStreamChatTests(unittest.TestCase):
             self.assertEqual("search", tool_blocks[0]["name"])
             self.assertEqual({"q": "foo"}, tool_blocks[0]["input"])
 
-        asyncio.run(go())
+        await go()
 
-    def test_usage_extracted(self) -> None:
+    async def test_usage_extracted(self) -> None:
         async def go():
             provider = self._make_provider()
 
@@ -290,9 +289,9 @@ class OpenAIProviderStreamChatTests(unittest.TestCase):
             self.assertEqual(100, result_usage.input_tokens)
             self.assertEqual(50, result_usage.output_tokens)
 
-        asyncio.run(go())
+        await go()
 
-    def test_channel_emits_text_delta(self) -> None:
+    async def test_channel_emits_text_delta(self) -> None:
         async def go():
             provider = self._make_provider()
             deltas: list[str] = []
@@ -312,9 +311,9 @@ class OpenAIProviderStreamChatTests(unittest.TestCase):
             await provider.stream_chat("m", 100, 0.0, "", [], [], channel=channel)
             self.assertEqual(["hi"], deltas)
 
-        asyncio.run(go())
+        await go()
 
-    def test_empty_choices_skipped(self) -> None:
+    async def test_empty_choices_skipped(self) -> None:
         async def go():
             provider = self._make_provider()
 
@@ -334,9 +333,9 @@ class OpenAIProviderStreamChatTests(unittest.TestCase):
             msg, _, _, _ = await provider.stream_chat("m", 100, 0.0, "", [], [])
             self.assertEqual("ok", msg["content"][0]["text"])
 
-        asyncio.run(go())
+        await go()
 
-    def test_tools_included_when_provided(self) -> None:
+    async def test_tools_included_when_provided(self) -> None:
         async def go():
             provider = self._make_provider()
             chunks = [_make_chunk(finish_reason="stop")]
@@ -356,15 +355,15 @@ class OpenAIProviderStreamChatTests(unittest.TestCase):
             call_kwargs = provider._client.chat.completions.create.call_args[1]
             self.assertIn("tools", call_kwargs)
 
-        asyncio.run(go())
+        await go()
 
 
-class OpenAIProviderCreateMessageTests(unittest.TestCase):
+class OpenAIProviderCreateMessageTests(unittest.IsolatedAsyncioTestCase):
     def _make_provider(self) -> OpenAIProvider:
         with patch("openai.AsyncOpenAI"):
             return OpenAIProvider(api_key="test")
 
-    def test_basic_compaction(self) -> None:
+    async def test_basic_compaction(self) -> None:
         async def go():
             provider = self._make_provider()
 
@@ -389,9 +388,9 @@ class OpenAIProviderCreateMessageTests(unittest.TestCase):
             self.assertEqual("summary text", text)
             self.assertEqual(50, result_usage.input_tokens)
 
-        asyncio.run(go())
+        await go()
 
-    def test_null_content(self) -> None:
+    async def test_null_content(self) -> None:
         async def go():
             provider = self._make_provider()
             resp = MagicMock()
@@ -404,7 +403,7 @@ class OpenAIProviderCreateMessageTests(unittest.TestCase):
             text, _ = await provider.create_message("m", 100, 0.0, [])
             self.assertEqual("", text)
 
-        asyncio.run(go())
+        await go()
 
 
 if __name__ == "__main__":

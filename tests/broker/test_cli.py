@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import io
 import tempfile
 import unittest
@@ -261,7 +260,7 @@ class JobEnableTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class JobRunNowTests(unittest.TestCase):
+class JobRunNowTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self._store = _make_store(self._tmp.name)
@@ -270,31 +269,31 @@ class JobRunNowTests(unittest.TestCase):
         self._store.close()
         self._tmp.cleanup()
 
-    def _capture_async(self, coro) -> str:
+    async def _capture_async(self, coro) -> str:
         buf = io.StringIO()
         with patch("builtins.print", lambda *a: buf.write(" ".join(str(x) for x in a) + "\n")):
-            asyncio.run(coro)
+            await coro
         return buf.getvalue()
 
-    def test_run_now_no_args(self) -> None:
+    async def test_run_now_no_args(self) -> None:
         async def go():
             await _job_run_now(self._store, [])
 
         buf = io.StringIO()
         with patch("builtins.print", lambda *a: buf.write(" ".join(str(x) for x in a) + "\n")):
-            asyncio.run(go())
+            await go()
         self.assertIn("Usage", buf.getvalue())
 
-    def test_run_now_no_match(self) -> None:
+    async def test_run_now_no_match(self) -> None:
         async def go():
             await _job_run_now(self._store, ["zzzzzz"])
 
         buf = io.StringIO()
         with patch("builtins.print", lambda *a: buf.write(" ".join(str(x) for x in a) + "\n")):
-            asyncio.run(go())
+            await go()
         self.assertIn("No job found", buf.getvalue())
 
-    def test_run_now_success(self) -> None:
+    async def test_run_now_success(self) -> None:
         from micro_x_agent_loop.broker.runner import RunResult
 
         job = self._store.create_job(name="j", cron_expr="* * * * *", prompt_template="say hello")
@@ -309,10 +308,10 @@ class JobRunNowTests(unittest.TestCase):
 
         buf = io.StringIO()
         with patch("builtins.print", lambda *a: buf.write(" ".join(str(x) for x in a) + "\n")):
-            asyncio.run(go())
+            await go()
         self.assertIn("completed", buf.getvalue())
 
-    def test_run_now_failure(self) -> None:
+    async def test_run_now_failure(self) -> None:
         from micro_x_agent_loop.broker.runner import RunResult
 
         job = self._store.create_job(name="j", cron_expr="* * * * *", prompt_template="fail")
@@ -327,7 +326,7 @@ class JobRunNowTests(unittest.TestCase):
 
         buf = io.StringIO()
         with patch("builtins.print", lambda *a: buf.write(" ".join(str(x) for x in a) + "\n")):
-            asyncio.run(go())
+            await go()
         self.assertIn("failed", buf.getvalue())
 
 
@@ -336,7 +335,7 @@ class JobRunNowTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class JobRunsTests(unittest.TestCase):
+class JobRunsTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self._store = _make_store(self._tmp.name)
@@ -397,48 +396,48 @@ class JobRunsTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class HandleBrokerCommandTests(unittest.TestCase):
+class HandleBrokerCommandTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def _capture_async(self, coro) -> str:
+    async def _capture_async(self, coro) -> str:
         buf = io.StringIO()
         with patch("builtins.print", lambda *a: buf.write(" ".join(str(x) for x in a) + "\n")):
-            asyncio.run(coro)
+            await coro
         return buf.getvalue()
 
-    def test_no_args_prints_help(self) -> None:
-        out = self._capture_async(handle_broker_command([]))
+    async def test_no_args_prints_help(self) -> None:
+        out = await self._capture_async(handle_broker_command([]))
         self.assertIn("start", out)
 
-    def test_stop_not_running(self) -> None:
+    async def test_stop_not_running(self) -> None:
         with patch(
             "micro_x_agent_loop.broker.cli.BrokerService.stop_broker",
             return_value=False,
         ):
-            out = self._capture_async(handle_broker_command(["stop"]))
+            out = await self._capture_async(handle_broker_command(["stop"]))
         self.assertIn("not running", out)
 
-    def test_stop_running(self) -> None:
+    async def test_stop_running(self) -> None:
         with patch(
             "micro_x_agent_loop.broker.cli.BrokerService.stop_broker",
             return_value=True,
         ):
-            out = self._capture_async(handle_broker_command(["stop"]))
+            out = await self._capture_async(handle_broker_command(["stop"]))
         self.assertIn("stopped", out)
 
-    def test_status_not_running(self) -> None:
+    async def test_status_not_running(self) -> None:
         with patch(
             "micro_x_agent_loop.broker.cli.BrokerService.read_pid",
             return_value=None,
         ):
-            out = self._capture_async(handle_broker_command(["status"]))
+            out = await self._capture_async(handle_broker_command(["status"]))
         self.assertIn("not running", out)
 
-    def test_status_running(self) -> None:
+    async def test_status_running(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db_path = str(Path(tmp) / "broker.db")
             store = BrokerStore(db_path)
@@ -453,11 +452,11 @@ class HandleBrokerCommandTests(unittest.TestCase):
                     return_value=BrokerStore(db_path),
                 ),
             ):
-                out = self._capture_async(handle_broker_command(["status"], config={"BrokerDatabase": db_path}))
+                out = await self._capture_async(handle_broker_command(["status"], config={"BrokerDatabase": db_path}))
         self.assertIn("12345", out)
 
-    def test_unknown_subcommand(self) -> None:
-        out = self._capture_async(handle_broker_command(["unknown"]))
+    async def test_unknown_subcommand(self) -> None:
+        out = await self._capture_async(handle_broker_command(["unknown"]))
         self.assertIn("Unknown", out)
 
 
@@ -466,7 +465,7 @@ class HandleBrokerCommandTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class HandleJobCommandTests(unittest.TestCase):
+class HandleJobCommandTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self._db_path = str(Path(self._tmp.name) / "broker.db")
@@ -474,54 +473,56 @@ class HandleJobCommandTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def _capture_async(self, coro) -> str:
+    async def _capture_async(self, coro) -> str:
         buf = io.StringIO()
         with patch("builtins.print", lambda *a: buf.write(" ".join(str(x) for x in a) + "\n")):
-            asyncio.run(coro)
+            await coro
         return buf.getvalue()
 
     def _config(self) -> dict:
         return {"BrokerDatabase": self._db_path}
 
-    def test_no_args_prints_help(self) -> None:
-        out = self._capture_async(handle_job_command([]))
+    async def test_no_args_prints_help(self) -> None:
+        out = await self._capture_async(handle_job_command([]))
         self.assertIn("add", out)
 
-    def test_add(self) -> None:
-        out = self._capture_async(handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config()))
+    async def test_add(self) -> None:
+        out = await self._capture_async(
+            handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config())
+        )
         self.assertIn("Created job", out)
 
-    def test_list(self) -> None:
+    async def test_list(self) -> None:
         # First add a job, then list
-        asyncio.run(handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config()))
-        out = self._capture_async(handle_job_command(["list"], config=self._config()))
+        await handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config())
+        out = await self._capture_async(handle_job_command(["list"], config=self._config()))
         self.assertIn("myjob", out)
 
-    def test_unknown_subcommand(self) -> None:
-        out = self._capture_async(handle_job_command(["bogus"], config=self._config()))
+    async def test_unknown_subcommand(self) -> None:
+        out = await self._capture_async(handle_job_command(["bogus"], config=self._config()))
         self.assertIn("Unknown", out)
 
-    def test_remove(self) -> None:
-        asyncio.run(handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config()))
+    async def test_remove(self) -> None:
+        await handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config())
         store = BrokerStore(self._db_path)
         jobs = store.list_jobs()
         store.close()
         job_id = jobs[0]["id"]
-        out = self._capture_async(handle_job_command(["remove", job_id[:8]], config=self._config()))
+        out = await self._capture_async(handle_job_command(["remove", job_id[:8]], config=self._config()))
         self.assertIn("Removed", out)
 
-    def test_enable(self) -> None:
-        asyncio.run(handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config()))
+    async def test_enable(self) -> None:
+        await handle_job_command(["add", "myjob", "0 9 * * *", "do it"], config=self._config())
         store = BrokerStore(self._db_path)
         jobs = store.list_jobs()
         store.close()
         job_id = jobs[0]["id"]
-        asyncio.run(handle_job_command(["disable", job_id[:8]], config=self._config()))
-        out = self._capture_async(handle_job_command(["enable", job_id[:8]], config=self._config()))
+        await handle_job_command(["disable", job_id[:8]], config=self._config())
+        out = await self._capture_async(handle_job_command(["enable", job_id[:8]], config=self._config()))
         self.assertIn("Enabled", out)
 
-    def test_runs(self) -> None:
-        out = self._capture_async(handle_job_command(["runs"], config=self._config()))
+    async def test_runs(self) -> None:
+        out = await self._capture_async(handle_job_command(["runs"], config=self._config()))
         self.assertIn("No runs", out)
 
 

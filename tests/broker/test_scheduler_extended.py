@@ -36,7 +36,7 @@ class SchedulerStopTests(unittest.TestCase):
         self.assertTrue(sched._stop_event.is_set())
 
 
-class SchedulerInitialiseTests(unittest.TestCase):
+class SchedulerInitialiseTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self._store = _make_store(self._tmp.name)
@@ -79,7 +79,7 @@ class SchedulerInitialiseTests(unittest.TestCase):
         self.assertEqual(past, updated["next_run_at"])
 
 
-class SchedulerPollAndDispatchTests(unittest.TestCase):
+class SchedulerPollAndDispatchTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self._store = _make_store(self._tmp.name)
@@ -88,7 +88,7 @@ class SchedulerPollAndDispatchTests(unittest.TestCase):
         self._store.close()
         self._tmp.cleanup()
 
-    def test_poll_dispatches_due_job(self) -> None:
+    async def test_poll_dispatches_due_job(self) -> None:
         async def go() -> None:
             ok_result = RunResult(exit_code=0, stdout="done", stderr="")
             router = _make_router()
@@ -110,9 +110,9 @@ class SchedulerPollAndDispatchTests(unittest.TestCase):
             runs = self._store.list_runs(job_id=job["id"])
             self.assertGreaterEqual(len(runs), 1)
 
-        asyncio.run(go())
+        await go()
 
-    def test_poll_skips_not_due_job(self) -> None:
+    async def test_poll_skips_not_due_job(self) -> None:
         async def go() -> None:
             dispatcher = MagicMock()
             dispatcher.at_capacity = False
@@ -126,9 +126,9 @@ class SchedulerPollAndDispatchTests(unittest.TestCase):
 
             dispatcher.dispatch.assert_not_called()
 
-        asyncio.run(go())
+        await go()
 
-    def test_poll_skips_when_at_capacity(self) -> None:
+    async def test_poll_skips_when_at_capacity(self) -> None:
         async def go() -> None:
             dispatcher = MagicMock()
             dispatcher.at_capacity = True
@@ -142,9 +142,9 @@ class SchedulerPollAndDispatchTests(unittest.TestCase):
 
             dispatcher.dispatch.assert_not_called()
 
-        asyncio.run(go())
+        await go()
 
-    def test_poll_overlap_policy_skip_if_running(self) -> None:
+    async def test_poll_overlap_policy_skip_if_running(self) -> None:
         async def go() -> None:
             dispatcher = MagicMock()
             dispatcher.at_capacity = False
@@ -166,9 +166,9 @@ class SchedulerPollAndDispatchTests(unittest.TestCase):
 
             dispatcher.dispatch.assert_not_called()
 
-        asyncio.run(go())
+        await go()
 
-    def test_poll_dispatches_due_retries(self) -> None:
+    async def test_poll_dispatches_due_retries(self) -> None:
         async def go() -> None:
             ok_result = RunResult(exit_code=0, stdout="done", stderr="")
             router = _make_router()
@@ -196,10 +196,10 @@ class SchedulerPollAndDispatchTests(unittest.TestCase):
             # Should have been started (status changed from queued)
             self.assertNotEqual("queued", retry["status"])
 
-        asyncio.run(go())
+        await go()
 
 
-class SchedulerStartStopTests(unittest.TestCase):
+class SchedulerStartStopTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self._store = _make_store(self._tmp.name)
@@ -208,7 +208,7 @@ class SchedulerStartStopTests(unittest.TestCase):
         self._store.close()
         self._tmp.cleanup()
 
-    def test_start_and_stop(self) -> None:
+    async def test_start_and_stop(self) -> None:
         async def go() -> None:
             dispatcher = MagicMock()
             dispatcher.at_capacity = False
@@ -222,9 +222,9 @@ class SchedulerStartStopTests(unittest.TestCase):
 
             await asyncio.gather(sched.start(), stop_soon())
 
-        asyncio.run(go())
+        await go()
 
-    def test_start_stops_on_max_errors(self) -> None:
+    async def test_start_stops_on_max_errors(self) -> None:
         async def go() -> None:
             dispatcher = MagicMock()
             dispatcher.at_capacity = False
@@ -243,7 +243,7 @@ class SchedulerStartStopTests(unittest.TestCase):
             await asyncio.wait_for(sched.start(), timeout=5.0)
             self.assertGreaterEqual(call_count, 10)
 
-        asyncio.run(go())
+        await go()
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -53,7 +52,7 @@ class ProviderStatusTests(unittest.TestCase):
         self.assertTrue(status.is_available())
 
 
-class ProviderPoolTests(unittest.TestCase):
+class ProviderPoolTests(unittest.IsolatedAsyncioTestCase):
     def test_provider_names(self) -> None:
         p1 = _make_fake_provider("anthropic")
         p2 = _make_fake_provider("openai")
@@ -91,13 +90,12 @@ class ProviderPoolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pool.resolve_target(RoutingTarget("anthropic", "model"))
 
-    def test_stream_chat_dispatches(self) -> None:
+    async def test_stream_chat_dispatches(self) -> None:
         p1 = _make_fake_provider("anthropic")
         pool = ProviderPool({"anthropic": p1})
         target = RoutingTarget("anthropic", "sonnet")
 
-        asyncio.run(
-            pool.stream_chat(
+        await pool.stream_chat(
                 target,
                 8192,
                 0.7,
@@ -105,11 +103,10 @@ class ProviderPoolTests(unittest.TestCase):
                 [],
                 [],
             )
-        )
         p1.stream_chat.assert_called_once()
         self.assertEqual(pool.active_cache_provider, "anthropic")
 
-    def test_stream_chat_fallback_on_error(self) -> None:
+    async def test_stream_chat_fallback_on_error(self) -> None:
         p1 = _make_fake_provider("primary", family="openai")
         p2 = _make_fake_provider("secondary", family="openai")
         p1.stream_chat = AsyncMock(side_effect=RuntimeError("API error"))
@@ -118,8 +115,7 @@ class ProviderPoolTests(unittest.TestCase):
             fallback_provider="secondary",
         )
 
-        asyncio.run(
-            pool.stream_chat(
+        await pool.stream_chat(
                 RoutingTarget("primary", "model"),
                 8192,
                 0.7,
@@ -127,7 +123,6 @@ class ProviderPoolTests(unittest.TestCase):
                 [],
                 [],
             )
-        )
         p2.stream_chat.assert_called_once()
         self.assertEqual(pool.active_cache_provider, "secondary")
 
@@ -188,7 +183,7 @@ class ProviderPoolTests(unittest.TestCase):
         self.assertIs(provider, p1)
         self.assertEqual(model, "qwen2.5:7b")
 
-    def test_stream_chat_cross_family_no_fallback(self) -> None:
+    async def test_stream_chat_cross_family_no_fallback(self) -> None:
         """Cross-family fallback in stream_chat raises the original error."""
         p1 = _make_fake_provider("ollama", family="openai")
         p2 = _make_fake_provider("anthropic", family="anthropic")
@@ -198,8 +193,7 @@ class ProviderPoolTests(unittest.TestCase):
             fallback_provider="anthropic",
         )
         with self.assertRaises(RuntimeError, msg="Ollama down"):
-            asyncio.run(
-                pool.stream_chat(
+            await pool.stream_chat(
                     RoutingTarget("ollama", "qwen2.5:7b"),
                     8192,
                     0.7,
@@ -207,6 +201,5 @@ class ProviderPoolTests(unittest.TestCase):
                     [],
                     [],
                 )
-            )
         # Anthropic provider should NOT have been called
         p2.stream_chat.assert_not_called()

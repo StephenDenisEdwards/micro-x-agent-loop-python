@@ -43,8 +43,8 @@ class ParseJsonObjectTests(unittest.TestCase):
             _parse_json_object("[1, 2, 3]")
 
 
-class PollingVoiceIngressTests(unittest.TestCase):
-    def test_no_tool_found_returns_immediately(self) -> None:
+class PollingVoiceIngressTests(unittest.IsolatedAsyncioTestCase):
+    async def test_no_tool_found_returns_immediately(self) -> None:
         """If no stt_get_updates tool is in the map, stream_events yields nothing."""
 
         async def collect():
@@ -54,10 +54,10 @@ class PollingVoiceIngressTests(unittest.TestCase):
                 events.append(event)
             return events
 
-        result = asyncio.run(collect())
+        result = await collect()
         self.assertEqual([], result)
 
-    def test_tool_not_in_map_returns_immediately(self) -> None:
+    async def test_tool_not_in_map_returns_immediately(self) -> None:
         """If tool key resolves to None, generator exits."""
 
         # A tool map where the key ends with __stt_get_updates but value could be None
@@ -70,10 +70,10 @@ class PollingVoiceIngressTests(unittest.TestCase):
                 events.append(event)
             return events
 
-        result = asyncio.run(collect())
+        result = await collect()
         self.assertEqual([], result)
 
-    def test_yields_events_and_updates_seq(self) -> None:
+    async def test_yields_events_and_updates_seq(self) -> None:
         """Events are yielded with incrementing seq tracking."""
         import json
         from unittest.mock import MagicMock
@@ -104,11 +104,11 @@ class PollingVoiceIngressTests(unittest.TestCase):
                     break
             return events
 
-        result = asyncio.run(collect())
+        result = await collect()
         self.assertEqual(1, len(result))
         self.assertEqual(1, result[0]["seq"])
 
-    def test_skips_events_with_old_seq(self) -> None:
+    async def test_skips_events_with_old_seq(self) -> None:
         """Events with seq <= last_seq are yielded (seq tracking only updates max)."""
         import json
         from unittest.mock import MagicMock
@@ -143,7 +143,7 @@ class PollingVoiceIngressTests(unittest.TestCase):
                     break
             return events
 
-        result = asyncio.run(collect())
+        result = await collect()
         # Both events are yielded; the seq tracking only tracks the max
         self.assertEqual(2, len(result))
 

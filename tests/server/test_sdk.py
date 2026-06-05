@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import unittest
 
@@ -29,11 +28,11 @@ class TestSdkDataClasses(unittest.TestCase):
         self.assertEqual("s1", s.session_id)
 
 
-class TestSdkClientContextManager(unittest.TestCase):
-    def test_client_requires_context_manager(self) -> None:
+class TestSdkClientContextManager(unittest.IsolatedAsyncioTestCase):
+    async def test_client_requires_context_manager(self) -> None:
         client = AgentClient("http://localhost:9999")
         with self.assertRaises(RuntimeError):
-            asyncio.run(client.health())
+            await client.health()
 
 
 class TestSdkAgainstTestServer(unittest.TestCase):
@@ -86,8 +85,8 @@ class TestSdkAgainstTestServer(unittest.TestCase):
             self.assertEqual(200, resp.status_code)
 
 
-class TestSdkConnectionError(unittest.TestCase):
-    def test_health_connection_error(self) -> None:
+class TestSdkConnectionError(unittest.IsolatedAsyncioTestCase):
+    async def test_health_connection_error(self) -> None:
         async def go() -> None:
             async with AgentClient("http://127.0.0.1:19998") as client:
                 with self.assertRaises(httpx.ConnectError):
@@ -95,7 +94,7 @@ class TestSdkConnectionError(unittest.TestCase):
 
         import httpx
 
-        asyncio.run(go())
+        await go()
 
 
 if __name__ == "__main__":

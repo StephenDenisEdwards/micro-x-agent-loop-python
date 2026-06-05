@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 
 from micro_x_agent_loop.server.client import run_client
 
 
-class TestClientConnectionErrors(unittest.TestCase):
-    def test_connect_to_nonexistent_server(self) -> None:
+class TestClientConnectionErrors(unittest.IsolatedAsyncioTestCase):
+    async def test_connect_to_nonexistent_server(self) -> None:
         """Client should print an error and return when server is unreachable."""
 
         async def go() -> None:
@@ -17,15 +16,15 @@ class TestClientConnectionErrors(unittest.TestCase):
             await run_client("http://127.0.0.1:19999")
 
         # Should not raise — just prints error and returns
-        asyncio.run(go())
+        await go()
 
-    def test_client_with_https_url(self) -> None:
+    async def test_client_with_https_url(self) -> None:
         """Client should attempt wss:// for https:// URLs."""
 
         async def go() -> None:
             await run_client("https://127.0.0.1:19999")
 
-        asyncio.run(go())
+        await go()
 
 
 class TestClientArgParsing(unittest.TestCase):

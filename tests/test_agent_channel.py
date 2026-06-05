@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,7 +12,7 @@ from micro_x_agent_loop.agent_channel import BrokerChannel, BufferedChannel, Ter
 # ---------------------------------------------------------------------------
 
 
-class BufferedChannelTests(unittest.TestCase):
+class BufferedChannelTests(unittest.IsolatedAsyncioTestCase):
     def test_emit_text_delta(self) -> None:
         ch = BufferedChannel()
         ch.emit_text_delta("hello ")
@@ -41,9 +40,9 @@ class BufferedChannelTests(unittest.TestCase):
         ch.emit_turn_complete({"cost": 0.01})
         self.assertEqual(1, len(ch.turn_usages))
 
-    def test_ask_user_returns_timeout(self) -> None:
+    async def test_ask_user_returns_timeout(self) -> None:
         ch = BufferedChannel()
-        answer = asyncio.run(ch.ask_user("proceed?"))
+        answer = await ch.ask_user("proceed?")
         self.assertIn("timed out", answer)
 
 
@@ -144,7 +143,7 @@ class TerminalChannelPlainTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class TerminalChannelMarkdownTests(unittest.TestCase):
+class TerminalChannelMarkdownTests(unittest.IsolatedAsyncioTestCase):
     """Test TerminalChannel with markdown=True — render paths."""
 
     def _make_channel(self) -> TerminalChannel:
@@ -183,7 +182,7 @@ class TerminalChannelMarkdownTests(unittest.TestCase):
         renderer.stop.assert_called_once()
         self.assertIsNone(ch._renderer)
 
-    def test_ask_user_stops_renderer(self) -> None:
+    async def test_ask_user_stops_renderer(self) -> None:
         ch = self._make_channel()
         renderer = MagicMock()
         ch._renderer = renderer
@@ -193,7 +192,7 @@ class TerminalChannelMarkdownTests(unittest.TestCase):
                 result = await ch.ask_user("proceed?")
             return result
 
-        result = asyncio.run(go())
+        result = await go()
         renderer.finalize_text.assert_called()
         renderer.stop.assert_called()
         self.assertEqual("answer", result)
@@ -204,7 +203,7 @@ class TerminalChannelMarkdownTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class BrokerChannelTests(unittest.TestCase):
+class BrokerChannelTests(unittest.IsolatedAsyncioTestCase):
     def _make_channel(self) -> BrokerChannel:
         return BrokerChannel("http://localhost:8321", "run-123", timeout=300, poll_interval=1)
 
@@ -218,7 +217,7 @@ class BrokerChannelTests(unittest.TestCase):
         ch.emit_system_message("msg")
         # No assertions — just should not raise
 
-    def test_ask_user_posts_and_polls_answered(self) -> None:
+    async def test_ask_user_posts_and_polls_answered(self) -> None:
         async def go():
             ch = self._make_channel()
 
@@ -249,9 +248,9 @@ class BrokerChannelTests(unittest.TestCase):
 
             self.assertEqual("yes", result)
 
-        asyncio.run(go())
+        await go()
 
-    def test_ask_user_post_fails(self) -> None:
+    async def test_ask_user_post_fails(self) -> None:
         async def go():
             ch = self._make_channel()
 
@@ -269,9 +268,9 @@ class BrokerChannelTests(unittest.TestCase):
 
             self.assertIn("timed out", result)
 
-        asyncio.run(go())
+        await go()
 
-    def test_ask_user_post_exception(self) -> None:
+    async def test_ask_user_post_exception(self) -> None:
         async def go():
             ch = self._make_channel()
 
@@ -285,9 +284,9 @@ class BrokerChannelTests(unittest.TestCase):
 
             self.assertIn("timed out", result)
 
-        asyncio.run(go())
+        await go()
 
-    def test_ask_user_timed_out_by_server(self) -> None:
+    async def test_ask_user_timed_out_by_server(self) -> None:
         async def go():
             ch = BrokerChannel("http://localhost:8321", "run-1", timeout=1, poll_interval=1)
 
@@ -311,9 +310,9 @@ class BrokerChannelTests(unittest.TestCase):
 
             self.assertIn("timed out", result)
 
-        asyncio.run(go())
+        await go()
 
-    def test_ask_user_with_options(self) -> None:
+    async def test_ask_user_with_options(self) -> None:
         async def go():
             ch = self._make_channel()
 
@@ -342,7 +341,7 @@ class BrokerChannelTests(unittest.TestCase):
 
             self.assertEqual("yes", result)
 
-        asyncio.run(go())
+        await go()
 
 
 # ---------------------------------------------------------------------------

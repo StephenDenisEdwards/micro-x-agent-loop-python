@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -76,12 +75,12 @@ class BuildEmbeddingTextTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class OllamaEmbeddingClientTests(unittest.TestCase):
+class OllamaEmbeddingClientTests(unittest.IsolatedAsyncioTestCase):
     def test_init_strips_trailing_slash(self) -> None:
         client = OllamaEmbeddingClient("http://localhost:11434/", "model")
         self.assertEqual("http://localhost:11434", client._base_url)
 
-    def test_embed_calls_api(self) -> None:
+    async def test_embed_calls_api(self) -> None:
         client = OllamaEmbeddingClient("http://localhost:11434", "nomic-embed")
 
         mock_response = MagicMock()
@@ -94,14 +93,14 @@ class OllamaEmbeddingClientTests(unittest.TestCase):
         mock_http.__aexit__ = AsyncMock(return_value=False)
 
         with patch("micro_x_agent_loop.embedding.httpx.AsyncClient", return_value=mock_http):
-            result = asyncio.run(client.embed(["hello", "world"]))
+            result = await client.embed(["hello", "world"])
 
         self.assertEqual([[0.1, 0.2], [0.3, 0.4]], result)
         mock_http.post.assert_called_once()
         call_args = mock_http.post.call_args
         self.assertIn("/api/embed", call_args[0][0])
 
-    def test_is_available_true(self) -> None:
+    async def test_is_available_true(self) -> None:
         client = OllamaEmbeddingClient("http://localhost:11434", "nomic-embed")
 
         mock_response = MagicMock()
@@ -114,9 +113,9 @@ class OllamaEmbeddingClientTests(unittest.TestCase):
         mock_http.__aexit__ = AsyncMock(return_value=False)
 
         with patch("micro_x_agent_loop.embedding.httpx.AsyncClient", return_value=mock_http):
-            self.assertTrue(asyncio.run(client.is_available()))
+            self.assertTrue(await client.is_available())
 
-    def test_is_available_false_on_error(self) -> None:
+    async def test_is_available_false_on_error(self) -> None:
         client = OllamaEmbeddingClient("http://localhost:11434", "nomic-embed")
 
         mock_http = AsyncMock()
@@ -125,9 +124,9 @@ class OllamaEmbeddingClientTests(unittest.TestCase):
         mock_http.__aexit__ = AsyncMock(return_value=False)
 
         with patch("micro_x_agent_loop.embedding.httpx.AsyncClient", return_value=mock_http):
-            self.assertFalse(asyncio.run(client.is_available()))
+            self.assertFalse(await client.is_available())
 
-    def test_is_available_false_on_empty(self) -> None:
+    async def test_is_available_false_on_empty(self) -> None:
         client = OllamaEmbeddingClient("http://localhost:11434", "nomic-embed")
 
         mock_response = MagicMock()
@@ -140,7 +139,7 @@ class OllamaEmbeddingClientTests(unittest.TestCase):
         mock_http.__aexit__ = AsyncMock(return_value=False)
 
         with patch("micro_x_agent_loop.embedding.httpx.AsyncClient", return_value=mock_http):
-            self.assertFalse(asyncio.run(client.is_available()))
+            self.assertFalse(await client.is_available())
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +147,7 @@ class OllamaEmbeddingClientTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class ToolEmbeddingIndexTests(unittest.TestCase):
+class ToolEmbeddingIndexTests(unittest.IsolatedAsyncioTestCase):
     def _make_index(self, embed_result: list[list[float]] | None = None) -> ToolEmbeddingIndex:
         client = MagicMock()
         if embed_result is not None:
@@ -161,47 +160,47 @@ class ToolEmbeddingIndexTests(unittest.TestCase):
         idx = self._make_index()
         self.assertFalse(idx.is_ready)
 
-    def test_build_success(self) -> None:
+    async def test_build_success(self) -> None:
         idx = self._make_index()
-        result = asyncio.run(idx.build([("tool_a", "desc a"), ("tool_b", "desc b")]))
+        result = await idx.build([("tool_a", "desc a"), ("tool_b", "desc b")])
         self.assertTrue(result)
         self.assertTrue(idx.is_ready)
 
-    def test_build_empty_tools(self) -> None:
+    async def test_build_empty_tools(self) -> None:
         idx = self._make_index()
-        result = asyncio.run(idx.build([]))
+        result = await idx.build([])
         self.assertFalse(result)
         self.assertFalse(idx.is_ready)
 
-    def test_build_mismatch_count(self) -> None:
+    async def test_build_mismatch_count(self) -> None:
         idx = self._make_index(embed_result=[[0.1, 0.2]])  # 1 embedding for 2 tools
-        result = asyncio.run(idx.build([("a", "da"), ("b", "db")]))
+        result = await idx.build([("a", "da"), ("b", "db")])
         self.assertFalse(result)
 
-    def test_build_exception(self) -> None:
+    async def test_build_exception(self) -> None:
         idx = self._make_index()
         idx._client.embed = AsyncMock(side_effect=Exception("api error"))
-        result = asyncio.run(idx.build([("a", "da")]))
+        result = await idx.build([("a", "da")])
         self.assertFalse(result)
 
-    def test_search(self) -> None:
+    async def test_search(self) -> None:
         idx = self._make_index(embed_result=[[1.0, 0.0], [0.0, 1.0]])
-        asyncio.run(idx.build([("tool_a", "desc a"), ("tool_b", "desc b")]))
+        await idx.build([("tool_a", "desc a"), ("tool_b", "desc b")])
         results = idx.search([1.0, 0.0], top_k=2)
         self.assertEqual(2, len(results))
         # tool_a should be first (identical vector)
         self.assertEqual("tool_a", results[0][0])
         self.assertAlmostEqual(1.0, results[0][1])
 
-    def test_search_top_k(self) -> None:
+    async def test_search_top_k(self) -> None:
         idx = self._make_index(embed_result=[[1.0, 0.0], [0.5, 0.5], [0.0, 1.0]])
-        asyncio.run(idx.build([("a", "da"), ("b", "db"), ("c", "dc")]))
+        await idx.build([("a", "da"), ("b", "db"), ("c", "dc")])
         results = idx.search([1.0, 0.0], top_k=1)
         self.assertEqual(1, len(results))
 
-    def test_remove_tools(self) -> None:
+    async def test_remove_tools(self) -> None:
         idx = self._make_index(embed_result=[[1.0, 0.0], [0.0, 1.0]])
-        asyncio.run(idx.build([("tool_a", "desc a"), ("tool_b", "desc b")]))
+        await idx.build([("tool_a", "desc a"), ("tool_b", "desc b")])
         idx.remove_tools(["tool_a"])
         results = idx.search([1.0, 0.0], top_k=10)
         names = [r[0] for r in results]
@@ -213,7 +212,7 @@ class ToolEmbeddingIndexTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class TaskEmbeddingIndexTests(unittest.TestCase):
+class TaskEmbeddingIndexTests(unittest.IsolatedAsyncioTestCase):
     def _make_index(self, dim: int = 4) -> TaskEmbeddingIndex:
         client = MagicMock()
         # Return unique vectors for each task type
@@ -236,29 +235,29 @@ class TaskEmbeddingIndexTests(unittest.TestCase):
         idx = TaskEmbeddingIndex(client)
         self.assertFalse(idx.is_ready)
 
-    def test_build_success(self) -> None:
+    async def test_build_success(self) -> None:
         idx = self._make_index(dim=10)
-        result = asyncio.run(idx.build())
+        result = await idx.build()
         self.assertTrue(result)
         self.assertTrue(idx.is_ready)
 
-    def test_build_mismatch(self) -> None:
+    async def test_build_mismatch(self) -> None:
         client = MagicMock()
         client.embed = AsyncMock(return_value=[[0.1]])  # Wrong count
         idx = TaskEmbeddingIndex(client)
-        result = asyncio.run(idx.build())
+        result = await idx.build()
         self.assertFalse(result)
 
-    def test_build_exception(self) -> None:
+    async def test_build_exception(self) -> None:
         client = MagicMock()
         client.embed = AsyncMock(side_effect=Exception("fail"))
         idx = TaskEmbeddingIndex(client)
-        result = asyncio.run(idx.build())
+        result = await idx.build()
         self.assertFalse(result)
 
-    def test_classify(self) -> None:
+    async def test_classify(self) -> None:
         idx = self._make_index(dim=10)
-        asyncio.run(idx.build())
+        await idx.build()
         task_type, score = idx.classify([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         self.assertIsInstance(task_type, str)
         self.assertGreater(score, 0.0)
@@ -270,25 +269,25 @@ class TaskEmbeddingIndexTests(unittest.TestCase):
         self.assertEqual("conversational", task_type)
         self.assertEqual(0.0, score)
 
-    def test_embed_query_success(self) -> None:
+    async def test_embed_query_success(self) -> None:
         client = MagicMock()
         client.embed = AsyncMock(return_value=[[0.5, 0.5]])
         idx = TaskEmbeddingIndex(client)
-        result = asyncio.run(idx.embed_query("hello"))
+        result = await idx.embed_query("hello")
         self.assertEqual([0.5, 0.5], result)
 
-    def test_embed_query_empty_result(self) -> None:
+    async def test_embed_query_empty_result(self) -> None:
         client = MagicMock()
         client.embed = AsyncMock(return_value=[])
         idx = TaskEmbeddingIndex(client)
-        result = asyncio.run(idx.embed_query("hello"))
+        result = await idx.embed_query("hello")
         self.assertIsNone(result)
 
-    def test_embed_query_exception(self) -> None:
+    async def test_embed_query_exception(self) -> None:
         client = MagicMock()
         client.embed = AsyncMock(side_effect=Exception("fail"))
         idx = TaskEmbeddingIndex(client)
-        result = asyncio.run(idx.embed_query("hello"))
+        result = await idx.embed_query("hello")
         self.assertIsNone(result)
 
 

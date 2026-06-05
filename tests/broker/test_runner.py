@@ -59,7 +59,7 @@ class TruncateOutputTests(unittest.TestCase):
         self.assertIsInstance(result, str)
 
 
-class RunAgentTests(unittest.TestCase):
+class RunAgentTests(unittest.IsolatedAsyncioTestCase):
     def _make_mock_process(self, stdout: bytes = b"output", stderr: bytes = b"", returncode: int = 0) -> MagicMock:
         process = MagicMock()
         process.returncode = returncode
@@ -68,49 +68,49 @@ class RunAgentTests(unittest.TestCase):
         process.wait = AsyncMock()
         return process
 
-    def test_success(self) -> None:
+    async def test_success(self) -> None:
         process = self._make_mock_process(stdout=b"done", returncode=0)
         with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=process)):
-            result = asyncio.run(run_agent(prompt="hello"))
+            result = await run_agent(prompt="hello")
         self.assertTrue(result.ok)
         self.assertEqual("done", result.stdout)
 
-    def test_failure_exit_code(self) -> None:
+    async def test_failure_exit_code(self) -> None:
         process = self._make_mock_process(stdout=b"", stderr=b"error msg", returncode=1)
         with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=process)):
-            result = asyncio.run(run_agent(prompt="fail"))
+            result = await run_agent(prompt="fail")
         self.assertFalse(result.ok)
         self.assertEqual("error msg", result.stderr)
 
-    def test_with_config_and_session(self) -> None:
+    async def test_with_config_and_session(self) -> None:
         process = self._make_mock_process()
         mock_create = AsyncMock(return_value=process)
         with patch("asyncio.create_subprocess_exec", mock_create):
-            asyncio.run(run_agent(prompt="hi", config="cfg.json", session_id="s1"))
+            await run_agent(prompt="hi", config="cfg.json", session_id="s1")
         call_args = mock_create.call_args[0]
         self.assertIn("--config", call_args)
         self.assertIn("cfg.json", call_args)
         self.assertIn("--session", call_args)
         self.assertIn("s1", call_args)
 
-    def test_extra_env_merged(self) -> None:
+    async def test_extra_env_merged(self) -> None:
         process = self._make_mock_process()
         mock_create = AsyncMock(return_value=process)
         with patch("asyncio.create_subprocess_exec", mock_create):
-            asyncio.run(run_agent(prompt="hi", extra_env={"MY_VAR": "42"}))
+            await run_agent(prompt="hi", extra_env={"MY_VAR": "42"})
         kwargs = mock_create.call_args[1]
         self.assertIn("env", kwargs)
         self.assertEqual("42", kwargs["env"]["MY_VAR"])
 
-    def test_no_extra_env(self) -> None:
+    async def test_no_extra_env(self) -> None:
         process = self._make_mock_process()
         mock_create = AsyncMock(return_value=process)
         with patch("asyncio.create_subprocess_exec", mock_create):
-            asyncio.run(run_agent(prompt="hi"))
+            await run_agent(prompt="hi")
         kwargs = mock_create.call_args[1]
         self.assertIsNone(kwargs["env"])
 
-    def test_timeout(self) -> None:
+    async def test_timeout(self) -> None:
         async def slow_communicate():
             await asyncio.sleep(100)
             return (b"", b"")
@@ -122,13 +122,13 @@ class RunAgentTests(unittest.TestCase):
         process.wait = AsyncMock()
 
         with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=process)):
-            result = asyncio.run(run_agent(prompt="slow", timeout_seconds=0))
+            result = await run_agent(prompt="slow", timeout_seconds=0)
         self.assertFalse(result.ok)
         self.assertIn("timed out", result.stderr)
 
-    def test_spawn_exception(self) -> None:
+    async def test_spawn_exception(self) -> None:
         with patch("asyncio.create_subprocess_exec", AsyncMock(side_effect=OSError("spawn failed"))):
-            result = asyncio.run(run_agent(prompt="fail"))
+            result = await run_agent(prompt="fail")
         self.assertFalse(result.ok)
         self.assertIn("spawn failed", result.stderr)
 

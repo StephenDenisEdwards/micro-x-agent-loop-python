@@ -1,4 +1,3 @@
-import asyncio
 import unittest
 
 from micro_x_agent_loop.agent import Agent
@@ -14,8 +13,8 @@ class _RaisingCheckpointManager:
         raise ValueError("outside working directory")
 
 
-class CheckpointTrackingNonBlockingTests(unittest.TestCase):
-    def test_tracking_failure_does_not_fail_tool_execution(self) -> None:
+class CheckpointTrackingNonBlockingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_tracking_failure_does_not_fail_tool_execution(self) -> None:
         tool = FakeTool(
             name="write_file",
             description="test tool",
@@ -36,8 +35,7 @@ class CheckpointTrackingNonBlockingTests(unittest.TestCase):
         )
         agent._current_checkpoint_id = "cp-1"
 
-        result = asyncio.run(
-            agent._execute_tools(
+        result = await agent._execute_tools(
                 [
                     {
                         "name": "write_file",
@@ -46,7 +44,6 @@ class CheckpointTrackingNonBlockingTests(unittest.TestCase):
                     }
                 ]
             )
-        )
 
         self.assertEqual(1, tool.execute_calls)
         self.assertEqual("tool executed", result[0]["content"])

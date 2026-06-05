@@ -8,7 +8,7 @@ from micro_x_agent_loop.memory import EventEmitter, MemoryStore, SessionManager
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-class MemoryStoreTestCase(unittest.TestCase):
+class MemoryStoreTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._tmp_dir = PROJECT_ROOT / ".test-artifacts" / f"{self.__class__.__name__.lower()}-{uuid4().hex}"
         self._tmp_dir.mkdir(parents=True, exist_ok=True)

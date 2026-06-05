@@ -238,7 +238,7 @@ class RetentionHardeningTests(MemoryStoreTestCase):
 class EventSinkConcurrencyTests(MemoryStoreTestCase):
     """Verify event sink handles concurrent emits safely."""
 
-    def test_many_concurrent_emits(self) -> None:
+    async def test_many_concurrent_emits(self) -> None:
         """Emit many events concurrently and verify all are persisted."""
         sid = self._sessions.create_session("sink-stress")
         sink = AsyncEventSink(self._store, batch_size=10, flush_interval_seconds=0.05)
@@ -251,7 +251,7 @@ class EventSinkConcurrencyTests(MemoryStoreTestCase):
             await asyncio.sleep(0.3)
             await sink.close()
 
-        asyncio.run(scenario())
+        await scenario()
 
         row = self._store.execute(
             "SELECT COUNT(*) AS c FROM events WHERE session_id = ? AND type LIKE 'stress.%'",

@@ -268,7 +268,7 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 
 | ID | Item | Location | Status | Action taken |
 |---|---|---|---|---|
-| T3-1 | Standardize on `@pytest.mark.asyncio` — migrate 30+ `asyncio.run()`-in-unittest tests | many | ❌ Gap | |
+| T3-1 | Standardize on `@pytest.mark.asyncio` — migrate 30+ `asyncio.run()`-in-unittest tests | many | ⚠️ Done (alt path) | Migrated to `unittest.IsolatedAsyncioTestCase` (stdlib, fits the project's `unittest`-based test style) instead of `@pytest.mark.asyncio`. 56 test files converted: classes changed to `IsolatedAsyncioTestCase`, test methods to `async def`, `asyncio.run(EXPR)` replaced with `await EXPR`, and ad-hoc `_run()` / `_capture_async()` / `_run_with_ws_messages()` helpers removed or async-ified. `tests/memory/base.py` `MemoryStoreTestCase` base widened to `IsolatedAsyncioTestCase` so its async subclass tests run correctly. Build green: 1880 passed / 14 skipped / 0 failing. |
 | T3-2 | Add `tests/integration/test_agent_loop.py` covering full multi-turn / tool / sub-agent / ask_user path with `FakeStreamProvider` | `tests/integration/` | ❌ Gap | |
 | T3-3 | Add direct tests for `cli/dispatch.py`, `cli/repl.py`, `agent_builder.py`, `services/checkpoint_service.py`, `services/session_controller.py` | n/a | ✅ Done | Added `tests/services/test_session_controller.py` (10 tests), `tests/services/test_checkpoint_service.py` (6 tests), `tests/test_agent_builder.py` (12 tests verifying build branch points + DI), and `tests/cli/test_dispatch.py` (10 tests covering job/broker/server/run/oneshot routing). 38 new tests in total. `cli/repl.py` left untested — tightly coupled to interactive `prompt_toolkit` + `EscWatcher`; high-effort low-value. |
 | T3-4 | Replace `Path.cwd() / ".tmp-run"` + `os.chdir` with `tempfile.TemporaryDirectory` | `tests/test_command_handler.py:368, 411` | ✅ Done | Both sites now use `tempfile.TemporaryDirectory`. `os.chdir` remains inside the TempDir because the code under test reads `Path.cwd()` — but the directory is now `/tmp/xxx` instead of inside the repo, so the test never litters and never races on `.tmp-run`. |
@@ -308,8 +308,8 @@ Primary reference: `CLAUDE.md` (project standards), `documentation/docs/architec
 |---|---:|---:|---|
 | Tier 1 (must-fix) | 9 | 0 | All done. Build green. |
 | Tier 2 (architecture) | 8 | 1 | T2-1, T2-2, T2-3, T2-4, T2-7, T2-8 fully done. T2-5 partial (unused subset dropped). T2-6 awaits user direction. |
-| Tier 3 (test quality) | 7 | 3 | T3-3, T3-4, T3-5, T3-6 done. T3-1 (async-test sprawl), T3-2 (integration test), T3-7 (MagicMock sprawl) remain. |
+| Tier 3 (test quality) | 7 | 2 | T3-1, T3-3, T3-4, T3-5, T3-6 done. T3-2 (integration test), T3-7 (MagicMock sprawl) remain. |
 | Tier 4 (hygiene) | 6 | 6 | |
-| **Total** | **30** | **10** | |
+| **Total** | **30** | **9** | |
 
 Remaining work is concentrated, fixable, and well within reach of the same discipline already on display elsewhere in the codebase.

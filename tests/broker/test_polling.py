@@ -37,7 +37,7 @@ class PollingIngressStopTests(unittest.TestCase):
         self.assertTrue(ingress._stop_event.is_set())
 
 
-class PollingIngressStartTests(unittest.TestCase):
+class PollingIngressStartTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self._store = _make_store(self._tmp.name)
@@ -46,7 +46,7 @@ class PollingIngressStartTests(unittest.TestCase):
         self._store.close()
         self._tmp.cleanup()
 
-    def test_start_dispatches_messages(self) -> None:
+    async def test_start_dispatches_messages(self) -> None:
         """Polling loop dispatches a trigger and then stops."""
 
         async def go() -> None:
@@ -91,9 +91,9 @@ class PollingIngressStartTests(unittest.TestCase):
             runs = self._store.list_runs()
             self.assertGreaterEqual(len(runs), 1)
 
-        asyncio.run(go())
+        await go()
 
-    def test_start_stops_on_max_errors(self) -> None:
+    async def test_start_stops_on_max_errors(self) -> None:
         """Loop stops after reaching the consecutive error limit."""
 
         async def go() -> None:
@@ -108,9 +108,9 @@ class PollingIngressStartTests(unittest.TestCase):
             # The loop should break after 10 consecutive errors without us stopping it
             await asyncio.wait_for(ingress.start(), timeout=5.0)
 
-        asyncio.run(go())
+        await go()
 
-    def test_start_skips_dispatch_when_at_capacity(self) -> None:
+    async def test_start_skips_dispatch_when_at_capacity(self) -> None:
         """Messages are dropped when the dispatcher is at capacity."""
 
         async def go() -> None:
@@ -147,7 +147,7 @@ class PollingIngressStartTests(unittest.TestCase):
             # No runs should have been dispatched
             dispatcher.dispatch.assert_not_called()
 
-        asyncio.run(go())
+        await go()
 
 
 if __name__ == "__main__":

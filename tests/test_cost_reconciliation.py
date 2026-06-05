@@ -423,34 +423,29 @@ class AppendSummaryTests(unittest.TestCase):
         self.assertIn("within threshold", text)
 
 
-class ReconcileCostsTests(unittest.TestCase):
+class ReconcileCostsTests(unittest.IsolatedAsyncioTestCase):
     """Tests for the reconcile_costs orchestrator with mocked dependencies."""
 
-    def test_missing_tool(self) -> None:
-        import asyncio
+    async def test_missing_tool(self) -> None:
 
         from micro_x_agent_loop.cost_reconciliation import reconcile_costs
 
-        lines = asyncio.run(reconcile_costs(tool_map={}, store=None))
+        lines = await reconcile_costs(tool_map={}, store=None)
         self.assertTrue(any("not available" in line for line in lines))
 
-    def test_missing_store(self) -> None:
-        import asyncio
+    async def test_missing_store(self) -> None:
         from unittest.mock import MagicMock
 
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
 
         fake_tool = MagicMock()
-        lines = asyncio.run(
-            reconcile_costs(
+        lines = await reconcile_costs(
                 tool_map={RECONCILE_TOOL_NAME: fake_tool},
                 store=None,
             )
-        )
         self.assertTrue(any("Memory not enabled" in line for line in lines))
 
-    def test_no_local_events(self) -> None:
-        import asyncio
+    async def test_no_local_events(self) -> None:
         from unittest.mock import MagicMock, patch
 
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
@@ -463,17 +458,14 @@ class ReconcileCostsTests(unittest.TestCase):
         fake_store.execute.return_value = cursor
 
         with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
-            lines = asyncio.run(
-                reconcile_costs(
+            lines = await reconcile_costs(
                     tool_map={RECONCILE_TOOL_NAME: fake_tool},
                     store=fake_store,
                     days=1,
                 )
-            )
         self.assertTrue(any("No local metric" in line for line in lines))
 
-    def test_successful_reconciliation_with_usage(self) -> None:
-        import asyncio
+    async def test_successful_reconciliation_with_usage(self) -> None:
         from unittest.mock import MagicMock, patch
 
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
@@ -535,22 +527,19 @@ class ReconcileCostsTests(unittest.TestCase):
         fake_tool.execute = fake_execute
 
         with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value="key1"):
-            lines = asyncio.run(
-                reconcile_costs(
+            lines = await reconcile_costs(
                     tool_map={RECONCILE_TOOL_NAME: fake_tool},
                     store=fake_store,
                     start=past_date,
                     end=past_date,
                 )
-            )
 
         text = "\n".join(lines)
         self.assertIn("Cost Reconciliation", text)
         self.assertIn("key1", text)
         self.assertGreaterEqual(call_count[0], 2)  # cost + usage calls
 
-    def test_with_start_and_end_dates(self) -> None:
-        import asyncio
+    async def test_with_start_and_end_dates(self) -> None:
         from unittest.mock import MagicMock, patch
 
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
@@ -586,20 +575,17 @@ class ReconcileCostsTests(unittest.TestCase):
         fake_tool.execute = fake_execute
 
         with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
-            lines = asyncio.run(
-                reconcile_costs(
+            lines = await reconcile_costs(
                     tool_map={RECONCILE_TOOL_NAME: fake_tool},
                     store=fake_store,
                     start="2026-03-10",
                     end="2026-03-10",
                 )
-            )
 
         text = "\n".join(lines)
         self.assertIn("2026-03-10", text)
 
-    def test_api_call_error(self) -> None:
-        import asyncio
+    async def test_api_call_error(self) -> None:
         from unittest.mock import MagicMock, patch
 
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
@@ -624,20 +610,17 @@ class ReconcileCostsTests(unittest.TestCase):
         fake_tool.execute = failing_execute
 
         with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
-            lines = asyncio.run(
-                reconcile_costs(
+            lines = await reconcile_costs(
                     tool_map={RECONCILE_TOOL_NAME: fake_tool},
                     store=fake_store,
                     start="2026-03-10",
                     end="2026-03-10",
                 )
-            )
 
         text = "\n".join(lines)
         self.assertIn("Error calling", text)
 
-    def test_api_returns_error_result(self) -> None:
-        import asyncio
+    async def test_api_returns_error_result(self) -> None:
         from unittest.mock import MagicMock, patch
 
         from micro_x_agent_loop.cost_reconciliation import RECONCILE_TOOL_NAME, reconcile_costs
@@ -662,14 +645,12 @@ class ReconcileCostsTests(unittest.TestCase):
         fake_tool.execute = error_execute
 
         with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
-            lines = asyncio.run(
-                reconcile_costs(
+            lines = await reconcile_costs(
                     tool_map={RECONCILE_TOOL_NAME: fake_tool},
                     store=fake_store,
                     start="2026-03-10",
                     end="2026-03-10",
                 )
-            )
 
         text = "\n".join(lines)
         self.assertIn("API error", text)

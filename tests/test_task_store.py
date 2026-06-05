@@ -9,7 +9,7 @@ from micro_x_agent_loop.tasks.models import Task, TaskStatus
 from micro_x_agent_loop.tasks.store import TaskStore
 
 
-class TestTaskStore(unittest.TestCase):
+class TestTaskStore(unittest.IsolatedAsyncioTestCase):
     """Tests for the SQLite-backed TaskStore.
 
     Covers the integration test scenarios from task-decomposition-implementation-guide.md
@@ -300,7 +300,7 @@ class TestTaskStore(unittest.TestCase):
     # 13.6  Parallel creation (concurrency)
     # ------------------------------------------------------------------
 
-    def test_parallel_creation_unique_ids(self) -> None:
+    async def test_parallel_creation_unique_ids(self) -> None:
         """Section 13.6: concurrent creates produce unique IDs.
 
         Each thread gets its own TaskStore (separate connection) to avoid
@@ -320,7 +320,7 @@ class TestTaskStore(unittest.TestCase):
             tasks_created = await asyncio.gather(*[loop.run_in_executor(None, _create_in_thread, i) for i in range(5)])
             return list(tasks_created)
 
-        created = asyncio.run(create_tasks())
+        created = await create_tasks()
         ids = {t.id for t in created}
         self.assertEqual(len(ids), 5)  # All unique
         self.assertEqual(ids, {"1", "2", "3", "4", "5"})

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -82,7 +81,7 @@ class McpToolProxyPropertiesTests(unittest.TestCase):
         self.assertEqual([], p.predict_touched_paths({}))
 
 
-class McpToolProxyExecuteTests(unittest.TestCase):
+class McpToolProxyExecuteTests(unittest.IsolatedAsyncioTestCase):
     def _make_proxy(self, session: MagicMock, **kwargs) -> McpToolProxy:
         return McpToolProxy(
             server_name="srv",
@@ -93,20 +92,20 @@ class McpToolProxyExecuteTests(unittest.TestCase):
             **kwargs,
         )
 
-    def test_execute_success(self) -> None:
+    async def test_execute_success(self) -> None:
         session = _make_session(text_parts=["result output"])
         proxy = self._make_proxy(session)
-        result = asyncio.run(proxy.execute({"arg": "value"}))
+        result = await proxy.execute({"arg": "value"})
         self.assertEqual("result output", result.text)
         self.assertFalse(result.is_error)
 
-    def test_execute_multiple_text_parts(self) -> None:
+    async def test_execute_multiple_text_parts(self) -> None:
         session = _make_session(text_parts=["part1", "part2"])
         proxy = self._make_proxy(session)
-        result = asyncio.run(proxy.execute({}))
+        result = await proxy.execute({})
         self.assertEqual("part1\npart2", result.text)
 
-    def test_execute_no_text_parts(self) -> None:
+    async def test_execute_no_text_parts(self) -> None:
         call_result = MagicMock()
         call_result.isError = False
         call_result.content = []
@@ -114,17 +113,17 @@ class McpToolProxyExecuteTests(unittest.TestCase):
         session = MagicMock()
         session.call_tool = AsyncMock(return_value=call_result)
         proxy = self._make_proxy(session)
-        result = asyncio.run(proxy.execute({}))
+        result = await proxy.execute({})
         self.assertEqual("(no output)", result.text)
 
-    def test_execute_error_result(self) -> None:
+    async def test_execute_error_result(self) -> None:
         session = _make_session(text_parts=["error details"], is_error=True)
         proxy = self._make_proxy(session)
-        result = asyncio.run(proxy.execute({}))
+        result = await proxy.execute({})
         self.assertEqual("error details", result.text)
         self.assertTrue(result.is_error)
 
-    def test_execute_with_structured_content(self) -> None:
+    async def test_execute_with_structured_content(self) -> None:
         from mcp.types import TextContent
 
         structured = {"key": "value", "count": 3}
@@ -135,18 +134,18 @@ class McpToolProxyExecuteTests(unittest.TestCase):
         session = MagicMock()
         session.call_tool = AsyncMock(return_value=call_result)
         proxy = self._make_proxy(session)
-        result = asyncio.run(proxy.execute({}))
+        result = await proxy.execute({})
         self.assertIsNotNone(result.structured)
         self.assertEqual("value", result.structured["key"])
 
-    def test_execute_passes_tool_input(self) -> None:
+    async def test_execute_passes_tool_input(self) -> None:
         session = _make_session()
         proxy = self._make_proxy(session)
         input_data = {"path": "/tmp/file.txt", "content": "hello"}
-        asyncio.run(proxy.execute(input_data))
+        await proxy.execute(input_data)
         session.call_tool.assert_called_once_with("tool", arguments=input_data)
 
-    def test_execute_no_structured_content_attr(self) -> None:
+    async def test_execute_no_structured_content_attr(self) -> None:
         """Handles the case where structuredContent attribute is absent."""
         from mcp.types import TextContent
 
@@ -156,7 +155,7 @@ class McpToolProxyExecuteTests(unittest.TestCase):
         session = MagicMock()
         session.call_tool = AsyncMock(return_value=call_result)
         proxy = self._make_proxy(session)
-        result = asyncio.run(proxy.execute({}))
+        result = await proxy.execute({})
         self.assertEqual("ok", result.text)
         self.assertIsNone(result.structured)
 

@@ -1,4 +1,3 @@
-import asyncio
 import unittest
 from unittest.mock import patch
 
@@ -7,7 +6,7 @@ from micro_x_agent_loop.usage import UsageResult
 from tests.fakes import FakeProvider
 
 
-class CompactionStrategyTests(unittest.TestCase):
+class CompactionStrategyTests(unittest.IsolatedAsyncioTestCase):
     def test_format_for_summarization_includes_tool_blocks(self) -> None:
         messages = [
             {"role": "user", "content": "hello"},
@@ -25,24 +24,24 @@ class CompactionStrategyTests(unittest.TestCase):
         self.assertIn("[Tool call: read_file", formatted)
         self.assertIn("[Tool result (1)]:", formatted)
 
-    def test_maybe_compact_returns_original_below_threshold(self) -> None:
+    async def test_maybe_compact_returns_original_below_threshold(self) -> None:
         strategy = SummarizeCompactionStrategy(FakeProvider(), "m", threshold_tokens=10_000)
         messages = [{"role": "user", "content": "small"}]
-        out = asyncio.run(strategy.maybe_compact(messages))
+        out = await strategy.maybe_compact(messages)
         self.assertEqual(messages, out)
 
-    def test_maybe_compact_summarizes_when_over_threshold(self) -> None:
+    async def test_maybe_compact_summarizes_when_over_threshold(self) -> None:
         strategy = SummarizeCompactionStrategy(FakeProvider(), "m", threshold_tokens=1, protected_tail_messages=1)
         messages = [
             {"role": "user", "content": "seed"},
             {"role": "assistant", "content": [{"type": "text", "text": "long text " * 200}]},
             {"role": "user", "content": "tail"},
         ]
-        out = asyncio.run(strategy.maybe_compact(messages))
+        out = await strategy.maybe_compact(messages)
         self.assertGreaterEqual(len(out), 2)
         self.assertIn("[CONTEXT SUMMARY]", out[0]["content"])
 
-    def test_maybe_compact_falls_back_on_summary_error(self) -> None:
+    async def test_maybe_compact_falls_back_on_summary_error(self) -> None:
         strategy = SummarizeCompactionStrategy(FakeProvider(), "m", threshold_tokens=1, protected_tail_messages=1)
         messages = [
             {"role": "user", "content": "seed"},
@@ -50,10 +49,10 @@ class CompactionStrategyTests(unittest.TestCase):
             {"role": "user", "content": "tail"},
         ]
         with patch("micro_x_agent_loop.compaction._summarize", side_effect=RuntimeError("boom")):
-            out = asyncio.run(strategy.maybe_compact(messages))
+            out = await strategy.maybe_compact(messages)
         self.assertEqual(messages, out)
 
-    def test_summarize_calls_provider_create_message(self) -> None:
+    async def test_summarize_calls_provider_create_message(self) -> None:
         provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(provider, "m", threshold_tokens=1, protected_tail_messages=1)
         messages = [
@@ -61,10 +60,10 @@ class CompactionStrategyTests(unittest.TestCase):
             {"role": "assistant", "content": [{"type": "text", "text": "long text " * 200}]},
             {"role": "user", "content": "tail"},
         ]
-        asyncio.run(strategy.maybe_compact(messages))
+        await strategy.maybe_compact(messages)
         self.assertGreaterEqual(len(provider.calls), 1)
 
-    def test_compaction_callback_invoked(self) -> None:
+    async def test_compaction_callback_invoked(self) -> None:
         callback_calls: list[tuple] = []
 
         def on_compaction(usage, tokens_before, tokens_after, messages_compacted):
@@ -83,7 +82,7 @@ class CompactionStrategyTests(unittest.TestCase):
             {"role": "assistant", "content": [{"type": "text", "text": "long text " * 200}]},
             {"role": "user", "content": "tail"},
         ]
-        asyncio.run(strategy.maybe_compact(messages))
+        await strategy.maybe_compact(messages)
         self.assertEqual(1, len(callback_calls))
         usage, tokens_before, tokens_after, messages_compacted = callback_calls[0]
         self.assertIsInstance(usage, UsageResult)
@@ -91,7 +90,7 @@ class CompactionStrategyTests(unittest.TestCase):
         self.assertEqual(1, messages_compacted)
 
 
-class VerbatimToolResultTests(unittest.TestCase):
+class VerbatimToolResultTests(unittest.IsolatedAsyncioTestCase):
     """Verifies that file-read tool results survive compaction unchanged.
 
     Rationale: read_file / grep / glob results are deterministic content the
@@ -128,9 +127,9 @@ class VerbatimToolResultTests(unittest.TestCase):
             {"role": "user", "content": "tail"},
         ]
 
-    def test_read_file_result_survives_compaction_verbatim(self) -> None:
+    async def test_read_file_result_survives_compaction_verbatim(self) -> None:
         strategy = SummarizeCompactionStrategy(FakeProvider(), "m", threshold_tokens=1, protected_tail_messages=1)
-        out = asyncio.run(strategy.maybe_compact(self._verbatim_messages()))
+        out = await strategy.maybe_compact(self._verbatim_messages())
         # The verbatim sentinel must appear somewhere in the compacted output.
         flat = "".join(
             block.get("content", "") if isinstance(block.get("content"), str)
@@ -143,7 +142,7 @@ class VerbatimToolResultTests(unittest.TestCase):
         )
         self.assertIn("VERBATIM_FILE_BYTES_KEEP_ME", flat)
 
-    def test_playwright_result_survives_compaction_via_wildcard(self) -> None:
+    async def test_playwright_result_survives_compaction_via_wildcard(self) -> None:
         # Playwright tools are exempted via the "playwright__*" wildcard
         # entry in _VERBATIM_TOOL_NAMES, so a browser_snapshot result should
         # be carried through compaction unchanged.
@@ -166,7 +165,7 @@ class VerbatimToolResultTests(unittest.TestCase):
             {"role": "user", "content": "tail"},
         ]
         strategy = SummarizeCompactionStrategy(FakeProvider(), "m", threshold_tokens=1, protected_tail_messages=1)
-        out = asyncio.run(strategy.maybe_compact(messages))
+        out = await strategy.maybe_compact(messages)
         flat = "".join(
             block.get("content", "") if isinstance(block.get("content"), str)
             else "".join(
@@ -178,7 +177,7 @@ class VerbatimToolResultTests(unittest.TestCase):
         )
         self.assertIn("PLAYWRIGHT_DOM_KEEP_ME", flat)
 
-    def test_bash_result_does_not_survive_compaction_verbatim(self) -> None:
+    async def test_bash_result_does_not_survive_compaction_verbatim(self) -> None:
         # Same shape but with bash instead of read_file — bash is NOT in
         # _VERBATIM_TOOL_NAMES, so its result should be summarised away.
         messages = [
@@ -200,7 +199,7 @@ class VerbatimToolResultTests(unittest.TestCase):
             {"role": "user", "content": "tail"},
         ]
         strategy = SummarizeCompactionStrategy(FakeProvider(), "m", threshold_tokens=1, protected_tail_messages=1)
-        out = asyncio.run(strategy.maybe_compact(messages))
+        out = await strategy.maybe_compact(messages)
         flat = "".join(
             block.get("content", "") if isinstance(block.get("content"), str)
             else "".join(
@@ -214,7 +213,7 @@ class VerbatimToolResultTests(unittest.TestCase):
         # (The fake summariser returns its model name, so the sentinel disappears.)
         self.assertNotIn("BASH_OUTPUT_SHOULD_BE_SUMMARISED", flat)
 
-    def test_all_verbatim_compaction_range_skips_summarisation(self) -> None:
+    async def test_all_verbatim_compaction_range_skips_summarisation(self) -> None:
         # When every compactable message is verbatim, compaction should
         # bail out and return the original messages unchanged.
         messages = [
@@ -235,26 +234,26 @@ class VerbatimToolResultTests(unittest.TestCase):
         ]
         provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(provider, "m", threshold_tokens=1, protected_tail_messages=1)
-        out = asyncio.run(strategy.maybe_compact(messages))
+        out = await strategy.maybe_compact(messages)
         self.assertEqual(messages, out)
         # Provider must not have been called — no summarisation happened.
         self.assertEqual([], provider.calls)
 
 
-class NoneCompactionStrategyTests(unittest.TestCase):
-    def test_returns_messages_unchanged(self) -> None:
+class NoneCompactionStrategyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_returns_messages_unchanged(self) -> None:
         strategy = NoneCompactionStrategy()
         messages = [
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "hi"},
         ]
-        out = asyncio.run(strategy.maybe_compact(messages))
+        out = await strategy.maybe_compact(messages)
         self.assertIs(out, messages)
 
-    def test_returns_empty_list_unchanged(self) -> None:
+    async def test_returns_empty_list_unchanged(self) -> None:
         strategy = NoneCompactionStrategy()
         messages: list[dict] = []
-        out = asyncio.run(strategy.maybe_compact(messages))
+        out = await strategy.maybe_compact(messages)
         self.assertIs(out, messages)
 
 

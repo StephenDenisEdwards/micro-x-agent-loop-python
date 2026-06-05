@@ -1,4 +1,3 @@
-import asyncio
 import unittest
 from types import SimpleNamespace
 
@@ -7,14 +6,14 @@ from micro_x_agent_loop.usage import UsageResult
 from tests.fakes import FakeAnthropicClient, FakeStreamContext
 
 
-class AnthropicProviderStreamTests(unittest.TestCase):
+class AnthropicProviderStreamTests(unittest.IsolatedAsyncioTestCase):
     def _make_provider(self, stream_ctx: FakeStreamContext) -> AnthropicProvider:
         provider = AnthropicProvider.__new__(AnthropicProvider)
         provider._client = FakeAnthropicClient(stream_ctx)
         provider._prompt_caching_enabled = False
         return provider
 
-    def test_stream_chat_returns_text_and_tool_use_blocks(self) -> None:
+    async def test_stream_chat_returns_text_and_tool_use_blocks(self) -> None:
         events = [
             SimpleNamespace(
                 type="content_block_delta",
@@ -31,8 +30,7 @@ class AnthropicProviderStreamTests(unittest.TestCase):
         )
         provider = self._make_provider(FakeStreamContext(events, final_message))
 
-        message, tool_use_blocks, stop_reason, usage = asyncio.run(
-            provider.stream_chat(
+        message, tool_use_blocks, stop_reason, usage = await provider.stream_chat(
                 model="m",
                 max_tokens=100,
                 temperature=0.5,
@@ -40,7 +38,6 @@ class AnthropicProviderStreamTests(unittest.TestCase):
                 messages=[{"role": "user", "content": "hi"}],
                 tools=[],
             )
-        )
 
         self.assertEqual("assistant", message["role"])
         self.assertEqual("tool_use", stop_reason)
@@ -50,7 +47,7 @@ class AnthropicProviderStreamTests(unittest.TestCase):
         self.assertEqual(10, usage.input_tokens)
         self.assertEqual(5, usage.output_tokens)
 
-    def test_stream_chat_handles_no_text_delta(self) -> None:
+    async def test_stream_chat_handles_no_text_delta(self) -> None:
         events: list[object] = []
         final_message = SimpleNamespace(
             stop_reason="end_turn",
@@ -59,8 +56,7 @@ class AnthropicProviderStreamTests(unittest.TestCase):
         )
         provider = self._make_provider(FakeStreamContext(events, final_message))
 
-        message, tool_use_blocks, stop_reason, usage = asyncio.run(
-            provider.stream_chat(
+        message, tool_use_blocks, stop_reason, usage = await provider.stream_chat(
                 model="m",
                 max_tokens=100,
                 temperature=0.1,
@@ -68,7 +64,6 @@ class AnthropicProviderStreamTests(unittest.TestCase):
                 messages=[{"role": "user", "content": "hi"}],
                 tools=[],
             )
-        )
 
         self.assertEqual("end_turn", stop_reason)
         self.assertEqual([], tool_use_blocks)

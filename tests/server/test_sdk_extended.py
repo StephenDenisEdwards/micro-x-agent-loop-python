@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import unittest
@@ -16,7 +15,7 @@ _TEST_CONFIG = os.path.join(os.path.dirname(__file__), "config-test.json")
 _BROKER_CONFIG = os.path.join(os.path.dirname(__file__), "config-test-broker.json")
 
 
-class StreamSessionTests(unittest.TestCase):
+class StreamSessionTests(unittest.IsolatedAsyncioTestCase):
     """Unit tests for StreamSession without a real WebSocket."""
 
     def _make_ws(self) -> tuple:
@@ -32,29 +31,29 @@ class StreamSessionTests(unittest.TestCase):
         ws.send = fake_send
         return ws, sent
 
-    def test_send_message(self) -> None:
+    async def test_send_message(self) -> None:
         ws, sent = self._make_ws()
         session = StreamSession(ws, "s1")
-        asyncio.run(session.send_message("hello"))
+        await session.send_message("hello")
         self.assertEqual(1, len(sent))
         parsed = json.loads(sent[0])
         self.assertEqual("message", parsed["type"])
         self.assertEqual("hello", parsed["text"])
 
-    def test_answer(self) -> None:
+    async def test_answer(self) -> None:
         ws, sent = self._make_ws()
         session = StreamSession(ws, "s1")
-        asyncio.run(session.answer("q1", "yes"))
+        await session.answer("q1", "yes")
         self.assertEqual(1, len(sent))
         parsed = json.loads(sent[0])
         self.assertEqual("answer", parsed["type"])
         self.assertEqual("q1", parsed["question_id"])
         self.assertEqual("yes", parsed["text"])
 
-    def test_ping(self) -> None:
+    async def test_ping(self) -> None:
         ws, sent = self._make_ws()
         session = StreamSession(ws, "s1")
-        asyncio.run(session.ping())
+        await session.ping()
         self.assertEqual(1, len(sent))
         parsed = json.loads(sent[0])
         self.assertEqual("ping", parsed["type"])
@@ -133,7 +132,7 @@ class AgentClientSessionTests(unittest.TestCase):
             self.assertIsInstance(resp.json(), list)
 
 
-class AgentClientStreamTests(unittest.TestCase):
+class AgentClientStreamTests(unittest.IsolatedAsyncioTestCase):
     def test_stream_url_building_http_to_ws(self) -> None:
         """Verify the ws:// URL substitution logic."""
         AgentClient("http://localhost:8321")
@@ -149,7 +148,7 @@ class AgentClientStreamTests(unittest.TestCase):
         ws_url = base.replace("https://", f"{ws_scheme}://")
         self.assertEqual("wss://example.com", ws_url)
 
-    def test_client_with_api_secret(self) -> None:
+    async def test_client_with_api_secret(self) -> None:
         async def go():
             async with AgentClient("http://127.0.0.1:19998", api_secret="secret") as client:
                 self.assertIsNotNone(client._http)
@@ -158,7 +157,7 @@ class AgentClientStreamTests(unittest.TestCase):
                 self.assertIn("authorization", headers)
                 self.assertEqual("Bearer secret", headers["authorization"])
 
-        asyncio.run(go())
+        await go()
 
 
 if __name__ == "__main__":

@@ -87,29 +87,29 @@ def _make_tool_map() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-class VoiceRuntimeStartTests(unittest.TestCase):
-    def test_missing_tools(self) -> None:
+class VoiceRuntimeStartTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_tools(self) -> None:
         """Start with missing tools returns error message."""
         runtime = VoiceRuntime(
             line_prefix=">> ",
             tool_map={},
             on_utterance=AsyncMock(),
         )
-        msg = asyncio.run(runtime.start())
+        msg = await runtime.start()
         self.assertIn("Voice unavailable", msg)
         self.assertIn("missing", msg)
 
-    def test_invalid_source(self) -> None:
+    async def test_invalid_source(self) -> None:
         runtime = VoiceRuntime(
             line_prefix=">> ",
             tool_map=_make_tool_map(),
             on_utterance=AsyncMock(),
             ingress=_FakeIngress([]),
         )
-        msg = asyncio.run(runtime.start(source="invalid"))
+        msg = await runtime.start(source="invalid")
         self.assertIn("microphone or loopback", msg)
 
-    def test_double_start(self) -> None:
+    async def test_double_start(self) -> None:
         async def scenario() -> str:
             runtime = VoiceRuntime(
                 line_prefix=">> ",
@@ -120,10 +120,10 @@ class VoiceRuntimeStartTests(unittest.TestCase):
             await runtime.start("microphone")
             return await runtime.start("microphone")
 
-        msg = asyncio.run(scenario())
+        msg = await scenario()
         self.assertIn("already running", msg)
 
-    def test_start_no_session_id(self) -> None:
+    async def test_start_no_session_id(self) -> None:
         """Start fails when tool response has no session_id."""
         tool_map = _make_tool_map()
         tool_map["stt-server__stt_start_session"] = _JsonTool({})
@@ -133,10 +133,10 @@ class VoiceRuntimeStartTests(unittest.TestCase):
             on_utterance=AsyncMock(),
             ingress=_FakeIngress([]),
         )
-        msg = asyncio.run(runtime.start())
+        msg = await runtime.start()
         self.assertIn("missing session_id", msg)
 
-    def test_start_with_loopback(self) -> None:
+    async def test_start_with_loopback(self) -> None:
         async def scenario() -> str:
             runtime = VoiceRuntime(
                 line_prefix=">> ",
@@ -148,11 +148,11 @@ class VoiceRuntimeStartTests(unittest.TestCase):
             await runtime.stop()
             return msg
 
-        msg = asyncio.run(scenario())
+        msg = await scenario()
         self.assertIn("Voice started", msg)
         self.assertIn("loopback", msg)
 
-    def test_start_with_mic_device(self) -> None:
+    async def test_start_with_mic_device(self) -> None:
         async def scenario() -> str:
             runtime = VoiceRuntime(
                 line_prefix=">> ",
@@ -164,43 +164,43 @@ class VoiceRuntimeStartTests(unittest.TestCase):
             await runtime.stop()
             return msg
 
-        msg = asyncio.run(scenario())
+        msg = await scenario()
         self.assertIn("Voice started", msg)
         self.assertIn("My Mic", msg)
         self.assertIn("dev-1", msg)
 
 
-class VoiceRuntimeStopTests(unittest.TestCase):
-    def test_stop_when_not_running(self) -> None:
+class VoiceRuntimeStopTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stop_when_not_running(self) -> None:
         runtime = VoiceRuntime(
             line_prefix=">> ",
             tool_map={},
             on_utterance=AsyncMock(),
         )
-        msg = asyncio.run(runtime.stop())
+        msg = await runtime.stop()
         self.assertIn("already stopped", msg)
 
-    def test_shutdown_when_not_running(self) -> None:
+    async def test_shutdown_when_not_running(self) -> None:
         runtime = VoiceRuntime(
             line_prefix=">> ",
             tool_map={},
             on_utterance=AsyncMock(),
         )
         # Should not raise
-        asyncio.run(runtime.shutdown())
+        await runtime.shutdown()
 
 
-class VoiceRuntimeStatusTests(unittest.TestCase):
-    def test_status_when_stopped(self) -> None:
+class VoiceRuntimeStatusTests(unittest.IsolatedAsyncioTestCase):
+    async def test_status_when_stopped(self) -> None:
         runtime = VoiceRuntime(
             line_prefix=">> ",
             tool_map={},
             on_utterance=AsyncMock(),
         )
-        msg = asyncio.run(runtime.status())
+        msg = await runtime.status()
         self.assertIn("stopped", msg)
 
-    def test_status_no_status_tool(self) -> None:
+    async def test_status_no_status_tool(self) -> None:
         """Status with missing status tool returns basic info."""
         tool_map = _make_tool_map()
 
@@ -218,10 +218,10 @@ class VoiceRuntimeStatusTests(unittest.TestCase):
             await runtime.stop()
             return msg
 
-        msg = asyncio.run(scenario())
+        msg = await scenario()
         self.assertIn("Voice running", msg)
 
-    def test_status_long_transcript_truncated(self) -> None:
+    async def test_status_long_transcript_truncated(self) -> None:
         """Long latest_transcript in status is truncated."""
         tool_map = _make_tool_map()
         tool_map["stt-server__stt_get_session"] = _JsonTool(
@@ -246,21 +246,21 @@ class VoiceRuntimeStatusTests(unittest.TestCase):
             await runtime.stop()
             return msg
 
-        msg = asyncio.run(scenario())
+        msg = await scenario()
         self.assertIn("...", msg)
 
 
-class VoiceRuntimeEventsTests(unittest.TestCase):
-    def test_events_when_stopped(self) -> None:
+class VoiceRuntimeEventsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_events_when_stopped(self) -> None:
         runtime = VoiceRuntime(
             line_prefix=">> ",
             tool_map={},
             on_utterance=AsyncMock(),
         )
-        msg = asyncio.run(runtime.events())
+        msg = await runtime.events()
         self.assertIn("stopped", msg)
 
-    def test_events_no_updates_tool(self) -> None:
+    async def test_events_no_updates_tool(self) -> None:
         tool_map = _make_tool_map()
 
         async def scenario() -> str:
@@ -277,27 +277,27 @@ class VoiceRuntimeEventsTests(unittest.TestCase):
             await runtime.stop()
             return msg
 
-        msg = asyncio.run(scenario())
+        msg = await scenario()
         self.assertIn("missing", msg)
 
 
-class VoiceRuntimeDevicesTests(unittest.TestCase):
-    def test_devices_no_tool(self) -> None:
+class VoiceRuntimeDevicesTests(unittest.IsolatedAsyncioTestCase):
+    async def test_devices_no_tool(self) -> None:
         runtime = VoiceRuntime(
             line_prefix=">> ",
             tool_map={},
             on_utterance=AsyncMock(),
         )
-        msg = asyncio.run(runtime.devices())
+        msg = await runtime.devices()
         self.assertIn("missing", msg)
 
-    def test_devices_success(self) -> None:
+    async def test_devices_success(self) -> None:
         runtime = VoiceRuntime(
             line_prefix=">> ",
             tool_map=_make_tool_map(),
             on_utterance=AsyncMock(),
         )
-        msg = asyncio.run(runtime.devices())
+        msg = await runtime.devices()
         data = json.loads(msg)
         self.assertIn("capture", data)
 

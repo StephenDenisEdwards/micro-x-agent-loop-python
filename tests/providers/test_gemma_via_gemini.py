@@ -6,12 +6,10 @@ network access.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import unittest
 from pathlib import Path
-from typing import Any
 
 from micro_x_agent_loop.app_config import load_json_config, parse_app_config
 from micro_x_agent_loop.tool_search import _get_context_window
@@ -110,7 +108,7 @@ class GemmaPricingEntriesCompleteTests(unittest.TestCase):
 
 
 @unittest.skipUnless(_GEMINI_KEY, "Live smoke test — set GEMINI_API_KEY to enable")
-class GemmaViaGeminiLiveSmokeTests(unittest.TestCase):
+class GemmaViaGeminiLiveSmokeTests(unittest.IsolatedAsyncioTestCase):
     """Hits the real Google AI Studio endpoint. Gated on GEMINI_API_KEY.
 
     These tests confirm that the existing GeminiProvider passes through
@@ -119,28 +117,25 @@ class GemmaViaGeminiLiveSmokeTests(unittest.TestCase):
     required for Phase 1**.
     """
 
-    def test_streams_text_for_chat_prompt(self) -> None:
+    async def test_streams_text_for_chat_prompt(self) -> None:
         from micro_x_agent_loop.providers.gemini_provider import GeminiProvider
 
         provider = GeminiProvider(api_key=_GEMINI_KEY)
 
-        async def _run() -> Any:
-            return await provider.stream_chat(
-                model="gemma-3-4b-it",
-                max_tokens=64,
-                temperature=0.0,
-                system_prompt="",
-                messages=[{"role": "user", "content": "Reply with only the word OK."}],
-                tools=[],
-            )
-
-        message, tool_use_blocks, stop_reason, usage = asyncio.run(_run())
+        message, tool_use_blocks, stop_reason, usage = await provider.stream_chat(
+            model="gemma-3-4b-it",
+            max_tokens=64,
+            temperature=0.0,
+            system_prompt="",
+            messages=[{"role": "user", "content": "Reply with only the word OK."}],
+            tools=[],
+        )
         self.assertEqual("assistant", message["role"])
         self.assertEqual([], tool_use_blocks)
         self.assertIn(stop_reason, ("end_turn", "max_tokens"))
         self.assertGreater(getattr(usage, "input_tokens", 0), 0)
 
-    def test_returns_function_call_for_tool_prompt(self) -> None:
+    async def test_returns_function_call_for_tool_prompt(self) -> None:
         from micro_x_agent_loop.providers.gemini_provider import GeminiProvider
 
         provider = GeminiProvider(api_key=_GEMINI_KEY)
@@ -156,19 +151,16 @@ class GemmaViaGeminiLiveSmokeTests(unittest.TestCase):
             }
         ]
 
-        async def _run() -> Any:
-            return await provider.stream_chat(
-                model="gemma-3-12b-it",
-                max_tokens=128,
-                temperature=0.0,
-                system_prompt="",
-                messages=[
-                    {"role": "user", "content": "What's the weather in Tokyo? Use the tool."}
-                ],
-                tools=tools,
-            )
-
-        _message, tool_use_blocks, stop_reason, _usage = asyncio.run(_run())
+        _message, tool_use_blocks, stop_reason, _usage = await provider.stream_chat(
+            model="gemma-3-12b-it",
+            max_tokens=128,
+            temperature=0.0,
+            system_prompt="",
+            messages=[
+                {"role": "user", "content": "What's the weather in Tokyo? Use the tool."}
+            ],
+            tools=tools,
+        )
         # If Gemma decided to call the tool, the wire format must be the
         # internal {type, id, name, input} shape. If it answered in text
         # instead (4B variants sometimes do), at least confirm no schema

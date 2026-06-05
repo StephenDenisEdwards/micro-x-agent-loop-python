@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from typing import Any
 
@@ -130,15 +129,15 @@ def _make_engine(
 # ---------------------------------------------------------------------------
 
 
-class TurnEngineBasicTests(unittest.TestCase):
-    def test_basic_text_response(self) -> None:
+class TurnEngineBasicTests(unittest.IsolatedAsyncioTestCase):
+    async def test_basic_text_response(self) -> None:
         """LLM returns text with no tool calls → immediate return."""
         provider = FakeStreamProvider()
         provider.queue(text="Hello!", stop_reason="end_turn")
         events = RecordingEvents()
         engine = _make_engine(provider, events)
 
-        user_id, assistant_id = asyncio.run(engine.run(messages=[], user_message="hi"))
+        user_id, assistant_id = await engine.run(messages=[], user_message="hi")
 
         self.assertIsNotNone(user_id)
         self.assertIsNotNone(assistant_id)
@@ -149,7 +148,7 @@ class TurnEngineBasicTests(unittest.TestCase):
         # API call metric should fire
         self.assertEqual(1, len(events.api_call_metrics))
 
-    def test_tool_execution_flow(self) -> None:
+    async def test_tool_execution_flow(self) -> None:
         """tool_use → execute → tool_result → LLM → text."""
         tool = FakeTool(name="read_file", execute_result="file contents")
         provider = FakeStreamProvider()
@@ -174,7 +173,7 @@ class TurnEngineBasicTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool])
 
-        asyncio.run(engine.run(messages=[], user_message="read a.py"))
+        await engine.run(messages=[], user_message="read a.py")
 
         self.assertEqual(1, tool.execute_calls)
         # Events: user, assistant(tool_use), user(tool_result), assistant(text)
@@ -184,7 +183,7 @@ class TurnEngineBasicTests(unittest.TestCase):
         self.assertEqual(("t1", "read_file"), events.tool_started[0])
         self.assertEqual(("t1", "read_file", False), events.tool_completed[0])
 
-    def test_multiple_tool_calls(self) -> None:
+    async def test_multiple_tool_calls(self) -> None:
         """Two tools in one response, both executed."""
         tool_a = FakeTool(name="read_file", execute_result="content_a")
         tool_b = FakeTool(name="list_dir", execute_result="content_b")
@@ -208,14 +207,14 @@ class TurnEngineBasicTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool_a, tool_b])
 
-        asyncio.run(engine.run(messages=[], user_message="read both"))
+        await engine.run(messages=[], user_message="read both")
 
         self.assertEqual(1, tool_a.execute_calls)
         self.assertEqual(1, tool_b.execute_calls)
         self.assertEqual(2, len(events.tool_started))
         self.assertEqual(2, len(events.tool_completed))
 
-    def test_tool_execution_error(self) -> None:
+    async def test_tool_execution_error(self) -> None:
         """Tool raises exception → error result returned to LLM."""
         tool = FakeTool(name="bad_tool", execute_side_effect=RuntimeError("boom"))
         provider = FakeStreamProvider()
@@ -235,7 +234,7 @@ class TurnEngineBasicTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool])
 
-        asyncio.run(engine.run(messages=[], user_message="try it"))
+        await engine.run(messages=[], user_message="try it")
 
         self.assertEqual(1, tool.execute_calls)
         # Tool result should be an error
@@ -245,7 +244,7 @@ class TurnEngineBasicTests(unittest.TestCase):
         # Tool completed with is_error=True
         self.assertEqual(("t1", "bad_tool", True), events.tool_completed[0])
 
-    def test_unknown_tool(self) -> None:
+    async def test_unknown_tool(self) -> None:
         """LLM calls nonexistent tool → error result."""
         provider = FakeStreamProvider()
         provider.responses.append(
@@ -264,14 +263,14 @@ class TurnEngineBasicTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[])
 
-        asyncio.run(engine.run(messages=[], user_message="do it"))
+        await engine.run(messages=[], user_message="do it")
 
         error_record = events.tool_call_records[0]
         self.assertTrue(error_record["is_error"])
         self.assertIn("unknown tool", error_record["result_text"])
         self.assertEqual(("t1", "nonexistent", True), events.tool_completed[0])
 
-    def test_unknown_tool_lists_available(self) -> None:
+    async def test_unknown_tool_lists_available(self) -> None:
         """Phase 2 of PLAN-gemma-model-support — error message includes the
         sorted list of available tool names so small models (e.g. gemma3:4b)
         can self-correct without guessing again.
@@ -292,7 +291,7 @@ class TurnEngineBasicTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool_a, tool_b])
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         result_text = events.tool_call_records[0]["result_text"]
         self.assertIn('unknown tool "hallucinated_tool"', result_text)
@@ -306,7 +305,7 @@ class TurnEngineBasicTests(unittest.TestCase):
             "Available tool names should be sorted",
         )
 
-    def test_tool_result_truncation(self) -> None:
+    async def test_tool_result_truncation(self) -> None:
         """Long result truncated to max_tool_result_chars."""
         long_result = "x" * 200
         tool = FakeTool(name="verbose", execute_result=long_result)
@@ -327,13 +326,13 @@ class TurnEngineBasicTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool], max_tool_result_chars=50)
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         result_text = events.tool_call_records[0]["result_text"]
         self.assertIn("OUTPUT TRUNCATED", result_text)
         self.assertLess(len(result_text), len(long_result) + 200)
 
-    def test_max_tokens_retry_then_stop(self) -> None:
+    async def test_max_tokens_retry_then_stop(self) -> None:
         """LLM hits max_tokens N times → stops."""
         provider = FakeStreamProvider()
         for _ in range(3):
@@ -342,14 +341,14 @@ class TurnEngineBasicTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, max_tokens_retries=3)
 
-        asyncio.run(engine.run(messages=[], user_message="big request"))
+        await engine.run(messages=[], user_message="big request")
 
         # Should have 3 API calls
         self.assertEqual(3, len(events.api_call_metrics))
         # After 3 max_tokens, it stops (no further retries)
         self.assertEqual(3, len(provider.stream_calls))
 
-    def test_max_tokens_resets_on_tool_use(self) -> None:
+    async def test_max_tokens_resets_on_tool_use(self) -> None:
         """max_tokens counter resets when tools are involved."""
         tool = FakeTool(name="read_file", execute_result="ok")
         provider = FakeStreamProvider()
@@ -373,13 +372,13 @@ class TurnEngineBasicTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool], max_tokens_retries=3)
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         # Should have completed successfully (3 API calls, no stop message)
         self.assertEqual(3, len(events.api_call_metrics))
         self.assertEqual(1, tool.execute_calls)
 
-    def test_api_call_metrics_callback(self) -> None:
+    async def test_api_call_metrics_callback(self) -> None:
         """on_api_call_completed called with usage."""
         usage = UsageResult(input_tokens=100, output_tokens=50, model="m")
         provider = FakeStreamProvider()
@@ -395,7 +394,7 @@ class TurnEngineBasicTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events)
 
-        asyncio.run(engine.run(messages=[], user_message="hello"))
+        await engine.run(messages=[], user_message="hello")
 
         self.assertEqual(1, len(events.api_call_metrics))
         recorded_usage, call_type = events.api_call_metrics[0]
@@ -403,7 +402,7 @@ class TurnEngineBasicTests(unittest.TestCase):
         self.assertEqual(50, recorded_usage.output_tokens)
         self.assertEqual("main", call_type)
 
-    def test_tool_executed_metrics_callback(self) -> None:
+    async def test_tool_executed_metrics_callback(self) -> None:
         """on_tool_executed called with timing."""
         tool = FakeTool(name="read_file", execute_result="result")
         provider = FakeStreamProvider()
@@ -423,7 +422,7 @@ class TurnEngineBasicTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool])
 
-        asyncio.run(engine.run(messages=[], user_message="read"))
+        await engine.run(messages=[], user_message="read")
 
         self.assertEqual(1, len(events.tool_exec_metrics))
         name, chars, duration_ms, is_error, was_summarized = events.tool_exec_metrics[0]

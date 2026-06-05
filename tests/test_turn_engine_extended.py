@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -46,8 +45,8 @@ def _make_engine(
 # ---------------------------------------------------------------------------
 
 
-class SummarizationTests(unittest.TestCase):
-    def test_large_result_summarized(self) -> None:
+class SummarizationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_large_result_summarized(self) -> None:
         """Tool result exceeding threshold is summarized."""
         long_result = "x" * 5000
         tool = FakeTool(name="read_file", execute_result=long_result)
@@ -79,7 +78,7 @@ class SummarizationTests(unittest.TestCase):
             summarization_threshold=100,
         )
 
-        asyncio.run(engine.run(messages=[], user_message="read"))
+        await engine.run(messages=[], user_message="read")
 
         # Summarization should have been called
         sum_provider.create_message.assert_called_once()
@@ -88,7 +87,7 @@ class SummarizationTests(unittest.TestCase):
         # Extra API call for summarization
         self.assertEqual(3, len(events.api_call_metrics))
 
-    def test_small_result_not_summarized(self) -> None:
+    async def test_small_result_not_summarized(self) -> None:
         tool = FakeTool(name="read_file", execute_result="small")
 
         sum_provider = MagicMock()
@@ -116,10 +115,10 @@ class SummarizationTests(unittest.TestCase):
             summarization_threshold=1000,
         )
 
-        asyncio.run(engine.run(messages=[], user_message="read"))
+        await engine.run(messages=[], user_message="read")
         sum_provider.create_message.assert_not_called()
 
-    def test_summarization_failure_returns_original(self) -> None:
+    async def test_summarization_failure_returns_original(self) -> None:
         long_result = "x" * 5000
         tool = FakeTool(name="read_file", execute_result=long_result)
 
@@ -148,7 +147,7 @@ class SummarizationTests(unittest.TestCase):
             summarization_threshold=100,
         )
 
-        asyncio.run(engine.run(messages=[], user_message="read"))
+        await engine.run(messages=[], user_message="read")
         # Should not crash, was_summarized should be False
         self.assertFalse(events.tool_exec_metrics[0][4])
 
@@ -158,15 +157,15 @@ class SummarizationTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class ApiPayloadStoreTests(unittest.TestCase):
-    def test_payload_recorded(self) -> None:
+class ApiPayloadStoreTests(unittest.IsolatedAsyncioTestCase):
+    async def test_payload_recorded(self) -> None:
         provider = FakeStreamProvider()
         provider.queue(text="Hello!", stop_reason="end_turn")
         events = RecordingEvents()
         store = ApiPayloadStore()
         engine = _make_engine(provider, events, api_payload_store=store)
 
-        asyncio.run(engine.run(messages=[], user_message="hi"))
+        await engine.run(messages=[], user_message="hi")
 
         self.assertEqual(1, len(store))
         self.assertEqual("m", store.get(0).model)
@@ -177,8 +176,8 @@ class ApiPayloadStoreTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class NestedLLMUsageTests(unittest.TestCase):
-    def test_nested_usage_tracked(self) -> None:
+class NestedLLMUsageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_nested_usage_tracked(self) -> None:
         """Tool returning structured LLM usage gets tracked."""
         tool = FakeTool(name="smart_tool", execute_result="result")
 
@@ -211,14 +210,14 @@ class NestedLLMUsageTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool])
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         # Should have 3 API call metrics: main, nested:smart_tool, main
         nested = [m for m in events.api_call_metrics if "nested" in m[1]]
         self.assertEqual(1, len(nested))
         self.assertEqual(500, nested[0][0].input_tokens)
 
-    def test_nested_usage_under_usage_key_tracked(self) -> None:
+    async def test_nested_usage_under_usage_key_tracked(self) -> None:
         """Usage nested under a `_usage` key (as codegen run_task surfaces it) is tracked."""
         tool = FakeTool(name="codegen__run_task", execute_result="ran")
 
@@ -255,7 +254,7 @@ class NestedLLMUsageTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool])
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         nested = [m for m in events.api_call_metrics if "nested" in m[1]]
         self.assertEqual(1, len(nested))
@@ -267,7 +266,7 @@ class NestedLLMUsageTests(unittest.TestCase):
         self.assertEqual(30, usage.cache_read_input_tokens)
         self.assertEqual("nested:codegen__run_task", nested[0][1])
 
-    def test_nested_usage_takes_precedence_over_top_level(self) -> None:
+    async def test_nested_usage_takes_precedence_over_top_level(self) -> None:
         """When both top-level and `_usage` fields exist, `_usage` wins."""
         tool = FakeTool(name="smart_tool", execute_result="done")
 
@@ -303,14 +302,14 @@ class NestedLLMUsageTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool])
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         nested = [m for m in events.api_call_metrics if "nested" in m[1]]
         self.assertEqual(1, len(nested))
         self.assertEqual(999, nested[0][0].input_tokens)
         self.assertEqual("nested-model", nested[0][0].model)
 
-    def test_usage_only_report_without_token_fields_not_tracked(self) -> None:
+    async def test_usage_only_report_without_token_fields_not_tracked(self) -> None:
         """A `_usage` block lacking the required token/model fields is ignored."""
         tool = FakeTool(name="codegen__run_task", execute_result="ran")
 
@@ -337,7 +336,7 @@ class NestedLLMUsageTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool])
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         nested = [m for m in events.api_call_metrics if "nested" in m[1]]
         self.assertEqual(0, len(nested))
@@ -441,8 +440,8 @@ class RoutingTargetResolutionTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class AskUserTests(unittest.TestCase):
-    def test_ask_user_handled_inline(self) -> None:
+class AskUserTests(unittest.IsolatedAsyncioTestCase):
+    async def test_ask_user_handled_inline(self) -> None:
         provider = FakeStreamProvider()
         provider.responses.append(
             (
@@ -459,7 +458,7 @@ class AskUserTests(unittest.TestCase):
         channel.ask_user = AsyncMock(return_value="yes")
 
         engine = _make_engine(provider, events, channel=channel)
-        asyncio.run(engine.run(messages=[], user_message="do something"))
+        await engine.run(messages=[], user_message="do something")
 
         channel.ask_user.assert_called_once_with("Continue?", ["yes", "no"])
         # Result should be in appended messages
@@ -472,8 +471,8 @@ class AskUserTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class MaxTokensWithChannelTests(unittest.TestCase):
-    def test_error_emitted_to_channel(self) -> None:
+class MaxTokensWithChannelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_error_emitted_to_channel(self) -> None:
         provider = FakeStreamProvider()
         for _ in range(3):
             provider.queue(text="cut", stop_reason="max_tokens")
@@ -494,7 +493,7 @@ class MaxTokensWithChannelTests(unittest.TestCase):
             events=events,
             channel=channel,
         )
-        asyncio.run(engine.run(messages=[], user_message="big"))
+        await engine.run(messages=[], user_message="big")
 
         channel.emit_error.assert_called_once()
         self.assertIn("max_tokens", channel.emit_error.call_args[0][0])
@@ -505,8 +504,8 @@ class MaxTokensWithChannelTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class ApiCallFailureTests(unittest.TestCase):
-    def test_failed_stream_chat_records_failure_and_reraises(self) -> None:
+class ApiCallFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_stream_chat_records_failure_and_reraises(self) -> None:
         provider = FakeStreamProvider()
 
         async def boom(*a, **k):
@@ -518,7 +517,7 @@ class ApiCallFailureTests(unittest.TestCase):
         engine = _make_engine(provider, events)
 
         with self.assertRaises(RuntimeError):
-            asyncio.run(engine.run(messages=[], user_message="go"))
+            await engine.run(messages=[], user_message="go")
 
         # The failure was recorded exactly once and propagated.
         self.assertEqual(1, len(events.api_call_failures))
@@ -531,8 +530,8 @@ class ApiCallFailureTests(unittest.TestCase):
         self.assertEqual(0, len(events.api_call_metrics))
 
 
-class ToolResultIsErrorTests(unittest.TestCase):
-    def test_tool_result_is_error_raises(self) -> None:
+class ToolResultIsErrorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_tool_result_is_error_raises(self) -> None:
         """When tool.execute returns ToolResult(is_error=True), it's treated as an error."""
         tool = FakeTool(name="err_tool", execute_result="ok")
 
@@ -556,7 +555,7 @@ class ToolResultIsErrorTests(unittest.TestCase):
         events = RecordingEvents()
         engine = _make_engine(provider, events, tools=[tool])
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         error_record = events.tool_call_records[0]
         self.assertTrue(error_record["is_error"])
@@ -567,7 +566,7 @@ class ToolResultIsErrorTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class ToolResultOverridesTests(unittest.TestCase):
+class ToolResultOverridesTests(unittest.IsolatedAsyncioTestCase):
     """Tests for the per-tool ToolResultOverrides mechanism."""
 
     def _make_tool_use_provider(self, tool_name: str) -> FakeStreamProvider:
@@ -583,7 +582,7 @@ class ToolResultOverridesTests(unittest.TestCase):
         provider.queue(text="Done.", stop_reason="end_turn")
         return provider
 
-    def test_no_override_uses_globals(self) -> None:
+    async def test_no_override_uses_globals(self) -> None:
         """A tool not in the override map gets summarized using the global threshold."""
         long_result = "x" * 5000
         tool = FakeTool(name="search_tool", execute_result=long_result)
@@ -605,12 +604,12 @@ class ToolResultOverridesTests(unittest.TestCase):
             tool_result_overrides={},
         )
 
-        asyncio.run(engine.run(messages=[], user_message="search"))
+        await engine.run(messages=[], user_message="search")
 
         sum_provider.create_message.assert_called_once()
         self.assertTrue(events.tool_exec_metrics[0][4])  # was_summarized
 
-    def test_override_summarize_false_skips_summarization(self) -> None:
+    async def test_override_summarize_false_skips_summarization(self) -> None:
         """Per-tool Summarize:false bypasses the summarizer even when global is on."""
         long_result = "x" * 5000
         tool = FakeTool(name="gmail_read", execute_result=long_result)
@@ -632,12 +631,12 @@ class ToolResultOverridesTests(unittest.TestCase):
             tool_result_overrides={"gmail_read": ToolResultOverride(summarize=False)},
         )
 
-        asyncio.run(engine.run(messages=[], user_message="read email"))
+        await engine.run(messages=[], user_message="read email")
 
         sum_provider.create_message.assert_not_called()
         self.assertFalse(events.tool_exec_metrics[0][4])
 
-    def test_override_max_chars_raises_truncation_cap(self) -> None:
+    async def test_override_max_chars_raises_truncation_cap(self) -> None:
         """Per-tool MaxChars override lets the tool's output exceed the global cap."""
         long_result = "y" * 80_000
         tool = FakeTool(name="gmail_read", execute_result=long_result)
@@ -650,13 +649,13 @@ class ToolResultOverridesTests(unittest.TestCase):
             tool_result_overrides={"gmail_read": ToolResultOverride(max_chars=200_000)},
         )
 
-        asyncio.run(engine.run(messages=[], user_message="read email"))
+        await engine.run(messages=[], user_message="read email")
 
         recorded = events.tool_call_records[0]["result_text"]
         self.assertNotIn("[OUTPUT TRUNCATED", recorded)
         self.assertGreaterEqual(len(recorded), 80_000)
 
-    def test_override_max_chars_does_not_affect_other_tools(self) -> None:
+    async def test_override_max_chars_does_not_affect_other_tools(self) -> None:
         """A non-overridden tool still hits the global truncation cap."""
         long_result = "z" * 80_000
         tool = FakeTool(name="other_tool", execute_result=long_result)
@@ -669,12 +668,12 @@ class ToolResultOverridesTests(unittest.TestCase):
             tool_result_overrides={"gmail_read": ToolResultOverride(max_chars=200_000)},
         )
 
-        asyncio.run(engine.run(messages=[], user_message="run"))
+        await engine.run(messages=[], user_message="run")
 
         recorded = events.tool_call_records[0]["result_text"]
         self.assertIn("[OUTPUT TRUNCATED", recorded)
 
-    def test_override_wildcard_prefix_matches_tool(self) -> None:
+    async def test_override_wildcard_prefix_matches_tool(self) -> None:
         """A ``*``-suffixed key applies to every tool with that prefix."""
         long_result = "p" * 80_000
         tool = FakeTool(name="playwright__browser_snapshot", execute_result=long_result)
@@ -698,14 +697,14 @@ class ToolResultOverridesTests(unittest.TestCase):
             },
         )
 
-        asyncio.run(engine.run(messages=[], user_message="snapshot"))
+        await engine.run(messages=[], user_message="snapshot")
 
         sum_provider.create_message.assert_not_called()
         recorded = events.tool_call_records[0]["result_text"]
         self.assertNotIn("[OUTPUT TRUNCATED", recorded)
         self.assertGreaterEqual(len(recorded), 80_000)
 
-    def test_exact_key_wins_over_wildcard(self) -> None:
+    async def test_exact_key_wins_over_wildcard(self) -> None:
         """Exact-name override is preferred to a wildcard match."""
         long_result = "p" * 80_000
         tool = FakeTool(name="playwright__browser_evaluate", execute_result=long_result)
@@ -721,12 +720,12 @@ class ToolResultOverridesTests(unittest.TestCase):
             },
         )
 
-        asyncio.run(engine.run(messages=[], user_message="evaluate"))
+        await engine.run(messages=[], user_message="evaluate")
 
         recorded = events.tool_call_records[0]["result_text"]
         self.assertIn("[OUTPUT TRUNCATED", recorded)
 
-    def test_override_threshold_overrides_global(self) -> None:
+    async def test_override_threshold_overrides_global(self) -> None:
         """Per-tool Threshold beats global threshold even when global enabled is on."""
         result = "x" * 500  # below the per-tool threshold of 1000
         tool = FakeTool(name="gmail_search", execute_result=result)
@@ -748,7 +747,7 @@ class ToolResultOverridesTests(unittest.TestCase):
             tool_result_overrides={"gmail_search": ToolResultOverride(threshold=1000)},
         )
 
-        asyncio.run(engine.run(messages=[], user_message="search"))
+        await engine.run(messages=[], user_message="search")
 
         sum_provider.create_message.assert_not_called()
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -10,10 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from micro_x_agent_loop.server.client import run_client
 
 
-class UrlParsingTests(unittest.TestCase):
+class UrlParsingTests(unittest.IsolatedAsyncioTestCase):
     """Test URL and WebSocket scheme logic without actual connections."""
 
-    def test_http_to_ws(self) -> None:
+    async def test_http_to_ws(self) -> None:
         """http:// URL should produce ws:// WebSocket URL."""
         # We test by checking that the health check attempt uses the right base_url.
         # The client will fail on health check (no server), but we verify the URL logic.
@@ -64,14 +63,14 @@ class UrlParsingTests(unittest.TestCase):
                     except Exception:
                         pass
 
-                asyncio.run(go())
+                await go()
 
                 # Health check should have been called
                 mock_http.get.assert_called_once()
                 url_arg = mock_http.get.call_args[0][0]
                 self.assertIn("http://localhost:8321/api/health", url_arg)
 
-    def test_health_check_failure(self) -> None:
+    async def test_health_check_failure(self) -> None:
         """Client returns early when health check fails."""
         mock_resp = MagicMock()
         mock_resp.status_code = 500
@@ -84,11 +83,11 @@ class UrlParsingTests(unittest.TestCase):
         with patch("micro_x_agent_loop.server.client.httpx.AsyncClient", return_value=mock_http):
             output: list[str] = []
             with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
-                asyncio.run(run_client("http://localhost:9999"))
+                await run_client("http://localhost:9999")
 
             self.assertTrue(any("health check failed" in o for o in output))
 
-    def test_session_creation_failure_generates_uuid(self) -> None:
+    async def test_session_creation_failure_generates_uuid(self) -> None:
         """When session creation fails, a UUID is generated."""
         mock_health_resp = MagicMock()
         mock_health_resp.status_code = 200
@@ -124,7 +123,7 @@ class UrlParsingTests(unittest.TestCase):
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
                     try:
-                        asyncio.run(client_mod.run_client("http://localhost:9999"))
+                        await client_mod.run_client("http://localhost:9999")
                     except Exception:
                         pass
 
@@ -132,7 +131,7 @@ class UrlParsingTests(unittest.TestCase):
         session_lines = [o for o in output if "Session:" in o]
         self.assertTrue(len(session_lines) > 0)
 
-    def test_explicit_session_id_used(self) -> None:
+    async def test_explicit_session_id_used(self) -> None:
         """When session_id is provided, no creation POST is made."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -155,14 +154,14 @@ class UrlParsingTests(unittest.TestCase):
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
                     try:
-                        asyncio.run(client_mod.run_client("http://localhost:9999", session_id="my-session"))
+                        await client_mod.run_client("http://localhost:9999", session_id="my-session")
                     except Exception:
                         pass
 
         session_lines = [o for o in output if "my-session" in o]
         self.assertTrue(len(session_lines) > 0)
 
-    def test_auth_header_passed(self) -> None:
+    async def test_auth_header_passed(self) -> None:
         """api_secret is passed as Authorization header."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -182,13 +181,11 @@ class UrlParsingTests(unittest.TestCase):
                 importlib.reload(client_mod)
 
                 try:
-                    asyncio.run(
-                        client_mod.run_client(
+                    await client_mod.run_client(
                             "http://localhost:9999",
                             session_id="s1",
                             api_secret="my-secret",
                         )
-                    )
                 except Exception:
                     pass
 
@@ -199,7 +196,7 @@ class UrlParsingTests(unittest.TestCase):
         if isinstance(headers, dict) and "Authorization" in headers:
             self.assertEqual("Bearer my-secret", headers["Authorization"])
 
-    def test_websockets_import_error(self) -> None:
+    async def test_websockets_import_error(self) -> None:
         """Missing websockets package shows helpful message."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -242,7 +239,7 @@ class UrlParsingTests(unittest.TestCase):
 
             with patch("micro_x_agent_loop.server.client.httpx.AsyncClient", side_effect=make_http):
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
-                    asyncio.run(client_mod.run_client("http://localhost:9999"))
+                    await client_mod.run_client("http://localhost:9999")
         finally:
             if ws_backup is not None:
                 sys.modules["websockets"] = ws_backup
@@ -252,10 +249,10 @@ class UrlParsingTests(unittest.TestCase):
         self.assertTrue(any("websockets" in o.lower() for o in output))
 
 
-class ReceiverDispatchTests(unittest.TestCase):
+class ReceiverDispatchTests(unittest.IsolatedAsyncioTestCase):
     """Test the WebSocket receiver loop message dispatch."""
 
-    def _run_with_ws_messages(self, ws_messages: list[dict], *, session_id: str = "s1") -> list[str]:
+    async def _run_with_ws_messages(self, ws_messages: list[dict], *, session_id: str = "s1") -> list[str]:
         """Helper: run client with mocked health check + WebSocket messages."""
         output: list[str] = []
 
@@ -318,14 +315,14 @@ class ReceiverDispatchTests(unittest.TestCase):
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
                     try:
-                        asyncio.run(client_mod.run_client("http://localhost:9999", session_id=session_id))
+                        await client_mod.run_client("http://localhost:9999", session_id=session_id)
                     except Exception:
                         pass
 
         return output
 
-    def test_text_delta_dispatched(self) -> None:
-        output = self._run_with_ws_messages(
+    async def test_text_delta_dispatched(self) -> None:
+        output = await self._run_with_ws_messages(
             [
                 {"type": "text_delta", "text": "Hello"},
                 {"type": "turn_complete", "usage": {}},
@@ -334,32 +331,32 @@ class ReceiverDispatchTests(unittest.TestCase):
         # Should have connected and printed session info
         self.assertTrue(any("Session:" in o for o in output))
 
-    def test_error_message_dispatched(self) -> None:
-        output = self._run_with_ws_messages(
+    async def test_error_message_dispatched(self) -> None:
+        output = await self._run_with_ws_messages(
             [
                 {"type": "error", "message": "something broke"},
             ]
         )
         self.assertTrue(any("Session:" in o for o in output))
 
-    def test_system_message_dispatched(self) -> None:
-        output = self._run_with_ws_messages(
+    async def test_system_message_dispatched(self) -> None:
+        output = await self._run_with_ws_messages(
             [
                 {"type": "system_message", "text": "system info"},
             ]
         )
         self.assertTrue(any("Session:" in o for o in output))
 
-    def test_pong_dispatched(self) -> None:
-        output = self._run_with_ws_messages(
+    async def test_pong_dispatched(self) -> None:
+        output = await self._run_with_ws_messages(
             [
                 {"type": "pong"},
             ]
         )
         self.assertTrue(any("Session:" in o for o in output))
 
-    def test_tool_lifecycle_dispatched(self) -> None:
-        output = self._run_with_ws_messages(
+    async def test_tool_lifecycle_dispatched(self) -> None:
+        output = await self._run_with_ws_messages(
             [
                 {"type": "tool_started", "tool_use_id": "t1", "tool": "read_file"},
                 {"type": "tool_completed", "tool_use_id": "t1", "tool": "read_file", "error": False},
@@ -369,8 +366,8 @@ class ReceiverDispatchTests(unittest.TestCase):
         self.assertTrue(any("Session:" in o for o in output))
 
 
-class InvalidStatusTests(unittest.TestCase):
-    def test_401_shows_auth_message(self) -> None:
+class InvalidStatusTests(unittest.IsolatedAsyncioTestCase):
+    async def test_401_shows_auth_message(self) -> None:
         """InvalidStatus with 401 shows auth failure message."""
         output: list[str] = []
 
@@ -408,11 +405,11 @@ class InvalidStatusTests(unittest.TestCase):
                 importlib.reload(client_mod)
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
-                    asyncio.run(client_mod.run_client("http://localhost:9999", session_id="s1"))
+                    await client_mod.run_client("http://localhost:9999", session_id="s1")
 
         self.assertTrue(any("Authentication failed" in o for o in output))
 
-    def test_non_401_shows_generic_message(self) -> None:
+    async def test_non_401_shows_generic_message(self) -> None:
         output: list[str] = []
 
         mock_health = MagicMock()
@@ -448,11 +445,11 @@ class InvalidStatusTests(unittest.TestCase):
                 importlib.reload(client_mod)
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
-                    asyncio.run(client_mod.run_client("http://localhost:9999", session_id="s1"))
+                    await client_mod.run_client("http://localhost:9999", session_id="s1")
 
         self.assertTrue(any("WebSocket connection failed" in o for o in output))
 
-    def test_generic_connection_error(self) -> None:
+    async def test_generic_connection_error(self) -> None:
         output: list[str] = []
 
         mock_health = MagicMock()
@@ -484,7 +481,7 @@ class InvalidStatusTests(unittest.TestCase):
                 importlib.reload(client_mod)
 
                 with patch("builtins.print", side_effect=lambda *a, **kw: output.append(str(a[0]) if a else "")):
-                    asyncio.run(client_mod.run_client("http://localhost:9999", session_id="s1"))
+                    await client_mod.run_client("http://localhost:9999", session_id="s1")
 
         self.assertTrue(any("Connection error" in o for o in output))
 

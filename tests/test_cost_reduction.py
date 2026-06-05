@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -42,7 +41,7 @@ class PromptCachingConfigTests(unittest.TestCase):
         self.assertFalse(config.prompt_caching_enabled)
 
 
-class PromptCachingProviderTests(unittest.TestCase):
+class PromptCachingProviderTests(unittest.IsolatedAsyncioTestCase):
     def _make_provider(self, *, prompt_caching_enabled: bool) -> AnthropicProvider:
         provider = AnthropicProvider.__new__(AnthropicProvider)
         provider._prompt_caching_enabled = prompt_caching_enabled
@@ -52,7 +51,7 @@ class PromptCachingProviderTests(unittest.TestCase):
         p = self._make_provider(prompt_caching_enabled=True)
         self.assertTrue(p._prompt_caching_enabled)
 
-    def test_stream_chat_adds_cache_control_when_enabled(self) -> None:
+    async def test_stream_chat_adds_cache_control_when_enabled(self) -> None:
         """When caching is enabled, system should be a list with cache_control,
         and the last tool should have cache_control."""
         captured_kwargs: dict[str, Any] = {}
@@ -79,8 +78,7 @@ class PromptCachingProviderTests(unittest.TestCase):
             {"name": "tool_b", "description": "B", "input_schema": {}},
         ]
 
-        asyncio.run(
-            provider.stream_chat(
+        await provider.stream_chat(
                 "m",
                 100,
                 0.5,
@@ -88,7 +86,6 @@ class PromptCachingProviderTests(unittest.TestCase):
                 [{"role": "user", "content": "hi"}],
                 tools,
             )
-        )
 
         # System should be a list with cache_control
         system = captured_kwargs["system"]
@@ -102,7 +99,7 @@ class PromptCachingProviderTests(unittest.TestCase):
         self.assertNotIn("cache_control", api_tools[0])
         self.assertEqual({"type": "ephemeral"}, api_tools[1]["cache_control"])
 
-    def test_stream_chat_no_cache_control_when_disabled(self) -> None:
+    async def test_stream_chat_no_cache_control_when_disabled(self) -> None:
         captured_kwargs: dict[str, Any] = {}
 
         class CapturingMessages:
@@ -124,8 +121,7 @@ class PromptCachingProviderTests(unittest.TestCase):
 
         tools = [{"name": "tool_a", "description": "A", "input_schema": {}}]
 
-        asyncio.run(
-            provider.stream_chat(
+        await provider.stream_chat(
                 "m",
                 100,
                 0.5,
@@ -133,14 +129,13 @@ class PromptCachingProviderTests(unittest.TestCase):
                 [{"role": "user", "content": "hi"}],
                 tools,
             )
-        )
 
         # System should be plain string
         self.assertEqual("system text", captured_kwargs["system"])
         # Tools should be unchanged
         self.assertNotIn("cache_control", captured_kwargs["tools"][0])
 
-    def test_stream_chat_no_tools_caching_enabled(self) -> None:
+    async def test_stream_chat_no_tools_caching_enabled(self) -> None:
         """When caching is enabled but no tools, should not crash."""
         captured_kwargs: dict[str, Any] = {}
 
@@ -161,8 +156,7 @@ class PromptCachingProviderTests(unittest.TestCase):
         provider = self._make_provider(prompt_caching_enabled=True)
         provider._client = CapturingClient()
 
-        asyncio.run(
-            provider.stream_chat(
+        await provider.stream_chat(
                 "m",
                 100,
                 0.5,
@@ -170,7 +164,6 @@ class PromptCachingProviderTests(unittest.TestCase):
                 [{"role": "user", "content": "hi"}],
                 [],
             )
-        )
 
         self.assertIsInstance(captured_kwargs["system"], list)
         self.assertEqual([], captured_kwargs["tools"])
@@ -203,8 +196,8 @@ class CompactionModelConfigTests(unittest.TestCase):
         self.assertEqual("claude-haiku-4-5-20251001", config.compaction_model)
 
 
-class CompactionModelUsageTests(unittest.TestCase):
-    def test_compaction_uses_specified_model(self) -> None:
+class CompactionModelUsageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_compaction_uses_specified_model(self) -> None:
         provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(
             provider,
@@ -217,7 +210,7 @@ class CompactionModelUsageTests(unittest.TestCase):
             {"role": "assistant", "content": [{"type": "text", "text": "long " * 200}]},
             {"role": "user", "content": "tail"},
         ]
-        asyncio.run(strategy.maybe_compact(messages))
+        await strategy.maybe_compact(messages)
         self.assertEqual(1, len(provider.calls))
         self.assertEqual("claude-haiku-4-5-20251001", provider.calls[0]["model"])
 
@@ -264,7 +257,7 @@ class RecordingEventsForSummarization(BaseTurnEvents):
         self.tool_exec_metrics.append((tool_name, result_chars, duration_ms, is_error, was_summarized))
 
 
-class ToolSummarizationEngineTests(unittest.TestCase):
+class ToolSummarizationEngineTests(unittest.IsolatedAsyncioTestCase):
     def _make_engine(
         self,
         provider: FakeStreamProvider,
@@ -293,7 +286,7 @@ class ToolSummarizationEngineTests(unittest.TestCase):
             summarization_threshold=summarization_threshold,
         )
 
-    def test_summarization_skipped_when_disabled(self) -> None:
+    async def test_summarization_skipped_when_disabled(self) -> None:
         tool = FakeTool(name="fetch", execute_result="x" * 5000)
         provider = FakeStreamProvider()
         provider.responses.append(
@@ -309,13 +302,13 @@ class ToolSummarizationEngineTests(unittest.TestCase):
         events = RecordingEventsForSummarization()
         engine = self._make_engine(provider, events, [tool], summarization_enabled=False)
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         # Tool result should be full, not summarized
         _, _, _, _, was_summarized = events.tool_exec_metrics[0]
         self.assertFalse(was_summarized)
 
-    def test_summarization_applied_when_enabled_and_above_threshold(self) -> None:
+    async def test_summarization_applied_when_enabled_and_above_threshold(self) -> None:
         big_result = "x" * 5000
         tool = FakeTool(name="fetch", execute_result=big_result)
         provider = FakeStreamProvider()
@@ -341,7 +334,7 @@ class ToolSummarizationEngineTests(unittest.TestCase):
             summarization_threshold=1000,
         )
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         # Tool result should be summarized
         _, result_chars, _, _, was_summarized = events.tool_exec_metrics[0]
@@ -352,7 +345,7 @@ class ToolSummarizationEngineTests(unittest.TestCase):
         summarization_calls = [(u, ct) for u, ct in events.api_call_metrics if ct == "tool_summarization"]
         self.assertEqual(1, len(summarization_calls))
 
-    def test_summarization_skipped_when_below_threshold(self) -> None:
+    async def test_summarization_skipped_when_below_threshold(self) -> None:
         small_result = "short"
         tool = FakeTool(name="fetch", execute_result=small_result)
         provider = FakeStreamProvider()
@@ -378,13 +371,13 @@ class ToolSummarizationEngineTests(unittest.TestCase):
             summarization_threshold=4000,
         )
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         _, _, _, _, was_summarized = events.tool_exec_metrics[0]
         self.assertFalse(was_summarized)
         self.assertEqual(0, len(summarization_provider.calls))
 
-    def test_summarization_fallback_on_error(self) -> None:
+    async def test_summarization_fallback_on_error(self) -> None:
         """If summarization fails, original result is preserved."""
         big_result = "x" * 5000
         tool = FakeTool(name="fetch", execute_result=big_result)
@@ -414,7 +407,7 @@ class ToolSummarizationEngineTests(unittest.TestCase):
             summarization_threshold=1000,
         )
 
-        asyncio.run(engine.run(messages=[], user_message="go"))
+        await engine.run(messages=[], user_message="go")
 
         _, result_chars, _, _, was_summarized = events.tool_exec_metrics[0]
         self.assertFalse(was_summarized)
@@ -436,8 +429,8 @@ class SmartCompactionConfigTests(unittest.TestCase):
         self.assertFalse(config.smart_compaction_trigger_enabled)
 
 
-class SmartCompactionTriggerTests(unittest.TestCase):
-    def test_uses_actual_tokens_when_smart_enabled(self) -> None:
+class SmartCompactionTriggerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_uses_actual_tokens_when_smart_enabled(self) -> None:
         """When smart trigger is enabled and actual tokens are fed, use them."""
         provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(
@@ -454,15 +447,15 @@ class SmartCompactionTriggerTests(unittest.TestCase):
         ]
 
         # Without feeding actual tokens, tiktoken estimate is small → no compaction
-        out = asyncio.run(strategy.maybe_compact(messages))
+        out = await strategy.maybe_compact(messages)
         self.assertEqual(messages, out)
 
         # Feed actual tokens above threshold → triggers compaction
         strategy.update_actual_tokens(60_000)
-        out = asyncio.run(strategy.maybe_compact(messages))
+        out = await strategy.maybe_compact(messages)
         self.assertIn("[CONTEXT SUMMARY]", out[0]["content"])
 
-    def test_falls_back_to_estimate_when_smart_disabled(self) -> None:
+    async def test_falls_back_to_estimate_when_smart_disabled(self) -> None:
         provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(
             provider,
@@ -479,11 +472,11 @@ class SmartCompactionTriggerTests(unittest.TestCase):
 
         # Even if we update tokens, should use tiktoken estimate
         strategy.update_actual_tokens(60_000)
-        out = asyncio.run(strategy.maybe_compact(messages))
+        out = await strategy.maybe_compact(messages)
         # Tiktoken estimate is small → no compaction
         self.assertEqual(messages, out)
 
-    def test_falls_back_to_estimate_when_no_actual_tokens(self) -> None:
+    async def test_falls_back_to_estimate_when_no_actual_tokens(self) -> None:
         provider = FakeProvider()
         strategy = SummarizeCompactionStrategy(
             provider,
@@ -499,7 +492,7 @@ class SmartCompactionTriggerTests(unittest.TestCase):
         ]
 
         # No actual tokens fed → falls back to tiktoken, which is above threshold=1
-        out = asyncio.run(strategy.maybe_compact(messages))
+        out = await strategy.maybe_compact(messages)
         self.assertIn("[CONTEXT SUMMARY]", out[0]["content"])
 
 
@@ -770,10 +763,10 @@ class SessionBudgetAgentTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class NoRoutingTurnEngineTests(unittest.TestCase):
+class NoRoutingTurnEngineTests(unittest.IsolatedAsyncioTestCase):
     """Verify TurnEngine uses main model when no routing is configured."""
 
-    def test_no_routing_uses_main_model(self) -> None:
+    async def test_no_routing_uses_main_model(self) -> None:
         provider = FakeStreamProvider()
         provider.queue(text="done")
         models_called: list[str] = []
@@ -797,7 +790,7 @@ class NoRoutingTurnEngineTests(unittest.TestCase):
             max_tokens_retries=1,
             events=events,
         )
-        asyncio.run(engine.run(messages=[], user_message="hello"))
+        await engine.run(messages=[], user_message="hello")
         self.assertEqual(models_called, ["main-model"])
 
 
