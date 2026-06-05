@@ -2,6 +2,68 @@
 
 All notable changes to micro-x-agent-loop-python are documented here, grouped by feature area.
 
+## 2026-06-05 — v0.2.1
+
+Cleanup release closing the 8 follow-up observations from the second-pass codebase-review audit performed against v0.2.0. Full details in [documentation/docs/review/codebase-review-2026-06-05-followups.md](documentation/docs/review/codebase-review-2026-06-05-followups.md).
+
+### Refactored
+- **Promoted 9 private symbols to the public testable surface** — `llm_client.on_retry`, `providers/gemini_provider.build_tool_use_id_map`, `providers/gemini_provider.is_retryable_gemini_error`, `system_prompt.SUBAGENT_DIRECTIVE`, `tool.sort_schema`, `tool_search.get_context_window`, `voice_ingress.parse_json_object` (module fn), `voice_runtime.parse_json_object` (method), `broker/runner.truncate_output`, `compaction.format_for_summarization`. All call sites updated. The leading-underscore variants are gone.
+- **Eliminated all 3 `# type: ignore[assignment]` comments in `server/app.py`** — replaced with `TYPE_CHECKING` imports + explicit narrowed declarations (`sched: Scheduler | None = _state.get(...)`). Zero `# type: ignore` remain on `server/app.py`.
+- **Typed the 10 `Any` fields on `AgentComponents`** with real Protocols via `TYPE_CHECKING` imports — `LLMProvider`, `AgentChannel`, `CompactionStrategy`, `LLMCompactor`, `ProviderPool`, `RoutingFeedbackStore`, `SemanticClassifierFn`, `RoutingFeedbackFn`. Zero `Any` on the dataclass.
+
+### Features
+- **`Agent.history` and `Agent.turn_number` public properties** — read-only accessors for the current conversation message list and completed-turn count. Integration tests now go through the public API instead of reaching into `agent._messages` / `agent._turn_number` at 7 sites.
+- **`SpawnSubagentPseudoToolTests` end-to-end scenario** added to `tests/integration/test_agent_loop.py`. Wires `sub_agents_enabled` + a compact routing policy to trigger `SubAgentRunner` construction in `agent_builder`, patches `SubAgentRunner.run` with a canned `SubAgentResult`, asserts the result lands as a `tool_result` block and the loop continues. Closes the spawn_subagent coverage gap flagged in the re-audit.
+
+### Test quality
+- **4 wall-clock sleeps removed or made deterministic.** Spinner idempotency tests (`test_llm_client.py:17`, `test_agent_channel.py:360`) no longer wall-clock-sleep. The mtime-ordering test (`test_native_filesystem_read_tools.py:172`) now uses explicit `os.utime()` calls (the original 20 ms sleep wouldn't have worked on 1 s mtime-resolution filesystems anyway). `test_ws_integration::test_ping_during_active_turn` simulated slow-turn shortened from 2.0 s → 0.5 s.
+
+### Docs
+- `tests/evals/filesystem-navigation/README.md` updated to the new `configs/evals/config-eval-haiku.json` path (stale from the v0.2.0 config reorganisation).
+
+### Build state
+Ruff clean · Mypy clean · **1,887 tests pass** / 14 skipped / 0 failing · **76% coverage** with the CI gate at 75%.
+
+---
+
+## 2026-06-05 — v0.2.0 — codebase review complete
+
+The "post-review" milestone. Closes all 30 items from the 2026-06-05 codebase review (see [documentation/docs/review/codebase-review-2026-06-05.md](documentation/docs/review/codebase-review-2026-06-05.md)).
+
+### Architecture
+- **`agent.py` split: 1,219 → 872 LOC (-28%)** via three new modules: `history_repair.py` (pure history-repair utilities — `find_safe_trim_count`, `repair_orphan_head`, `repair_orphan_tool_uses`), `mode_orchestrator.py` (the PROMPT/COMPILED mode-analysis pipeline with DI), and `agent_listener.py` (`AgentEventListener` implementing the pure-observability subset of `TurnEvents`).
+- **`commands/command_handler.py` split: 1,062 → 171 LOC (-84%)**. The class is now a pure delegating facade over 14 per-command modules (`help_command.py`, `session_command.py`, `tool_command.py`, `voice_command_handler.py`, etc.) plus a shared `CommandContext` dataclass.
+- **`turn_engine.py`: `PseudoToolHandler` protocol extracted** with 4 concrete handlers (`ToolSearchHandler`, `AskUserHandler`, `TaskToolHandler`, `SubAgentHandler`). Dispatch is now a 20-line list walk instead of an 80-line 5-bucket `if/elif`. Adding a 5th pseudo tool is a one-line append.
+- **`AgentChannel` Protocol drift fixed.** `begin_streaming` / `end_streaming` added to the Protocol with no-op implementations in `BufferedChannel`, `BrokerChannel`, `WebSocketChannel`. The `hasattr` guard in `agent.py` deleted.
+- **Blocking `subprocess.run` wrapped in `asyncio.to_thread`** in `native_tools/filesystem/bash_tool.py` and `read_tools.py` — both called from async `execute` methods.
+- **5 `Any`-typed dependencies in `TurnEngine` replaced** with real Protocols: `LLMProvider`, `LLMCompactor`, `SemanticClassifierFn` (Callable alias), `RoutingFeedbackFn` (Callable alias), `TaskEmbeddingIndex`.
+- **`agent_config.py`: 4 unused sub-config dataclasses dropped** (`MemoryConfig`, `SubAgentConfig`, `CostReductionConfig`, `ToolResultConfig`). File shrank 268 → 176 LOC.
+
+### Breaking change — config-file reorganisation
+- **Profile / eval / testing configs moved out of repo root into `configs/{profiles,evals,testing}/`** — 36 → 3 `config-*.json` files at the repo root. Entry-point configs stay at root (`config.json`, `config-base.json`, `config-baseline.json`, `config-starter.json`).
+- Each moved file's `Base: "config-base.json"` reference rewritten to `Base: "../../config-base.json"`. The one `ConfigFile`-indirected profile updated to the new path. `config-starter.json.bak` deleted.
+- **Users with persisted `--config config-standard-X.json` invocations need to update to `--config configs/profiles/config-standard-X.json`** (or `configs/evals/`, `configs/testing/`). All test references, eval harness, README, CLAUDE.md, and 49 documentation references swept.
+
+### Test quality
+- **56 test files migrated** from `asyncio.run()` inside `unittest.TestCase` to `unittest.IsolatedAsyncioTestCase`. Only one `asyncio.run(` call remains in `tests/`, in the eval harness (legitimate).
+- **44 new tests added (+52 net):** 6 end-to-end integration scenarios in new `tests/integration/test_agent_loop.py` (driving a real `Agent` with only the LLM provider faked; covers single-turn, multi-turn tool-call, multi-tool-per-response, `ask_user`, iteration cap, tool error propagation); 10 cli/dispatch routing tests; 16 services tests (`SessionController`, `CheckpointService`); 12 `agent_builder` branch tests.
+- **Tests no longer write inside the repo.** `Path.cwd() / ".tmp-run"` replaced with `tempfile.TemporaryDirectory`.
+- **Sleep-as-sync replaced with deterministic waits.** `WebSocketChannel` now tracks fire-and-forget `_send` futures in `_pending_sends` with a `_drain_pending_sends()` helper; `broker_store` tests use `timeout_seconds=-1` instead of wall-clock sleeps.
+- **`MagicMock` sprawl in command tests replaced** with the existing `SessionManagerFake` / `CheckpointManagerFake` from `tests/fakes.py` + real `ToolResultFormatter` + real `CheckpointService`. The tautological `format_rewind_outcome_lines.return_value = ["  Rewound."]` → `assertIn("Rewound.")` pattern is gone.
+- **`FakeStreamProvider.stream_chat` signature tightened** — no more `**kwargs` silently swallowing Provider Protocol drift.
+
+### Hygiene
+- **12 ruff violations, 2 mypy errors, 5 failing tests at start → 0 / 0 / 0.**
+- **15 `# type: ignore[no-untyped-def]` annotations on FastAPI routes** in `server/app.py` and `server/broker_routes.py` replaced with real return types (`Response | dict[str, Any]`, `AsyncIterator[None]`, etc.).
+- **6 source files gained `from __future__ import annotations`.**
+- **3 private symbols promoted** to the public testable surface: `resolve_api_key_id`, `load_user_memory`, `parse_cli_args`.
+- **Voice tests consolidated** at one level (`tests/voice/` subdirectory removed; all 4 voice test files at top level).
+- **Coverage gate (≥75%) added to CI** alongside the ADR-024 grep gate.
+- **Cleared the ADR-024 violation** in `mcp_servers/ts/packages/web/dist/` (the artifact was gitignored but stale on disk; rebuilt and added a CI grep gate to prevent re-introduction).
+
+### Build state
+Ruff clean · Mypy clean · **1,886 tests pass** / 14 skipped / 0 failing · **76% coverage** with the CI gate at 75% · Root `config-*.json` count **36 → 3**.
+
 ## 2026-05-09
 
 ### Fixed
