@@ -114,9 +114,9 @@ class CliArgParsingTests(unittest.TestCase):
         original_argv = sys.argv
         try:
             sys.argv = ["prog", "--tui"]
-            from micro_x_agent_loop.__main__ import _parse_cli_args
+            from micro_x_agent_loop.__main__ import parse_cli_args
 
-            args = _parse_cli_args()
+            args = parse_cli_args()
             self.assertTrue(args["tui"])
         finally:
             sys.argv = original_argv
@@ -127,9 +127,9 @@ class CliArgParsingTests(unittest.TestCase):
         original_argv = sys.argv
         try:
             sys.argv = ["prog"]
-            from micro_x_agent_loop.__main__ import _parse_cli_args
+            from micro_x_agent_loop.__main__ import parse_cli_args
 
-            args = _parse_cli_args()
+            args = parse_cli_args()
             self.assertFalse(args["tui"])
         finally:
             sys.argv = original_argv
@@ -140,9 +140,9 @@ class CliArgParsingTests(unittest.TestCase):
         original_argv = sys.argv
         try:
             sys.argv = ["prog", "--config", "my.json", "--tui"]
-            from micro_x_agent_loop.__main__ import _parse_cli_args
+            from micro_x_agent_loop.__main__ import parse_cli_args
 
-            args = _parse_cli_args()
+            args = parse_cli_args()
             self.assertTrue(args["tui"])
             self.assertEqual(args["config"], "my.json")
         finally:

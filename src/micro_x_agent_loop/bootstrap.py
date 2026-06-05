@@ -33,7 +33,7 @@ class AppRuntime:
     log_descriptions: list[str]
 
 
-def _load_user_memory(memory_dir: Path, max_lines: int) -> str:
+def load_user_memory(memory_dir: Path, max_lines: int) -> str:
     memory_file = memory_dir / "MEMORY.md"
     if not memory_file.exists():
         return ""
@@ -171,7 +171,7 @@ async def bootstrap_runtime(
     if not user_memory_dir.is_absolute():
         user_memory_dir = Path.cwd() / user_memory_dir
     if app.user_memory_enabled:
-        user_memory = _load_user_memory(user_memory_dir, app.user_memory_max_lines)
+        user_memory = load_user_memory(user_memory_dir, app.user_memory_max_lines)
 
     hitl_enabled = autonomous and bool(os.environ.get("MICRO_X_BROKER_URL"))
 

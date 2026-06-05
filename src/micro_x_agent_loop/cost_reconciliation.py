@@ -23,7 +23,7 @@ _ADMIN_API_BASE = "https://api.anthropic.com/v1/organizations"
 DIVERGENCE_THRESHOLD_PCT = 5.0
 
 
-def _resolve_api_key_id() -> str | None:
+def resolve_api_key_id() -> str | None:
     """Resolve the Anthropic API key ID for the inference key used by this agent.
 
     Lists all org API keys via the Admin API and matches by the first ~15
@@ -444,7 +444,7 @@ async def reconcile_costs(
         return lines
 
     # 2. Resolve the API key ID so we only compare costs for this agent's key
-    api_key_id = _resolve_api_key_id()
+    api_key_id = resolve_api_key_id()
     if api_key_id:
         lines.append(f"Filtering to API key: {api_key_id}")
     else:

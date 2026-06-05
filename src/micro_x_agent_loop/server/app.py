@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -38,7 +39,7 @@ def create_app(
     """Create and configure the FastAPI application."""
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # -- Startup --
         raw_config, _ = load_json_config(config_path)
         app_config = parse_app_config(raw_config)
@@ -240,7 +241,10 @@ def create_app(
     if secret:
 
         @app.middleware("http")
-        async def auth_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+        async def auth_middleware(
+            request: Request,
+            call_next: Callable[[Request], Awaitable[Response]],
+        ) -> Response:
             if request.url.path in ("/api/health", "/docs", "/openapi.json"):
                 return await call_next(request)
             auth = request.headers.get("authorization", "")
@@ -280,7 +284,7 @@ def create_app(
     # -- Sessions -------------------------------------------------------------
 
     @app.post("/api/sessions", response_model=None)
-    async def create_session():  # type: ignore[no-untyped-def]
+    async def create_session() -> Response | dict[str, Any]:
         memory_store: MemoryStore | None = _state.get("memory_store")
         app_config: AppConfig | None = _state.get("app_config")
         if memory_store is None or app_config is None or not app_config.memory_enabled:
@@ -311,7 +315,7 @@ def create_app(
         return {"sessions": sessions}
 
     @app.get("/api/sessions/{session_id}", response_model=None)
-    async def get_session(session_id: str):  # type: ignore[no-untyped-def]
+    async def get_session(session_id: str) -> Response | dict[str, Any]:
         memory_store: MemoryStore | None = _state.get("memory_store")
         app_config: AppConfig | None = _state.get("app_config")
         if memory_store is None or app_config is None or not app_config.memory_enabled:
@@ -333,7 +337,7 @@ def create_app(
         return {"status": "deleted", "session_id": session_id}
 
     @app.get("/api/sessions/{session_id}/messages", response_model=None)
-    async def get_messages(session_id: str):  # type: ignore[no-untyped-def]
+    async def get_messages(session_id: str) -> Response | dict[str, Any]:
         memory_store: MemoryStore | None = _state.get("memory_store")
         app_config: AppConfig | None = _state.get("app_config")
         if memory_store is None or app_config is None or not app_config.memory_enabled:
@@ -348,7 +352,7 @@ def create_app(
     # -- Chat (non-streaming) -------------------------------------------------
 
     @app.post("/api/chat", response_model=None)
-    async def chat(request: Request):  # type: ignore[no-untyped-def]
+    async def chat(request: Request) -> Response | dict[str, Any]:
         agent_manager: AgentManager | None = _state.get("agent_manager")
         if agent_manager is None:
             return Response(status_code=503, content='{"error": "Not ready"}', media_type="application/json")

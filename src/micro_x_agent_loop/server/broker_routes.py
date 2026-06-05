@@ -34,7 +34,7 @@ def create_broker_router(
     # -- Runs ------------------------------------------------------------------
 
     @router.get("/api/runs/{run_id}", response_model=None)
-    async def get_run(run_id: str):  # type: ignore[no-untyped-def]
+    async def get_run(run_id: str) -> Response | dict[str, Any]:
         run = store.get_run(run_id)
         if run is None:
             return Response(status_code=404, content='{"error": "Run not found"}', media_type="application/json")
@@ -43,7 +43,7 @@ def create_broker_router(
     # -- HITL questions --------------------------------------------------------
 
     @router.post("/api/runs/{run_id}/questions", response_model=None)
-    async def post_question(run_id: str, request: Request):  # type: ignore[no-untyped-def]
+    async def post_question(run_id: str, request: Request) -> Response | dict[str, Any]:
         """Agent subprocess posts a question for async human-in-the-loop."""
         run = store.get_run(run_id)
         if run is None:
@@ -93,7 +93,7 @@ def create_broker_router(
         return {"question_id": qid, "timeout_seconds": timeout}
 
     @router.get("/api/runs/{run_id}/questions/{question_id}", response_model=None)
-    async def get_question(run_id: str, question_id: str):  # type: ignore[no-untyped-def]
+    async def get_question(run_id: str, question_id: str) -> Response | dict[str, Any]:
         """Agent subprocess polls for answer."""
         q = store.get_question(question_id)
         if q is None or q["run_id"] != run_id:
@@ -101,7 +101,7 @@ def create_broker_router(
         return q
 
     @router.post("/api/runs/{run_id}/questions/{question_id}/answer", response_model=None)
-    async def answer_question(run_id: str, question_id: str, request: Request):  # type: ignore[no-untyped-def]
+    async def answer_question(run_id: str, question_id: str, request: Request) -> Response | dict[str, Any]:
         """External client or channel adapter posts an answer."""
         q = store.get_question(question_id)
         if q is None or q["run_id"] != run_id:
@@ -143,7 +143,7 @@ def create_broker_router(
     # -- Webhook triggers ------------------------------------------------------
 
     @router.get("/api/trigger/{channel}", response_model=None)
-    async def trigger_verify(channel: str, request: Request):  # type: ignore[no-untyped-def]
+    async def trigger_verify(channel: str, request: Request) -> Response | dict[str, Any]:
         """Handle webhook verification challenges (e.g., WhatsApp/Meta hub.verify_token)."""
         mode = request.query_params.get("hub.mode")
         verify_token = request.query_params.get("hub.verify_token")
@@ -164,7 +164,7 @@ def create_broker_router(
         return Response(status_code=403, content='{"error": "Verification failed"}', media_type="application/json")
 
     @router.post("/api/trigger/{channel}", response_model=None)
-    async def trigger(channel: str, request: Request):  # type: ignore[no-untyped-def]
+    async def trigger(channel: str, request: Request) -> Response | dict[str, Any]:
         adapter = adapters.get(channel)
         if adapter is None:
             return Response(

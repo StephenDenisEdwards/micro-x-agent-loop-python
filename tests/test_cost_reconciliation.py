@@ -28,25 +28,25 @@ class ResolveApiKeyIdTests(unittest.TestCase):
         import os
         from unittest.mock import patch
 
-        from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
+        from micro_x_agent_loop.cost_reconciliation import resolve_api_key_id
 
         with patch.dict(os.environ, {}, clear=True):
-            self.assertIsNone(_resolve_api_key_id())
+            self.assertIsNone(resolve_api_key_id())
 
     def test_missing_admin_key_returns_none(self) -> None:
         import os
         from unittest.mock import patch
 
-        from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
+        from micro_x_agent_loop.cost_reconciliation import resolve_api_key_id
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True):
-            self.assertIsNone(_resolve_api_key_id())
+            self.assertIsNone(resolve_api_key_id())
 
     def test_successful_match(self) -> None:
         import os
         from unittest.mock import MagicMock, patch
 
-        from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
+        from micro_x_agent_loop.cost_reconciliation import resolve_api_key_id
 
         api_key = "sk-ant-api03-HzWxxxxxxQwAA"
         response_data = json.dumps(
@@ -65,7 +65,7 @@ class ResolveApiKeyIdTests(unittest.TestCase):
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": api_key, "ANTHROPIC_ADMIN_API_KEY": "admin-key"}):
             with patch("urllib.request.urlopen", return_value=mock_resp):
-                result = _resolve_api_key_id()
+                result = resolve_api_key_id()
 
         self.assertEqual("apikey_match", result)
 
@@ -73,7 +73,7 @@ class ResolveApiKeyIdTests(unittest.TestCase):
         import os
         from unittest.mock import MagicMock, patch
 
-        from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
+        from micro_x_agent_loop.cost_reconciliation import resolve_api_key_id
 
         response_data = json.dumps(
             {
@@ -90,7 +90,7 @@ class ResolveApiKeyIdTests(unittest.TestCase):
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-nope", "ANTHROPIC_ADMIN_API_KEY": "admin"}):
             with patch("urllib.request.urlopen", return_value=mock_resp):
-                result = _resolve_api_key_id()
+                result = resolve_api_key_id()
 
         self.assertIsNone(result)
 
@@ -98,11 +98,11 @@ class ResolveApiKeyIdTests(unittest.TestCase):
         import os
         from unittest.mock import patch
 
-        from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
+        from micro_x_agent_loop.cost_reconciliation import resolve_api_key_id
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test", "ANTHROPIC_ADMIN_API_KEY": "admin"}):
             with patch("urllib.request.urlopen", side_effect=Exception("timeout")):
-                result = _resolve_api_key_id()
+                result = resolve_api_key_id()
 
         self.assertIsNone(result)
 
@@ -110,7 +110,7 @@ class ResolveApiKeyIdTests(unittest.TestCase):
         import os
         from unittest.mock import MagicMock, patch
 
-        from micro_x_agent_loop.cost_reconciliation import _resolve_api_key_id
+        from micro_x_agent_loop.cost_reconciliation import resolve_api_key_id
 
         response_data = json.dumps(
             {
@@ -127,7 +127,7 @@ class ResolveApiKeyIdTests(unittest.TestCase):
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-test", "ANTHROPIC_ADMIN_API_KEY": "admin"}):
             with patch("urllib.request.urlopen", return_value=mock_resp):
-                result = _resolve_api_key_id()
+                result = resolve_api_key_id()
 
         self.assertIsNone(result)
 
@@ -457,7 +457,7 @@ class ReconcileCostsTests(unittest.IsolatedAsyncioTestCase):
         cursor.fetchall.return_value = []
         fake_store.execute.return_value = cursor
 
-        with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
+        with patch("micro_x_agent_loop.cost_reconciliation.resolve_api_key_id", return_value=None):
             lines = await reconcile_costs(
                     tool_map={RECONCILE_TOOL_NAME: fake_tool},
                     store=fake_store,
@@ -526,7 +526,7 @@ class ReconcileCostsTests(unittest.IsolatedAsyncioTestCase):
         fake_tool = MagicMock()
         fake_tool.execute = fake_execute
 
-        with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value="key1"):
+        with patch("micro_x_agent_loop.cost_reconciliation.resolve_api_key_id", return_value="key1"):
             lines = await reconcile_costs(
                     tool_map={RECONCILE_TOOL_NAME: fake_tool},
                     store=fake_store,
@@ -574,7 +574,7 @@ class ReconcileCostsTests(unittest.IsolatedAsyncioTestCase):
         fake_tool = MagicMock()
         fake_tool.execute = fake_execute
 
-        with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
+        with patch("micro_x_agent_loop.cost_reconciliation.resolve_api_key_id", return_value=None):
             lines = await reconcile_costs(
                     tool_map={RECONCILE_TOOL_NAME: fake_tool},
                     store=fake_store,
@@ -609,7 +609,7 @@ class ReconcileCostsTests(unittest.IsolatedAsyncioTestCase):
         fake_tool = MagicMock()
         fake_tool.execute = failing_execute
 
-        with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
+        with patch("micro_x_agent_loop.cost_reconciliation.resolve_api_key_id", return_value=None):
             lines = await reconcile_costs(
                     tool_map={RECONCILE_TOOL_NAME: fake_tool},
                     store=fake_store,
@@ -644,7 +644,7 @@ class ReconcileCostsTests(unittest.IsolatedAsyncioTestCase):
         fake_tool = MagicMock()
         fake_tool.execute = error_execute
 
-        with patch("micro_x_agent_loop.cost_reconciliation._resolve_api_key_id", return_value=None):
+        with patch("micro_x_agent_loop.cost_reconciliation.resolve_api_key_id", return_value=None):
             lines = await reconcile_costs(
                     tool_map={RECONCILE_TOOL_NAME: fake_tool},
                     store=fake_store,

@@ -16,7 +16,7 @@ from micro_x_agent_loop.cli.repl import (  # noqa: F401
 )
 
 
-def _parse_cli_args() -> dict:
+def parse_cli_args() -> dict:
     """Parse CLI arguments (simple, no argparse).
 
     Supported flags:
@@ -105,7 +105,7 @@ async def main() -> None:
     logger.remove()
     logging.getLogger().addFilter(_McpNotificationFilter())
 
-    cli_args = _parse_cli_args()
+    cli_args = parse_cli_args()
 
     if not cli_args["run"] and not cli_args.get("tui"):
         _print_startup_banner()
