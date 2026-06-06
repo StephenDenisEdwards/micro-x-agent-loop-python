@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from micro_x_agent_loop.compaction import CompactionStrategy, NoneCompactionStrategy
 
 if TYPE_CHECKING:
+    from micro_x_agent_loop.agent_channel import AgentChannel
     from micro_x_agent_loop.app_config import ToolResultOverride
 from micro_x_agent_loop.constants import (
     DEFAULT_MAX_AGENTIC_ITERATIONS,
@@ -24,44 +25,6 @@ from micro_x_agent_loop.memory.events import EventEmitter
 from micro_x_agent_loop.memory.session_manager import SessionManager
 from micro_x_agent_loop.memory.store import MemoryStore
 from micro_x_agent_loop.tool import Tool
-
-
-@dataclass
-class LLMConfig:
-    """Core LLM provider and model settings."""
-
-    model: str = "claude-sonnet-4-5-20250929"
-    max_tokens: int = DEFAULT_MAX_TOKENS
-    temperature: float = 0.7
-    api_key: str = ""
-    provider: str = "anthropic"
-    prompt_caching_enabled: bool = False
-
-
-@dataclass
-class ToolSearchConfig:
-    """On-demand tool discovery settings."""
-
-    tool_search_enabled: str = "false"
-    tool_search_strategy: str = "auto"
-    tool_search_max_load: int = 5
-    embedding_model: str = ""
-    ollama_base_url: str = ""
-
-
-@dataclass
-class RoutingConfig:
-    """Semantic routing settings."""
-
-    complexity_keywords: str = DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS
-    semantic_routing_enabled: bool = False
-    semantic_routing_strategy: str = "rules+keywords"
-    routing_policies: dict = field(default_factory=dict)
-    routing_fallback_provider: str = ""
-    routing_fallback_model: str = ""
-    routing_confidence_threshold: float = 0.6
-    routing_feedback_enabled: bool = False
-    routing_feedback_db_path: str = ".micro_x/routing.db"
 
 
 @dataclass
@@ -132,7 +95,7 @@ class AgentConfig:
     # Display
     markdown_rendering_enabled: bool = True
     # AgentChannel for bidirectional client communication
-    channel: Any = None  # AgentChannel | None (Any to avoid circular import)
+    channel: AgentChannel | None = None
     # System prompt customisation (Phase 2 of PLAN-gemma-model-support)
     # `system_prompt_compact` is tri-state: None preserves the legacy fallback
     # (compact when provider == "ollama"); True/False forces it explicitly.
@@ -140,37 +103,3 @@ class AgentConfig:
     # gemma3:4b to suppress over-eager tool calls on conversational turns.
     system_prompt_compact: bool | None = None
     system_prompt_extras: list[str] = field(default_factory=list)
-
-    # -- Sub-config factory methods ------------------------------------------
-
-    def llm_config(self) -> LLMConfig:
-        return LLMConfig(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
-            api_key=self.api_key,
-            provider=self.provider,
-            prompt_caching_enabled=self.prompt_caching_enabled,
-        )
-
-    def tool_search_config(self) -> ToolSearchConfig:
-        return ToolSearchConfig(
-            tool_search_enabled=self.tool_search_enabled,
-            tool_search_strategy=self.tool_search_strategy,
-            tool_search_max_load=self.tool_search_max_load,
-            embedding_model=self.embedding_model,
-            ollama_base_url=self.ollama_base_url,
-        )
-
-    def routing_config(self) -> RoutingConfig:
-        return RoutingConfig(
-            complexity_keywords=self.complexity_keywords,
-            semantic_routing_enabled=self.semantic_routing_enabled,
-            semantic_routing_strategy=self.semantic_routing_strategy,
-            routing_policies=self.routing_policies,
-            routing_fallback_provider=self.routing_fallback_provider,
-            routing_fallback_model=self.routing_fallback_model,
-            routing_confidence_threshold=self.routing_confidence_threshold,
-            routing_feedback_enabled=self.routing_feedback_enabled,
-            routing_feedback_db_path=self.routing_feedback_db_path,
-        )

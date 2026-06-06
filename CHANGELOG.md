@@ -2,6 +2,29 @@
 
 All notable changes to micro-x-agent-loop-python are documented here, grouped by feature area.
 
+## 2026-06-05 — v0.3.0 — architecture cleanup
+
+Closes the 5 architecture follow-ups carried over from the v0.2.1 review. The headline change is the extraction of a dedicated **ToolDispatcher** from `TurnEngine`, which shrinks the engine from 676 → 427 LOC (-37%) and isolates tool-execution concerns (pseudo-tool routing, MCP dispatch, result formatting / truncation / summarization) behind one collaborator.
+
+### Refactored
+- **Extracted `ToolDispatcher` from `TurnEngine`** (`src/micro_x_agent_loop/tool_dispatcher.py`, 356 LOC). Owns the pseudo-tool registry, MCP tool map, and tool-result post-processing. `TurnEngine.run()` now delegates one call (`dispatcher.dispatch(...)`) instead of inlining pseudo/regular routing, ordering, and result merging. Public `execute_tools()` survives as a thin proxy for back-compat callers (`Agent._execute_tools`, integration tests).
+- **Split `TurnEvents` into `TurnObserver` + `TurnStateRecorder` sub-protocols** — `TurnObserver` covers read-only hooks (`on_llm_call`, `on_api_call_completed`, `on_turn_cap_reached`, `on_tool_executed`, `on_subagent_completed`, `on_api_call_failed`); `TurnStateRecorder` covers mutating hooks (`on_append_message`, `on_ensure_checkpoint_for_turn`, `on_record_tool_call`, `on_maybe_compact`, etc.). `TurnEvents` is now the union (`Protocol, TurnObserver, TurnStateRecorder`) so existing implementors (Agent, BaseTurnEvents) need no changes; new narrower collaborators can declare just the side they need.
+- **Name-keyed `PseudoToolRegistry`** replaces the first-match-wins `matches()` list dispatch. Each handler declares `claimed_names() -> frozenset[str]`; the registry builds a `name → handler` dict at construction and raises `ValueError` if two handlers claim the same name. Adding a future pseudo-tool can no longer silently shadow an existing one.
+- **Removed `LLMConfig` / `ToolSearchConfig` / `RoutingConfig` duplicating sub-dataclasses** (and the three factory methods on `AgentConfig`). They existed only to narrow the parameter surface of two private `agent_builder` helpers — those helpers now take `AgentConfig` directly. `AgentConfig` is the single source of truth: -76 LOC, one less place to forget to keep in sync when adding a config field.
+
+### Features
+- **`Agent.history` is now an immutable view** (`tuple[dict, ...]`) returned by shallow-copying `self._messages`. External observers — integration tests, future broker/inspector tools — can read state without being able to corrupt it. The shallow copy is intentional: individual message dicts aren't deep-copied (callers must not mutate them; the protocol is "read-only by convention" for the inner dicts).
+- **`AgentConfig.channel` is now typed `AgentChannel | None`** instead of `Any`, via a `TYPE_CHECKING` import to keep the runtime cycle broken. Mypy now catches misuse instead of accepting anything.
+
+### Tests
+- **`tests/test_pseudo_tool_registry.py` (6 new tests)** — locks the registry contract: empty registry returns None, single handler resolves its names, disjoint handlers coexist, overlapping claims raise `ValueError`, partial overlap also raises, the error message names both handler classes.
+- **`tests/test_tool_dispatcher.py` (5 new tests)** — locks the dispatcher contract: pseudo-only batches set `ran_regular_tools=False`, regular-only sets it `True`, mixed pseudo + regular preserves original tool_use_id order in the merged result, unknown tool names yield an error block, multi-name handlers receive all matching blocks in one `execute_batch` call.
+
+### Build state
+Ruff clean · Mypy clean · **1,898 tests pass** / 14 skipped / 0 failing.
+
+---
+
 ## 2026-06-05 — v0.2.1
 
 Cleanup release closing the 8 follow-up observations from the second-pass codebase-review audit performed against v0.2.0. Full details in [documentation/docs/review/codebase-review-2026-06-05-followups.md](documentation/docs/review/codebase-review-2026-06-05-followups.md).

@@ -406,6 +406,11 @@ class TestTurnEngineToolSearch(unittest.IsolatedAsyncioTestCase):
 
 class TestMergeToolResults(unittest.TestCase):
     def test_preserves_original_order(self) -> None:
+        # _merge_tool_results moved from TurnEngine to ToolDispatcher when
+        # the dispatch logic was extracted. The behaviour contract is the
+        # same — merged results follow the original block order.
+        from micro_x_agent_loop.tool_dispatcher import ToolDispatcher
+
         original = [
             {"id": "a", "name": "tool_search"},
             {"id": "b", "name": "read_file"},
@@ -418,7 +423,7 @@ class TestMergeToolResults(unittest.TestCase):
         regular_results = [
             {"tool_use_id": "b", "content": "file data"},
         ]
-        merged = TurnEngine._merge_tool_results(original, search_results, regular_results)
+        merged = ToolDispatcher._merge_tool_results(original, search_results, regular_results)
         self.assertEqual(3, len(merged))
         self.assertEqual("a", merged[0]["tool_use_id"])
         self.assertEqual("b", merged[1]["tool_use_id"])

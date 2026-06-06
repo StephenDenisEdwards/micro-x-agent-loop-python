@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from micro_x_agent_loop.agent_config import AgentConfig, LLMConfig, RoutingConfig, ToolSearchConfig
+from micro_x_agent_loop.agent_config import AgentConfig
 from micro_x_agent_loop.api_payload_store import ApiPayloadStore
 from micro_x_agent_loop.app_config import ToolResultOverride, resolve_runtime_env
 from micro_x_agent_loop.embedding import TaskEmbeddingIndex
@@ -114,13 +114,10 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
         provider=config.provider,
     )
     any_policy_needs_search = any(p.get("tool_search_only", False) for p in config.routing_policies.values())
-    ts = config.tool_search_config()
-    rc = config.routing_config()
-    llm = config.llm_config()
 
     tool_search_manager: ToolSearchManager | None = None
     if tool_search_active or any_policy_needs_search:
-        embedding_index = _build_tool_embedding_index(ts)
+        embedding_index = _build_tool_embedding_index(config)
         tool_search_manager = ToolSearchManager(
             all_tools=config.tools,
             converted_tools=converted_tools,
@@ -229,7 +226,7 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
 
     if config.semantic_routing_enabled:
         provider_pool, semantic_classifier, routing_feedback_store, routing_feedback_callback, task_embedding_index = (
-            _build_semantic_routing(rc, llm, ts, provider)
+            _build_semantic_routing(config, provider)
         )
 
     # --- Task decomposition ---
@@ -297,28 +294,26 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
 # ---------------------------------------------------------------------------
 
 
-def _build_tool_embedding_index(ts: ToolSearchConfig) -> Any:
+def _build_tool_embedding_index(config: AgentConfig) -> Any:
     """Build a ToolEmbeddingIndex for semantic tool search (or None)."""
-    if ts.tool_search_strategy == "keyword" or not ts.ollama_base_url:
+    if config.tool_search_strategy == "keyword" or not config.ollama_base_url:
         return None
     from micro_x_agent_loop.embedding import OllamaEmbeddingClient, ToolEmbeddingIndex
 
-    client = OllamaEmbeddingClient(ts.ollama_base_url, ts.embedding_model)
+    client = OllamaEmbeddingClient(config.ollama_base_url, config.embedding_model)
     return ToolEmbeddingIndex(client)
 
 
 def _build_semantic_routing(
-    rc: RoutingConfig,
-    llm: LLMConfig,
-    ts: ToolSearchConfig,
+    config: AgentConfig,
     provider: Any,
 ) -> tuple[Any, Any, Any, Any, Any]:
     """Build the semantic routing subsystem. Returns (pool, classifier, feedback_store, callback, embedding_index)."""
     from micro_x_agent_loop.provider_pool import ProviderPool
     from micro_x_agent_loop.semantic_classifier import classify_task
 
-    pool_providers: dict[str, object] = {llm.provider: provider}
-    for policy in rc.routing_policies.values():
+    pool_providers: dict[str, object] = {config.provider: provider}
+    for policy in config.routing_policies.values():
         p_name = policy.get("provider", "")
         if p_name and p_name not in pool_providers:
             try:
@@ -326,47 +321,47 @@ def _build_semantic_routing(
                 pool_providers[p_name] = create_provider(
                     p_name,
                     p_env.provider_api_key,
-                    prompt_caching_enabled=llm.prompt_caching_enabled,
-                    ollama_base_url=ts.ollama_base_url,
+                    prompt_caching_enabled=config.prompt_caching_enabled,
+                    ollama_base_url=config.ollama_base_url,
                 )
             except Exception as ex:
                 logger.warning(f"Failed to create provider {p_name!r} for routing: {ex}")
 
     provider_pool = ProviderPool(
         pool_providers,
-        fallback_provider=rc.routing_fallback_provider or llm.provider,
+        fallback_provider=config.routing_fallback_provider or config.provider,
     )
 
     task_embedding_index: TaskEmbeddingIndex | None = None
-    if ts.ollama_base_url and ts.embedding_model:
+    if config.ollama_base_url and config.embedding_model:
         from micro_x_agent_loop.embedding import OllamaEmbeddingClient
 
-        task_client = OllamaEmbeddingClient(ts.ollama_base_url, ts.embedding_model)
+        task_client = OllamaEmbeddingClient(config.ollama_base_url, config.embedding_model)
         task_embedding_index = TaskEmbeddingIndex(task_client)
 
-    keywords = [kw.strip() for kw in rc.complexity_keywords.split(",") if kw.strip()]
+    keywords = [kw.strip() for kw in config.complexity_keywords.split(",") if kw.strip()]
     semantic_classifier = partial(
         classify_task,
         complexity_keywords=keywords,
-        strategy=rc.semantic_routing_strategy,
+        strategy=config.semantic_routing_strategy,
         task_embedding_index=task_embedding_index,
     )
 
     routing_feedback_store = None
     routing_feedback_callback = None
-    if rc.routing_feedback_enabled:
+    if config.routing_feedback_enabled:
         from micro_x_agent_loop.routing_feedback import RoutingFeedbackStore
 
-        db_path = Path(rc.routing_feedback_db_path)
+        db_path = Path(config.routing_feedback_db_path)
         if not db_path.is_absolute():
             db_path = Path.cwd() / db_path
         routing_feedback_store = RoutingFeedbackStore(str(db_path))
 
     logger.info(
         "Semantic routing enabled: strategy={strategy} providers={providers} policies={policies}",
-        strategy=rc.semantic_routing_strategy,
+        strategy=config.semantic_routing_strategy,
         providers=list(pool_providers.keys()),
-        policies=list(rc.routing_policies.keys()),
+        policies=list(config.routing_policies.keys()),
     )
 
     return provider_pool, semantic_classifier, routing_feedback_store, routing_feedback_callback, task_embedding_index

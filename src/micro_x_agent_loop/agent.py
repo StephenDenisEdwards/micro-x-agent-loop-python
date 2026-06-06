@@ -815,13 +815,15 @@ class Agent:
         return self._session_accumulator
 
     @property
-    def history(self) -> list[dict]:
-        """The current in-memory conversation messages list.
+    def history(self) -> tuple[dict, ...]:
+        """The current in-memory conversation messages as an immutable tuple.
 
         Public accessor for integration tests and external observers.
-        Returns a live reference; do not mutate from outside the agent.
+        Returns a shallow copy so external code cannot corrupt the agent's
+        message list. Individual message dicts are not deep-copied — that's
+        a deliberate cost/safety trade-off; callers must not mutate them.
         """
-        return self._messages
+        return tuple(self._messages)
 
     @property
     def turn_number(self) -> int:

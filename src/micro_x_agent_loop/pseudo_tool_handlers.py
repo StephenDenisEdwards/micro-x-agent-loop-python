@@ -1,10 +1,11 @@
 """Pseudo-tool handlers — pluggable executors for tool calls handled
 inline by the agent loop instead of being dispatched to MCP.
 
-Each handler claims tool calls by name (``matches``) and executes a batch
-of matched blocks, returning ``tool_result`` dicts. Adding a new pseudo
-tool means writing a handler and appending it to the list passed to
-``TurnEngine`` — no further dispatch wiring required.
+Each handler declares the set of tool names it claims via
+``claimed_names``; ``PseudoToolRegistry`` builds a name→handler map at
+construction time and raises on collisions. Adding a new pseudo tool
+means writing a handler, declaring its names, and registering it — no
+first-match-wins dispatch ambiguity.
 """
 
 from __future__ import annotations
@@ -16,22 +17,23 @@ from typing import TYPE_CHECKING, Protocol
 from loguru import logger
 
 from micro_x_agent_loop.sub_agent import SubAgentType
-from micro_x_agent_loop.tasks.schemas import is_task_tool
-from micro_x_agent_loop.tool_search import ToolSearchManager
+from micro_x_agent_loop.tasks.schemas import TASK_TOOL_NAMES
 from micro_x_agent_loop.usage import estimate_cost
 
 if TYPE_CHECKING:
     from micro_x_agent_loop.agent_channel import AgentChannel
     from micro_x_agent_loop.sub_agent import SubAgentRunner
     from micro_x_agent_loop.tasks.manager import TaskManager
+    from micro_x_agent_loop.tool_search import ToolSearchManager
     from micro_x_agent_loop.turn_events import TurnEvents
 
 
 class PseudoToolHandler(Protocol):
     """Handles a class of pseudo-tools dispatched inside the agent loop."""
 
-    def matches(self, name: str) -> bool:
-        """True if this handler claims the given tool name."""
+    def claimed_names(self) -> frozenset[str]:
+        """The exact tool names this handler claims. Used by the registry to
+        detect collisions at construction and dispatch by name lookup."""
         ...
 
     async def execute_batch(self, blocks: list[dict]) -> list[dict]:
@@ -39,12 +41,41 @@ class PseudoToolHandler(Protocol):
         ...
 
 
+class PseudoToolRegistry:
+    """Name-keyed registry that fails loudly on collisions.
+
+    Replaces the previous first-match-wins list dispatch. Construction
+    raises ``ValueError`` if two handlers claim the same tool name, so a
+    future handler with overlapping claims cannot silently shadow another.
+    """
+
+    def __init__(self, handlers: list[PseudoToolHandler]) -> None:
+        by_name: dict[str, PseudoToolHandler] = {}
+        for handler in handlers:
+            for name in handler.claimed_names():
+                if name in by_name:
+                    existing = type(by_name[name]).__name__
+                    incoming = type(handler).__name__
+                    raise ValueError(
+                        f"PseudoToolRegistry: name {name!r} claimed by both "
+                        f"{existing} and {incoming}",
+                    )
+                by_name[name] = handler
+        self._by_name = by_name
+
+    def get(self, name: str) -> PseudoToolHandler | None:
+        """Return the handler that claims ``name``, or ``None`` for regular tools."""
+        return self._by_name.get(name)
+
+
 class ToolSearchHandler:
+    _NAMES = frozenset({"tool_search"})
+
     def __init__(self, manager: ToolSearchManager) -> None:
         self._mgr = manager
 
-    def matches(self, name: str) -> bool:
-        return ToolSearchManager.is_tool_search_call(name)
+    def claimed_names(self) -> frozenset[str]:
+        return self._NAMES
 
     async def execute_batch(self, blocks: list[dict]) -> list[dict]:
         results: list[dict] = []
@@ -57,11 +88,13 @@ class ToolSearchHandler:
 
 
 class AskUserHandler:
+    _NAMES = frozenset({"ask_user"})
+
     def __init__(self, channel: AgentChannel) -> None:
         self._channel = channel
 
-    def matches(self, name: str) -> bool:
-        return name == "ask_user"
+    def claimed_names(self) -> frozenset[str]:
+        return self._NAMES
 
     async def execute_batch(self, blocks: list[dict]) -> list[dict]:
         results: list[dict] = []
@@ -79,8 +112,8 @@ class TaskToolHandler:
     def __init__(self, manager: TaskManager) -> None:
         self._mgr = manager
 
-    def matches(self, name: str) -> bool:
-        return is_task_tool(name)
+    def claimed_names(self) -> frozenset[str]:
+        return TASK_TOOL_NAMES
 
     async def execute_batch(self, blocks: list[dict]) -> list[dict]:
         results: list[dict] = []
@@ -95,6 +128,8 @@ class SubAgentHandler:
     """Runs spawn_subagent calls concurrently and bridges sub-agent
     usage/completion into the parent's events/channel."""
 
+    _NAMES = frozenset({"spawn_subagent"})
+
     def __init__(
         self,
         runner: SubAgentRunner,
@@ -106,8 +141,8 @@ class SubAgentHandler:
         self._channel = channel
         self._events = events
 
-    def matches(self, name: str) -> bool:
-        return name == "spawn_subagent"
+    def claimed_names(self) -> frozenset[str]:
+        return self._NAMES
 
     async def execute_batch(self, blocks: list[dict]) -> list[dict]:
         return list(await asyncio.gather(*(self._run_one(b) for b in blocks)))
