@@ -3,7 +3,7 @@
 **Status:** Proposed
 **Date:** 2026-05-20
 **Author:** Stephen D Edwards (with Claude)
-**Tool home:** native in-process filesystem tools (alongside F1–F6), per [ADR-025](../architecture/decisions/ADR-025-native-filesystem-tools.md) and the `project_native_core_tools` decision — **not** an MCP server, **not** a per-task codegen target.
+**Tool home:** native in-process filesystem tools (alongside F1–F6), per [ADR-025](../architecture/decisions/ADR-025-native-core-tools-mcp-for-subsystems.md) and the `project_native_core_tools` decision — **not** an MCP server, **not** a per-task codegen target.
 
 ## One-line
 
@@ -361,7 +361,7 @@ In this composition the outer context never holds a file body *or* any raw item 
 
 ## 13. Related
 
-- [ADR-025 — Native filesystem tools](../architecture/decisions/ADR-025-native-filesystem-tools.md) — defines where this tool lives and how it's loaded.
+- [ADR-025 — Native filesystem tools](../architecture/decisions/ADR-025-native-core-tools-mcp-for-subsystems.md) — defines where this tool lives and how it's loaded.
 - [ADR-024 — Single-layer tool-result truncation](../architecture/decisions/ADR-024-single-layer-tool-result-truncation.md) — `ToolResultOverrides` is where the body-incapable cap (`MaxChars`) is configured.
 - [ISSUE-007 — Prose-contract drift across policy layers](../issues/ISSUE-007-prose-contract-drift-across-policy-layers.md) — the failure mode this design is responding to (LLM emergent behaviour across uncorrelated layers).
 - [PLAN-behavioural-eval-suite](../planning/PLAN-behavioural-eval-suite.md) — the apparatus that surfaced the gap and verifies the fix.

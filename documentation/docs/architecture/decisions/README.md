@@ -27,7 +27,7 @@ What becomes easier or more difficult to do because of this change?
 | [ADR-001](ADR-001-python-dotenv-for-secrets.md) | python-dotenv for secrets management | Accepted |
 | [ADR-002](ADR-002-tenacity-for-retry.md) | tenacity for API retry resilience | Accepted |
 | [ADR-003](ADR-003-streaming-responses.md) | Streaming responses via SSE | Accepted |
-| [ADR-004](ADR-004-raw-html-for-gmail.md) | Raw HTML for Gmail email content | Accepted |
+| [ADR-004](ADR-004-raw-html-for-gmail.md) | Raw HTML for Gmail email content | Superseded (link-preserving `html_to_text()`) |
 | [ADR-005](ADR-005-mcp-for-external-tools.md) | MCP for external tool integration | Accepted |
 | [ADR-006](ADR-006-separate-repos-for-third-party-mcp-servers.md) | Separate repos for third-party MCP servers | Accepted |
 | [ADR-007](ADR-007-google-contacts-built-in-tools.md) | Google Contacts as built-in tools | Accepted |

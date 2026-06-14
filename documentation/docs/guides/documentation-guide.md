@@ -28,20 +28,40 @@ Where each type of document goes, naming conventions, templates, and how to keep
 │   │
 │   ├── operations/              User-facing: how to run, configure, troubleshoot
 │   ├── guides/                  Developer-facing: how to extend, debug, contribute
+│   ├── setup/                   Per-server / per-integration setup catalogues
 │   ├── planning/
 │   │   ├── INDEX.md             Priority queue and status — UPDATE when plans change
 │   │   └── PLAN-*.md            Feature plans
+│   │
+│   ├── issues/
+│   │   ├── README.md            Issue index table — UPDATE when adding ISSUE records
+│   │   └── ISSUE-NNN-*.md       Issue resolution records
+│   │
+│   ├── testing/                 MANUAL-TEST-*.md step-by-step verification plans
+│   ├── review/
+│   │   ├── index.md             Review index — UPDATE when adding review reports
+│   │   └── *.md                 Cross-cutting review reports
 │   │
 │   ├── research/
 │   │   ├── README.md            Research index with themes
 │   │   └── *.md                 Framework studies, surveys, analysis
 │   │
 │   ├── research-papers/         Formal papers and white papers
+│   ├── openclaw-research/       OpenClaw-specific deep dives (numbered series + README)
+│   ├── salesforce/              Salesforce CRM API investigation and reference
 │   ├── examples/                Prompt packs and workflow examples
-│   ├── openclaw-research/       OpenClaw-specific deep dives
 │   ├── best-practice/           Conventions and best practices
-│   └── issues/                  Issue resolution records
+│   ├── demos/                   Terminal recordings (asciinema/VHS) + README
+│   ├── claude-skills/           Skill authoring skeletons/templates
+│   └── use-cases/               Captured agent run outputs and example artifacts
+│                                (raw, largely generated — not curated docs)
 ```
+
+> **Loose top-level files.** A few documents currently live directly under
+> `documentation/docs/` rather than in a category folder:
+> `task-decomposition-implementation-guide.md` (belongs under `guides/`) and
+> `CV-repo-skills-evidence.md` (a CV artifact). New docs should go in a category
+> folder, not the docs root.
 
 ## Document Types and Templates
 
@@ -135,6 +155,22 @@ Include sources and links. Relate findings back to the project where relevant.
 **Location:** `issues/ISSUE-NNN-<slug>.md`
 **When:** A significant issue is discovered and resolved, especially if it corrects an ADR or design assumption.
 
+**After creating:** Add a row to the index table in `issues/README.md`.
+
+### Manual Test Plans
+
+**Location:** `testing/MANUAL-TEST-<feature>.md`
+**When:** A shipped feature needs a repeatable manual verification procedure (steps, expected output, pass/fail criteria).
+
+Keep these executable: numbered steps, exact commands, observable expected results. Link them from the relevant `planning/INDEX.md` row so the plan and its test stay paired.
+
+### Review Reports
+
+**Location:** `review/<name>.md`
+**When:** A cross-cutting review or investigation (cost reduction, prompt versioning, feature-parity comparison) that spans multiple components.
+
+**After creating:** Add a row to `review/index.md`.
+
 ## Naming Conventions
 
 | Type | Pattern | Example |
@@ -143,9 +179,12 @@ Include sources and links. Relate findings back to the project where relevant.
 | Design | `DESIGN-kebab-name.md` | `DESIGN-sandbox-runtime.md` |
 | Plan | `PLAN-kebab-name.md` | `PLAN-sandbox-integration.md` |
 | Issue | `ISSUE-NNN-kebab-slug.md` | `ISSUE-002-config-race-condition.md` |
+| Manual Test | `MANUAL-TEST-kebab-feature.md` | `MANUAL-TEST-prompt-caching.md` |
 | Operations | `kebab-name.md` | `voice-mode.md` |
 | Guides | `kebab-name.md` | `adding-an-mcp-server.md` |
+| Setup | `kebab-name.md` | `mcp-servers.md` |
 | Research | `kebab-name.md` | `ai-agent-sandboxing.md` |
+| Review | `kebab-name.md` | `cost-reduction-review.md` |
 
 ## Cross-Referencing
 
@@ -167,6 +206,9 @@ When you add a new document, update these files:
 |-------------|-------------|
 | ADR | `architecture/decisions/README.md` (index table) |
 | Plan | `planning/INDEX.md` (priority queue + all plans table) |
+| Issue | `issues/README.md` (index table) |
+| Review | `review/index.md` (index table) |
+| Manual Test | `planning/INDEX.md` (link from the related plan's row) |
 | Any | `index.md` (if it belongs in the navigation hub) |
 | Key file/convention | `CLAUDE.md` (if it changes how AI assistants should work with the project) |
 

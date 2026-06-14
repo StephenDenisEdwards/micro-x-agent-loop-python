@@ -1,8 +1,12 @@
 # Design: Trigger Broker Phase 2 — Webhook Ingress + Response Routing
 
+## Status
+
+**Implemented** — Phases 2a, 2a+, 2b, and 3 are all shipped (Phase 2b and Phase 3 completed 2026-03-07; see the per-phase notes under [Phased Implementation](#phased-implementation)). The `(NEW)`, "future requirement", and "deferred to Phase 2b" framing throughout this document is the **original design narrative** and is retained for rationale — the components it describes are in place. The companion [DESIGN-trigger-broker.md](DESIGN-trigger-broker.md) covers the Phase 1 cron dispatcher; `EmailAdapter` remains the one component listed here that is intentionally out of scope ("for design completeness").
+
 ## Overview
 
-Phase 2 adds external trigger sources (HTTP webhooks, messaging channels) and response routing (send results back to the originating channel). The design is informed by a future requirement: any frontend (web app, CLI, WhatsApp, Messenger) should be able to drive the agent as a client.
+Phase 2 adds external trigger sources (HTTP webhooks, messaging channels) and response routing (send results back to the originating channel). The design is informed by a requirement that any frontend (web app, CLI, WhatsApp, Messenger) should be able to drive the agent as a client.
 
 ## Design Principles
 

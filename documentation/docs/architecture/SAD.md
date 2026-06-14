@@ -1,22 +1,23 @@
 # Software Architecture Document
 
 **Project:** micro-x-agent-loop-python
-**Version:** 3.3
-**Last Updated:** 2026-04-03
+**Version:** 3.4
+**Last Updated:** 2026-06-12
 
 ## 1. Introduction and Goals
 
-Micro-X Agent is a general-purpose, cost-aware AI agent built with Python and a pluggable LLM backend (Anthropic Claude, OpenAI GPT, DeepSeek, Gemini, or Ollama for local inference). It provides a REPL interface where users type natural-language prompts (or use voice mode) and the agent autonomously orchestrates tools via the Model Context Protocol (MCP) to accomplish tasks.
+Micro-X Agent is a general-purpose, cost-aware AI agent built with Python and a pluggable LLM backend (Anthropic Claude, OpenAI GPT, DeepSeek, Gemini, or Ollama for local inference). It offers the same agent core across multiple front-ends — an interactive REPL (with optional voice mode), an opt-in Textual TUI (`--tui`, [ADR-022](decisions/ADR-022-textual-tui-for-cli.md)), and a FastAPI HTTP/WebSocket server (`--server`) for web, desktop, and mobile clients. Users type natural-language prompts and the agent autonomously orchestrates tools — native in-process Python tools for core primitives plus external tools via the Model Context Protocol (MCP) — to accomplish tasks.
 
 ### Key Goals
 
 - Provide a simple, extensible agent loop for personal automation
 - Support file operations, shell commands, web search, job searching, email, GitHub, and messaging
 - Stream responses in real time for better user experience
+- Offer the same agent core across multiple front-ends (REPL, TUI, HTTP/WebSocket API)
 - Persist session state and execution history for continuity across restarts
 - Enable human-in-the-loop questioning so the LLM can ask clarifying questions mid-execution
 - Support cost-aware execution via mode selection (prompt vs compiled) and layered cost reduction
-- Keep the codebase small and easy to understand
+- Keep the agent core small and easy to understand
 
 ### Stakeholders
 
@@ -31,7 +32,7 @@ Micro-X Agent is a general-purpose, cost-aware AI agent built with Python and a 
 |-----------|-----------|
 | Python 3.11+ | Minimum version for `typing.Protocol` features and modern syntax |
 | LLM provider API | LLM provider for reasoning and tool dispatch — Anthropic, OpenAI, DeepSeek, Gemini, or Ollama (config-driven) |
-| Console application | Simplicity; no web UI overhead |
+| Terminal-first, with optional API | Primary UX is the REPL/TUI; the HTTP/WebSocket server is an opt-in front-end over the same core, not a separate service |
 | OAuth2 for Gmail | Required by Google API |
 
 ## 3. Context and Scope
@@ -74,6 +75,7 @@ The agent sits between the user and external services. The user provides natural
 | File system | Direct I/O | Read/write files (.txt, .docx) |
 | SQLite | Local file I/O | Session, message, checkpoint, and event persistence |
 | MCP servers | stdio / StreamableHTTP | Dynamic external tools via Model Context Protocol |
+| HTTP/WebSocket API | HTTP REST + WS | `--server` front-end for web/desktop/mobile clients: `/api/chat`, `/api/sessions`, `/api/ws/{session_id}` (see [DESIGN-agent-api-server](../design/DESIGN-agent-api-server.md), [DESIGN-websocket-protocol](../design/DESIGN-websocket-protocol.md)) |
 | Deepgram STT (via Interview Assist MCP) | HTTPS / WebSocket | Continuous speech transcription for voice mode |
 | WhatsApp Web | MCP stdio + HTTP :8080 + WebSocket | Messaging via Go bridge (whatsmeow) and Python MCP server |
 
@@ -87,7 +89,8 @@ The agent sits between the user and external services. The user provides natural
 | Resilience | tenacity decorator with exponential backoff for rate limits (per-provider); `resilientFetch` in TypeScript MCP servers for HTTP retry ([ADR-016](decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md)) |
 | Secrets | `.env` file loaded by python-dotenv; never committed to git |
 | App config | `config.json` for non-secret settings |
-| Tool extensibility | `Tool` Protocol class; all tools are TypeScript MCP servers discovered at startup ([ADR-015](decisions/ADR-015-all-tools-as-typescript-mcp-servers.md)) |
+| Tool extensibility | `Tool` Protocol class. Core primitives (filesystem read/write/bash/grep/glob, save_memory, system_info) are **native in-process Python tools** via `build_native_tools()`; external and isolatable subsystems remain TypeScript MCP servers discovered at startup ([ADR-025](decisions/ADR-025-native-core-tools-mcp-for-subsystems.md) amends [ADR-015](decisions/ADR-015-all-tools-as-typescript-mcp-servers.md); codegen tasks also use native tools per [ADR-027](decisions/ADR-027-native-tools-in-codegen-tasks.md)) |
+| Front-ends | One agent core, multiple interfaces: REPL, opt-in Textual TUI (`--tui`, [ADR-022](decisions/ADR-022-textual-tui-for-cli.md)), and FastAPI HTTP/WebSocket server (`--server`) via the `AgentChannel` abstraction |
 | Session persistence | Opt-in SQLite-backed memory for sessions, messages, tool calls, checkpoints, and events |
 | File safety | Checkpoint/rewind for mutating tools (`write_file`, `append_file`) |
 | Human-in-the-loop | `ask_user` pseudo-tool for LLM-initiated clarifying questions ([ADR-017](decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md)) |
@@ -235,6 +238,15 @@ graph TD
 | `broker/store` | SQLite persistence for broker jobs and run history (`broker_jobs`, `broker_runs` tables) |
 | `broker/runner` | Subprocess dispatcher: spawns `--run` agent processes in autonomous mode |
 | `broker/cli` | CLI commands for `--broker` and `--job` management |
+| `server/app` | FastAPI application (lifespan-managed) exposing REST (`/api/chat`, `/api/sessions`, `/api/health`) and WebSocket (`/api/ws/{session_id}`) endpoints. See [DESIGN-agent-api-server](../design/DESIGN-agent-api-server.md) |
+| `server/agent_manager` | `AgentManager` — per-session `Agent` lifecycle for the server: create, cache, evict |
+| `server/ws_channel` | `WebSocketChannel` — `AgentChannel` implementation streaming text deltas, tool events, and `ask_user` questions over WebSocket ([DESIGN-websocket-protocol](../design/DESIGN-websocket-protocol.md)) |
+| `server/broker_routes` | Broker endpoints (jobs, runs, HITL, webhooks) mounted as an `APIRouter` |
+| `server/client` | WebSocket CLI client for `--server http://...` connect mode |
+| `server/sdk` | Thin client SDK for programmatic access to the API server |
+| `AgentChannel` | Protocol abstracting the front-end I/O surface so one agent core serves Terminal, Buffered, Broker, WebSocket, and Textual channels |
+| `tui/app` | Textual TUI application (`--tui`): chat log, tool panel, session sidebar, task panel, command palette ([ADR-022](decisions/ADR-022-textual-tui-for-cli.md)) |
+| `tui/channel` | `TextualChannel` — `AgentChannel` implementation that drives the TUI widgets |
 | `CheckpointService` | Formatting service for checkpoint list entries and rewind outcome reports |
 | `VoiceRuntime` | Manages continuous voice input via MCP STT sessions (start/stop/poll) |
 | `VoiceIngress` | Protocol for streaming STT events; `PollingVoiceIngress` polls MCP for updates |
@@ -262,7 +274,8 @@ graph TD
 | `memory/models` | Frozen dataclasses for `SessionRecord` and `MessageRecord` |
 | `McpManager` | Connects to all configured MCP servers in parallel, discovers tools, manages lifecycle |
 | `McpToolProxy` | Adapter wrapping an MCP tool + session into the `Tool` Protocol; extracts `structuredContent` into `ToolResult.structured` |
-| `mcp_servers/ts/` | TypeScript npm workspaces monorepo containing 8 first-party MCP servers (filesystem, web, linkedin, x-twitter, github, google, anthropic-admin, interview-assist) plus shared utilities |
+| `native_tools/` | In-process Python tools for core primitives. `build_native_tools()` returns the filesystem toolset (`filesystem/`: read/write/append, bash, grep/glob, save_memory, path policy in `paths.py`) and `system_info` ([ADR-025](decisions/ADR-025-native-core-tools-mcp-for-subsystems.md)) |
+| `mcp_servers/ts/` | TypeScript npm workspaces monorepo of first-party MCP servers (web, linkedin, github, google, anthropic-admin, interview-assist, devto, discord, playwright, x-twitter, reddit, echo, shared utilities). The active set is config-driven via `McpServers`; filesystem/system-info are now native (above) |
 | `mcp_servers/python/codegen/` | Python FastMCP server exposing `generate_code` — isolated single-shot code generation via Anthropic API with zero tools (see [DESIGN-codegen-server](../design/DESIGN-codegen-server.md)) |
 | [mcp-servers](https://github.com/StephenDenisEdwards/mcp-servers) (external) | .NET MCP server exposing `system_info`, `disk_info`, `network_info` via stdio |
 | WhatsApp MCP (external) | External two-component MCP server: Go bridge (WhatsApp Web connection, SQLite, HTTP API) + Python FastMCP server (12 tools for messaging, contacts, chats) |
@@ -383,6 +396,19 @@ A warning is also printed to stderr.
 - Checkpoint tracking failures are non-blocking (logged + event emitted, tool still executes)
 - Unrecoverable errors propagate to the REPL catch block
 
+### Native vs MCP Tools
+
+Originally every tool was a TypeScript MCP server ([ADR-015](decisions/ADR-015-all-tools-as-typescript-mcp-servers.md)). [ADR-025](decisions/ADR-025-native-core-tools-mcp-for-subsystems.md) amended this: **core primitives** (filesystem read/write/append, bash, grep/glob, save_memory, system_info) are now native in-process Python tools, while **external services and isolatable subsystems** (web, github, google, linkedin, interview-assist, codegen, devto, discord, playwright, whatsapp) remain MCP servers. Native tools avoid subprocess/venv overhead and Windows process-tree issues, share the agent's path policy directly, and start instantly; MCP is retained where process isolation, a third-party runtime, or a separate publish lifecycle is genuinely valuable. Codegen task apps follow the same split — they call native tools in-process rather than spawning an MCP subprocess ([ADR-027](decisions/ADR-027-native-tools-in-codegen-tasks.md)). Both kinds present the same `Tool` Protocol to `TurnEngine`, so the loop is agnostic to a tool's origin.
+
+### Front-Ends and Channels
+
+The agent core is decoupled from its I/O surface by the `AgentChannel` protocol. The same `Agent`/`TurnEngine` serves:
+
+- **REPL** — the default interactive terminal loop (with optional voice mode).
+- **Textual TUI** (`--tui`) — chat log, tool panel, session sidebar, task panel, and command palette via `TextualChannel` ([ADR-022](decisions/ADR-022-textual-tui-for-cli.md)).
+- **HTTP/WebSocket API** (`--server`) — FastAPI app with REST endpoints and a per-session WebSocket (`WebSocketChannel`) for web/desktop/mobile clients; `AgentManager` owns per-session `Agent` lifecycle. See [DESIGN-agent-api-server](../design/DESIGN-agent-api-server.md) and [DESIGN-websocket-protocol](../design/DESIGN-websocket-protocol.md).
+- **Broker** — autonomous `--run` subprocesses driven by the trigger broker use a buffered/broker channel.
+
 ### Model Routing
 
 The agent uses semantic model routing, configured via `SemanticRoutingEnabled` and `RoutingPolicies` in `config.json`.
@@ -459,7 +485,7 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-001](decisions/ADR-001-python-dotenv-for-secrets.md) | python-dotenv for secrets management | Accepted |
 | [ADR-002](decisions/ADR-002-tenacity-for-retry.md) | tenacity for API retry resilience | Accepted |
 | [ADR-003](decisions/ADR-003-streaming-responses.md) | Streaming responses via SSE | Accepted |
-| [ADR-004](decisions/ADR-004-raw-html-for-gmail.md) | Raw HTML for Gmail email content | Accepted |
+| [ADR-004](decisions/ADR-004-raw-html-for-gmail.md) | Raw HTML for Gmail email content | Superseded |
 | [ADR-005](decisions/ADR-005-mcp-for-external-tools.md) | MCP for external tool integration | Accepted |
 | [ADR-006](decisions/ADR-006-separate-repos-for-third-party-mcp-servers.md) | Separate repos for third-party MCP servers | Accepted |
 | [ADR-007](decisions/ADR-007-google-contacts-built-in-tools.md) | Google Contacts as built-in tools | Accepted |
@@ -470,11 +496,19 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | [ADR-012](decisions/ADR-012-layered-cost-reduction.md) | Layered cost reduction architecture | Accepted |
 | [ADR-013](decisions/ADR-013-tool-result-summarization-reliability.md) | Tool result summarization is fundamentally unreliable | Accepted |
 | [ADR-014](decisions/ADR-014-mcp-unstructured-data-constraint.md) | Structured tool results with configurable LLM formatting | Accepted |
-| [ADR-015](decisions/ADR-015-all-tools-as-typescript-mcp-servers.md) | All tools as TypeScript MCP servers | Accepted |
+| [ADR-015](decisions/ADR-015-all-tools-as-typescript-mcp-servers.md) | All tools as TypeScript MCP servers | Accepted (amended by ADR-025) |
 | [ADR-016](decisions/ADR-016-retry-resilience-for-mcp-servers-and-transport.md) | Retry/resilience for MCP servers and transport | Accepted |
 | [ADR-017](decisions/ADR-017-ask-user-pseudo-tool-for-human-in-the-loop.md) | Ask user pseudo-tool for human-in-the-loop questioning | Accepted |
 | [ADR-018](decisions/ADR-018-trigger-broker-subprocess-dispatch.md) | Trigger broker with subprocess dispatch | Accepted |
+| [ADR-019](decisions/ADR-019-typescript-codegen-template.md) | TypeScript codegen template | Accepted (extended by ADR-027) |
 | [ADR-020](decisions/ADR-020-semantic-model-routing.md) | Semantic model routing across providers | Accepted |
+| [ADR-021](decisions/ADR-021-same-family-provider-fallback.md) | Same-family provider fallback | Accepted |
+| [ADR-022](decisions/ADR-022-textual-tui-for-cli.md) | Textual TUI for CLI | Accepted |
+| [ADR-023](decisions/ADR-023-file-handling-truncation-signaling.md) | Truncation signaling for file-handling MCP tools | Accepted |
+| [ADR-024](decisions/ADR-024-single-layer-tool-result-truncation.md) | Single-layer tool-result truncation policy | Accepted |
+| [ADR-025](decisions/ADR-025-native-core-tools-mcp-for-subsystems.md) | Native in-process tools for core primitives; MCP for external + isolatable subsystems | Accepted |
+| [ADR-026](decisions/ADR-026-single-event-log-projections-not-parallel-writers.md) | Single event log as source of truth; other sinks are projections | Accepted |
+| [ADR-027](decisions/ADR-027-native-tools-in-codegen-tasks.md) | Native tools in codegen tasks (in-process, not MCP subprocess) | Accepted |
 
 ## 9. Risks and Technical Debt
 
@@ -504,4 +538,4 @@ See [Architecture Decision Records](decisions/README.md) for the full index.
 | Sub-agent | A lightweight, disposable in-process agent instance that runs a focused task in its own context window and returns a summary |
 | Task decomposition | System that breaks complex work into trackable subtasks with status lifecycle, dependency DAG, lifecycle hooks, and multi-agent coordination |
 | High-water-mark | Counter tracking the highest task ID ever assigned in a list, preventing ID reuse after deletion |
-| Compiled mode | Cost-aware execution mode that generates code for batch-processing tasks instead of running them conversationally |
+| Compiled mode | Cost-aware execution mode that would generate code for batch-processing tasks instead of running them conversationally. Mode selection is currently **diagnostic only** — the compiled-mode execution path is not yet implemented (see [ADR-014](decisions/ADR-014-mcp-unstructured-data-constraint.md)); prompts always run in prompt mode |

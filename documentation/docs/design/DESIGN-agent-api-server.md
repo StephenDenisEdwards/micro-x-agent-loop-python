@@ -1,5 +1,9 @@
 # DESIGN: Agent API Server — Multi-Client Architecture
 
+## Status
+
+**Implemented** — all 5 phases shipped (`AgentChannel`, FastAPI server, broker convergence, CLI client, SDK). Start with `python -m micro_x_agent_loop --server start`; connect the CLI with `--server http://host:port`. See [API Server Operations](../operations/api-server.md) and [WebSocket Protocol](DESIGN-websocket-protocol.md). The "Problem Statement" below is the original motivation; sections written in future/proposal tense describe decisions that are now in place.
+
 ## Problem Statement
 
 The agent is currently tightly coupled to the CLI. All output goes to stdout via `print()`, input comes from `input()` or `--run` args, and the REPL loop lives in `__main__.py`. This prevents non-CLI clients (web apps, desktop apps, mobile apps) from using the agent.

@@ -2,7 +2,13 @@
 
 ## Status
 
-**Planning** — architecture defined, not yet implemented.
+**Implemented (2026-03)** — but *not* as the "Stable Lanes" architecture that most of this
+document describes. The **lane** approach (static tool groups + a `ToolLanes` config section)
+was evaluated and **permanently shelved**. What actually shipped is **canonical tool
+serialisation + provider-aware tool search**: see the [Decision Matrix](#decision-matrix-current-implementation)
+and the "Relationship to Semantic Routing" section for the as-built behaviour. The
+"Lane Architecture", lane pseudocode, and "Relationship to Existing System" (`ToolLanes`)
+sections are retained as a record of the path not taken — treat them as historical, not current.
 
 ## Problem
 

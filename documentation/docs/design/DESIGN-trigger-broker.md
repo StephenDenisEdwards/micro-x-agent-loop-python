@@ -1,5 +1,9 @@
 # Design: Trigger Broker
 
+## Status
+
+**Implemented** — all phases shipped (per [planning INDEX](../planning/INDEX.md): cron scheduling, webhook ingress, messaging channels, async human-in-the-loop, retries, and missed-run recovery). This document describes the **core cron dispatcher** (Phase 1). Webhook ingress, channel adapters, async HITL, and operational hardening are documented in the companion [DESIGN-trigger-broker-phase2.md](DESIGN-trigger-broker-phase2.md) — together they form the as-built broker design.
+
 ## Overview
 
 The trigger broker is a lightweight always-on daemon that dispatches autonomous agent runs on cron schedules. The key insight: the agent doesn't need to be always-on — only the trigger router does. The agent cold-starts via `--run`, executes a prompt, persists results, and exits. The broker handles scheduling, concurrency, and run tracking.
@@ -167,12 +171,14 @@ Broker settings in `config.json`:
 | Setting | Type | Default | Purpose |
 |---------|------|---------|---------|
 | `BrokerEnabled` | bool | `true` | Enable broker functionality |
-| `BrokerHost` | string | `127.0.0.1` | Bind address (Phase 2: webhook server) |
-| `BrokerPort` | int | `8321` | Port (Phase 2: webhook server) |
+| `BrokerHost` | string | `127.0.0.1` | Bind address for the webhook/API server |
+| `BrokerPort` | int | `8321` | Port for the webhook/API server |
 | `BrokerPollIntervalSeconds` | int | `5` | Seconds between schedule checks |
 | `BrokerMaxConcurrentRuns` | int | `2` | Max simultaneous agent runs |
-| `BrokerRecoveryPolicy` | string | `skip` | Missed-run policy after downtime (Phase 3) |
+| `BrokerRecoveryPolicy` | string | `skip` | Missed-run policy after downtime (`skip` / `run_once`) |
 | `BrokerDatabase` | string | `.micro_x/broker.db` | SQLite database path |
+
+Webhook ingress, channel adapters (`BrokerWebhookEnabled`, `BrokerChannels`), and management-endpoint auth (`BrokerApiSecret`) are documented in [DESIGN-trigger-broker-phase2.md](DESIGN-trigger-broker-phase2.md#configuration).
 
 ## Related Documents
 
