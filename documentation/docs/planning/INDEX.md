@@ -70,17 +70,19 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 
 ## Plan Status Summary
 
+Counts every `PLAN-*.md` once (52 total). Hybrid-phase plans are bucketed by remaining work: Cost Reduction (phases Completed/Removed/Dropped) counts as **Completed**; Sub-Agents (Phase 3+ remaining) as **In Progress**; Observability ("Largely Implemented", only minor within-phase follow-ups deferred) has its own row.
+
 | Status | Count |
 |--------|-------|
-| Completed | 39 |
-| Review | 1 |
+| Completed | 37 |
+| Largely Implemented | 1 |
 | In Progress | 4 |
+| Planned | 6 |
 | Blocked | 1 |
 | Superseded | 1 |
 | Draft | 1 |
-| Dropped | 1 |
-| Planned | 6 |
 | Research | 1 |
+| **Total** | **52** |
 
 ## All Plans
 
@@ -134,3 +136,7 @@ Rationale: infrastructure (metrics, broker, API server, publishing channels) is 
 | [JobServe MCP Server](PLAN-jobserve-mcp.md) | Planned | Hand-written first-party MCP server for the JobServe apply flow. Replaces the failed codegen-driven `tools/jobserve_apply/` experiment with the same pattern used by gmail/linkedin/web/github MCPs. |
 | [Compiled-Wiki Knowledge Base](PLAN-compiled-wiki-kb.md) | Research | Placeholder reminder — Karpathy-style "compiled wiki" / context-engineering pattern. See [compiled-wiki-knowledge-base.md](../research/compiled-wiki-knowledge-base.md). Zero-code MVP (manual habit + `wiki/` dir + `CLAUDE.md` directive) recommended before any implementation. |
 | [Observability](PLAN-observability.md) | Largely Implemented | Production-grade observability + session step-through. All 8 phases (emit-path consolidation [ADR-026](../architecture/decisions/ADR-026-single-event-log-projections-not-parallel-writers.md); step-through MVP; `/replay`; PII redaction; OTel exporter; alerting; online eval + `/feedback`; cost rollups + sampling) **implemented 2026-06-03**, with a few within-phase follow-ups deferred. Measured against [observability-for-ai-agents.md](../best-practice/observability-for-ai-agents.md). |
+| [Task Decomposition](PLAN-task-decomposition.md) | Completed | All 8 phases: MVP, hooks, multi-agent, TUI, session persistence, parallel execution |
+| [Codegen Multi-Tool](PLAN-codegen-multi-tool.md) | Completed | TypeScript codegen template supports `TOOLS: ToolDef[]` for multi-tool task apps; legacy single-tool shape unchanged |
+| [Filesystem Navigation](PLAN-filesystem-navigation.md) | Completed | Completed 2026-05-09 — phases 1, 2, 2b, 3, 3b, 4, 5 shipped; Phase 6 (image/PDF/notebook) deferred; [ISSUE-005](../issues/ISSUE-005-bash-tool-bypasses-path-policy.md) resolved in accident-prevention scope |
+| [Behavioural Eval Suite](PLAN-behavioural-eval-suite.md) | Planned | Implements [ISSUE-007](../issues/ISSUE-007-prose-contract-drift-across-policy-layers.md) Option A as DIY pytest + `BufferedChannel`; Phases 0–1 close the open ISSUE-007 web_fetch/routing tail behind a failing test |
