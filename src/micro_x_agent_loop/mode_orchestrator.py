@@ -50,6 +50,7 @@ class ModeOrchestrator:
         stage2_enabled: bool,
         stage2_provider: LLMCompactor | None,
         stage2_model: str,
+        stage2_temperature: float,
         channel: AgentChannel | None,
         system_print: Callable[[str], None],
         on_api_call_completed: Callable[[UsageResult, str], None],
@@ -59,6 +60,7 @@ class ModeOrchestrator:
         self._stage2_enabled = stage2_enabled
         self._stage2_provider = stage2_provider
         self._stage2_model = stage2_model
+        self._stage2_temperature = stage2_temperature
         self._channel = channel
         self._system_print = system_print
         self._on_api_call_completed = on_api_call_completed
@@ -103,7 +105,7 @@ class ModeOrchestrator:
         prompt = build_stage2_prompt(user_message, stage1)
         assert self._stage2_provider is not None
         response_text, usage = await self._stage2_provider.create_message(
-            self._stage2_model, 300, 0.0, [{"role": "user", "content": prompt}]
+            self._stage2_model, 300, self._stage2_temperature, [{"role": "user", "content": prompt}]
         )
         self._on_api_call_completed(usage, "stage2_classification")
         return parse_stage2_response(response_text)

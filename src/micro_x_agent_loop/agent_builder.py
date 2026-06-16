@@ -73,6 +73,7 @@ class AgentComponents:
     stage2_classification_enabled: bool
     stage2_model: str
     stage2_provider: LLMCompactor | None
+    stage2_temperature: float
     working_directory: str | None
     tool_result_formatter: ToolResultFormatter
     api_payload_store: ApiPayloadStore
@@ -173,6 +174,7 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
             timeout=config.sub_agent_timeout,
             max_turns=config.sub_agent_max_turns,
             max_tokens=config.sub_agent_max_tokens,
+            temperature=config.sub_agent_temperature,
             max_tool_result_chars=config.max_tool_result_chars,
             tool_result_overrides=config.tool_result_overrides,
         )
@@ -267,6 +269,7 @@ def build_agent_components(config: AgentConfig) -> AgentComponents:
         stage2_classification_enabled=config.stage2_classification_enabled,
         stage2_model=config.stage2_model,
         stage2_provider=stage2_provider,
+        stage2_temperature=config.stage2_temperature,
         working_directory=config.working_directory,
         tool_result_formatter=tool_result_formatter,
         api_payload_store=ApiPayloadStore(),

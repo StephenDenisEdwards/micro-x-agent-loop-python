@@ -14,6 +14,10 @@ DEFAULT_MAX_TOOL_RESULT_CHARS = 40_000
 DEFAULT_MAX_CONVERSATION_MESSAGES = 50
 DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD = 4000
 MAX_TOKENS_RETRIES = 3
+# Main agentic loop default. Low (not the chat-style 0.7) because the loop's
+# job is emitting reliable tool calls and structured decisions, not prose.
+# Per-task-type overrides live in RoutingPolicies; creative work can raise it.
+DEFAULT_TEMPERATURE = 0.2
 
 # ---------------------------------------------------------------------------
 # AppConfig parse defaults
@@ -83,6 +87,16 @@ DEFAULT_SUBAGENT_TIMEOUT = 120
 DEFAULT_SUBAGENT_MAX_TURNS = 15
 DEFAULT_SUBAGENT_MAX_TOKENS = 4096
 DEFAULT_SUBAGENT_MODEL = ""  # empty = inherit from parent
+# Sub-agents run focused extraction/exploration tasks — slightly above the
+# main-loop default but still well below chat temperature.
+DEFAULT_SUBAGENT_TEMPERATURE = 0.3
+
+# ---------------------------------------------------------------------------
+# Mode classification (Stage 2)
+# ---------------------------------------------------------------------------
+# Stage-2 PROMPT/COMPILED classification must be deterministic — it parses a
+# fixed JSON shape, so any sampling variance is pure downside.
+DEFAULT_STAGE2_TEMPERATURE = 0.0
 
 # ---------------------------------------------------------------------------
 # Agentic loop

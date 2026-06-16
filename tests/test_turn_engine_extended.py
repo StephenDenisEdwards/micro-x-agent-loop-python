@@ -434,6 +434,30 @@ class RoutingTargetResolutionTests(unittest.TestCase):
         result, gate = strategy._resolve_routing_target(classification)
         self.assertIsNone(result)
 
+    def test_policy_temperature_override_carried_on_target(self) -> None:
+        strategy = self._make_strategy(
+            routing_policies={"creative": {"provider": "anthropic", "model": "m", "temperature": 0.7}},
+            routing_fallback_provider="anthropic",
+            routing_fallback_model="m",
+        )
+        classification = TaskClassification(
+            task_type=TaskType.CREATIVE, stage="rules", confidence=0.9, reason="test"
+        )
+        result, gate = strategy._resolve_routing_target(classification)
+        self.assertIsNotNone(result)
+        self.assertEqual(0.7, result.temperature)
+
+    def test_policy_without_temperature_leaves_none(self) -> None:
+        strategy = self._make_strategy(
+            routing_policies={"trivial": {"provider": "anthropic", "model": "m"}},
+            routing_fallback_provider="anthropic",
+            routing_fallback_model="m",
+        )
+        classification = TaskClassification(task_type=TaskType.TRIVIAL, stage="rules", confidence=0.9, reason="test")
+        result, gate = strategy._resolve_routing_target(classification)
+        self.assertIsNotNone(result)
+        self.assertIsNone(result.temperature)
+
 
 # ---------------------------------------------------------------------------
 # ask_user pseudo-tool

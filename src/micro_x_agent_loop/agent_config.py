@@ -15,9 +15,12 @@ from micro_x_agent_loop.constants import (
     DEFAULT_MAX_TOOL_RESULT_CHARS,
     DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS,
     DEFAULT_SESSION_BUDGET_USD,
+    DEFAULT_STAGE2_TEMPERATURE,
     DEFAULT_SUBAGENT_MAX_TOKENS,
     DEFAULT_SUBAGENT_MAX_TURNS,
+    DEFAULT_SUBAGENT_TEMPERATURE,
     DEFAULT_SUBAGENT_TIMEOUT,
+    DEFAULT_TEMPERATURE,
     DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD,
 )
 from micro_x_agent_loop.memory.checkpoints import CheckpointManager
@@ -31,7 +34,7 @@ from micro_x_agent_loop.tool import Tool
 class AgentConfig:
     model: str = "claude-sonnet-4-5-20250929"
     max_tokens: int = DEFAULT_MAX_TOKENS
-    temperature: float = 0.7
+    temperature: float = DEFAULT_TEMPERATURE
     api_key: str = ""
     provider: str = "anthropic"
     tools: list[Tool] = field(default_factory=list)
@@ -58,6 +61,7 @@ class AgentConfig:
     stage2_classification_enabled: bool = False
     stage2_provider: str = ""
     stage2_model: str = ""
+    stage2_temperature: float = DEFAULT_STAGE2_TEMPERATURE
     tool_search_enabled: str = "false"
     tool_search_strategy: str = "auto"
     tool_search_max_load: int = 5
@@ -77,6 +81,7 @@ class AgentConfig:
     sub_agent_timeout: int = DEFAULT_SUBAGENT_TIMEOUT
     sub_agent_max_turns: int = DEFAULT_SUBAGENT_MAX_TURNS
     sub_agent_max_tokens: int = DEFAULT_SUBAGENT_MAX_TOKENS
+    sub_agent_temperature: float = DEFAULT_SUBAGENT_TEMPERATURE
     # Routing
     complexity_keywords: str = DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS
     # Semantic routing

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +22,19 @@ _STOP_REASON_MAP = {
     "tool_calls": "tool_use",
     "length": "max_tokens",
 }
+
+# OpenAI reasoning models (the o-series and the gpt-5 family) only support the
+# default sampling temperature (1.0) and return a 400 if an explicit
+# ``temperature`` is sent. Match them by name so the agent can route to such a
+# model without the call failing — the parameter is dropped rather than passed.
+# Note: ``gpt-4o`` starts with ``gpt-4`` (not ``gpt-5``) and is unaffected, and
+# local Ollama model ids (``gemma3:4b``, ``llama3.2`` …) never match.
+_REASONING_MODEL_RE = re.compile(r"^(o\d|gpt-5)", re.IGNORECASE)
+
+
+def _model_rejects_custom_temperature(model: str) -> bool:
+    """True for OpenAI reasoning models that only accept the default temperature."""
+    return bool(_REASONING_MODEL_RE.match(model.strip()))
 
 
 def _to_openai_messages(
@@ -165,11 +179,14 @@ class OpenAIProvider:
         kwargs: dict = dict(
             model=model,
             max_tokens=max_tokens,
-            temperature=temperature,
             messages=messages,
             stream=True,
             stream_options={"include_usage": True},
         )
+        if _model_rejects_custom_temperature(model):
+            logger.debug(f"Reasoning model {model!r}: omitting temperature (only default supported)")
+        else:
+            kwargs["temperature"] = temperature
         if tools:
             kwargs["tools"] = tools
         return kwargs
@@ -355,12 +372,16 @@ class OpenAIProvider:
         oai_messages = _to_openai_messages("", messages)
         t_start = time.monotonic()
         logger.debug(f"Compaction API request: model={model}, messages={len(oai_messages)}")
-        response = await self._client.chat.completions.create(
+        create_kwargs: dict = dict(
             model=model,
             max_tokens=max_tokens,
-            temperature=temperature,
-            messages=oai_messages,  # type: ignore[arg-type]
+            messages=oai_messages,
         )
+        if _model_rejects_custom_temperature(model):
+            logger.debug(f"Reasoning model {model!r}: omitting temperature (only default supported)")
+        else:
+            create_kwargs["temperature"] = temperature
+        response = await self._client.chat.completions.create(**create_kwargs)
         t_end = time.monotonic()
         text = response.choices[0].message.content or ""
 

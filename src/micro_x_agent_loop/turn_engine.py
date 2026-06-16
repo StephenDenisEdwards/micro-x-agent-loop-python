@@ -215,6 +215,7 @@ class TurnEngine:
             # Model routing via RoutingStrategy
             effective_model = self._model
             effective_provider: Any = None
+            effective_temperature = self._temperature
             task_classification = None
             call_type = "main"
             routing_target: RoutingTarget | None = None
@@ -240,6 +241,8 @@ class TurnEngine:
                     api_tools = decision.narrowed_tools
                 if decision.system_prompt_override is not None:
                     system_prompt = decision.system_prompt_override
+                if decision.temperature_override is not None:
+                    effective_temperature = decision.temperature_override
 
             # Resolve the effective provider name once, up front, so it can be
             # reported on the llm.call event and reused as the dispatch target.
@@ -256,7 +259,7 @@ class TurnEngine:
                 call_type=call_type,
                 effective_provider=dispatch_provider,
                 effective_model=effective_model,
-                temperature=self._temperature,
+                temperature=effective_temperature,
                 max_tokens=self._max_tokens,
                 message_count=len(messages),
                 tool_names=[str(t.get("name", "")) for t in api_tools],
@@ -281,7 +284,7 @@ class TurnEngine:
                     message, tool_use_blocks, stop_reason, usage = await effective_provider.stream_chat(
                         dispatch_target,
                         self._max_tokens,
-                        self._temperature,
+                        effective_temperature,
                         system_prompt,
                         messages,
                         api_tools,
@@ -291,7 +294,7 @@ class TurnEngine:
                     message, tool_use_blocks, stop_reason, usage = await self._provider.stream_chat(
                         effective_model,
                         self._max_tokens,
-                        self._temperature,
+                        effective_temperature,
                         system_prompt,
                         messages,
                         api_tools,

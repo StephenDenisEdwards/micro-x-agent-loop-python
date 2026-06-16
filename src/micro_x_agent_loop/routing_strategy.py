@@ -28,6 +28,8 @@ class RoutingDecision:
     system_prompt_override: str | None = None
     narrowed_tools: list[dict] | None = None
     new_pinned_target: RoutingTarget | None = None
+    # Per-policy temperature override (None → use the turn engine's default).
+    temperature_override: float | None = None
     # --- Observability rationale (Phase 1: routing.decision event) ---
     policy_name: str = ""
     reason: str = ""
@@ -190,6 +192,7 @@ class RoutingStrategy:
             system_prompt_override=system_prompt_override,
             narrowed_tools=narrowed_tools,
             new_pinned_target=new_pinned_target,
+            temperature_override=routing_target.temperature if routing_target is not None else None,
             policy_name=task_classification.task_type.value if task_classification is not None else "",
             reason=task_classification.reason if task_classification is not None else "",
             tool_search_only=narrowed_tools is not None,
@@ -231,6 +234,8 @@ class RoutingStrategy:
         tool_search_only = bool(policy.get("tool_search_only", False))
         system_prompt_policy = str(policy.get("system_prompt", ""))
         pin_continuation = bool(policy.get("pin_continuation", False))
+        temperature = policy.get("temperature")
+        temperature = float(temperature) if temperature is not None else None
         if not provider or not model:
             return None, False
 
@@ -265,4 +270,5 @@ class RoutingStrategy:
             tool_search_only=tool_search_only,
             system_prompt=system_prompt_policy,
             pin_continuation=pin_continuation,
+            temperature=temperature,
         ), False

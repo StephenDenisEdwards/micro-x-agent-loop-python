@@ -22,9 +22,12 @@ from micro_x_agent_loop.constants import (
     DEFAULT_PER_TURN_ROUTING_COMPLEXITY_KEYWORDS,
     DEFAULT_PROTECTED_TAIL_MESSAGES,
     DEFAULT_SESSION_BUDGET_USD,
+    DEFAULT_STAGE2_TEMPERATURE,
     DEFAULT_SUBAGENT_MAX_TOKENS,
     DEFAULT_SUBAGENT_MAX_TURNS,
+    DEFAULT_SUBAGENT_TEMPERATURE,
     DEFAULT_SUBAGENT_TIMEOUT,
+    DEFAULT_TEMPERATURE,
     DEFAULT_TOOL_RESULT_SUMMARIZATION_THRESHOLD,
     DEFAULT_USER_MEMORY_MAX_LINES,
     TOOL_SEARCH_DEFAULT_STRATEGY,
@@ -100,6 +103,7 @@ class AppConfig:
     stage2_classification_enabled: bool
     stage2_provider: str
     stage2_model: str
+    stage2_temperature: float
     tool_search_enabled: str
     tool_search_strategy: str
     tool_search_max_load: int
@@ -115,6 +119,7 @@ class AppConfig:
     sub_agent_timeout: int
     sub_agent_max_turns: int
     sub_agent_max_tokens: int
+    sub_agent_temperature: float
     # Routing
     complexity_keywords: str
     # Semantic routing
@@ -416,7 +421,7 @@ def parse_app_config(config: dict) -> AppConfig:
         provider_name=config.get("Provider", "anthropic").strip().lower(),
         model=config.get("Model", "claude-sonnet-4-5-20250929"),
         max_tokens=int(config.get("MaxTokens", DEFAULT_MAX_TOKENS)),
-        temperature=float(config.get("Temperature", 0.7)),
+        temperature=float(config.get("Temperature", DEFAULT_TEMPERATURE)),
         max_tool_result_chars=int(config.get("MaxToolResultChars", DEFAULT_MAX_TOOL_RESULT_CHARS)),
         max_conversation_messages=int(config.get("MaxConversationMessages", DEFAULT_MAX_CONVERSATION_MESSAGES)),
         max_agentic_iterations=int(config.get("MaxAgenticIterations", DEFAULT_MAX_AGENTIC_ITERATIONS)),
@@ -460,6 +465,7 @@ def parse_app_config(config: dict) -> AppConfig:
         stage2_classification_enabled=_to_bool(config.get("Stage2ClassificationEnabled", True), default=True),
         stage2_provider=str(config.get("Stage2Provider", "")).strip().lower(),
         stage2_model=str(config.get("Stage2Model", "")).strip(),
+        stage2_temperature=float(config.get("Stage2Temperature", DEFAULT_STAGE2_TEMPERATURE)),
         tool_search_enabled=str(config.get("ToolSearchEnabled", "false")).strip().lower(),
         tool_search_strategy=str(config.get("ToolSearchStrategy", TOOL_SEARCH_DEFAULT_STRATEGY)).strip().lower(),
         tool_search_max_load=int(config.get("ToolSearchMaxLoad", TOOL_SEARCH_SEMANTIC_MAX_LOAD)),
@@ -473,6 +479,7 @@ def parse_app_config(config: dict) -> AppConfig:
         sub_agent_timeout=int(config.get("SubAgentTimeout", DEFAULT_SUBAGENT_TIMEOUT)),
         sub_agent_max_turns=int(config.get("SubAgentMaxTurns", DEFAULT_SUBAGENT_MAX_TURNS)),
         sub_agent_max_tokens=int(config.get("SubAgentMaxTokens", DEFAULT_SUBAGENT_MAX_TOKENS)),
+        sub_agent_temperature=float(config.get("SubAgentTemperature", DEFAULT_SUBAGENT_TEMPERATURE)),
         complexity_keywords=str(
             config.get(
                 "ComplexityKeywords",

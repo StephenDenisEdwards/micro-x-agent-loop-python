@@ -93,7 +93,7 @@ The required API key depends on the configured `Provider`. The `ollama` provider
 | `Model` | string | `"claude-sonnet-4-5-20250929"` | Model ID to use (provider-specific) |
 | `MaxTokens` | int | `8192` | Maximum tokens per API response |
 | `MaxAgenticIterations` | int | `15` | Hard cap on tool-use iterations within a single turn — safety rail against a non-converging prompt thrashing tool calls indefinitely (see [MaxAgenticIterations](#maxagenticiterations)) |
-| `Temperature` | float | `0.7` | Sampling temperature — tuned for agentic tool-use reliability (see [Temperature](#temperature)) |
+| `Temperature` | float | `0.2` | Main-loop sampling temperature — low for reliable tool calls; per-task overrides live in `RoutingPolicies` (see [Temperature](#temperature)) |
 | `MaxToolResultChars` | int | `40000` | Maximum characters per tool result before truncation |
 | `MaxConversationMessages` | int | `50` | Maximum messages in conversation history before trimming |
 | `CompactionStrategy` | string | `"none"` | Compaction strategy: `"none"` or `"summarize"` |
@@ -168,7 +168,7 @@ The required API key depends on the configured `Provider`. The `ollama` provider
   "Provider": "anthropic",
   "Model": "claude-sonnet-4-5-20250929",
   "MaxTokens": 8192,
-  "Temperature": 0.7,
+  "Temperature": 0.2,
   "MaxToolResultChars": 40000,
   "MaxConversationMessages": 50,
   "CompactionStrategy": "summarize",
@@ -284,16 +284,25 @@ When the cap is reached, the turn stops cleanly (no exception), the channel emit
 
 ### Temperature
 
-Controls randomness in the model's responses. The default is `0.7`, tuned for agentic tool-use reliability.
+Controls randomness in the model's responses. The default is `0.2`.
 
 | Value | Behaviour |
 |-------|-----------|
 | `0.0` | Most deterministic — nearly identical output for the same input |
-| `0.5–0.7` | Recommended for agentic/tool-heavy workloads — reduces randomness in tool calls and structured output while retaining enough variation for natural language |
-| `1.0` | Provider API default — good general-purpose balance for conversational use |
+| `0.1–0.3` | Recommended for the agentic main loop — reliable tool calls and structured output |
+| `0.7` | Chat-style default — more variation, suited to creative/prose work |
+| `1.0` | Provider API default |
 | `>1.0` | Increases randomness (OpenAI supports up to 2.0; Anthropic caps at 1.0) |
 
-**Why `0.7`?** The provider API default is `1.0`, but this is an agent loop, not a chatbot. The primary workload is tool-heavy — file operations, MCP calls, code generation — where deterministic, reliable tool calls matter more than creative variation. `0.7` retains enough variation for natural conversational responses while reducing noise in structured output. Set to `1.0` if you prefer the provider default for more conversational use cases.
+**Why `0.2`?** This is an agent loop, not a chatbot. The main loop's primary job is emitting reliable tool calls and structured decisions, where determinism and reproducibility (the agent captures `temperature` per call for session replay) matter more than creative variation. A low default avoids noise in tool-argument formatting and control-flow choices.
+
+`Temperature` is the global default. Three places diverge from it:
+
+- **`RoutingPolicies` per-task override** — each policy entry may carry a `temperature` field, applied when [semantic routing](#routing-and-semantic-routing) classifies a turn into that task type. The shipped `config-base.json` sets `creative` → `0.7`, `analysis` → `0.3`, `code_generation`/`code_review` → `0.2`, `factual_lookup`/`trivial` → `0.0`, `summarization` → `0.1`. A policy with no `temperature` falls back to the global default. When confidence gating declines a downgrade, the main model runs at the global default (no per-task temperature applied).
+- **`SubAgentTemperature`** (default `0.3`) — temperature for spawned sub-agents running focused extraction/exploration tasks.
+- **`Stage2Temperature`** (default `0.0`) — temperature for Stage-2 PROMPT/COMPILED mode classification, which parses a fixed JSON shape and must be deterministic.
+
+**Reasoning models.** OpenAI reasoning models (the `o`-series and `gpt-5` family) only accept the default temperature and reject an explicit `temperature` parameter. When routing to such a model the OpenAI provider drops the parameter automatically — you do not need to special-case it in config. Anthropic, Gemini, and Ollama models accept the configured temperature normally.
 
 ### MaxToolResultChars
 

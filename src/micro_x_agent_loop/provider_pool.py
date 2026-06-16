@@ -26,6 +26,8 @@ class RoutingTarget:
     tool_search_only: bool = False
     system_prompt: str = ""  # "compact" or "" (default/full)
     pin_continuation: bool = False
+    # Per-policy temperature override. None → caller's default temperature.
+    temperature: float | None = None
 
 
 @dataclass

@@ -130,6 +130,7 @@ class Agent:
             stage2_enabled=c.stage2_classification_enabled,
             stage2_provider=c.stage2_provider,
             stage2_model=c.stage2_model,
+            stage2_temperature=c.stage2_temperature,
             channel=c.channel,
             system_print=self._system_print,
             on_api_call_completed=self.on_api_call_completed,

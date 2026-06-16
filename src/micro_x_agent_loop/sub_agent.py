@@ -19,6 +19,7 @@ from micro_x_agent_loop.app_config import ToolResultOverride, resolve_runtime_en
 from micro_x_agent_loop.constants import (
     DEFAULT_SUBAGENT_MAX_TOKENS,
     DEFAULT_SUBAGENT_MAX_TURNS,
+    DEFAULT_SUBAGENT_TEMPERATURE,
     DEFAULT_SUBAGENT_TIMEOUT,
 )
 from micro_x_agent_loop.provider import create_provider
@@ -238,6 +239,7 @@ class SubAgentRunner:
         timeout: int = DEFAULT_SUBAGENT_TIMEOUT,
         max_turns: int = DEFAULT_SUBAGENT_MAX_TURNS,
         max_tokens: int = DEFAULT_SUBAGENT_MAX_TOKENS,
+        temperature: float = DEFAULT_SUBAGENT_TEMPERATURE,
         max_tool_result_chars: int = 40_000,
         tool_result_overrides: dict[str, ToolResultOverride] | None = None,
     ) -> None:
@@ -250,6 +252,7 @@ class SubAgentRunner:
         self._timeout = timeout
         self._max_turns = max_turns
         self._max_tokens = max_tokens
+        self._temperature = temperature
         self._max_tool_result_chars = max_tool_result_chars
         self._tool_result_overrides: dict[str, ToolResultOverride] = tool_result_overrides or {}
 
@@ -290,7 +293,7 @@ class SubAgentRunner:
             provider=provider,
             model=model,
             max_tokens=max_tokens,
-            temperature=0.3,  # Lower temperature for focused tasks
+            temperature=self._temperature,  # Lower temperature for focused tasks (SubAgentTemperature)
             system_prompt=type_config.system_prompt,
             converted_tools=converted_tools,
             tool_map=tool_map,

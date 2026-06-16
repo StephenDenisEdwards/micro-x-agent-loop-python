@@ -181,7 +181,7 @@ When a user submits a prompt:
 - `Pricing` key: per-model token pricing (input/output/cache_read/cache_create per MTok USD) — no hardcoded defaults
 - All configuration elements must be in `config-base.json` — no hardcoded fallback defaults in code
 - Profiles: `config-standard.json`, `config-standard-no-summarization.json`, `config-baseline.json`
-- `RoutingPolicies` map task types to `{provider, model}` pairs with optional per-policy overrides: `tool_search_only` (narrow tools for small models), `system_prompt: "compact"` (minimal prompt for small context windows), `pin_continuation` (latch routing at iteration 0 — prevents mid-turn model switches)
+- `RoutingPolicies` map task types to `{provider, model}` pairs with optional per-policy overrides: `tool_search_only` (narrow tools for small models), `system_prompt: "compact"` (minimal prompt for small context windows), `pin_continuation` (latch routing at iteration 0 — prevents mid-turn model switches), `temperature` (per-task sampling temperature; falls back to the global `Temperature` when omitted)
 - `RoutingConfidenceThreshold` (default 0.6) — classifier confidence below this threshold refuses to downgrade to a cheaper model, falling back to the main model instead
 
 ### Memory System

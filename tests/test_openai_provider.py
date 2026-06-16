@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from micro_x_agent_loop.providers.openai_provider import (
     OpenAIProvider,
+    _model_rejects_custom_temperature,
     _to_openai_messages,
     _to_openai_tools,
 )
@@ -404,6 +405,43 @@ class OpenAIProviderCreateMessageTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("", text)
 
         await go()
+
+
+class ReasoningModelTemperatureGuardTests(unittest.IsolatedAsyncioTestCase):
+    """Reasoning models (o-series, gpt-5) reject a custom temperature."""
+
+    def test_detection(self) -> None:
+        for model in ("o1", "o1-mini", "o3", "o3-mini", "o4-mini", "gpt-5", "gpt-5-mini", "GPT-5"):
+            self.assertTrue(_model_rejects_custom_temperature(model), model)
+        for model in ("gpt-4", "gpt-4o", "gpt-4o-mini", "gpt-4.1", "gemma3:4b", "llama3.2", "deepseek-chat"):
+            self.assertFalse(_model_rejects_custom_temperature(model), model)
+
+    def _make_provider(self) -> OpenAIProvider:
+        with patch("openai.AsyncOpenAI"):
+            return OpenAIProvider(api_key="test")
+
+    def test_stream_kwargs_omit_temperature_for_reasoning_model(self) -> None:
+        provider = self._make_provider()
+        kwargs = provider._build_stream_kwargs("o3-mini", 1000, 0.2, [], [])
+        self.assertNotIn("temperature", kwargs)
+
+    def test_stream_kwargs_include_temperature_for_chat_model(self) -> None:
+        provider = self._make_provider()
+        kwargs = provider._build_stream_kwargs("gpt-4o", 1000, 0.2, [], [])
+        self.assertEqual(0.2, kwargs["temperature"])
+
+    async def test_create_message_omits_temperature_for_reasoning_model(self) -> None:
+        provider = self._make_provider()
+        resp = MagicMock()
+        choice = MagicMock()
+        choice.message.content = "ok"
+        resp.choices = [choice]
+        resp.usage = None
+        create = AsyncMock(return_value=resp)
+        provider._client.chat.completions.create = create
+
+        await provider.create_message("o3", 100, 0.2, [{"role": "user", "content": "hi"}])
+        self.assertNotIn("temperature", create.call_args.kwargs)
 
 
 if __name__ == "__main__":
